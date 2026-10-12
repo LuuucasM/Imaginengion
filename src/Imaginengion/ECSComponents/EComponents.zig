@@ -279,8 +279,8 @@ comptime {
 
     for (ScriptsList) |script_type| {
         const type_name = " " ++ @typeName(script_type) ++ "\n";
-        if (!@hasDecl(script_type, "Scripttype")) {
-            @compileError("Type must have 'Scripttype' pub const declaration " ++ type_name);
+        if (!@hasDecl(script_type, "Hook")) {
+            @compileError("Type must have 'Hook' pub const declaration " ++ type_name);
         }
     }
 }

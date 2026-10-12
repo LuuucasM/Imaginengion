@@ -54,7 +54,7 @@ pub fn RemapRefs(self: *SpawnPossComponent, ref_map: *const RefMap) void {
     self.mEntityRef = ref_map.Get(self.mEntityRef) orelse .uninit;
 }
 
-fn ResolveEntityRef(requester: Serializer.Requester, entity_uuid: u64) bool {
+fn ResolveEntityRef(requester: Serializer.Requester, entity_uuid: u64, _: u32) bool {
     const scene = requester.Scene;
     const entity = scene.mManager.GetObjectByUUID(Entity, entity_uuid) orelse return false;
     //the component may have been removed since the request was made, nothing left to resolve

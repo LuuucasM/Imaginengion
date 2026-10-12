@@ -14,6 +14,8 @@ const GameContext = @import("../ECSObjects/GameContext.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
+const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
+const ScriptValues = @import("../Scripts/ScriptValues.zig");
 const PathType = @import("../ECSManagers/AManager.zig").PathType;
 
 const EManager = @import("../ECSManagers/EManager.zig");
@@ -169,7 +171,15 @@ fn RetargetHandles(self: *WorldManager) void {
     self.RetargetECSHandles(&self.mSManager.mECSManager);
 }
 
+/// RetargetHandles for every script's object variables, which live in the script's DLL rather than in a component
+fn RetargetScriptHandles(self: *WorldManager, ecs_manager: anytype) void {
+    for (ecs_manager.GetComponentSlice(ScriptComponent)) |*component| {
+        if (ScriptValues.InstanceOf(component)) |instance| ScriptValues.Retarget(instance, self);
+    }
+}
+
 fn RetargetECSHandles(self: *WorldManager, ecs_manager: anytype) void {
+    self.RetargetScriptHandles(ecs_manager);
     inline for (@TypeOf(ecs_manager.*).ComponentTypes) |component_type| {
         //most components hold no handles, and those are skipped at compile time
         if (comptime HoldsObjectHandle(component_type)) {

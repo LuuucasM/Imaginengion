@@ -4,15 +4,13 @@ const Entity = @import("IM").Entity;
 const Vec3 = @import("IM").Vec3;
 const Quat = @import("IM").Quat;
 const Vec2 = @import("IM").Vec2;
-const ScriptType = @import("IM").ScriptType;
 const ScriptResult = @import("IM").ScriptResult;
 const TransformComponent = @import("IM").EntityComponents.TransformComponent;
-const OnUpdateTemplate = @This();
 
 /// Function that gets executed every frame after polling inputs and input events
 /// return .Continue and it allows the event to be propegated to other layers/systems
 /// return .Handled and it will stop at this layer
-pub export fn Run(engine_context: *EngineContext, self: *const Entity) callconv(.c) ScriptResult {
+pub fn OnUpdate(_: *@This(), engine_context: *EngineContext, owner: Entity) ScriptResult {
     const input_context = &engine_context.mInputManager;
     if (input_context.IsKeyPressed(.LALT) == true) {
         //all per pixel of mouse movement. pan and zoom are world units, rotate is radians
@@ -23,7 +21,7 @@ pub export fn Run(engine_context: *EngineContext, self: *const Entity) callconv(
 
         const mouse_delta = input_context.GetMousePositionDelta();
 
-        const transform_component = self.GetComponent(TransformComponent).?;
+        const transform_component = owner.GetComponent(TransformComponent).?;
         var translation = transform_component.GetTranslation();
         var rotation = transform_component.GetRotation();
 
@@ -32,7 +30,7 @@ pub export fn Run(engine_context: *EngineContext, self: *const Entity) callconv(
             const up_dir = rotation.GetUpDir();
             translation.SubEqVec(right_dir.MulScalar(mouse_delta.x * PanSpeed));
             translation.AddEqVec(up_dir.MulScalar(mouse_delta.y * PanSpeed));
-            self.SetTranslation(engine_context, translation) catch return .Handled;
+            owner.SetTranslation(engine_context, translation) catch return .Handled;
         } else if (input_context.IsMousePressed(.BUTTON_LEFT) == true) {
             //yaw turns around the world up axis so the horizon stays level, so it multiplies on
             //the left. pitch turns around the camera's own right axis, so it multiplies on the
@@ -43,17 +41,13 @@ pub export fn Run(engine_context: *EngineContext, self: *const Entity) callconv(
             const yaw = Quat(f32).FromAxisAngle(world_up, -mouse_delta.x * RotateSpeed);
             const pitch = Quat(f32).FromAxisAngle(local_right, -mouse_delta.y * RotateSpeed);
             rotation = yaw.MulQuat(rotation).MulQuat(pitch);
-            self.SetRotation(engine_context, rotation) catch return .Handled;
+            owner.SetRotation(engine_context, rotation) catch return .Handled;
         } else if (input_context.IsMousePressed(.BUTTON_RIGHT) == true) {
             const forward_dir = rotation.GetForwardDir();
             translation.AddEqVec(forward_dir.MulScalar(mouse_delta.y * ZoomSpeed));
-            self.SetTranslation(engine_context, translation) catch return .Handled;
+            owner.SetTranslation(engine_context, translation) catch return .Handled;
         }
     }
 
     return .Continue;
-}
-//Note the following functions are for editor purposes and to not be changed by user or bad things can happen :)
-pub export fn GetScriptType() callconv(.c) ScriptType {
-    return ScriptType.EntityOnUpdate;
 }

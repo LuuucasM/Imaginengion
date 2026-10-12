@@ -224,6 +224,9 @@ test "a readout shows its field as it changes, a bit set is a checkbox a bit, an
 }
 
 test "an asset field shows its asset's name, and takes a dropped file of a kind it accepts" {
+    //the turned-down drop's warning is expected; kept off the build runner's output (see TmplTests)
+    std.testing.log_level = .err;
+    defer std.testing.log_level = .warn;
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;

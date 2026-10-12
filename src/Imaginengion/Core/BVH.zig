@@ -191,18 +191,34 @@ pub fn Build(allocator: std.mem.Allocator, items: []Item, nodes: *std.ArrayList(
     Refit(items, nodes.items);
 }
 
-/// How many bins a split sorts a node's items into along each axis, by where their centers are, to try a split at
+//// How many bins a split sorts a node's items into along each axis, by where their centers are, to try a split at
 /// every boundary between two: more finds a slightly better split, fewer builds slightly faster
 pub const SAH_BINS: u32 = 16;
 
+/// x, y and z at once
+const Vec3V = @Vector(3, f32);
+
+/// Where the build places an item: twice its center, its box's Min + Max, which saves halving it. Every center in a
+/// split is doubled the same way, so which bin each lands in is exactly as if they weren't
+fn DoubledCenter(item: Item) Vec3V {
+    return item.Bounds.Min.ToVector() + item.Bounds.Max.ToVector();
+}
+
+/// Which bin along each axis a doubled center falls in, the bins starting at `min` and `scale` of them a unit along
+/// each. An axis with a scale of 0 puts everything in bin 0
+fn BinsOf(doubled_center: Vec3V, min: Vec3V, scale: Vec3V) @Vector(3, u32) {
+    const bins: @Vector(3, u32) = @intFromFloat((doubled_center - min) * scale);
+    return @min(bins, @as(@Vector(3, u32), @splat(SAH_BINS - 1)));
+}
+
 /// A split BestSplit has picked: the items whose centers fall in bins below Bin along Axis go left. Min and Scale
-/// place a center in its bin (BinOf), kept so the items are put in exactly the bins they were counted in
+/// place a center in its bins (BinsOf), kept so the items are put in exactly the bins they were counted in
 const SplitChoice = struct {
     Axis: usize,
     Bin: u32,
     LeftCount: u32,
-    Min: f32,
-    Scale: f32,
+    Min: Vec3V,
+    Scale: Vec3V,
 };
 
 /// Splits `items`, more than a leaf holds, in two at depth `depth`: reorders them so the left half comes first and
@@ -212,57 +228,69 @@ const SplitChoice = struct {
 /// instead, which always fits
 fn Split(items: []Item, depth: u32) u32 {
     const count: u32 = @intCast(items.len);
-    var centers = Aabb.empty;
+    //the box around the items' doubled centers
+    var min: Vec3V = @splat(std.math.inf(f32));
+    var max: Vec3V = @splat(-std.math.inf(f32));
     for (items) |item| {
-        const center = item.Bounds.Center();
-        centers = centers.Union(.{ .Min = center, .Max = center });
+        const center = DoubledCenter(item);
+        min = @min(min, center);
+        max = @max(max, center);
     }
 
-    if (BestSplit(items, centers)) |best| {
+    if (BestSplit(items, min, max)) |best| {
         const bigger_half = @max(best.LeftCount, count - best.LeftCount);
         if (depth + 1 + LevelsBelow(bigger_half) <= MAX_DEPTH) {
             Partition(items, best);
             return best.LeftCount;
         }
     }
-    SortAlongWidest(items, centers);
+    SortAlongWidest(items, max - min);
     return count / 2;
 }
 
-/// Which bin a center at `at` along an axis falls in, the bins starting at `min`, `scale` of them a unit
-fn BinOf(at: f32, min: f32, scale: f32) u32 {
-    const bin: u32 = @intFromFloat((at - min) * scale);
-    return @min(bin, SAH_BINS - 1);
-}
+/// The cheapest split of `items`, whose doubled centers are within `min` and `max`, or null if every center is in one
+/// spot. Along each axis the centers spread over, the items go into SAH_BINS bins, each keeping a box around its items
+/// and how many there are, all three axes' bins filled in one pass over the items. Each boundary between two bins is
+/// a split: its cost is each side's box's surface area times how many items it holds, added up. A ray through the
+/// node goes through a box with a chance in proportion to its area, and then has its items to pay for, so the
+/// cheapest split is the one a ray pays least for
+fn BestSplit(items: []const Item, min: Vec3V, max: Vec3V) ?SplitChoice {
+    const Bin = struct {
+        Min: Vec3V = @splat(std.math.inf(f32)),
+        Max: Vec3V = @splat(-std.math.inf(f32)),
+        Count: u32 = 0,
 
-fn CenterOn(item: Item, axis: usize) f32 {
-    const center: [3]f32 = item.Bounds.Center().ToVector();
-    return center[axis];
-}
+        fn Add(self: *@This(), other_min: Vec3V, other_max: Vec3V, count: u32) void {
+            self.Min = @min(self.Min, other_min);
+            self.Max = @max(self.Max, other_max);
+            self.Count += count;
+        }
+        fn Cost(self: @This()) f32 {
+            const bounds = Aabb{ .Min = .FromVector(self.Min), .Max = .FromVector(self.Max) };
+            return bounds.HalfArea() * @as(f32, @floatFromInt(self.Count));
+        }
+    };
 
-/// The cheapest split of `items`, whose centers are within `centers`, or null if every center is in one spot. Along
-/// each axis the centers spread over, the items go into SAH_BINS bins, each keeping a box around its items and how
-/// many there are, and each boundary between two bins is a split: its cost is each side's box's surface area times
-/// how many items it holds, added up. A ray through the node goes through a box with a chance in proportion to its
-/// area, and then has its items to pay for, so the cheapest split is the one a ray pays least for
-fn BestSplit(items: []const Item, centers: Aabb) ?SplitChoice {
-    const Bin = struct { Bounds: Aabb = .empty, Count: u32 = 0 };
-    const min: [3]f32 = centers.Min.ToVector();
-    const max: [3]f32 = centers.Max.ToVector();
+    const extent = max - min;
+    const zero: Vec3V = @splat(0);
+    if (!@reduce(.Or, extent > zero)) return null;
+    //a flat axis gets a scale of 0, and is passed over below
+    const scale = @select(f32, extent > zero, @as(Vec3V, @splat(@floatFromInt(SAH_BINS))) / extent, zero);
+
+    var bins: [3][SAH_BINS]Bin = @splat(@splat(.{}));
+    for (items) |item| {
+        const item_bins = BinsOf(DoubledCenter(item), min, scale);
+        const item_min = item.Bounds.Min.ToVector();
+        const item_max = item.Bounds.Max.ToVector();
+        inline for (0..3) |axis| bins[axis][item_bins[axis]].Add(item_min, item_max, 1);
+    }
 
     var best: ?SplitChoice = null;
     var best_cost = std.math.inf(f32);
+    const extents: [3]f32 = extent;
     for (0..3) |axis| {
-        const extent = max[axis] - min[axis];
-        if (!(extent > 0)) continue;
-        const scale = @as(f32, SAH_BINS) / extent;
-
-        var bins: [SAH_BINS]Bin = @splat(.{});
-        for (items) |item| {
-            const bin = &bins[BinOf(CenterOn(item, axis), min[axis], scale)];
-            bin.Bounds = bin.Bounds.Union(item.Bounds);
-            bin.Count += 1;
-        }
+        if (!(extents[axis] > 0)) continue;
+        const axis_bins = &bins[axis];
 
         //every boundary's right side, swept in from the right end: what is in bin b and every bin past it
         var right_costs: [SAH_BINS]f32 = undefined;
@@ -271,23 +299,21 @@ fn BestSplit(items: []const Item, centers: Aabb) ?SplitChoice {
         var bin_ind = SAH_BINS;
         while (bin_ind > 1) {
             bin_ind -= 1;
-            right.Bounds = right.Bounds.Union(bins[bin_ind].Bounds);
-            right.Count += bins[bin_ind].Count;
+            right.Add(axis_bins[bin_ind].Min, axis_bins[bin_ind].Max, axis_bins[bin_ind].Count);
             right_counts[bin_ind] = right.Count;
-            right_costs[bin_ind] = if (right.Count > 0) right.Bounds.HalfArea() * @as(f32, @floatFromInt(right.Count)) else 0;
+            right_costs[bin_ind] = if (right.Count > 0) right.Cost() else 0;
         }
 
         //then each boundary's left side, swept in from the left end. The first cheapest wins a tie, so the same items
         //always split the same way
         var left = Bin{};
         for (1..SAH_BINS) |boundary| {
-            left.Bounds = left.Bounds.Union(bins[boundary - 1].Bounds);
-            left.Count += bins[boundary - 1].Count;
+            left.Add(axis_bins[boundary - 1].Min, axis_bins[boundary - 1].Max, axis_bins[boundary - 1].Count);
             if (left.Count == 0 or right_counts[boundary] == 0) continue;
-            const cost = left.Bounds.HalfArea() * @as(f32, @floatFromInt(left.Count)) + right_costs[boundary];
+            const cost = left.Cost() + right_costs[boundary];
             if (cost < best_cost) {
                 best_cost = cost;
-                best = .{ .Axis = axis, .Bin = @intCast(boundary), .LeftCount = left.Count, .Min = min[axis], .Scale = scale };
+                best = .{ .Axis = axis, .Bin = @intCast(boundary), .LeftCount = left.Count, .Min = min, .Scale = scale };
             }
         }
     }
@@ -299,7 +325,8 @@ fn Partition(items: []Item, split: SplitChoice) void {
     var left: usize = 0;
     var right = items.len;
     while (left < right) {
-        if (BinOf(CenterOn(items[left], split.Axis), split.Min, split.Scale) < split.Bin) {
+        const item_bins: [3]u32 = BinsOf(DoubledCenter(items[left]), split.Min, split.Scale);
+        if (item_bins[split.Axis] < split.Bin) {
             left += 1;
         } else {
             right -= 1;
@@ -309,10 +336,10 @@ fn Partition(items: []Item, split: SplitChoice) void {
     std.debug.assert(left == split.LeftCount);
 }
 
-/// Sorts `items` by their centers along the axis `centers` is widest on, so splitting them down the middle still
-/// splits them in space. Items whose centers are all in one spot stay as they are
-fn SortAlongWidest(items: []Item, centers: Aabb) void {
-    const extent: [3]f32 = centers.Max.SubVec(centers.Min).ToVector();
+/// Sorts `items` by their centers along the axis their centers spread widest on (`extent`), so splitting them down the
+/// middle still splits them in space. Items whose centers are all in one spot stay as they are
+fn SortAlongWidest(items: []Item, extent_v: Vec3V) void {
+    const extent: [3]f32 = extent_v;
     var axis: usize = 0;
     for (1..3) |other| {
         if (extent[other] > extent[axis]) axis = other;
@@ -320,7 +347,9 @@ fn SortAlongWidest(items: []Item, centers: Aabb) void {
     if (!(extent[axis] > 0)) return;
     std.sort.pdq(Item, items, axis, struct {
         fn lessThan(on: usize, a: Item, b: Item) bool {
-            return CenterOn(a, on) < CenterOn(b, on);
+            const a_center: [3]f32 = DoubledCenter(a);
+            const b_center: [3]f32 = DoubledCenter(b);
+            return a_center[on] < b_center[on];
         }
     }.lessThan);
 }

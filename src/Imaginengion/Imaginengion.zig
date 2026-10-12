@@ -33,6 +33,7 @@ test {
     _ = @import("Tests/UI/UIElementTests.zig");
     _ = @import("Tests/UI/StyleSystemTests.zig");
     _ = @import("Tests/Scripts/EventScriptsTests.zig");
+    _ = @import("Tests/Scripts/ScriptValuesTests.zig");
     _ = @import("Tests/UI/WidgetsTests.zig");
     _ = @import("Tests/UI/NumberFieldSystemTests.zig");
     _ = @import("Tests/UI/TreeMenuTests.zig");
@@ -87,9 +88,10 @@ pub const GameContext = @import("ECSObjects/GameContext.zig");
 pub const GCComponents = @import("ECSComponents/GCComponents.zig");
 
 //Script Stuff ----------------------------------------------
-pub const ScriptType = @import("ECSComponents/Asset/ScriptAsset.zig").ScriptType;
-pub const ScriptResult = @import("ECSComponents/Asset/ScriptAsset.zig").ScriptResult;
-pub const _ValidateScript = @import("Scripts/ScriptsProcessor.zig")._ValidateScript;
+pub const ScriptResult = @import("Scripts/ScriptABI.zig").ScriptResult;
+//what a script's generated DLL root builds itself from (see build_script.zig)
+pub const ScriptABI = @import("Scripts/ScriptABI.zig");
+pub const ScriptExport = @import("Scripts/ScriptExport.zig");
 
 //Event Stuff -----------------------------------------------
 pub const KeyboardPressedEvent = @import("Events/WindowEventData.zig").KeyboardPressedEvent;

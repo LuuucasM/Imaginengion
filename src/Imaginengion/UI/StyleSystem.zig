@@ -127,7 +127,7 @@ fn ThemeOf(self: *StyleSystem, engine_context: *EngineContext, style: StyleCompo
 
 /// Gives a surface with no texture of its own the plain one, sampled only at its middle, so the edges of the texture
 /// manager's slot it is in never blend in
-fn FillPlain(texture: *AssetHandle, tex_options: *Texture2D.TexOptions, plain_texture: AssetHandle) void {
+pub fn FillPlain(texture: *AssetHandle, tex_options: *Texture2D.TexOptions, plain_texture: AssetHandle) void {
     if (texture.IsIDValid() or !plain_texture.IsIDValid()) return;
     plain_texture.RetainAsset();
     texture.* = plain_texture;

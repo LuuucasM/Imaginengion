@@ -28,7 +28,6 @@ const PathType = @import("../ECSManagers/AManager.zig").PathType;
 const Assets = @import("../ECSComponents/AComponents.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const OnSceneStartScript = SceneComponents.OnSceneStartScript;
-const SceneInputPressed = SceneComponents.InputPressedScript;
 const SceneOnUpdate = SceneComponents.OnUpdateScript;
 const NewEntityConfig = Entity.CreateConfig;
 const ECSCore = @import("ECSObject.zig").Core;
@@ -127,35 +126,10 @@ pub fn GetSceneComponent(self: Scene) SceneComponent {
 //    }
 //}
 
+/// Adds a script child running the script `new_script_handle`, with its own variables and the tags for its hooks
+/// (see Core.AddScript)
 pub fn AddScript(self: Scene, engine_context: *EngineContext, new_script_handle: AssetHandle) !void {
-    const script_asset = new_script_handle.GetAsset(engine_context, ScriptAsset) catch |err| switch (err) {
-        //it failed to load (the reason is already logged). Keep the script child so the script stays on the
-        //scene and is saved back out. Nothing runs it until its file is fixed, see ScriptsProcessor.SyncScriptTypes
-        error.NoDefaultAsset => {
-            const new_script_entity = try Core.AddScript(self, engine_context, new_script_handle);
-            _ = try new_script_entity.AddComponent(engine_context, SceneComponents.UntypedScriptTag{});
-            return;
-        },
-        else => return err,
-    };
-    const script_type = script_asset.GetScriptType();
-    _ValidateScriptType(script_type);
-
-    const new_script_entity = try Core.AddScript(self, engine_context, new_script_handle);
-    if (!try AddScriptTypeTag(new_script_entity, engine_context, script_type)) unreachable;
-}
-
-/// Gives a script child the tag for script_type, which is what has it run. False, with nothing added, if script_type
-/// is not a scene script
-pub fn AddScriptTypeTag(script: Scene, engine_context: *EngineContext, script_type: ScriptAsset.ScriptType) !bool {
-    switch (script_type) {
-        .SceneSceneStart => _ = try script.AddComponent(engine_context, OnSceneStartScript{}),
-        .SceneInputPressed => _ = try script.AddComponent(engine_context, SceneInputPressed{}),
-        .SceneOnUpdate => _ = try script.AddComponent(engine_context, SceneOnUpdate{}),
-        .SceneOnPhysicsUpdate => _ = try script.AddComponent(engine_context, SceneComponents.OnPhysicsUpdateScript{}),
-        else => return false,
-    }
-    return true;
+    _ = try Core.AddScript(self, engine_context, new_script_handle);
 }
 
 pub const AddComponentScript = Core.AddComponentScript;
@@ -244,10 +218,3 @@ fn FilterEntityByScene(self: Scene, list_allocator: std.mem.Allocator, entity_re
     entity_result_list.shrinkAndFree(list_allocator, end_index);
 }
 //======================for the entities in the scenes=====================================
-
-fn _ValidateScriptType(script_type: ScriptAsset.ScriptType) void {
-    std.debug.assert(script_type == .SceneInputPressed or
-        script_type == .SceneOnUpdate or
-        script_type == .SceneOnPhysicsUpdate or
-        script_type == .SceneSceneStart);
-}

@@ -57,7 +57,7 @@ pub const ObjectRef = union(enum) {
     Bus: Bus,
     UIElement: UIElement,
 
-    fn Of(object: anytype) ObjectRef {
+    pub fn Of(object: anytype) ObjectRef {
         return switch (@TypeOf(object)) {
             Entity => .{ .Entity = object },
             Scene => .{ .Scene = object },
@@ -322,6 +322,16 @@ pub const Builder = struct {
     pub fn SceneRef(self: *Builder, field: *Scene, label: []const u8, options: SceneRefOptions) !Entity {
         const access = if (options.OverlayOnly) NameAccess(Scene, true) else NameAccess(Scene, false);
         return try self.ObjectRefField(Scene, .scene_layer, field, label, access, .{ .Writes = options.Writes });
+    }
+
+    /// A player field, the same way, taking a player's row from the Players panel
+    pub fn PlayerRef(self: *Builder, field: *Player, label: []const u8, options: RefOptions) !Entity {
+        return try self.ObjectRefField(Player, .player, field, label, NameAccess(Player, false), options);
+    }
+
+    /// A game context field, the same way, taking a game context's row
+    pub fn GameContextRef(self: *Builder, field: *GameContext, label: []const u8, options: RefOptions) !Entity {
+        return try self.ObjectRefField(GameContext, .gamecontext, field, label, NameAccess(GameContext, false), options);
     }
 
     fn ObjectRefField(self: *Builder, comptime T: type, comptime kind: std.meta.Tag(ObjectRefComponent.Ref), field: *T, label: []const u8, access: *const Access, options: RefOptions) !Entity {
@@ -806,8 +816,8 @@ const OPTIONAL_VALUE = Access{
     }.Write,
 };
 
-/// An entity or scene field, shown as its object's name. Written only by a dropped row of its kind (Ref) or its Clear
-/// (a null Ref). With `overlay_only` a scene that isn't an overlay is turned down
+/// An object field (entity, scene, player, game context), shown as its object's name. Written only by a dropped row of
+/// its kind (Ref) or its Clear (a null Ref). With `overlay_only` a scene that isn't an overlay is turned down
 fn NameAccess(comptime T: type, comptime overlay_only: bool) *const Access {
     return &struct {
         const access = Access{ .Read = Read, .Write = Write };
@@ -829,6 +839,8 @@ fn NameAccess(comptime T: type, comptime overlay_only: bool) *const Access {
             const dropped: T = switch (T) {
                 Entity => if (ref == .entity) ref.entity else return,
                 Scene => if (ref == .scene_layer) ref.scene_layer else return,
+                Player => if (ref == .player) ref.player else return,
+                GameContext => if (ref == .gamecontext) ref.gamecontext else return,
                 else => @compileError("Not a reference field type: " ++ @typeName(T)),
             };
             if (comptime overlay_only) {

@@ -111,6 +111,9 @@ fn TextIn(box: Entity) []const u8 {
 }
 
 test "an entity field takes a dropped entity row, turns down a scene row, and Clear empties it" {
+    //the turned-down drop's warning is expected; kept off the build runner's output (see TmplTests)
+    std.testing.log_level = .err;
+    defer std.testing.log_level = .warn;
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
@@ -137,6 +140,9 @@ test "an entity field takes a dropped entity row, turns down a scene row, and Cl
 }
 
 test "an overlay field turns down a game layer scene and takes an overlay one" {
+    //the turned-down drop's warning is expected; kept off the build runner's output (see TmplTests)
+    std.testing.log_level = .err;
+    defer std.testing.log_level = .warn;
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;

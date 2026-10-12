@@ -62,7 +62,9 @@ pub const Requester = union(enum(u16)) {
 pub const ResolveReq = struct {
     Requester: Requester,
     UUID: u64,
-    Resolve: *const fn (requester: Requester, uuid: u64) bool,
+    Resolve: *const fn (requester: Requester, uuid: u64, field: u32) bool,
+    /// which of the requester's references it is, for one that has several (a script's variables)
+    Field: u32 = 0,
 };
 
 pub const DeserializeContext = struct {
@@ -139,7 +141,7 @@ pub fn ResolveUUIDs(self: *Serializer) void {
     var i: usize = 0;
     while (i < self.mPendingResolves.items.len) {
         const request = self.mPendingResolves.items[i];
-        if (!request.Requester.IsActive() or request.Resolve(request.Requester, request.UUID)) {
+        if (!request.Requester.IsActive() or request.Resolve(request.Requester, request.UUID, request.Field)) {
             _ = self.mPendingResolves.swapRemove(i);
         } else {
             i += 1;

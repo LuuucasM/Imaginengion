@@ -1,10 +1,17 @@
 const std = @import("std");
 const EngineContext = @import("IM").EngineContext;
 const Entity = @import("IM").Entity;
-const ScriptType = @import("IM").ScriptType;
 const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
-const OnPointerEventScript = @This();
+
+//The script's variables go here, above its functions. Each one is shown under the script in the Scripts panel, where it
+//can be set (an entity dragged onto an Entity), and saved with the object, and every object the script is on has its
+//own. Each needs a default, and can be a f32, i32, u32, bool, enum, Vec2/Vec3/Vec4(f32), Entity, SceneLayer, Player
+//or GameContext. They are self's fields in the functions below, e.g. self.mSpeed
+//mSpeed: f32 = 5.0,
+
+//The functions the engine runs (its hooks) are named for when they run. A script can have any of the ones its object
+//takes, e.g. OnUpdate and OnCollisionBegin together, and they all share the variables
 
 /// Function that gets executed for every pointer (mouse) event sent to this entity. Any entity the pointer can be over
 /// gets them, in the world as much as in UI: an enemy that lights up when hovered, a door that opens when clicked, a
@@ -22,9 +29,10 @@ const OnPointerEventScript = @This();
 ///     .PointerDropped: mSource, a drag source (DragSourceComponent), was let go on this drop target
 /// return .Continue and the entities this one is inside get the event too, and this entity's other pointer scripts
 /// return .Handled and it stops here: e.g. a button inside a clickable panel keeps its click from the panel
-pub export fn Run(engine_context: *EngineContext, self: *const Entity, event: *const PointerEvent) callconv(.c) ScriptResult {
-    _ = engine_context;
+pub fn OnPointerEvent(self: *@This(), engine_context: *EngineContext, owner: Entity, event: *const PointerEvent) !ScriptResult {
     _ = self;
+    _ = engine_context;
+    _ = owner;
 
     switch (event.*) {
         .PointerClicked => |click| {
@@ -35,8 +43,4 @@ pub export fn Run(engine_context: *EngineContext, self: *const Entity, event: *c
         else => {},
     }
     return .Continue;
-}
-//Note the following functions are for editor purposes and to not be changed by user or bad things can happen :)
-pub export fn GetScriptType() callconv(.c) ScriptType {
-    return ScriptType.EntityOnPointerEvent;
 }

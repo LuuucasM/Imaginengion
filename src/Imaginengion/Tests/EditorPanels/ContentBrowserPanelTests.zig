@@ -224,11 +224,13 @@ test "EngineAssets goes into the engine's assets, whose files are engine files, 
 }
 
 test "the Scripts panel takes each kind of script onto its kind of object, and nothing else" {
-    try std.testing.expectEqual(.entity, ScriptsPanel.ScriptOwnerOf(.EntityOnUpdate).?);
-    try std.testing.expectEqual(.scene_layer, ScriptsPanel.ScriptOwnerOf(.SceneOnUpdate).?);
-    try std.testing.expectEqual(.player, ScriptsPanel.ScriptOwnerOf(.PlayerOnUpdate).?);
-    try std.testing.expectEqual(.player, ScriptsPanel.ScriptOwnerOf(.PlayerInputPressed).?);
-    try std.testing.expectEqual(.gamecontext, ScriptsPanel.ScriptOwnerOf(.GameContextGameStart).?);
+    //the turned-down drop's warning is expected; kept off the build runner's output (see TmplTests)
+    std.testing.log_level = .err;
+    defer std.testing.log_level = .warn;
+    try std.testing.expectEqual(.entity, ScriptsPanel.ScriptOwnerOf(.Entity));
+    try std.testing.expectEqual(.scene_layer, ScriptsPanel.ScriptOwnerOf(.Scene));
+    try std.testing.expectEqual(.player, ScriptsPanel.ScriptOwnerOf(.Player));
+    try std.testing.expectEqual(.gamecontext, ScriptsPanel.ScriptOwnerOf(.GameContext));
 
     //a texture dropped on it: left alone, nothing loaded
     const browser = try TestBrowser.Init();

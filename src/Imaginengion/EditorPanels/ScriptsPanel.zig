@@ -1,8 +1,9 @@
 //! The Scripts panel, in the editor's own UI, in the shell's Scripts tab: the selected object's name, then a row for
-//! each of its scripts, which right clicking offers to delete. A line says why when there is nothing to list. Every
-//! frame the selection and its scripts are checked against what the rows were built for, and they are built again when
-//! they differ. A script is added by dropping it on the panel from the Content Browser: an entity script onto an
-//! entity, a scene script onto a scene, a player script onto a player, a game mode script onto a game mode
+//! each of its scripts, which right clicking offers to delete, with the script's variables under it to edit (see
+//! ScriptValues.BuildFields). A line says why when there is nothing to list. Every frame the selection, its scripts and
+//! the builds they run are checked against what the rows were built for, and they are built again when they differ. A
+//! script is added by dropping it on the panel from the Content Browser: an entity script onto an entity, a scene script
+//! onto a scene, a player script onto a player, a game mode script onto a game mode
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -16,7 +17,9 @@ const SurfaceComponent = EntityComponents.SurfaceComponent;
 const DropTargetComponent = EntityComponents.DropTargetComponent;
 const FileRefComponent = EntityComponents.FileRefComponent;
 const ScriptAsset = @import("../ECSComponents/AComponents.zig").ScriptAsset;
-const ScriptType = @import("../ECSComponents/Asset/ScriptAsset.zig").ScriptType;
+const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
+const OwnerKind = @import("../Scripts/ScriptABI.zig").OwnerKind;
+const ScriptValues = @import("../Scripts/ScriptValues.zig");
 const PointerDroppedEvent = @import("../Events/PointerEventData.zig").PointerDroppedEvent;
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 
@@ -39,9 +42,10 @@ mRows: ?Entity = null,
 /// The rows' right-click menus, each a popup at the top of the scene
 mMenus: std.ArrayList(Entity) = .empty,
 mItems: std.ArrayList(ItemAction) = .empty,
-/// The object the rows were built for, and its scripts then
+/// The object the rows were built for, and its scripts then, with which build of its script each was running (Version)
 mBuiltFor: ?SelectedObject = null,
 mBuiltScripts: std.ArrayList(SelectedObject) = .empty,
+mBuiltVersions: std.ArrayList(u32) = .empty,
 mOptions: Widgets.Options = .{},
 
 /// Builds the panel into `page`, the shell's Scripts tab
@@ -66,6 +70,7 @@ pub fn Deinit(self: *ScriptsPanel, engine_allocator: std.mem.Allocator) void {
     self.mMenus.deinit(engine_allocator);
     self.mItems.deinit(engine_allocator);
     self.mBuiltScripts.deinit(engine_allocator);
+    self.mBuiltVersions.deinit(engine_allocator);
 }
 
 /// Whether it is shown in its tab (the Window menu's Scripts)
@@ -122,14 +127,14 @@ pub fn Run(engine_context: *EngineContext, script: SelectedObject) !void {
     }
 }
 
-/// Which kind of object a script goes on, from its type's name: null for one whose name says none of them
-pub fn ScriptOwnerOf(script_type: ScriptType) ?std.meta.Tag(SelectedObject) {
-    const name = @tagName(script_type);
-    if (std.mem.startsWith(u8, name, "Entity")) return .entity;
-    if (std.mem.startsWith(u8, name, "Scene")) return .scene_layer;
-    if (std.mem.startsWith(u8, name, "Player")) return .player;
-    if (std.mem.startsWith(u8, name, "GameContext")) return .gamecontext;
-    return null;
+/// Which kind of selected object a script goes on
+pub fn ScriptOwnerOf(owner: OwnerKind) std.meta.Tag(SelectedObject) {
+    return switch (owner) {
+        .Entity => .entity,
+        .Scene => .scene_layer,
+        .Player => .player,
+        .GameContext => .gamecontext,
+    };
 }
 
 /// A drop on the panel: a script added to the selected object, if it is the kind of script that object takes
@@ -152,9 +157,9 @@ pub fn OnDrop(self: ScriptsPanel, engine_context: *EngineContext, on: Entity, dr
         error.NoDefaultAsset => return,
         else => return err,
     };
-    const script_type = script_asset.GetScriptType();
-    if (ScriptOwnerOf(script_type) != std.meta.activeTag(object)) {
-        std.log.warn("{s} is a {s} script, which doesn't go on a {s}", .{ rel_path, @tagName(script_type), @tagName(object) });
+    const owner = script_asset.GetOwner();
+    if (ScriptOwnerOf(owner) != std.meta.activeTag(object)) {
+        std.log.warn("{s} is a {s} script, which doesn't go on a {s}", .{ rel_path, @tagName(owner), @tagName(object) });
         return;
     }
     switch (object) {
@@ -168,10 +173,22 @@ fn IsBuiltFor(self: ScriptsPanel, listed: ?SelectedObject, scripts: []const Sele
         if (!SameObject(object, self.mBuiltFor.?)) return false;
     }
     if (scripts.len != self.mBuiltScripts.items.len) return false;
-    for (scripts, self.mBuiltScripts.items) |script, built| {
+    for (scripts, self.mBuiltScripts.items, self.mBuiltVersions.items) |script, built, version| {
         if (!SameObject(script, built)) return false;
+        //swapped for a new build, whose variables can be others or elsewhere: the rows editing them are built again
+        if (Version(script) != version) return false;
     }
     return true;
+}
+
+/// Which build of its script a script child runs, so a new one is noticed: maxInt for one with no variables yet (its
+/// script never loaded), which has none to show
+fn Version(script: SelectedObject) u32 {
+    const component = switch (script) {
+        inline else => |typed| typed.GetComponent(ScriptComponent),
+    } orelse return std.math.maxInt(u32);
+    if (ScriptValues.InstanceOf(component) == null) return std.math.maxInt(u32);
+    return ScriptValues.AssetOf(component).?.mGeneration;
 }
 
 /// The old rows hidden and deleted, and new ones built for `scripts`
@@ -185,7 +202,9 @@ fn Rebuild(self: *ScriptsPanel, engine_context: *EngineContext, listed: ?Selecte
     self.mMenus.clearRetainingCapacity();
     self.mItems.clearRetainingCapacity();
     self.mBuiltScripts.clearRetainingCapacity();
+    self.mBuiltVersions.clearRetainingCapacity();
     try self.mBuiltScripts.appendSlice(engine_allocator, scripts);
+    for (scripts) |script| try self.mBuiltVersions.append(engine_allocator, Version(script));
     self.mBuiltFor = listed;
     try self.mArea.MarkLayoutDirty(engine_context);
     if (scripts.len == 0) return;
@@ -199,6 +218,16 @@ fn Rebuild(self: *ScriptsPanel, engine_context: *EngineContext, listed: ?Selecte
         try self.mMenus.append(engine_allocator, menu);
         const item = try Widgets.MenuItem(engine_context, menu, "Delete Script", .{ .StockScripts = self.mOptions.StockScripts });
         try self.mItems.append(engine_allocator, .{ .Item = item, .Script = script });
+
+        //its variables under it, for one that has some
+        if (Version(script) == std.math.maxInt(u32)) continue;
+        switch (script) {
+            inline else => |typed| {
+                if (ScriptValues.InstanceOf(typed.GetComponent(ScriptComponent).?).?.mInfo.mFieldCount == 0) continue;
+                const fields = try Widgets.Column(engine_context, .{ .Entity = rows });
+                try ScriptValues.BuildFields(engine_context, fields, fields, typed, self.mOptions);
+            },
+        }
     }
 }
 

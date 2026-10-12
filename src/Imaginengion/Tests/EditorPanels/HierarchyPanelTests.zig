@@ -47,6 +47,8 @@ const TestWorld = struct {
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
+        //the rows' stripes' white texture
+        try engine_context.mAssetManager.Init(engine_context);
         try engine_context.mUIManager.Init(engine_context.EngineAllocator());
         try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
         //as the editor has it (EditorProgram)
@@ -64,6 +66,12 @@ const TestWorld = struct {
         engine_context.mGameWorld.Deinit(engine_context);
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
+        const engine_allocator = engine_context.EngineAllocator();
+        const asset_manager = &engine_context.mAssetManager;
+        asset_manager.mECSManager.Deinit(engine_context);
+        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
+        asset_manager.mEventManager.Deinit(engine_allocator);
+        asset_manager.mCWDPath.deinit(engine_allocator);
         _ = engine_context._Internal.EngineGPA.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -435,6 +443,9 @@ test "a ready-made checkbox shows a check mark only while it is checked" {
 }
 
 test "a file dropped on the panel: another type's file ignored, an entity file needs a scene selected" {
+    //the turned-down drops' warnings are expected; kept off the build runner's output (see TmplTests)
+    std.testing.log_level = .err;
+    defer std.testing.log_level = .warn;
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;

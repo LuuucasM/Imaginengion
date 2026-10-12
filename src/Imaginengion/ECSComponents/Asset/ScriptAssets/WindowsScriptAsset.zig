@@ -1,65 +1,31 @@
+//! Building and loading a script's DLL on Windows, for ScriptAsset. A build goes to zig-out/bin/<file name>.dll, and what
+//! is loaded is a numbered copy of it (<file name>.<generation>.dll): Windows won't let a loaded DLL be written over, and
+//! the old build has to stay loaded while the next one is built, to keep running if that one doesn't
 const std = @import("std");
 const builtin = @import("builtin");
 const game_build_options = @import("game_build_options");
 const WindowsScriptAsset = @This();
 
-
-const EntityComponents = @import("../../EComponents.zig");
-const EntityInputPressedScript = EntityComponents.OnInputPressedScript;
-const EntityOnUpdateScript = EntityComponents.OnUpdateScript;
-
-const SceneComponents = @import("../../SComponents.zig");
-const SceneSceneStartScript = SceneComponents.OnSceneStartScript;
-const SceneOnUpdateScript = SceneComponents.OnUpdateScript;
-const SceneInputPressedScript = SceneComponents.InputPressedScript;
-
 const EngineContext = @import("../../../Core/EngineContext.zig");
 const Tracy = @import("../../../Core/Tracy.zig");
-const ScriptResult = @import("../ScriptAsset.zig").ScriptResult;
-const ScriptType = @import("../ScriptAsset.zig").ScriptType;
+const ScriptABI = @import("../../../Scripts/ScriptABI.zig");
 
-mLib: std.os.windows.HMODULE = undefined,
-mScriptType: ScriptType = undefined,
-mRunFunc: *anyopaque = undefined,
+mLib: ?std.os.windows.HMODULE = null,
+/// the copy that is loaded, deleted once it is unloaded. Empty for a packaged game's, which isn't a copy
+mLoadedPath: std.ArrayList(u8) = .empty,
 
-pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, _: std.Io.File) !void {
-    const zone = Tracy.ZoneInit("WindowsScriptAsset::Init", @src());
+/// Builds the script at abs_path into zig-out/bin/<file name>.dll with the engine's own build (zig build script). A
+/// packaged game (-Dprebuilt-scripts) ships its scripts already built, so there it does nothing
+pub fn Build(engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8) !void {
+    if (game_build_options.prebuilt_scripts) return;
+    const zone = Tracy.ZoneInit("WindowsScriptAsset::Build", @src());
     defer zone.Deinit();
-    zone.Text(rel_path);
 
-    //a packaged game (-Dprebuilt-scripts) ships its scripts already built, everything else builds them here so an
-    //edit to one is picked up. Either way the dll ends up at the same place
-    if (!game_build_options.prebuilt_scripts) try Compile(engine_context, abs_path, rel_path);
-
-    //get the path of the newly create dyn lib and open it
-    const dyn_path = try std.fmt.allocPrint(engine_context.FrameAllocator(), "zig-out/bin/{s}.dll", .{std.fs.path.basename(abs_path)});
-
-    const dyn_path_w = try std.unicode.utf8ToUtf16LeAllocZ(engine_context.FrameAllocator(), dyn_path);
-
-    self.mLib = LoadLibraryExW(dyn_path_w.ptr, null, 0) orelse {
-        std.log.err("Failed to load DLL: {s}", .{dyn_path});
-        return error.AssetInitFailed;
-    };
-
-    const script_type_func = try LoadSymbol(*const fn () ScriptType, self.mLib, "GetScriptType");
-    self.mScriptType = script_type_func();
-
-    self.mRunFunc = GetProcAddress(self.mLib, "Run\x00") orelse {
-        std.log.err("Missing exported symbol: Run", .{});
-        return error.AssetInitFailed;
-    };
-}
-
-/// Builds the script at abs_path into zig-out/bin/<file name>.dll with the engine's own build (zig build script)
-fn Compile(engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8) !void {
     const name = std.fs.path.basename(abs_path);
-
-    //spawn a child to handle compiling the zig file into a dll
     const path_arg = try std.fmt.allocPrint(engine_context.FrameAllocator(), "-Dscript_path={s}", .{abs_path});
     const name_arg = try std.fmt.allocPrint(engine_context.FrameAllocator(), "-Dscript_name={s}", .{name});
     const environ_map = try engine_context.mEnviron.createMap(engine_context.FrameAllocator());
 
-    //defer allocator.free(file_arg);
     var child = try std.process.spawn(engine_context.Io(), .{
         .argv = &[_][]const u8{
             "zig",
@@ -89,39 +55,73 @@ fn Compile(engine_context: *EngineContext, abs_path: []const u8, rel_path: []con
     std.log.info("script {s} compile success!\n", .{rel_path});
 }
 
-pub fn Deinit(self: *WindowsScriptAsset, _: *EngineContext) void {
-    _ = FreeLibrary(self.mLib);
-}
+/// Loads the last build of the script at abs_path, as copy number `generation`, and hands back what it exports
+pub fn Open(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path: []const u8, generation: u32) !*const ScriptABI.ScriptInfo {
+    const frame_allocator = engine_context.FrameAllocator();
+    const name = std.fs.path.basename(abs_path);
+    const built_path = try std.fmt.allocPrint(frame_allocator, "zig-out/bin/{s}.dll", .{name});
 
-pub fn Run(self: *WindowsScriptAsset, comptime script_type: type, args: anytype) ScriptResult {
-    const run_func: script_type.RunFuncSig = @ptrCast(self.mRunFunc);
-    return @call(.auto, run_func, args);
-}
+    var load_path = built_path;
+    if (!game_build_options.prebuilt_scripts) {
+        load_path = try std.fmt.allocPrint(frame_allocator, "zig-out/bin/{s}.{d}.dll", .{ name, generation });
+        const built_w = try std.unicode.utf8ToUtf16LeAllocZ(frame_allocator, built_path);
+        const copy_w = try std.unicode.utf8ToUtf16LeAllocZ(frame_allocator, load_path);
+        if (!CopyFileW(built_w.ptr, copy_w.ptr, .FALSE).toBool()) {
+            std.log.err("Failed to copy {s} to {s} to load it", .{ built_path, load_path });
+            return error.AssetInitFailed;
+        }
+        try self.mLoadedPath.appendSlice(engine_context.EngineAllocator(), load_path);
+    }
+    errdefer self.Close(engine_context);
 
-pub fn GetScriptType(self: WindowsScriptAsset) ScriptType {
-    return self.mScriptType;
-}
-
-fn LoadSymbol(comptime T: type, lib: std.os.windows.HMODULE, comptime name: [:0]const u8) !T {
-    const addr = GetProcAddress(lib, name.ptr) orelse {
-        std.log.err("Missing exported symbol: {s}", .{name});
+    const load_path_w = try std.unicode.utf8ToUtf16LeAllocZ(frame_allocator, load_path);
+    self.mLib = LoadLibraryExW(load_path_w.ptr, null, 0) orelse {
+        std.log.err("Failed to load DLL: {s}", .{load_path});
         return error.AssetInitFailed;
     };
 
-    return @as(T, @ptrCast(@alignCast(addr)));
+    const get_info: ScriptABI.GetInfoFn = @ptrCast(@alignCast(GetProcAddress(self.mLib.?, ScriptABI.INFO_SYMBOL) orelse {
+        std.log.err("{s} exports no {s}: it wasn't built by zig build script", .{ load_path, ScriptABI.INFO_SYMBOL });
+        return error.AssetInitFailed;
+    }));
+    return get_info();
 }
 
-pub extern "kernel32" fn LoadLibraryExW(
+/// Unloads what Open loaded, and deletes the copy
+pub fn Close(self: *WindowsScriptAsset, engine_context: *EngineContext) void {
+    if (self.mLib) |lib| _ = FreeLibrary(lib);
+    self.mLib = null;
+    if (self.mLoadedPath.items.len != 0) {
+        //best effort: a copy left behind is written over by the next one with its number
+        if (std.unicode.utf8ToUtf16LeAllocZ(engine_context.FrameAllocator(), self.mLoadedPath.items)) |path_w| {
+            _ = DeleteFileW(path_w.ptr);
+        } else |_| {}
+    }
+    self.mLoadedPath.deinit(engine_context.EngineAllocator());
+    self.mLoadedPath = .empty;
+}
+
+extern "kernel32" fn LoadLibraryExW(
     lpLibFileName: std.os.windows.LPCWSTR,
     hFile: ?std.os.windows.HANDLE,
     dwFlags: std.os.windows.DWORD,
 ) callconv(.winapi) ?std.os.windows.HMODULE;
 
-pub extern "kernel32" fn GetProcAddress(
+extern "kernel32" fn GetProcAddress(
     hModule: std.os.windows.HMODULE,
     lpProcName: std.os.windows.LPCSTR,
 ) callconv(.winapi) ?std.os.windows.FARPROC;
 
-pub extern "kernel32" fn FreeLibrary(
+extern "kernel32" fn FreeLibrary(
     hModule: std.os.windows.HMODULE,
+) callconv(.winapi) std.os.windows.BOOL;
+
+extern "kernel32" fn CopyFileW(
+    lpExistingFileName: std.os.windows.LPCWSTR,
+    lpNewFileName: std.os.windows.LPCWSTR,
+    bFailIfExists: std.os.windows.BOOL,
+) callconv(.winapi) std.os.windows.BOOL;
+
+extern "kernel32" fn DeleteFileW(
+    lpFileName: std.os.windows.LPCWSTR,
 ) callconv(.winapi) std.os.windows.BOOL;

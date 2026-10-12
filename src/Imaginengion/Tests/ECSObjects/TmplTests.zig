@@ -685,6 +685,10 @@ fn ExpectLoopSpawn(world: *TestWorld, scene: Scene, tmpl: AssetHandle) !void {
 }
 
 test "a template that ends up inside itself can not be spawned, and nothing is left of the try" {
+    //the warning is the point of the test. Printed, the build runner shows it as "run test w" with a
+    //"failed command" line even though every test passed
+    std.testing.log_level = .err;
+    defer std.testing.log_level = .warn;
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;

@@ -90,39 +90,13 @@ pub const Invalidate = Core.Invalidate;
 
 pub const CreateChild = Core.CreateChild;
 
+/// Adds a script child running the script `new_script_handle`, with its own variables and the tags for its hooks
+/// (see Core.AddScript)
 pub fn AddScript(self: GameContext, engine_context: *EngineContext, new_script_handle: AssetHandle) !void {
-    const script_asset = new_script_handle.GetAsset(engine_context, ScriptAsset) catch |err| switch (err) {
-        //it failed to load (the reason is already logged). Keep the script child so the script stays on the game
-        //context and is saved back out. Nothing runs it until its file is fixed, see ScriptsProcessor.SyncScriptTypes
-        error.NoDefaultAsset => {
-            const new_script_context = try Core.AddScript(self, engine_context, new_script_handle);
-            _ = try new_script_context.AddComponent(engine_context, GameModeComponents.UntypedScriptTag{});
-            return;
-        },
-        else => return err,
-    };
-    const script_type = script_asset.GetScriptType();
-    _ValidateScriptType(script_type);
-
-    const new_script_context = try Core.AddScript(self, engine_context, new_script_handle);
-    if (!try AddScriptTypeTag(new_script_context, engine_context, script_type)) unreachable;
-}
-
-/// Gives a script child the tag for script_type, which is what has it run. False, with nothing added, if script_type
-/// is not a game context script
-pub fn AddScriptTypeTag(script: GameContext, engine_context: *EngineContext, script_type: ScriptAsset.ScriptType) !bool {
-    switch (script_type) {
-        .GameContextGameStart => _ = try script.AddComponent(engine_context, GameModeComponents.OnGameStartScript{}),
-        else => return false,
-    }
-    return true;
+    _ = try Core.AddScript(self, engine_context, new_script_handle);
 }
 
 pub const AddComponentScript = Core.AddComponentScript;
-
-fn _ValidateScriptType(script_type: ScriptAsset.ScriptType) void {
-    std.debug.assert(script_type == .GameContextGameStart);
-}
 
 //TODO: move to GCManager
 //pub fn CreateGameModeConfig(self: *GameMode, engine_context: *EngineContext, config: NewGameModeConfig) !void {

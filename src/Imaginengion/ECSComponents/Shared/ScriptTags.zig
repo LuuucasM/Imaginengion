@@ -1,45 +1,32 @@
-const std = @import("std");
+//! The tags on a script child that say which of its script's hooks run: one for each hook the script has (see
+//! ScriptABI.Hook), given by ScriptsProcessor.SetUpScript from the script's DLL. A tag is what the engine queries for,
+//! its Hook which of the script's functions it calls
 const EngineContext = @import("../../Core/EngineContext.zig");
-const Entity = @import("../../ECSObjects/Entity.zig");
-const ScriptType = @import("../Asset/ScriptAsset.zig").ScriptType;
-const ScriptResult = @import("../Asset/ScriptAsset.zig").ScriptResult;
-const SceneLayer = @import("../../ECSObjects/Scene.zig");
-const Player = @import("../../ECSObjects/Player.zig");
-const GameContext = @import("../../ECSObjects/GameContext.zig");
-
-const WindowEventData = @import("../../Events/WindowEventData.zig");
-const KeyboardPressedEvent = WindowEventData.KeyboardPressedEvent;
-
-const CollisionInfo = @import("../../Physics/Collisions.zig").CollisionInfo;
-const PreSolveInfo = @import("../../Physics/Collisions.zig").PreSolveInfo;
-const PointerEvent = @import("../../Events/PointerEventData.zig").PointerEvent;
-const UIEvent = @import("../../Events/UIEventData.zig").UIEvent;
+const ScriptHook = @import("../../Scripts/ScriptABI.zig").Hook;
 
 //ENTITY SCRIPTS
+/// Handed every key pressed, like an OnKeyPressed for a player, and checks which it got
 pub const OnKeyPressedScript = struct {
-    pub const RunFuncSig = *const fn (*const EngineContext, *const Entity, *const KeyboardPressedEvent) callconv(.c) ScriptResult;
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnKeyPressedScript";
-    pub const Scripttype: ScriptType = .EntityInputPressed;
+    pub const Hook: ScriptHook = .OnKeyPressed;
     pub fn Deinit(_: *OnKeyPressedScript, _: *EngineContext) void {}
 };
 
 pub const EntityOnUpdateScript = struct {
-    pub const RunFuncSig = *const fn (*const EngineContext, *const Entity) callconv(.c) ScriptResult;
     pub const Editable: bool = false;
     pub const Name: []const u8 = "EntityOnUpdateScript";
-    pub const Scripttype: ScriptType = .EntityOnUpdate;
+    pub const Hook: ScriptHook = .OnUpdate;
     pub fn Deinit(_: *EntityOnUpdateScript, _: *EngineContext) void {}
 };
 
 /// Runs once when the owner's collider starts touching another one (see CollisionBeginEvent), whatever
-/// it touched: like a key pressed script being handed every key, the script itself checks what it hit
+/// it touched: like a key pressed script being handed every key, the script itself checks what it hit.
+/// Handed the entity it hit and the contact as the owner sees it
 pub const OnCollisionBeginScript = struct {
-    //engine context, the script's owner, the entity it hit, and the contact as the owner sees it
-    pub const RunFuncSig = *const fn (*EngineContext, *const Entity, *const Entity, *const CollisionInfo) callconv(.c) ScriptResult;
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnCollisionBeginScript";
-    pub const Scripttype: ScriptType = .EntityOnCollisionBegin;
+    pub const Hook: ScriptHook = .OnCollisionBegin;
     pub fn Deinit(_: *OnCollisionBeginScript, _: *EngineContext) void {}
 };
 
@@ -48,11 +35,9 @@ pub const OnCollisionBeginScript = struct {
 /// It still runs when the other entity was deleted, which ends the collision too, so check other.IsActive() before
 /// reading anything off it. An owner that was deleted is not run at all
 pub const OnCollisionEndScript = struct {
-    //engine context, the script's owner, the entity it was touching, and the contact as the owner saw it
-    pub const RunFuncSig = *const fn (*EngineContext, *const Entity, *const Entity, *const CollisionInfo) callconv(.c) ScriptResult;
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnCollisionEndScript";
-    pub const Scripttype: ScriptType = .EntityOnCollisionEnd;
+    pub const Hook: ScriptHook = .OnCollisionEnd;
     pub fn Deinit(_: *OnCollisionEndScript, _: *EngineContext) void {}
 };
 
@@ -61,23 +46,19 @@ pub const OnCollisionEndScript = struct {
 /// Set info.mEnabled to false to have the two pass through each other on this substep, e.g. a one way platform.
 /// The step's contact lists are live while it runs: read the world and decide, never create, delete or move anything
 pub const OnPreSolveScript = struct {
-    //engine context, the script's owner, the entity in contact with it, and the contact as the owner sees it
-    pub const RunFuncSig = *const fn (*EngineContext, *const Entity, *const Entity, *PreSolveInfo) callconv(.c) ScriptResult;
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnPreSolveScript";
-    pub const Scripttype: ScriptType = .EntityOnPreSolve;
+    pub const Hook: ScriptHook = .OnPreSolve;
     pub fn Deinit(_: *OnPreSolveScript, _: *EngineContext) void {}
 };
 
 /// Runs at the start of every physics step, at the physics' own fixed rate rather than once a frame (see
 /// PhysicsEventData.StepBeginEvent): the place for anything the physics should feel, like forces. A force
-/// applied here pushes for the whole step and is let go of after it
+/// applied here pushes for the whole step and is let go of after it. Handed the length of the step in seconds
 pub const EntityOnPhysicsUpdateScript = struct {
-    //engine context, the script's owner, and the length of the step in seconds, the same every step
-    pub const RunFuncSig = *const fn (*EngineContext, *const Entity, f32) callconv(.c) ScriptResult;
     pub const Editable: bool = false;
     pub const Name: []const u8 = "EntityOnPhysicsUpdateScript";
-    pub const Scripttype: ScriptType = .EntityOnPhysicsUpdate;
+    pub const Hook: ScriptHook = .OnPhysicsUpdate;
     pub fn Deinit(_: *EntityOnPhysicsUpdateScript, _: *EngineContext) void {}
 };
 
@@ -87,28 +68,24 @@ pub const EntityOnPhysicsUpdateScript = struct {
 /// panel hears clicks on its rows too, and the event's mTarget is what was actually under the pointer. Returning
 /// .Handled keeps a press, click, drag or drop from going on to the owner's parents (an enter or exit is each one's own)
 pub const OnPointerEventScript = struct {
-    //engine context, the script's owner, and the event
-    pub const RunFuncSig = *const fn (*EngineContext, *const Entity, *const PointerEvent) callconv(.c) ScriptResult;
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnPointerEventScript";
-    pub const Scripttype: ScriptType = .EntityOnPointerEvent;
+    pub const Hook: ScriptHook = .OnPointerEvent;
     pub fn Deinit(_: *OnPointerEventScript, _: *EngineContext) void {}
 };
 
 /// OnPointerEventScript for the UI's events (see Events/UIEventData.zig): a text input getting or losing the keyboard,
 /// its text changing or being submitted, a popup opening or closing. Run right after the pointer's events
 pub const OnUIEventScript = struct {
-    //engine context, the script's owner, and the event
-    pub const RunFuncSig = *const fn (*EngineContext, *const Entity, *const UIEvent) callconv(.c) ScriptResult;
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnUIEventScript";
-    pub const Scripttype: ScriptType = .EntityOnUIEvent;
+    pub const Hook: ScriptHook = .OnUIEvent;
     pub fn Deinit(_: *OnUIEventScript, _: *EngineContext) void {}
 };
 
-/// On a script that does not load (it does not compile, say), so it has none of the type tags here and nothing runs
-/// it. Given by AddScript, or by ScriptsProcessor.SyncScriptTypes when an edit breaks a script, and swapped for the
-/// type tag by SyncScriptTypes once the script's file is changed and loads. For all four object types. Never saved
+/// On a script that has nothing to run: it does not load (it does not compile, say), or it is a script for another
+/// kind of object. Given by ScriptsProcessor.SetUpScript, and taken off again once the script's file is changed and it
+/// loads as a script for this object. For all four object types. Never saved
 pub const UntypedScriptTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "UntypedScriptTag";
@@ -116,43 +93,37 @@ pub const UntypedScriptTag = struct {
 };
 
 //SCENE SCRIPTS
+/// Runs once when the scene is loaded while the game runs, and for every scene when the game starts
 pub const OnSceneStartScript = struct {
-    pub const RunFuncSig = *const fn (*EngineContext, *const SceneLayer) callconv(.c) ScriptResult;
+    pub const Editable: bool = false;
     pub const Name: []const u8 = "OnSceneStartScript";
-    pub const Scripttype: ScriptType = .SceneSceneStart;
+    pub const Hook: ScriptHook = .OnSceneStart;
     pub fn Deinit(_: *OnSceneStartScript, _: *EngineContext) void {}
 };
 
+/// Runs once a frame for each scene, after the players' OnUpdate scripts and before the entities'
 pub const SceneOnUpdateScript = struct {
-    pub const RunFuncSig = *const fn (*EngineContext, *const SceneLayer) callconv(.c) ScriptResult;
+    pub const Editable: bool = false;
     pub const Name: []const u8 = "SceneOnUpdateScript";
-    pub const Scripttype: ScriptType = .SceneOnUpdate;
+    pub const Hook: ScriptHook = .OnUpdate;
     pub fn Deinit(_: *SceneOnUpdateScript, _: *EngineContext) void {}
 };
 
 /// EntityOnPhysicsUpdateScript for a scene, e.g. a rule that pushes on every body in it. A scene's run before its
 /// entities' on each step
 pub const SceneOnPhysicsUpdateScript = struct {
-    pub const RunFuncSig = *const fn (*EngineContext, *const SceneLayer, f32) callconv(.c) ScriptResult;
+    pub const Editable: bool = false;
     pub const Name: []const u8 = "SceneOnPhysicsUpdateScript";
-    pub const Scripttype: ScriptType = .SceneOnPhysicsUpdate;
+    pub const Hook: ScriptHook = .OnPhysicsUpdate;
     pub fn Deinit(_: *SceneOnPhysicsUpdateScript, _: *EngineContext) void {}
 };
 
-pub const InputPressedScript = struct {
-    pub const RunFuncSig = *const fn (*EngineContext, *const SceneLayer) callconv(.c) ScriptResult;
-    pub const Name: []const u8 = "InputPressedScript";
-    pub const Scripttype: ScriptType = .SceneInputPressed;
-    pub fn Deinit(_: *InputPressedScript, _: *EngineContext) void {}
-};
-
 //PLAYER SCRIPTS
-/// Runs once a frame for each player, before the entities' OnUpdate scripts
+/// Runs once a frame for each player, after the game context's OnUpdate scripts and before the scenes'
 pub const PlayerOnUpdateScript = struct {
-    pub const RunFuncSig = *const fn (*EngineContext, *const Player) callconv(.c) ScriptResult;
     pub const Editable: bool = false;
     pub const Name: []const u8 = "PlayerOnUpdateScript";
-    pub const Scripttype: ScriptType = .PlayerOnUpdate;
+    pub const Hook: ScriptHook = .OnUpdate;
     pub fn Deinit(_: *PlayerOnUpdateScript, _: *EngineContext) void {}
 };
 
@@ -160,10 +131,9 @@ pub const PlayerOnUpdateScript = struct {
 /// scene stack leaves, so after every entity's key pressed scripts, and only if none of them handled it. A key the UI
 /// takes (a text input with the keyboard) never reaches it
 pub const PlayerOnInputPressedScript = struct {
-    pub const RunFuncSig = *const fn (*EngineContext, *const Player, *const KeyboardPressedEvent) callconv(.c) ScriptResult;
     pub const Editable: bool = false;
     pub const Name: []const u8 = "PlayerOnInputPressedScript";
-    pub const Scripttype: ScriptType = .PlayerInputPressed;
+    pub const Hook: ScriptHook = .OnKeyPressed;
     pub fn Deinit(_: *PlayerOnInputPressedScript, _: *EngineContext) void {}
 };
 
@@ -171,9 +141,16 @@ pub const PlayerOnInputPressedScript = struct {
 /// Runs once when the game starts (Play in the editor, launching a built game), before the scenes' OnSceneStart
 /// scripts: the place to set up the game's rules
 pub const OnGameStartScript = struct {
-    pub const RunFuncSig = *const fn (*EngineContext, *const GameContext) callconv(.c) ScriptResult;
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnGameStartScript";
-    pub const Scripttype: ScriptType = .GameContextGameStart;
+    pub const Hook: ScriptHook = .OnGameStart;
     pub fn Deinit(_: *OnGameStartScript, _: *EngineContext) void {}
+};
+
+/// Runs once a frame for the game context, first of all the OnUpdate scripts
+pub const GameContextOnUpdateScript = struct {
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "GameContextOnUpdateScript";
+    pub const Hook: ScriptHook = .OnUpdate;
+    pub fn Deinit(_: *GameContextOnUpdateScript, _: *EngineContext) void {}
 };

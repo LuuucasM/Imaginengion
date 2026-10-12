@@ -66,9 +66,10 @@ pub const EComponents = enum(16) {
     GCAsset = ListInd(&ComponentsList, GCAsset),
 };
 
+/// The assets that are unloaded when their file changes, and loaded again the next time they are asked for. A script is
+/// not one of them: it is swapped for its new build in place, keeping its instances (see ScriptAsset.Reload)
 pub const FileUpdateList = [_]type{
     Texture2D,
-    ScriptAsset,
     ShaderAsset,
     TextAsset,
     AudioAsset,

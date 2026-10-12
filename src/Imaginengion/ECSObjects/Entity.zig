@@ -161,39 +161,10 @@ pub fn GetMainObject(self: Entity) Entity {
 
 pub const GetIterator = Core.GetIterator;
 
+/// Adds a script child running the script `new_script_handle`, with its own variables and the tags for its hooks
+/// (see Core.AddScript)
 pub fn AddScript(self: Entity, engine_context: *EngineContext, new_script_handle: AssetHandle) !void {
-    const script_asset = new_script_handle.GetAsset(engine_context, ScriptAsset) catch |err| switch (err) {
-        //it failed to load (the reason is already logged). Keep the script child so the script stays on the
-        //object and is saved back out. Nothing runs it until its file is fixed, see ScriptsProcessor.SyncScriptTypes
-        error.NoDefaultAsset => {
-            const new_script_entity = try Core.AddScript(self, engine_context, new_script_handle);
-            _ = try new_script_entity.AddComponent(engine_context, Components.UntypedScriptTag{});
-            return;
-        },
-        else => return err,
-    };
-    const script_type = script_asset.GetScriptType();
-    _ValidateScriptType(script_type);
-
-    const new_script_entity = try Core.AddScript(self, engine_context, new_script_handle);
-    if (!try AddScriptTypeTag(new_script_entity, engine_context, script_type)) @panic("this shouldnt happen!\n");
-}
-
-/// Gives a script child the tag for script_type, which is what has it run. False, with nothing added, if script_type
-/// is not an entity script
-pub fn AddScriptTypeTag(script: Entity, engine_context: *EngineContext, script_type: ScriptAsset.ScriptType) !bool {
-    switch (script_type) {
-        .EntityInputPressed => _ = try script.AddComponent(engine_context, OnKeyPressedScript{}),
-        .EntityOnUpdate => _ = try script.AddComponent(engine_context, OnUpdateScript{}),
-        .EntityOnCollisionBegin => _ = try script.AddComponent(engine_context, OnCollisionBeginScript{}),
-        .EntityOnCollisionEnd => _ = try script.AddComponent(engine_context, Components.OnCollisionEndScript{}),
-        .EntityOnPreSolve => _ = try script.AddComponent(engine_context, Components.OnPreSolveScript{}),
-        .EntityOnPhysicsUpdate => _ = try script.AddComponent(engine_context, Components.OnPhysicsUpdateScript{}),
-        .EntityOnPointerEvent => _ = try script.AddComponent(engine_context, Components.OnPointerEventScript{}),
-        .EntityOnUIEvent => _ = try script.AddComponent(engine_context, Components.OnUIEventScript{}),
-        else => return false,
-    }
-    return true;
+    _ = try Core.AddScript(self, engine_context, new_script_handle);
 }
 
 /// The only supported way to write an entity's local transform. Each one tags the entity so the
@@ -401,7 +372,3 @@ pub const IsActive = Core.IsActive;
 pub const Invalidate = Core.Invalidate;
 
 pub const IsIDValid = Core.IsIDValid;
-
-fn _ValidateScriptType(script_type: ScriptAsset.ScriptType) void {
-    std.debug.assert(script_type == .EntityInputPressed or script_type == .EntityOnUpdate or script_type == .EntityOnCollisionBegin or script_type == .EntityOnCollisionEnd or script_type == .EntityOnPreSolve or script_type == .EntityOnPhysicsUpdate or script_type == .EntityOnPointerEvent or script_type == .EntityOnUIEvent);
-}

@@ -1,5 +1,3 @@
-- the bars infront of the entities and scenes to differentiate them are nice but they are using the default texture when they should use the engines White texture instead
-- when i run the editor the cpu time is noticablly longer and when i turn off vsync the frame time is also much less than it use to be even tho we cleaned up a lot of extra work and decreased instructions
 - add reparenting
 - fix the rendering at the ends of quads theres some weird artifacts
 	- for pngs the see through parts for some reason skips the behind objects when it should continue to march forward to the next object behind this one

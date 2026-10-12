@@ -85,6 +85,8 @@ const OnSceneStartScript = SceneComponents.OnSceneStartScript;
 const PlayerOnUpdateScript = @import("../ECSComponents/PComponents.zig").OnUpdateScript;
 const PlayerOnInputPressedScript = @import("../ECSComponents/PComponents.zig").OnInputPressedScript;
 const OnGameStartScript = @import("../ECSComponents/GCComponents.zig").OnGameStartScript;
+const GameContextOnUpdateScript = @import("../ECSComponents/GCComponents.zig").OnUpdateScript;
+const SceneOnUpdateScript = @import("../ECSComponents/SComponents.zig").OnUpdateScript;
 
 const PlayerComponents = @import("../ECSComponents/PComponents.zig");
 const PossessComponent = PlayerComponents.PossessComponent;
@@ -403,10 +405,15 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             callback_list.first = null;
             callback_list.last = null;
 
+            //the game's rules first, then each player, each scene, and what is in them
+            _ = try ScriptsProcessor.RunScript(GameContext, GameContextOnUpdateScript, .Simulate, engine_context, .{});
             _ = try ScriptsProcessor.RunScript(Player, PlayerOnUpdateScript, .Simulate, engine_context, .{});
+            _ = try ScriptsProcessor.RunScript(Scene, SceneOnUpdateScript, .Simulate, engine_context, .{});
             _ = try ScriptsProcessor.RunScript(Entity, OnUpdateScript, .Simulate, engine_context, .{});
         }
+        _ = try ScriptsProcessor.RunScript(GameContext, GameContextOnUpdateScript, .Editor, engine_context, .{});
         _ = try ScriptsProcessor.RunScript(Player, PlayerOnUpdateScript, .Editor, engine_context, .{});
+        _ = try ScriptsProcessor.RunScript(Scene, SceneOnUpdateScript, .Editor, engine_context, .{});
         _ = try ScriptsProcessor.RunScript(Entity, OnUpdateScript, .Editor, engine_context, .{});
     }
     //-------------Game Logic End----------------
@@ -424,7 +431,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         defer assets_zone.Deinit();
         //scripts whose files changed last frame, before OnUpdate clears what changed
         const script_worlds = [_]*WorldManager{ &engine_context.mGameWorld, &engine_context.mEditorWorld, &engine_context.mTmplEditWorld, &engine_context.mSimulateWorld };
-        try ScriptsProcessor.SyncScriptTypes(engine_context, if (self.mEditorState == .Play) &script_worlds else script_worlds[0..3]);
+        try ScriptsProcessor.SyncScripts(engine_context, if (self.mEditorState == .Play) &script_worlds else script_worlds[0..3]);
         try engine_context.mAssetManager.OnUpdate(engine_context);
     }
     //-------------End Assets Update ------------------

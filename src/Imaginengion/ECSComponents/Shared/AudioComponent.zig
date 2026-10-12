@@ -190,7 +190,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
     };
 }
 
-fn ResolveBusRef(requester: Serializer.Requester, bus_uuid: u64) bool {
+fn ResolveBusRef(requester: Serializer.Requester, bus_uuid: u64, _: u32) bool {
     //the component may have been removed since the request was made, nothing left to resolve
     const audio_component = switch (requester) {
         inline .Entity, .Scene, .Player, .GameContext => |object| object.GetComponent(AudioComponent),

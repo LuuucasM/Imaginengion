@@ -41,6 +41,8 @@ const ParentComponent = @import("../ECS/Components.zig").ParentComponent;
 const ChildComponent = @import("../ECS/Components.zig").ChildComponent;
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const TextSerializer = @import("../Serializer/TextSerializer.zig");
+const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
+const ScriptValues = @import("../Scripts/ScriptValues.zig");
 
 /// Template object -> its copy, built by Fill while it copies a template, so that a copied component pointing at
 /// another object inside the template can be pointed at that object's copy afterwards (a component's RemapRefs).
@@ -364,9 +366,11 @@ pub fn Core(comptime Self: type) type {
             //this is the one place that goes straight to the manager
             _ = try _AddScriptComponent(new_script_entity, engine_context, new_script_component);
             //named after its file, scripts aren't saved with a name so this also names them on load. One with no
-            //script yet keeps the name its config gave it
+            //script yet keeps the name its config gave it, and has nothing to run
             if (new_script_handle.mID != AssetHandle.NullObject) {
                 try SetName(new_script_entity, engine_context, std.fs.path.stem(new_script_handle.GetFileMetaData().mRelPath.items));
+                //its variables and the tags for its hooks, from the script's DLL
+                try ScriptsProcessor.SetUpScript(Self, new_script_entity, engine_context);
             }
 
             return new_script_entity;
@@ -538,7 +542,10 @@ pub fn Core(comptime Self: type) type {
                     var script_handle = GetComponent(tmpl_script, ScriptComponent).?.mScriptAssetHandle;
                     script_handle.RetainAsset();
                     errdefer script_handle.ReleaseAsset();
-                    try target.AddScript(engine_context, script_handle);
+                    const script = try AddScript(target, engine_context, script_handle);
+                    //the copy starts with the template's variables, its object variables pointed at copies by _RemapRefs.
+                    //Both looked up again now: adding the script can move the template's (a duplicate in the same world)
+                    ScriptValues.CopyValues(GetComponent(tmpl_script, ScriptComponent).?, GetComponent(script, ScriptComponent).?);
                 }
             }
 
@@ -564,6 +571,14 @@ pub fn Core(comptime Self: type) type {
             inline for (comptime _SerializeList(), 0..) |component_type, i| {
                 if (@hasDecl(component_type, "RemapRefs") and !skip.isSet(i)) {
                     if (GetComponent(target, component_type)) |component| component.RemapRefs(ref_map);
+                }
+            }
+
+            if (@hasDecl(Self, "AddScript")) {
+                var script_iter = target.GetIterator(.Script);
+                while (script_iter.next()) |script| {
+                    const component = GetComponent(script, ScriptComponent) orelse continue;
+                    if (ScriptValues.InstanceOf(component)) |instance| ScriptValues.RemapRefs(instance, ref_map, target.mManager);
                 }
             }
 

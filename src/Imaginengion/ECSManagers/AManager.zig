@@ -243,6 +243,14 @@ pub fn FileChanged(self: *AManager, asset_id: AssetHandle.Type) bool {
     return self.mECSManager.IsActiveEntity(asset_id) and self.mECSManager.HasComponent(FileChangedTag, asset_id);
 }
 
+/// The asset if it is loaded, never loading it: for something that only has work to do if it is (a script child giving
+/// back its variables)
+pub fn GetLoadedAsset(self: *AManager, comptime asset_type: type, asset_id: AssetHandle.Type) ?*asset_type {
+    _ValidateAssetType(asset_type);
+    if (!self.mECSManager.IsActiveEntity(asset_id)) return null;
+    return self.mECSManager.GetComponent(asset_type, asset_id);
+}
+
 pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_type: type, asset_id: AssetHandle.Type) !*asset_type {
     _ValidateAssetType(asset_type);
 

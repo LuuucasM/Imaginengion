@@ -208,6 +208,9 @@ test "a new font size has layout fit the text again, a new color doesn't" {
 }
 
 test "an element whose style the theme hasn't is left alone" {
+    //the warning is expected; kept off the build runner's output (see TmplTests)
+    std.testing.log_level = .err;
+    defer std.testing.log_level = .warn;
     const world = try TestWorld.Init();
     defer world.Deinit();
 

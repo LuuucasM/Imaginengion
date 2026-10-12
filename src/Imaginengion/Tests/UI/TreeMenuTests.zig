@@ -31,6 +31,12 @@ const TestWorld = struct {
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
+        engine_context._Internal.ThreadedIO = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+            .concurrent_limit = .nothing,
+            .async_limit = .nothing,
+        });
+        //a stripe's white texture
+        try engine_context.mAssetManager.Init(engine_context);
         try engine_context.mUIManager.Init(engine_context.EngineAllocator());
         try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
         self.mScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
@@ -43,6 +49,12 @@ const TestWorld = struct {
         engine_context.mPointerSystem.Deinit(engine_context.EngineAllocator());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
+        const engine_allocator = engine_context.EngineAllocator();
+        const asset_manager = &engine_context.mAssetManager;
+        asset_manager.mECSManager.Deinit(engine_context);
+        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
+        asset_manager.mEventManager.Deinit(engine_allocator);
+        asset_manager.mCWDPath.deinit(engine_allocator);
         _ = engine_context._Internal.EngineGPA.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -143,7 +155,11 @@ test "a tree node's stripe comes before its arrow in its own color, with no styl
     const node = try Widgets.TreeNode(engine_context, .{ .Entity = tree }, "Player", .{ .StockScripts = false, .Stripe = color });
     const stripe = Child(node.Header, 0);
     try std.testing.expectEqual(Widgets.STRIPE_WIDTH, stripe.GetComponent(LayoutItemComponent).?.mWidth.Fixed);
-    try std.testing.expectEqual(color, stripe.GetComponent(EntityComponents.SurfaceComponent).?.mTexOptions.mColor);
+    const surface = stripe.GetComponent(EntityComponents.SurfaceComponent).?;
+    try std.testing.expectEqual(color, surface.mTexOptions.mColor);
+    //on the white texture styled shapes fill with, not the engine's default one
+    try std.testing.expect(surface.mTexture.IsIDValid());
+    try std.testing.expectEqual(engine_context.mUIManager.PlainTexture(engine_context).mID, surface.mTexture.mID);
     try std.testing.expect(UIManager.GetUIComponent(stripe, StyleComponent) == null);
     try std.testing.expectEqualStrings("Player", TextOf(UIManager.LabelOf(node.Header).?));
 

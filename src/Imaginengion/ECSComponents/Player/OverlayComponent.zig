@@ -69,7 +69,7 @@ pub fn RemapRefs(self: *OverlayComponent, _: *const RefMap) void {
     self.mScene = .uninit;
 }
 
-fn ResolveSceneRef(requester: Serializer.Requester, scene_uuid: u64) bool {
+fn ResolveSceneRef(requester: Serializer.Requester, scene_uuid: u64, _: u32) bool {
     const player = requester.Player;
     const scene = player.mManager.GetObjectByUUID(Scene, scene_uuid) orelse return false;
     //the component may have been removed since the request was made, nothing left to resolve

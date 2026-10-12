@@ -19,6 +19,9 @@ const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const PlayerComponents = @import("../ECSComponents/PComponents.zig");
 const GameContextComponents = @import("../ECSComponents/GCComponents.zig");
 const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
+const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
+const ECSObject = @import("../ECSObjects/ECSObject.zig");
+const ScriptValues = @import("../Scripts/ScriptValues.zig");
 
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 
@@ -32,7 +35,7 @@ const PARSE_OPTIONS: std.json.ParseOptions = .{
 // File layout, the same for every object type (entity, scene, player, game context):
 // {
 //   "<Component.Name>": { component json }, ...
-//   "Scripts": [ { ScriptComponent json }, ... ],
+//   "Scripts": [ { "Script": script file, "Values": { variable name: value, ... } }, ... ],
 //   "Children": [ { object of the same type }, ... ],
 //   "Entities": [ { entity }, ... ]    (scenes only, the scene's top level entities)
 // }
@@ -98,7 +101,7 @@ fn SerializeObject(write_stream: *std.json.Stringify, frame_allocator: std.mem.A
         }
     }
 
-    //script children only hold their ScriptComponent + a script type tag that AddScript recreates from the asset.
+    //script children only hold their ScriptComponent (the script and its variables) + hook tags AddScript recreates.
     //object types that scripts can't be added to (e.g. a bus) have none to write, the same check DeserializeObject makes
     if (comptime @hasDecl(obj_t, "AddScript")) {
         var script_iter = object.GetIterator(.Script);
@@ -229,13 +232,21 @@ fn DeserializeComponent(engine_context: *EngineContext, scanner: *std.json.Scann
     return false;
 }
 
+/// One of an object's "Scripts", as ScriptComponent.jsonStringify writes it
+const ScriptEntry = struct {
+    Script: AssetHandle = .uninit,
+    /// the script's variables by name, set once the script is added and has them
+    Values: ?std.json.Value = null,
+};
+
 fn DeserializeScripts(engine_context: *EngineContext, scanner: *std.json.Scanner, object: anytype) !void {
     if (.array_begin != try scanner.next()) return error.UnexpectedToken;
     while (try scanner.peekNextTokenType() != .array_end) {
-        const script_component = try std.json.innerParse(ScriptComponent, engine_context.FrameAllocator(), scanner, PARSE_OPTIONS);
-        if (!script_component.mScriptAssetHandle.IsIDValid()) continue; //the script asset could not be found
-        //AddScript creates the script child and its script type tag component from the asset
-        try object.AddScript(engine_context, script_component.mScriptAssetHandle);
+        const entry = try std.json.innerParse(ScriptEntry, engine_context.FrameAllocator(), scanner, PARSE_OPTIONS);
+        if (!entry.Script.IsIDValid()) continue; //the script asset could not be found
+        //AddScript creates the script child, its variables and the tags for its hooks from the asset
+        const script = try ECSObject.Core(@TypeOf(object)).AddScript(object, engine_context, entry.Script);
+        if (entry.Values) |values| try ScriptValues.Read(engine_context, script, values);
     }
     _ = try scanner.next();
 }

@@ -13,6 +13,7 @@ const Player = @import("../ECSObjects/Player.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const UIManager = @import("UIManager.zig");
+const StyleSystem = @import("StyleSystem.zig");
 const NumberFieldSystem = @import("NumberFieldSystem.zig");
 const ScrollSystem = @import("ScrollSystem.zig");
 const WidgetActions = @import("WidgetActions.zig");
@@ -909,8 +910,10 @@ fn FoldHeader(engine_context: *EngineContext, parent: Parent, text: []const u8, 
 
     if (stripe) |color| {
         const bar = try NewEntity(engine_context, .{ .Entity = header });
+        //on the plain white texture, as a styled shape is, so it shows its color alone
         var surface = SurfaceComponent{};
         surface.mTexOptions.mColor = color;
+        StyleSystem.FillPlain(&surface.mTexture, &surface.mTexOptions, engine_context.mUIManager.PlainTexture(engine_context));
         try AddQuad(engine_context, bar, .{}, surface);
         _ = try bar.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fixed = STRIPE_WIDTH }, .mHeight = .{ .Fixed = ARROW_SIZE } });
     }

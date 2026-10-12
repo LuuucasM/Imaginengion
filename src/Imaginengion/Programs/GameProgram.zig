@@ -33,6 +33,8 @@ const PossessComponent = @import("../ECSComponents/PComponents.zig").PossessComp
 const PlayerOnUpdateScript = @import("../ECSComponents/PComponents.zig").OnUpdateScript;
 const PlayerOnInputPressedScript = @import("../ECSComponents/PComponents.zig").OnInputPressedScript;
 const OnGameStartScript = @import("../ECSComponents/GCComponents.zig").OnGameStartScript;
+const GameContextOnUpdateScript = @import("../ECSComponents/GCComponents.zig").OnUpdateScript;
+const SceneOnUpdateScript = @import("../ECSComponents/SComponents.zig").OnUpdateScript;
 
 const WindowEventData = @import("../Events/WindowEventData.zig");
 const WindowEvent = WindowEventData.EventT;
@@ -181,7 +183,10 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
         callback_list.first = null;
         callback_list.last = null;
 
+        //the game's rules first, then each player, each scene, and what is in them
+        _ = try ScriptsProcessor.RunScript(GameContext, GameContextOnUpdateScript, .Game, engine_context, .{});
         _ = try ScriptsProcessor.RunScript(Player, PlayerOnUpdateScript, .Game, engine_context, .{});
+        _ = try ScriptsProcessor.RunScript(Scene, SceneOnUpdateScript, .Game, engine_context, .{});
         _ = try ScriptsProcessor.RunScript(Entity, OnUpdateScript, .Game, engine_context, .{});
     }
     //-------------Game Logic End----------------
@@ -191,7 +196,7 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
         const assets_zone = Tracy.ZoneInit("Assets Section", @src());
         defer assets_zone.Deinit();
         //scripts whose files changed last frame, before OnUpdate clears what changed
-        try ScriptsProcessor.SyncScriptTypes(engine_context, &.{game_world});
+        try ScriptsProcessor.SyncScripts(engine_context, &.{game_world});
         try engine_context.mAssetManager.OnUpdate(engine_context);
     }
     //-------------End Assets Update ------------------

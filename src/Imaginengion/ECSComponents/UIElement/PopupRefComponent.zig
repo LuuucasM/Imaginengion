@@ -56,7 +56,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
     return .{};
 }
 
-fn ResolvePopup(requester: Serializer.Requester, popup_uuid: u64) bool {
+fn ResolvePopup(requester: Serializer.Requester, popup_uuid: u64, _: u32) bool {
     const owner = requester.Entity;
     const popup = owner.mManager.GetObjectByUUID(Entity, popup_uuid) orelse return false;
     //the component may have been removed since the request was made, nothing left to resolve
