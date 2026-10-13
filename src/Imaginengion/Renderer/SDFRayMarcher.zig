@@ -17,6 +17,9 @@ const BVHNode = BVH.Node;
 const SDFProgram = @import("SDFProgram.zig");
 
 const ShapeType = @import("Renderer.zig").ShapeType;
+/// what the shading buffers hold, for the heatmap's byte counts
+const SurfShading = @import("Renderer.zig").SurfShadingData;
+const MedShading = @import("Renderer.zig").MedShadingData;
 
 const THICKNESS_2D = SDFFunc.THICKNESS_2D;
 
@@ -249,6 +252,12 @@ pub const HeatMetric = enum(u32) {
     Edges,
     /// march steps, for marched shapes
     MarchSteps,
+    /// bytes of scene data read: shapes, BVH nodes and their shadings, as the code asks for them. Where the memory
+    /// traffic comes from, not whether it was in cache. Mask programs aren't counted
+    BytesLoaded,
+    /// bytes of the pixel's own ray tree (its Nodes and Edges) written and read: arrays indexed at runtime, which a
+    /// GPU keeps in its slow local memory rather than registers
+    TreeBytes,
 
     /// What the heatmap's shortcut switches to from `current`: off, then each count in turn, then off again
     pub fn Next(current: ?HeatMetric) ?HeatMetric {
@@ -265,6 +274,8 @@ pub const HeatMetric = enum(u32) {
             .AcceptChecks => 8,
             .Edges => 8,
             .MarchSteps => 64,
+            .BytesLoaded => 4096,
+            .TreeBytes => 1024,
         };
     }
 };
@@ -307,6 +318,8 @@ pub const Counters = extern struct {
     AcceptChecks: u32 = 0,
     Edges: u32 = 0,
     MarchSteps: u32 = 0,
+    BytesLoaded: u32 = 0,
+    TreeBytes: u32 = 0,
 
     pub fn Of(self: Counters, metric: HeatMetric) u32 {
         return self.OfIndex(@intFromEnum(metric));
@@ -320,6 +333,8 @@ pub const Counters = extern struct {
             @intFromEnum(HeatMetric.AcceptChecks) => self.AcceptChecks,
             @intFromEnum(HeatMetric.Edges) => self.Edges,
             @intFromEnum(HeatMetric.MarchSteps) => self.MarchSteps,
+            @intFromEnum(HeatMetric.BytesLoaded) => self.BytesLoaded,
+            @intFromEnum(HeatMetric.TreeBytes) => self.TreeBytes,
             else => 0,
         };
     }
@@ -379,6 +394,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 .TextureUV = .{ .x = -1, .y = -1, .z = -1 },
                 .ShapeT = .None,
             };
+            self.Tree(Node);
             self.mEdges[0] = .{
                 .Direction = ray.Dir,
                 .Length = 0.0,
@@ -390,12 +406,41 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             };
             self.mNodeCount = 1;
             self.mEdgeCount = 1;
+            self.Tree(Edge);
         }
 
         /// Counts one more of `counter` for the heatmap. Nothing at all in a variant without it
         inline fn Count(self: *Self, comptime counter: std.meta.FieldEnum(Counters)) void {
-            if (features.Heatmap) @field(self.mCounters, @tagName(counter)) += 1;
+            self.CountBy(counter, 1);
         }
+        /// Count, by `amount`
+        inline fn CountBy(self: *Self, comptime counter: std.meta.FieldEnum(Counters), comptime amount: u32) void {
+            if (features.Heatmap) @field(self.mCounters, @tagName(counter)) += amount;
+        }
+        /// Counts a read of a `T` of scene data (Counters.BytesLoaded)
+        inline fn Loaded(self: *Self, comptime T: type) void {
+            self.CountBy(.BytesLoaded, @sizeOf(T));
+        }
+        /// Counts a read or write of a `T` in the ray tree (Counters.TreeBytes)
+        inline fn Tree(self: *Self, comptime T: type) void {
+            self.CountBy(.TreeBytes, @sizeOf(T));
+        }
+        /// What Accepts reads for a shape past the shape itself: a glyph's atlas entry
+        inline fn LoadedForAccept(self: *Self, shape: ShapeData) void {
+            if (features.Heatmap) {
+                if (shape.Type == .Glyph) {
+                    self.Loaded(ShapeSurface);
+                    self.Loaded(SurfShading);
+                }
+            }
+        }
+        /// What Shade reads: the shape, its surface and its shading
+        inline fn LoadedForShade(self: *Self) void {
+            self.Loaded(ShapeData);
+            self.Loaded(ShapeSurface);
+            self.Loaded(SurfShading);
+        }
+
 
         pub fn March(self: *Self, sample_sampler: anytype, textures_array: textures_array_type) void {
             var edge_ind_stack: Stack(usize, MAX_EDGES) = .empty;
@@ -406,6 +451,8 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 self.Count(.Edges);
                 const curr_edge = self.mEdges[curr_edge_ind];
                 const from_point = self.mNodes[@intCast(curr_edge.FromNode)].Point;
+                self.Tree(Edge);
+                self.Tree(Vec3(f32));
 
                 const edge_ray = Ray{ .Origin = from_point, .Dir = curr_edge.Direction };
 
@@ -433,6 +480,9 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                         .ShapeT = .None,
                     };
                     self.mEdges[curr_edge_ind].ToNode = @intCast(miss_node_ind);
+                    self.Tree(f32);
+                    self.Tree(Node);
+                    self.Tree(u32);
                     continue;
                 }
 
@@ -454,16 +504,22 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 };
 
                 self.mEdges[curr_edge_ind].ToNode = @intCast(new_node_ind);
+                self.Tree(f32);
+                self.Tree(Node);
+                self.Tree(u32);
 
                 //now for checking if we need to spawn more edges based off different material properties of the object
                 //in the future can expand this to do reflectivity, lighting, shadows, refraction, whatever else exists idk
                 const shading_flags = self.mShapes[surface.Shape].Flags;
+                self.Loaded(u32);
 
                 //if transparent bit is set, aka it can be some level of transparent and we are not already full of edges.
                 //mEdgeCount is the real bound: the stack is popped before each push so it never fills, and
                 //each edge adds exactly one node, so this also keeps mNodeCount <= MAX_NODES
                 if (shading_flags & ShapeData.FLAG_TRANSPARENT != 0 and self.mEdgeCount < MAX_EDGES and !edge_ind_stack.IsFull()) {
                     const alpha = self.SurfaceColor(self.mNodes[new_node_ind], sample_sampler, textures_array).w;
+                    self.Tree(Node);
+                    self.Loaded(SurfShading);
                     if (alpha < 1.0) {
                         const new_edge_ind = self.GetEdgeIndex();
 
@@ -479,6 +535,8 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                         };
 
                         self.mNodes[new_node_ind].FirstEdge = @intCast(new_edge_ind);
+                        self.Tree(Edge);
+                        self.Tree(u32);
                         edge_ind_stack.Push(new_edge_ind);
                     }
                 }
@@ -490,15 +548,18 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             while (i > 0) {
                 i -= 1;
                 const node = self.mNodes[i];
+                self.Tree(Node);
 
                 var ei: u32 = node.FirstEdge;
                 while (ei != NO_EDGE) {
                     self.CalcEdgeColor(ei);
                     ei = self.mEdges[@intCast(ei)].SiblingEdge;
+                    self.Tree(u32);
                 }
                 self.CalcNodeColor(i, sample_sampler, textures_array);
             }
 
+            self.Tree(Vec4(f32));
             return self.mNodes[0].AccumColor;
         }
 
@@ -523,6 +584,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 .Linear => self.NearestByLinearSearch(ray, skip_shape, sample_sampler, textures_array),
             };
             if (nearest.Order.Shape == NO_SHAPE) return .none;
+            self.LoadedForShade();
             return self.Shade(ray, nearest.Order.Shape, nearest.Hit, sample_sampler, textures_array);
         }
 
@@ -547,11 +609,13 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             if (shape_ind == skip_shape) return;
             const shape: ShapeData = self.mShapes[shape_ind];
             self.Count(.ShapeTests);
+            self.Loaded(ShapeData);
             const hit = HitShape(features, ray, shape);
             if (!IsFaceHit(hit)) return;
             const order = HitOrder.Of(hit.T, shape, shape_ind);
             if (!order.Before(nearest.Order)) return;
             self.Count(.AcceptChecks);
+            self.LoadedForAccept(shape);
             if (self.Accepts(ray, shape, hit, sample_sampler, textures_array)) nearest.* = .{ .Order = order, .Hit = hit };
         }
 
@@ -572,6 +636,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 if (slot < count and shape_ind != skip_shape) {
                     const shape: ShapeData = self.mShapes[shape_ind];
                     self.Count(.ShapeTests);
+                    self.Loaded(ShapeData);
                     const hit = HitShape(features, ray, shape);
                     if (IsFaceHit(hit)) {
                         const hit_order = HitOrder.Of(hit.T, shape, shape_ind);
@@ -593,6 +658,8 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 const shape: ShapeData = self.mShapes[best.Shape];
                 const hit = HitShape(features, ray, shape);
                 self.Count(.AcceptChecks);
+                self.Loaded(ShapeData);
+                self.LoadedForAccept(shape);
                 if (self.Accepts(ray, shape, hit, sample_sampler, textures_array)) {
                     nearest.* = .{ .Order = best, .Hit = hit };
                     return;
@@ -618,18 +685,22 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             var waiting_count: u32 = 0;
 
             self.Count(.BVHNodes);
+            self.Loaded(BVHNode);
             if (NodeEnter(ray, inv_dir, self.mBVHNodes[0], nearest.Order) == null) return nearest;
             var node_ind: u32 = 0;
             while (true) {
                 const node: BVHNode = self.mBVHNodes[node_ind];
+                self.Loaded(BVHNode);
                 if (node.IsLeaf()) {
                     self.ConsiderLeaf(ray, node, skip_shape, &nearest, sample_sampler, textures_array);
                 } else {
                     const left_ind = node_ind + 1;
                     const right_ind = node.RightChild();
                     self.Count(.BVHNodes);
+                    self.Loaded(BVHNode);
                     const left_enter = NodeEnter(ray, inv_dir, self.mBVHNodes[left_ind], nearest.Order);
                     self.Count(.BVHNodes);
+                    self.Loaded(BVHNode);
                     const right_enter = NodeEnter(ray, inv_dir, self.mBVHNodes[right_ind], nearest.Order);
                     if (left_enter) |left| {
                         if (right_enter) |right| {
@@ -652,6 +723,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                     waiting_count -= 1;
                     const next = waiting[waiting_count];
                     self.Count(.BVHNodes);
+                    self.Loaded(BVHNode);
                     if (NodeEnter(ray, inv_dir, self.mBVHNodes[next], nearest.Order) != null) {
                         node_ind = next;
                         break;
@@ -691,6 +763,8 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             var i: u32 = 0;
             while (i < MAX_STEPS and dist_origin < limit) : (i += 1) {
                 self.Count(.MarchSteps);
+                //every marched shape, read for its distance
+                if (features.Heatmap) self.mCounters.BytesLoaded += @intCast((self.mShapesCount - self.mDirectCount) * @sizeOf(ShapeData));
                 const point = ray.Origin.AddVec(ray.Dir.MulScalar(dist_origin));
                 const march_data = self.NextSurface(point, skips);
                 if (march_data.min_dist > SurfaceEpsilon(dist_origin)) {
@@ -702,7 +776,12 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 //a plate's faces are drawn, and a glyph only where the letter covers it: at its thin
                 //sides or a gap in the letter the ray goes on to whatever is behind
                 self.Count(.AcceptChecks);
+                self.Loaded(ShapeData);
+                if (features.Heatmap) self.LoadedForAccept(self.mShapes[march_data.shape]);
                 const surface = self.SurfaceAt(ray, march_data.shape, sample_sampler, textures_array);
+                if (features.Heatmap) {
+                    if (surface.Found) self.LoadedForShade();
+                }
                 if (surface.Found) return surface;
                 skips.Add(march_data.shape);
             }
@@ -882,13 +961,19 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
 
         fn CalcNodeColor(self: *Self, node_ind: usize, sample_sampler: anytype, textures_array: textures_array_type) void {
             const curr_node = self.mNodes[node_ind];
+            self.Tree(Node);
 
             const child_accum = if (curr_node.FirstEdge == NO_EDGE) self.mDefaultColor else self.mEdges[@intCast(curr_node.FirstEdge)].AccumColor;
+            if (features.Heatmap) {
+                if (curr_node.FirstEdge != NO_EDGE) self.Tree(Vec4(f32));
+                if (curr_node.MaterialHandle != OWN_COLOR) self.Loaded(SurfShading);
+            }
 
             const color = self.SurfaceColor(curr_node, sample_sampler, textures_array);
             const alpha = color.w;
 
             self.mNodes[node_ind].AccumColor = color.Lerp(child_accum, 1.0 - alpha);
+            self.Tree(Vec4(f32));
         }
 
         /// The color of the surface a node is on, before anything behind it shows through: its surface shading's
@@ -904,6 +989,9 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         fn CalcEdgeColor(self: *Self, edge_ind: u32) void {
             const curr_edge = self.mEdges[edge_ind];
             const to_node = self.mNodes[curr_edge.ToNode];
+            self.Tree(Edge);
+            self.Tree(Node);
+            self.Loaded(MedShading);
 
             const child_accum = to_node.AccumColor;
 
@@ -925,6 +1013,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             const color_out = transmitted.AddVec(inscattered);
 
             self.mEdges[edge_ind].AccumColor = .{ .x = color_out.x, .y = color_out.y, .z = color_out.z, .w = child_accum.w };
+            self.Tree(Vec4(f32));
         }
 
         fn SampleTexture(texture_uv: Vec3(f32), sample_sampler: anytype, textures_array: textures_array_type) Vec4(f32) {

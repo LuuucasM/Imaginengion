@@ -911,14 +911,17 @@ test "a ray that misses everything tests the tree's root and nothing in it" {
     const shadings = [_]SurfShadingData{ColorShading(RED)};
     const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
     const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(5, 5));
-    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 0, .AcceptChecks = 0, .Edges = 1, .MarchSteps = 0 }, counted);
+    //it still loads the root's box, and the shadings and medium its colors are worked out from
+    const loaded = @sizeOf(BVH.Node) + 2 * @sizeOf(SurfShadingData) + @sizeOf(MedShadingData);
+    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 0, .AcceptChecks = 0, .Edges = 1, .MarchSteps = 0, .BytesLoaded = loaded, .TreeBytes = counted.TreeBytes }, counted);
 }
 
 test "a ray onto one quad tests it once and checks it once" {
     const shadings = [_]SurfShadingData{ColorShading(RED)};
     const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
     const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0));
-    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 1, .AcceptChecks = 1, .Edges = 1, .MarchSteps = 0 }, counted);
+    //its bytes are added up on their own below
+    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 1, .AcceptChecks = 1, .Edges = 1, .MarchSteps = 0, .BytesLoaded = counted.BytesLoaded, .TreeBytes = counted.TreeBytes }, counted);
 }
 
 test "a ray through a letter's gap checks both the glyph and the quad behind it, in one walk" {
@@ -934,7 +937,7 @@ test "a ray through a letter's gap checks both the glyph and the quad behind it,
         MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 2, 0),
     };
     const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0.25, 0));
-    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 2, .AcceptChecks = 2, .Edges = 1, .MarchSteps = 0 }, counted);
+    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 2, .AcceptChecks = 2, .Edges = 1, .MarchSteps = 0, .BytesLoaded = counted.BytesLoaded, .TreeBytes = counted.TreeBytes }, counted);
 }
 
 test "a ray onto the front of a stack of shapes in one leaf checks only the front one" {
@@ -977,6 +980,44 @@ test "UI layers a thousandth of a unit apart, as far out as an overlay canvas, a
     const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, ray);
     try std.testing.expect(counted.ShapeTests <= BVH.MAX_LEAF_ITEMS);
     try std.testing.expectEqual(@as(u32, 1), counted.AcceptChecks);
+}
+
+test "a ray onto one opaque quad loads and writes exactly what it reads: its scene data, and its ray tree" {
+    const shadings = [_]SurfShadingData{ColorShading(RED)};
+    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
+    const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0));
+
+    //the tree's one node, tested at the root and read going in; the quad read to ray test it and again to check it;
+    //then Shade's shape, surface and shading; its flags; each node's shading (the hit's and the start's) and the
+    //edge's medium for the colors
+    const loaded = 2 * @sizeOf(BVH.Node) + 3 * @sizeOf(ShapeData) + @sizeOf(ShapeSurface) + 3 * @sizeOf(SurfShadingData) +
+        @sizeOf(MedShadingData) + @sizeOf(u32);
+    try std.testing.expectEqual(@as(u32, loaded), counted.BytesLoaded);
+
+    //even one hit fills in the tree and reads it all back: the start node and edge written, the edge and its start
+    //read and the hit node written by the march, then every node and edge read again for the color, with the colors
+    //they each come out with written and read
+    const Node = SDFRayMarcher.Node;
+    const Edge = SDFRayMarcher.Edge;
+    const tree = 7 * @sizeOf(Node) + 3 * @sizeOf(Edge) + @sizeOf(Vec3(f32)) + @sizeOf(f32) + 2 * @sizeOf(u32) + 5 * @sizeOf(Vec4(f32));
+    try std.testing.expectEqual(@as(u32, tree), counted.TreeBytes);
+}
+
+test "a see-through quad moves more of the ray tree than an opaque one" {
+    const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
+    const shadings = [_]SurfShadingData{ ColorShading(BLUE), ColorShading(half_red) };
+    const opaque_shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
+    const see_through_shapes = [_]TestShape{
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, TRANSPARENT, NO_MASK),
+    };
+    const opaque_work = try CountWork(.{ .Shapes = &opaque_shapes, .Shadings = &shadings }, RayAt(0, 0));
+    const see_through_work = try CountWork(.{ .Shapes = &see_through_shapes, .Shadings = &shadings }, RayAt(0, 0));
+    try std.testing.expect(see_through_work.TreeBytes > opaque_work.TreeBytes);
+    try std.testing.expect(see_through_work.BytesLoaded > opaque_work.BytesLoaded);
+    //only the heatmap marcher counts
+    const uncounted = (try TraceCounted(.{ .Shapes = &see_through_shapes, .Shadings = &shadings }, RayAt(0, 0), see_through_shapes.len, .BVH, .full)).Counters;
+    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{}, uncounted);
 }
 
 test "a see-through quad sends its ray on through, one more edge" {

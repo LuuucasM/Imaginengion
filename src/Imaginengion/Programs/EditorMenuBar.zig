@@ -82,6 +82,8 @@ fn HeatmapTitle(comptime metric: HeatMetric) []const u8 {
         .AcceptChecks => "Accept checks",
         .Edges => "Ray tree edges",
         .MarchSteps => "March steps",
+        .BytesLoaded => "Bytes loaded",
+        .TreeBytes => "Ray tree bytes",
     };
     return comptime std.fmt.comptimePrint("{s} (red = {d})", .{ what, metric.RedAt() });
 }
