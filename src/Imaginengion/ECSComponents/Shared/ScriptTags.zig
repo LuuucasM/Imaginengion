@@ -92,6 +92,14 @@ pub const UntypedScriptTag = struct {
     pub fn Deinit(_: *UntypedScriptTag, _: *EngineContext) void {}
 };
 
+/// On a script child whose script handles game events (any of its functions takes one, see Scripts/GameEvents.zig), so
+/// ScriptsProcessor.ProcessGameEvents only looks at those. For all four object types, given by SetUpScript. Never saved
+pub const GameEventScript = struct {
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "GameEventScript";
+    pub fn Deinit(_: *GameEventScript, _: *EngineContext) void {}
+};
+
 //SCENE SCRIPTS
 /// Runs once when the scene is loaded while the game runs, and for every scene when the game starts
 pub const OnSceneStartScript = struct {

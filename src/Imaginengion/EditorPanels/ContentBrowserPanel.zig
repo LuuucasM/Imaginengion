@@ -59,6 +59,8 @@ pub const SCRIPT_TEMPLATES = [_]ScriptTemplate{
     .{ .Group = "Player", .Name = "On Update", .Text = @embedFile("../Scripts/Player/OnUpdateTemplate.zig") },
     .{ .Group = "Player", .Name = "On Input Pressed", .Text = @embedFile("../Scripts/Player/OnInputPressedTemplate.zig") },
     .{ .Group = "Game Mode", .Name = "On Game Start", .Text = @embedFile("../Scripts/GameContext/OnGameStartTemplate.zig") },
+    //not a script but what scripts send each other, see Scripts/GameEvents.zig
+    .{ .Group = "Game Event", .Name = "Game Event", .Text = @embedFile("../Scripts/Event/EventTemplate.zig") },
 };
 
 /// What a tile is

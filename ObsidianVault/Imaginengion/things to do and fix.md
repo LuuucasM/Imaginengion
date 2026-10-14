@@ -1,8 +1,6 @@
+- make visualizer for sphere collision and box collision
 - add reparenting
 - fix the rendering at the ends of quads theres some weird artifacts
 	- for pngs the see through parts for some reason skips the behind objects when it should continue to march forward to the next object behind this one
-- theres no way to make events and have systems talk to each other by events
-	- need an event system that can work at runtime somehow or maybe this will unbury one of the major possible changes of making the engine into this hot reloading DLL type thingy
 - keeping track of whats modified so we can do a SAVE ALL
-- add .Error to ScriptResult and change all the scripts to return .Error on error instead of whatever its doing now
 - rename UI stuff that refers to Entity as GameObject

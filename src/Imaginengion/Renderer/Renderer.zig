@@ -27,6 +27,7 @@ const ViewpointComponent = EntityComponents.ViewpointComponent;
 const ShapeComponent = EntityComponents.ShapeComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
+const ColliderComponent = EntityComponents.ColliderComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -147,6 +148,11 @@ pub const ShapeType = enum(u32) {
     Glyph,
     /// a compound SDF (MergeComponent), 2D: a plate in its root's plane, shaped by its program (SDFProgram)
     Merge,
+    /// a solid box, its Size its half extents. A solid has an inside, so a ray through a see-through one is drawn
+    /// where it goes in and again where it comes out, where a plate is one surface
+    Box,
+    /// a solid sphere, its radius in each of Size's components, so its box is its bounds
+    Sphere,
 };
 
 pub const ShadingBuffers = struct {
@@ -299,6 +305,9 @@ mPresentMode: RenderPlatform.PresentMode = .VSync,
 /// The shader heatmap: which count of each pixel's work every pass draws instead of the picture, null for the picture.
 /// The editor's debug view (Editor > Shader Heatmap)
 mHeatmap: ?HeatMetric = null,
+/// Draws every collider as well, see-through with its edges marked (Renderer2D.DrawCollider). The editor's debug view
+/// (Editor > Show Colliders)
+mShowColliders: bool = false,
 /// Writes the next overlay pass's camera, shapes and BVH to a file (BVHDump), then goes back off. The editor's debug
 /// dump (F7), set just before the render it wants
 mDumpOverlayBVH: bool = false,
@@ -403,7 +412,14 @@ pub fn RenderWorld(self: *Renderer, world_manager: *WorldManager, view_scenes: V
     //the screen each overlay is drawn on is what its layout fits into
     try LayoutSystem.RecordViewArea(world_manager, view_scenes.Overlays, camera_view, engine_context);
     const view = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), world_manager, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
-    try self.RenderShapes(&view, stats, engine_context, push_constants, compute_texture, rendering_mode);
+    var colliders = try self.GatherColliders(engine_context.FrameAllocator(), world_manager, camera_view, view_scenes);
+    try self.RenderShapes(&view, if (colliders) |*found| found else null, camera_view, stats, engine_context, push_constants, compute_texture, rendering_mode);
+}
+
+/// The colliders a view shows, when they are being drawn (mShowColliders)
+fn GatherColliders(self: *const Renderer, frame_allocator: std.mem.Allocator, world_manager: *WorldManager, camera_view: CameraView, view_scenes: ViewScenes) !?ShapeGeometry.ViewShapes {
+    if (!self.mShowColliders) return null;
+    return try ShapeGeometry.GatherViewShapes(frame_allocator, world_manager, camera_view, view_scenes, .{ .Component = ColliderComponent });
 }
 
 /// RenderWorld for only the shapes in one scene, e.g. one template out of the several open in the template editing world
@@ -418,11 +434,13 @@ pub fn RenderScene(self: *Renderer, scene: Scene, stats: *RenderStats, engine_co
     };
     try LayoutSystem.RecordViewArea(scene.mManager, view_scenes.Overlays, camera_view, engine_context);
     const view = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), scene.mManager, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
-    try self.RenderShapes(&view, stats, engine_context, push_constants, compute_texture, rendering_mode);
+    var colliders = try self.GatherColliders(engine_context.FrameAllocator(), scene.mManager, camera_view, view_scenes);
+    try self.RenderShapes(&view, if (colliders) |*found| found else null, camera_view, stats, engine_context, push_constants, compute_texture, rendering_mode);
 }
 
-/// Draws shapes already gathered for a view (ShapeGeometry.GatherViewShapes), each carrying its canvas and its mask
-fn RenderShapes(self: *Renderer, view: *const ShapeGeometry.ViewShapes, stats: *RenderStats, engine_context: *EngineContext, push_constants: PushConstants, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
+/// Draws shapes already gathered for a view (ShapeGeometry.GatherViewShapes), each carrying its canvas and its mask,
+/// and the view's colliders when they're shown (GatherColliders)
+fn RenderShapes(self: *Renderer, view: *const ShapeGeometry.ViewShapes, colliders: ?*const ShapeGeometry.ViewShapes, camera_view: CameraView, stats: *RenderStats, engine_context: *EngineContext, push_constants: PushConstants, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
     self.mSDFPushConstants = push_constants;
 
     try self.BeginRendering(engine_context.EngineAllocator());
@@ -442,6 +460,19 @@ fn RenderShapes(self: *Renderer, view: *const ShapeGeometry.ViewShapes, stats: *
             //TODO: distance based culling
             //because since rays have max distances we know if something is greater than the camera point to the object then we can ignore
             try self.DrawShape(engine_context, shape, &view.Masks);
+        }
+    }
+
+    if (colliders) |found| {
+        const collider_zone = Tracy.ZoneInit("Renderer::DrawColliders", @src());
+        defer collider_zone.Deinit();
+        collider_zone.Value(found.Shapes.items.len);
+
+        const shadings = try Renderer2D.AddColliderShadings(engine_context, &self.mSDFShading);
+        for (found.Shapes.items) |shape| {
+            const transform_component = shape.Entity.GetComponent(TransformComponent) orelse continue;
+            const collider = shape.Entity.GetComponent(ColliderComponent).?;
+            try self.mR2D.DrawCollider(engine_context, transform_component, collider, shape.Canvas, camera_view, shadings);
         }
     }
 

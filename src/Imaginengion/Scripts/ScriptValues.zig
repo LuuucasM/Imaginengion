@@ -48,6 +48,23 @@ pub fn InstanceOf(component: *const ScriptComponent) ?Instance {
     return .{ .mInfo = asset.GetInfo(), .mData = asset.GetInstance(id) orelse return null };
 }
 
+/// Sets the variable called `name` of `script` (a script child, any of the four object types) to `value`: for code that
+/// puts a script on an object and fills it in, the way a widget builder does its stock script's. Nothing for a script
+/// that never loaded (why is already logged). error.NoSuchVariable if it has no variable of that name of value's kind
+pub fn Set(script: anytype, name: []const u8, value: anytype) !void {
+    const T = @TypeOf(value);
+    const kind = comptime ScriptABI.FieldKind.Of(T) orelse @compileError(@typeName(T) ++ " is not something a script variable can be");
+    if (kind == .Enum) @compileError("an enum variable is set by its value's name, which Set doesn't do yet");
+    const component = script.GetComponent(ScriptComponent) orelse return;
+    const instance = InstanceOf(component) orelse return;
+    for (instance.mInfo.Fields()) |field| {
+        if (field.mKind != kind or !std.mem.eql(u8, field.Name(), name)) continue;
+        At(T, instance.mData, field).* = value;
+        return;
+    }
+    return error.NoSuchVariable;
+}
+
 /// The variable `field` in `data`, as a T
 fn At(comptime T: type, data: *anyopaque, field: FieldDesc) *T {
     return @ptrCast(@alignCast(@as([*]u8, @ptrCast(data)) + field.mOffset));

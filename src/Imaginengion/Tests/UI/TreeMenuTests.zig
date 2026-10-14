@@ -102,7 +102,7 @@ test "selecting a tree row unselects the row selected in another branch, and lea
     const sword = try world.Node(player.Content.?, "Sword", true);
     const camera = try world.Node(tree, "Camera", true);
     const checkbox = try Widgets.Checkbox(engine_context, .{ .Entity = world.mPanel }, "Grid", NO_SCRIPTS);
-    try WidgetActions.Toggle(engine_context, Child(checkbox, 0));
+    try WidgetActions.Toggle(engine_context, Child(checkbox, 0), .uninit);
 
     try WidgetActions.Select(engine_context, sword.Header);
     try WidgetActions.Select(engine_context, camera.Header);
@@ -131,10 +131,11 @@ test "a tree node's arrow folds its content and turns, and a leaf has no arrow a
     try std.testing.expect(node.Content.?.GetComponent(LayoutItemComponent).?.mCollapsed);
     try std.testing.expectEqual(Widgets.INDENT, node.Content.?.GetComponent(EntityComponents.LayoutComponent).?.mPadding.Left);
 
-    try WidgetActions.FoldFromArrow(engine_context, Child(node.Header, 0));
+    const arrow = Child(node.Header, 0);
+    try WidgetActions.Fold(engine_context, node.Content.?, arrow);
     try std.testing.expect(!node.Content.?.GetComponent(LayoutItemComponent).?.mCollapsed);
     try std.testing.expectEqualStrings(WidgetActions.ARROW_OPEN, ArrowOf(node.Header));
-    try WidgetActions.FoldNext(engine_context, node.Header);
+    try WidgetActions.Fold(engine_context, node.Content.?, arrow);
     try std.testing.expectEqualStrings(WidgetActions.ARROW_FOLDED, ArrowOf(node.Header));
 
     const leaf = try world.Node(tree, "Camera", true);
@@ -142,7 +143,9 @@ test "a tree node's arrow folds its content and turns, and a leaf has no arrow a
     //the gap where the arrow would be has nothing in it
     var gap_children = Child(leaf.Header, 0).GetIterator(.Child);
     try std.testing.expect(gap_children.next() == null);
-    try WidgetActions.FoldNext(engine_context, leaf.Header);
+    try WidgetActions.Fold(engine_context, .uninit, Child(leaf.Header, 0));
+    gap_children = Child(leaf.Header, 0).GetIterator(.Child);
+    try std.testing.expect(gap_children.next() == null);
 }
 
 test "a tree node's stripe comes before its arrow in its own color, with no style to repaint it, and folding still turns the arrow" {
@@ -164,26 +167,25 @@ test "a tree node's stripe comes before its arrow in its own color, with no styl
     try std.testing.expectEqualStrings("Player", TextOf(UIManager.LabelOf(node.Header).?));
 
     try std.testing.expectEqualStrings(WidgetActions.ARROW_FOLDED, TextOf(Child(node.Header, 1)));
-    try WidgetActions.FoldFromArrow(engine_context, Child(node.Header, 1));
+    try WidgetActions.Fold(engine_context, node.Content.?, Child(node.Header, 1));
     try std.testing.expect(!node.Content.?.GetComponent(LayoutItemComponent).?.mCollapsed);
     try std.testing.expectEqualStrings(WidgetActions.ARROW_OPEN, TextOf(Child(node.Header, 1)));
 }
 
-test "a collapsing header folds the content right after it, and folding a header without an arrow leaves its text" {
+test "a collapsing header's content folds and its arrow turns, and folding with no arrow only folds" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
 
     const section = try Widgets.CollapsingHeader(engine_context, .{ .Entity = world.mPanel }, "Transform", true, NO_SCRIPTS);
     try std.testing.expectEqualStrings(WidgetActions.ARROW_OPEN, ArrowOf(section.Header));
-    try WidgetActions.FoldNext(engine_context, section.Header);
+    try WidgetActions.Fold(engine_context, section.Content.?, Child(section.Header, 0));
     try std.testing.expect(section.Content.?.GetComponent(LayoutItemComponent).?.mCollapsed);
     try std.testing.expectEqualStrings(WidgetActions.ARROW_FOLDED, ArrowOf(section.Header));
 
-    const button = try Widgets.Button(engine_context, .{ .Entity = world.mPanel }, "Play");
-    _ = try Widgets.Label(engine_context, .{ .Entity = world.mPanel }, "after");
-    try WidgetActions.FoldNext(engine_context, button);
-    try std.testing.expectEqualStrings("Play", TextOf(button));
+    try WidgetActions.Fold(engine_context, section.Content.?, .uninit);
+    try std.testing.expect(!section.Content.?.GetComponent(LayoutItemComponent).?.mCollapsed);
+    try std.testing.expectEqualStrings(WidgetActions.ARROW_FOLDED, ArrowOf(section.Header));
 }
 
 /// A menu bar with File (New, Recent > ..., Save with a shortcut, Grid checkable) and Edit (Undo)

@@ -35,7 +35,7 @@ const Chaser = struct {
         return .Continue;
     }
 };
-const ChaserExports = ScriptExport.Exports(Chaser, "Chaser");
+const ChaserExports = ScriptExport.Exports(Chaser, "Chaser", &.{});
 
 /// Chaser after an edit: mSpeed kept, mMode's values reordered with one added, mOffset made a f32 and mTarget gone, a
 /// new variable, and a second hook
@@ -52,7 +52,7 @@ const ChaserEdited = struct {
         return .Continue;
     }
 };
-const ChaserEditedExports = ScriptExport.Exports(ChaserEdited, "ChaserEdited");
+const ChaserEditedExports = ScriptExport.Exports(ChaserEdited, "ChaserEdited", &.{});
 
 /// A scene script, to put on an entity by mistake
 const SceneRule = struct {
@@ -60,7 +60,7 @@ const SceneRule = struct {
         return .Continue;
     }
 };
-const SceneRuleExports = ScriptExport.Exports(SceneRule, "SceneRule");
+const SceneRuleExports = ScriptExport.Exports(SceneRule, "SceneRule", &.{});
 
 const TestWorlds = struct {
     mEngineContext: *EngineContext,
@@ -149,6 +149,24 @@ test "a script gets its own variables and a tag for each of its hooks, or none f
     defer scene_handle.ReleaseAsset();
     _, const wrong = try worlds.EntityWithScript(scene_handle);
     try std.testing.expect(wrong.HasComponent(UntypedScriptTag));
+}
+
+test "engine code sets a script's variable by name, and a name or kind it hasn't is an error" {
+    const worlds = try TestWorlds.Init();
+    defer worlds.Deinit();
+    const engine_context = worlds.mEngineContext;
+
+    var handle = try worlds.ScriptAssetFor(&ChaserExports.info);
+    defer handle.ReleaseAsset();
+    const ball = try worlds.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _, const script = try worlds.EntityWithScript(handle);
+    try ScriptValues.Set(script, "mTarget", ball);
+    try ScriptValues.Set(script, "mSpeed", @as(f32, 2.5));
+    try std.testing.expectEqual(ball.mID, ChaserOf(script).mTarget.mID);
+    try std.testing.expectEqual(@as(f32, 2.5), ChaserOf(script).mSpeed);
+
+    try std.testing.expectError(error.NoSuchVariable, ScriptValues.Set(script, "mTargets", ball));
+    try std.testing.expectError(error.NoSuchVariable, ScriptValues.Set(script, "mSpeed", @as(u32, 2)));
 }
 
 test "a script's variables are saved by name and read back, an entity once it is found by its UUID" {

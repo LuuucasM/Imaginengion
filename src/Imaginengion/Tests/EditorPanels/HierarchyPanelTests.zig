@@ -436,9 +436,9 @@ test "a ready-made checkbox shows a check mark only while it is checked" {
     try std.testing.expectEqualStrings("Check", mark.GetComponent(NameComponent).?.mName.items);
 
     try std.testing.expect(mark.GetComponent(LayoutItemComponent).?.mCollapsed);
-    try WidgetActions.Toggle(engine_context, box);
+    try WidgetActions.Toggle(engine_context, box, mark);
     try std.testing.expect(!mark.GetComponent(LayoutItemComponent).?.mCollapsed);
-    try WidgetActions.Toggle(engine_context, box);
+    try WidgetActions.Toggle(engine_context, box, mark);
     try std.testing.expect(mark.GetComponent(LayoutItemComponent).?.mCollapsed);
 }
 

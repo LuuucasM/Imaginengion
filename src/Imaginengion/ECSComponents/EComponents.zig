@@ -61,6 +61,7 @@ pub const OnCollisionEndScript = ScriptTags.OnCollisionEndScript;
 pub const OnPreSolveScript = ScriptTags.OnPreSolveScript;
 pub const OnPhysicsUpdateScript = ScriptTags.EntityOnPhysicsUpdateScript;
 pub const UntypedScriptTag = ScriptTags.UntypedScriptTag;
+pub const GameEventScript = ScriptTags.GameEventScript;
 
 ///This is an array of all the components that Entity can have
 /// It is used to be passed to the ECS
@@ -123,6 +124,7 @@ pub const ComponentsList = [_]type{
     OnPreSolveScript,
     OnPhysicsUpdateScript,
     UntypedScriptTag,
+    GameEventScript,
 };
 
 ///This is an array of components that should be serialized
@@ -245,6 +247,7 @@ pub const EComponents = enum(u16) {
     OnPreSolveScript = ListInd(&ComponentsList, OnPreSolveScript),
     OnPhysicsUpdateScript = ListInd(&ComponentsList, OnPhysicsUpdateScript),
     UntypedScriptTag = ListInd(&ComponentsList, UntypedScriptTag),
+    GameEventScript = ListInd(&ComponentsList, GameEventScript),
     ViewpointComponent = ListInd(&ComponentsList, ViewpointComponent),
     RenderTargetComponent = ListInd(&ComponentsList, RenderTargetComponent),
     TmplRefComponent = ListInd(&ComponentsList, TmplRefComponent),

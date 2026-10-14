@@ -182,12 +182,16 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
         try game_world.ProcessEvents(PhysicsEventData, .PostPhysics, engine_context, &callback_list);
         callback_list.first = null;
         callback_list.last = null;
+        //the game events sent during the step and by what reacted to it
+        try ScriptsProcessor.ProcessGameEvents(engine_context, game_world, .AfterPhysics);
 
         //the game's rules first, then each player, each scene, and what is in them
         _ = try ScriptsProcessor.RunScript(GameContext, GameContextOnUpdateScript, .Game, engine_context, .{});
         _ = try ScriptsProcessor.RunScript(Player, PlayerOnUpdateScript, .Game, engine_context, .{});
         _ = try ScriptsProcessor.RunScript(Scene, SceneOnUpdateScript, .Game, engine_context, .{});
         _ = try ScriptsProcessor.RunScript(Entity, OnUpdateScript, .Game, engine_context, .{});
+        //before layout and drawing, so what reacts shows this frame
+        try ScriptsProcessor.ProcessGameEvents(engine_context, game_world, .AfterUpdate);
     }
     //-------------Game Logic End----------------
 

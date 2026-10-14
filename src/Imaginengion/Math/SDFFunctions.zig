@@ -219,6 +219,8 @@ pub fn aabbIMShape(shape: ShapeData) Aabb {
         .Glyph => aabbIMGlyph(shape),
         //the rectangle its parts lie within
         .Merge => aabbIMBoxShape(shape),
+        //a sphere's Size is its radius on every axis, so the box around it is exact
+        .Box, .Sphere => aabbIMBoxShape(shape),
         .None => Aabb.empty,
     };
 }
@@ -337,6 +339,56 @@ pub fn rayIMGlyph(ray: Ray, glyph: ShapeData) HitInfo {
 /// in the box it is hit decides nothing, its program does (SDFProgram)
 pub fn rayIMMerge(ray: Ray, merge: ShapeData) HitInfo {
     return rayIMGlyph(ray, merge);
+}
+
+/// The ray against a solid box, every face of it, the same way as rayIMGlyph
+pub fn rayIMBox(ray: Ray, box: ShapeData) HitInfo {
+    return rayIMGlyph(ray, box);
+}
+
+/// The ray against a solid sphere, its radius Size.x, tested in its own space with the normal turned back into world
+/// space. The axes are unit length, so the ray's direction still is there
+pub fn rayIMSphere(ray: Ray, sphere: ShapeData) HitInfo {
+    const local_ray = Ray{ .Origin = ShapeLocalPoint(sphere, ray.Origin), .Dir = ShapeLocalDir(sphere, ray.Dir) };
+    var hit = RayIntersect.RaySphere(local_ray, .{ .x = 0, .y = 0, .z = 0 }, Vec3(f32).FromVector(sphere.Size).x);
+    if (hit.IsHit()) hit.Normal = ShapeWorldDir(sphere, hit.Normal);
+    return hit;
+}
+
+/// Whether a point on a solid box is in its edge band: within `edge_width` of one of its 12 edges, which is being that
+/// close to two of its faces at once. A point on a face is already on one, so it's in the band near any edge of that
+/// face, on whichever side of the box. Drawn in the border's color, it's the box's wireframe
+pub fn InIMBoxEdge(point: Vec3(f32), box: ShapeData, edge_width: f32) bool {
+    if (edge_width <= 0) return false;
+    //how far into the band of each pair of faces: past 0 is within edge_width of it
+    const near = ShapeLocalPoint(box, point).Abs().SubVec(.FromVector(box.Size)).AddVec(.FromScalar(edge_width));
+    const faces = @as(u32, @intFromBool(near.x > 0)) + @intFromBool(near.y > 0) + @intFromBool(near.z > 0);
+    return faces >= 2;
+}
+
+/// Whether a ray's hit on a solid sphere is in its rim band: the ray passes within `rim_width` of the sphere's outline
+/// as the ray sees it, its closest approach to the center more than the radius less rim_width. A sphere has no edges,
+/// so its outline is what stands in for them. Both the near and far side of the ray's way through are in it alike
+pub fn InIMSphereRim(ray: Ray, sphere: ShapeData, rim_width: f32) bool {
+    if (rim_width <= 0) return false;
+    const inner = Vec3(f32).FromVector(sphere.Size).x - rim_width;
+    if (inner <= 0) return true;
+    //the ray in the sphere's own space, centered on the origin. Dir is unit length, so this is the squared distance
+    //from the center to the closest point along the ray
+    const origin = ShapeLocalPoint(sphere, ray.Origin);
+    const along = origin.Dot(ShapeLocalDir(sphere, ray.Dir));
+    return origin.Dot(origin) - along * along > inner * inner;
+}
+
+/// The normal where a ray comes out of a solid box at `point`, facing back toward the ray the way a hit's normal does:
+/// into the box, the opposite of the way out of its surface
+pub fn exitNormalIMBox(point: Vec3(f32), box: ShapeData) Vec3(f32) {
+    return ShapeWorldDir(box, gradBox(ShapeLocalPoint(box, point), .FromVector(box.Size))).Neg();
+}
+
+/// exitNormalIMBox for a solid sphere: toward its center
+pub fn exitNormalIMSphere(point: Vec3(f32), sphere: ShapeData) Vec3(f32) {
+    return ShapeWorldDir(sphere, gradSphere(ShapeLocalPoint(sphere, point))).Neg();
 }
 
 /// A 0 to 1 position within a texture, as the texture manager's UV for that texture's slot.

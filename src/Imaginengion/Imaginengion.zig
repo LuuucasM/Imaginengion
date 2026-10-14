@@ -34,6 +34,7 @@ test {
     _ = @import("Tests/UI/StyleSystemTests.zig");
     _ = @import("Tests/Scripts/EventScriptsTests.zig");
     _ = @import("Tests/Scripts/ScriptValuesTests.zig");
+    _ = @import("Tests/Scripts/GameEventsTests.zig");
     _ = @import("Tests/UI/WidgetsTests.zig");
     _ = @import("Tests/UI/NumberFieldSystemTests.zig");
     _ = @import("Tests/UI/TreeMenuTests.zig");
@@ -92,6 +93,8 @@ pub const ScriptResult = @import("Scripts/ScriptABI.zig").ScriptResult;
 //what a script's generated DLL root builds itself from (see build_script.zig)
 pub const ScriptABI = @import("Scripts/ScriptABI.zig");
 pub const ScriptExport = @import("Scripts/ScriptExport.zig");
+//game events: an event file's Phase is a GamePhase (see Scripts/GameEvents.zig)
+pub const GamePhase = @import("Scripts/GameEvents.zig").GamePhase;
 
 //Event Stuff -----------------------------------------------
 pub const KeyboardPressedEvent = @import("Events/WindowEventData.zig").KeyboardPressedEvent;

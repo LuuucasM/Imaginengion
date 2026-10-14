@@ -113,13 +113,12 @@ test "a tab bar shows its first tab's page to start with, and selecting a tab sh
     try std.testing.expect(!Item(scenes).mCollapsed);
     try std.testing.expect(Item(entities).mCollapsed);
 
-    try WidgetActions.SelectTab(engine_context, Child(bar, 2));
+    try WidgetActions.SelectTab(engine_context, Child(bar, 2), players);
     try std.testing.expect(Item(scenes).mCollapsed);
     try std.testing.expect(Item(entities).mCollapsed);
     try std.testing.expect(!Item(players).mCollapsed);
     try std.testing.expect(!Child(bar, 0).HasComponent(SelectedTag));
     try std.testing.expect(Child(bar, 2).HasComponent(SelectedTag));
-    try std.testing.expectEqual(players.mID, WidgetActions.PageOf(Child(bar, 2)).?.mID);
 }
 
 test "a floating window moves by its title bar, closes and opens, and comes in front of the others when raised" {
@@ -135,18 +134,17 @@ test "a floating window moves by its title bar, closes and opens, and comes in f
     try std.testing.expect(Depth(buses.Window) > Depth(stats.Window));
     try std.testing.expect(Widgets.POPUP_DEPTH > Depth(buses.Window));
 
-    //raised from anywhere in it, here its content: the other one keeps its place behind
-    try WidgetActions.RaiseWindow(engine_context, stats.Content);
+    //raised: the other one keeps its place behind
+    try WidgetActions.RaiseWindow(engine_context, stats.Window);
     try std.testing.expect(Depth(stats.Window) > Depth(buses.Window));
     try std.testing.expectEqual(WidgetActions.WINDOW_DEPTH, Depth(buses.Window));
 
-    try WidgetActions.MoveWindow(engine_context, stats.TitleBar, .{ .x = 10, .y = -20, .z = 0 });
+    try WidgetActions.MoveWindow(engine_context, stats.Window, .{ .x = 10, .y = -20, .z = 0 });
     const offset = Item(stats.Window).mPlacement.Anchored.Offset;
     try std.testing.expectEqual(@as(f32, 10), offset.x);
     try std.testing.expectEqual(@as(f32, -20), offset.y);
 
-    //closed by its close button, the title bar's last child
-    try WidgetActions.CloseWindow(engine_context, Child(stats.TitleBar, 1));
+    try WidgetActions.CloseWindow(engine_context, stats.Window);
     try std.testing.expect(!WidgetActions.IsWindowOpen(stats.Window));
     try WidgetActions.RaiseWindow(engine_context, buses.Window);
     try WidgetActions.OpenWindow(engine_context, stats.Window);

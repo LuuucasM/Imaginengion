@@ -26,17 +26,25 @@ pub fn Build(engine_context: *EngineContext, abs_path: []const u8, rel_path: []c
     const name_arg = try std.fmt.allocPrint(engine_context.FrameAllocator(), "-Dscript_name={s}", .{name});
     const environ_map = try engine_context.mEnviron.createMap(engine_context.FrameAllocator());
 
+    var argv: std.ArrayList([]const u8) = .empty;
+    try argv.appendSlice(engine_context.FrameAllocator(), &.{
+        "zig",
+        "build",
+        "script",
+        path_arg,
+        name_arg,
+        //the same mode as the engine: a script shares the engine's structs (EngineContext and the rest), whose
+        //layout can differ between modes, so a script built in another one reads their fields from the wrong place
+        "-Doptimize=" ++ @tagName(builtin.mode),
+    });
+    //a project's script can import the project's files by their names (see build_script.zig)
+    const project = &engine_context.mProject;
+    if (project.IsOpen() and std.mem.startsWith(u8, abs_path, project.mPath.items)) {
+        try argv.append(engine_context.FrameAllocator(), try std.fmt.allocPrint(engine_context.FrameAllocator(), "-Dproject_path={s}", .{project.mPath.items}));
+    }
+
     var child = try std.process.spawn(engine_context.Io(), .{
-        .argv = &[_][]const u8{
-            "zig",
-            "build",
-            "script",
-            path_arg,
-            name_arg,
-            //the same mode as the engine: a script shares the engine's structs (EngineContext and the rest), whose
-            //layout can differ between modes, so a script built in another one reads their fields from the wrong place
-            "-Doptimize=" ++ @tagName(builtin.mode),
-        },
+        .argv = argv.items,
         .environ_map = &environ_map,
         .request_resource_usage_statistics = true,
         .stdin = .inherit,

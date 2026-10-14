@@ -78,11 +78,21 @@ pub const Edge = extern struct {
     SiblingEdge: u32,
     //the medium it travels through, into the medium shadings. 0 is air, the only one there is so far
     MaterialHandle: u32,
-    //the shape this edge starts on, which the search ignores. A continuation edge starts within
-    //epsilon of the plate it passed through, so without this it immediately re-hits that same plate
-    //and spawns another edge, forever. Every shape is a flat plate, so a straight ray can't
-    //legitimately hit the one it just left.
+    //the shape this edge starts on, which the search ignores: a plate it passed through, or a solid it came out of. A
+    //continuation edge starts within epsilon of that surface, so without this it immediately re-hits it and spawns
+    //another edge, forever. A plate is one surface and a solid is convex, so a straight ray can't legitimately hit
+    //either again
     SkipShape: u32 = NO_SHAPE,
+    //the solid this edge starts inside, having just gone in through its surface: it is only hit where the ray comes
+    //out the far side. Kept rather than trusting the ray test to see the ray starts inside, since within epsilon of
+    //the surface it can just as well find it outside and hit the same spot again
+    InsideShape: u32 = NO_SHAPE,
+};
+
+/// The shapes an edge starts on, which its search treats differently from any other (Edge.SkipShape, Edge.InsideShape)
+const EdgeStart = struct {
+    Skip: u32 = NO_SHAPE,
+    Inside: u32 = NO_SHAPE,
 };
 
 /// A shape index that is no shape: what a miss or an empty skip slot holds
@@ -101,6 +111,8 @@ const SurfaceHit = struct {
     //a merge, whose color at the hit is Color
     ShadingHandle: u32,
     Color: Vec4(f32) = .{ .x = 0, .y = 0, .z = 0, .w = 0 },
+    //the hit is where the ray comes out of a solid, rather than where it goes in or on a plate
+    Exit: bool = false,
 
     const none: SurfaceHit = .{
         .Found = false,
@@ -127,15 +139,54 @@ fn HitShape(comptime features: Features, ray: Ray, shape: ShapeData) HitInfo {
         .Quad => SDFFunc.rayIMQuad(ray, shape),
         .Glyph => SDFFunc.rayIMGlyph(ray, shape),
         .Merge => if (features.Merges) SDFFunc.rayIMMerge(ray, shape) else .miss,
+        .Box => SDFFunc.rayIMBox(ray, shape),
+        .Sphere => SDFFunc.rayIMSphere(ray, shape),
         .None => .miss,
     };
 }
 
-/// Which kind of shape wins an exact tie: a quad, then a merge, then a glyph, so text on either stays on top
+/// Whether a kind of shape is a solid, with an inside a ray goes into and comes out of, rather than a plate
+fn IsSolid(shape_type: ShapeType) bool {
+    return shape_type == .Box or shape_type == .Sphere;
+}
+
+/// A hit a search can take on a shape, and whether it's where the ray comes out of a solid
+const DrawnHit = struct {
+    Hit: HitInfo,
+    Exit: bool = false,
+
+    const miss: DrawnHit = .{ .Hit = .miss };
+};
+
+/// Where a ray is drawn on a shape, if anywhere. A plate only on its faces (IsFaceHit). A solid on any face, on
+/// whichever side the ray reaches first: where it goes in, or for a ray already inside it, where it comes out. `inside`
+/// is a solid the edge has just gone into (Edge.InsideShape), which counts as inside whatever the ray test says. The
+/// edge's SkipShape is the caller's to leave out, before it reads the shape at all
+fn DrawnHitOn(comptime features: Features, ray: Ray, shape: ShapeData, inside: bool) DrawnHit {
+    const hit = HitShape(features, ray, shape);
+    if (!IsSolid(shape.Type)) return if (IsFaceHit(hit)) .{ .Hit = hit } else .miss;
+    if (!hit.IsHit()) return .miss;
+    if (hit.StartedInside or inside) return .{ .Hit = SolidExit(ray, shape, hit.TExit), .Exit = true };
+    return .{ .Hit = hit };
+}
+
+/// The hit where a ray comes out of a solid, `t_exit` along it, its normal facing back toward the ray like any hit's.
+/// No face or UV: a solid's faces aren't textured yet
+fn SolidExit(ray: Ray, shape: ShapeData, t_exit: f32) HitInfo {
+    const point = ray.Origin.AddVec(ray.Dir.MulScalar(t_exit));
+    return .{
+        .T = t_exit,
+        .TExit = t_exit,
+        .Normal = if (shape.Type == .Sphere) SDFFunc.exitNormalIMSphere(point, shape) else SDFFunc.exitNormalIMBox(point, shape),
+        .StartedInside = false,
+    };
+}
+
+/// Which kind of shape wins an exact tie: a quad, then a merge or a solid, then a glyph, so text on any stays on top
 fn TieRank(shape_type: ShapeType) u32 {
     return switch (shape_type) {
         .Quad => 0,
-        .Merge => 1,
+        .Merge, .Box, .Sphere => 1,
         .Glyph => 2,
         .None => 3,
     };
@@ -455,10 +506,11 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 self.Tree(Vec3(f32));
 
                 const edge_ray = Ray{ .Origin = from_point, .Dir = curr_edge.Direction };
+                const start = EdgeStart{ .Skip = curr_edge.SkipShape, .Inside = curr_edge.InsideShape };
 
                 //the direct shapes first, then the marched ones only as far as that hit, since nothing behind it
                 //can show. With no marched shapes, every pixel skips the march together
-                var surface = self.DirectSurface(edge_ray, curr_edge.SkipShape, sample_sampler, textures_array);
+                var surface = self.DirectSurface(edge_ray, start, sample_sampler, textures_array);
                 if (features.Marched and self.mDirectCount < self.mShapesCount) {
                     const limit = if (surface.Found) surface.T else self.mPerspectiveFar;
                     const marched = self.MarchedSurface(edge_ray, curr_edge.SkipShape, limit, sample_sampler, textures_array);
@@ -522,6 +574,9 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                     self.Loaded(SurfShading);
                     if (alpha < 1.0) {
                         const new_edge_ind = self.GetEdgeIndex();
+                        //through a solid's near side the ray is inside it, and still has its far side to hit. Past a
+                        //plate or out of a solid's far side, it's done with that shape
+                        const went_in = IsSolid(surface.Type) and !surface.Exit;
 
                         self.mEdges[new_edge_ind] = Edge{
                             .Direction = curr_edge.Direction,
@@ -531,7 +586,8 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                             .SiblingEdge = NO_EDGE,
                             .AccumColor = self.mDefaultColor,
                             .MaterialHandle = 0,
-                            .SkipShape = surface.Shape,
+                            .SkipShape = if (went_in) NO_SHAPE else surface.Shape,
+                            .InsideShape = if (went_in) surface.Shape else NO_SHAPE,
                         };
 
                         self.mNodes[new_node_ind].FirstEdge = @intCast(new_edge_ind);
@@ -577,21 +633,25 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// (picked by `direct_search`). A candidate is only taken as the nearest once it's checked to really be drawn
         /// (Accepts), so one cut off by its masks or in a gap in a letter is passed over within the same search and the
         /// ray goes on to whatever is behind it, without ever searching again
-        fn DirectSurface(self: *Self, ray: Ray, skip_shape: u32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+        fn DirectSurface(self: *Self, ray: Ray, start: EdgeStart, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
             if (self.mDirectCount == 0) return .none;
             const nearest = switch (direct_search) {
-                .BVH => self.NearestByBVH(ray, skip_shape, sample_sampler, textures_array),
-                .Linear => self.NearestByLinearSearch(ray, skip_shape, sample_sampler, textures_array),
+                .BVH => self.NearestByBVH(ray, start, sample_sampler, textures_array),
+                .Linear => self.NearestByLinearSearch(ray, start, sample_sampler, textures_array),
             };
             if (nearest.Order.Shape == NO_SHAPE) return .none;
             self.LoadedForShade();
-            return self.Shade(ray, nearest.Order.Shape, nearest.Hit, sample_sampler, textures_array);
+            var surface = self.Shade(ray, nearest.Order.Shape, nearest.Hit, sample_sampler, textures_array);
+            surface.Exit = nearest.Exit;
+            return surface;
         }
 
         /// The nearest drawn direct hit a search has found so far, and the hit itself for Shade
         const Candidate = struct {
             Order: HitOrder,
             Hit: HitInfo,
+            //the hit is where the ray comes out of a solid (DrawnHit)
+            Exit: bool = false,
         };
 
         /// Nothing found yet: anything nearer than the far distance beats it
@@ -605,18 +665,18 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// Ray tests one direct shape, and makes it the nearest if a face of it is hit before the nearest so far and it is
         /// really drawn there. Only a hit that would win is checked, so a shape the search has already beaten never
         /// pays for its masks or its letter. All a search does with a shape, whichever way it found it
-        fn ConsiderShape(self: *Self, ray: Ray, shape_ind: u32, skip_shape: u32, nearest: *Candidate, sample_sampler: anytype, textures_array: textures_array_type) void {
-            if (shape_ind == skip_shape) return;
+        fn ConsiderShape(self: *Self, ray: Ray, shape_ind: u32, start: EdgeStart, nearest: *Candidate, sample_sampler: anytype, textures_array: textures_array_type) void {
+            if (shape_ind == start.Skip) return;
             const shape: ShapeData = self.mShapes[shape_ind];
             self.Count(.ShapeTests);
             self.Loaded(ShapeData);
-            const hit = HitShape(features, ray, shape);
-            if (!IsFaceHit(hit)) return;
-            const order = HitOrder.Of(hit.T, shape, shape_ind);
+            const drawn = DrawnHitOn(features, ray, shape, shape_ind == start.Inside);
+            if (!drawn.Hit.IsHit()) return;
+            const order = HitOrder.Of(drawn.Hit.T, shape, shape_ind);
             if (!order.Before(nearest.Order)) return;
             self.Count(.AcceptChecks);
             self.LoadedForAccept(shape);
-            if (self.Accepts(ray, shape, hit, sample_sampler, textures_array)) nearest.* = .{ .Order = order, .Hit = hit };
+            if (self.Accepts(ray, shape, drawn.Hit, sample_sampler, textures_array)) nearest.* = .{ .Order = order, .Hit = drawn.Hit, .Exit = drawn.Exit };
         }
 
         /// The shapes of one BVH leaf, checked nearest first: each is ray tested, then the ones that beat the nearest so
@@ -624,7 +684,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// after it is further away. Whatever order the leaf holds them in, a stack of shapes facing the ray costs one
         /// check, not one per shape that was nearest for a moment. Every loop over the leaf is unrolled, so each slot is
         /// read with a constant index and stays in a register: a runtime indexed array would sit in slow local memory
-        fn ConsiderLeaf(self: *Self, ray: Ray, leaf: BVHNode, skip_shape: u32, nearest: *Candidate, sample_sampler: anytype, textures_array: textures_array_type) void {
+        fn ConsiderLeaf(self: *Self, ray: Ray, leaf: BVHNode, start: EdgeStart, nearest: *Candidate, sample_sampler: anytype, textures_array: textures_array_type) void {
             const first = leaf.FirstItem();
             const count = leaf.ItemCount();
 
@@ -633,13 +693,13 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             inline for (&orders, 0..) |*order, slot| {
                 order.* = .none;
                 const shape_ind: u32 = first + @as(u32, slot);
-                if (slot < count and shape_ind != skip_shape) {
+                if (slot < count and shape_ind != start.Skip) {
                     const shape: ShapeData = self.mShapes[shape_ind];
                     self.Count(.ShapeTests);
                     self.Loaded(ShapeData);
-                    const hit = HitShape(features, ray, shape);
-                    if (IsFaceHit(hit)) {
-                        const hit_order = HitOrder.Of(hit.T, shape, shape_ind);
+                    const drawn = DrawnHitOn(features, ray, shape, shape_ind == start.Inside);
+                    if (drawn.Hit.IsHit()) {
+                        const hit_order = HitOrder.Of(drawn.Hit.T, shape, shape_ind);
                         if (hit_order.Before(nearest.Order)) order.* = hit_order;
                     }
                 }
@@ -656,12 +716,12 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
 
                 //its hit again, rather than keeping every slot's whole hit in registers for the one or two checked
                 const shape: ShapeData = self.mShapes[best.Shape];
-                const hit = HitShape(features, ray, shape);
+                const drawn = DrawnHitOn(features, ray, shape, best.Shape == start.Inside);
                 self.Count(.AcceptChecks);
                 self.Loaded(ShapeData);
                 self.LoadedForAccept(shape);
-                if (self.Accepts(ray, shape, hit, sample_sampler, textures_array)) {
-                    nearest.* = .{ .Order = best, .Hit = hit };
+                if (self.Accepts(ray, shape, drawn.Hit, sample_sampler, textures_array)) {
+                    nearest.* = .{ .Order = best, .Hit = drawn.Hit, .Exit = drawn.Exit };
                     return;
                 }
                 inline for (&orders) |*order| {
@@ -677,7 +737,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// one usually starts before its box does, so it's passed over without going in: a menu in front of a panel is
         /// searched first, and everything behind it skipped. Each inner node has its left child right after it and its
         /// right one in its Info. A leaf's shapes are a run of mShapes, since the tree was built over them in that order
-        fn NearestByBVH(self: *Self, ray: Ray, skip_shape: u32, sample_sampler: anytype, textures_array: textures_array_type) Candidate {
+        fn NearestByBVH(self: *Self, ray: Ray, start: EdgeStart, sample_sampler: anytype, textures_array: textures_array_type) Candidate {
             var nearest = self.NoCandidate();
             const inv_dir = Vec3(f32).FromVector(@as(Vec3(f32).VectorT, @splat(1.0)) / ray.Dir.ToVector());
             //the farther children still to come back to, the next on top: at most one per level (BVH.MAX_DEPTH)
@@ -692,7 +752,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 const node: BVHNode = self.mBVHNodes[node_ind];
                 self.Loaded(BVHNode);
                 if (node.IsLeaf()) {
-                    self.ConsiderLeaf(ray, node, skip_shape, &nearest, sample_sampler, textures_array);
+                    self.ConsiderLeaf(ray, node, start, &nearest, sample_sampler, textures_array);
                 } else {
                     const left_ind = node_ind + 1;
                     const right_ind = node.RightChild();
@@ -733,10 +793,10 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         }
 
         /// DirectSearch.Linear: considers every direct shape, the BVH walk's answer key
-        fn NearestByLinearSearch(self: *Self, ray: Ray, skip_shape: u32, sample_sampler: anytype, textures_array: textures_array_type) Candidate {
+        fn NearestByLinearSearch(self: *Self, ray: Ray, start: EdgeStart, sample_sampler: anytype, textures_array: textures_array_type) Candidate {
             var nearest = self.NoCandidate();
             for (0..self.mDirectCount) |shape_ind| {
-                self.ConsiderShape(ray, @intCast(shape_ind), skip_shape, &nearest, sample_sampler, textures_array);
+                self.ConsiderShape(ray, @intCast(shape_ind), start, &nearest, sample_sampler, textures_array);
             }
             return nearest;
         }
@@ -802,7 +862,9 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                     .Quad => SDFFunc.sdIMQuad(point, shape),
                     .Glyph => SDFFunc.sdIMGlyph(point, shape),
                     .Merge => SDFProgram.sdIMMerge(point, shape, self.mInstrs, self.mParts),
-                    .None => continue,
+                    //solids are only ever direct: marching into and out of one would need the march to know when
+                    //it's inside, which nothing needs yet
+                    .Box, .Sphere, .None => continue,
                 };
                 const dist = SDFProgram.Masked(self.mMasks, self.mInstrs, self.mParts, shape.MaskIndex, shape_dist, point);
                 //an exact tie goes the way HitOrder settles one: a quad before a glyph, then the one drawn first
@@ -846,7 +908,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             const hit_point = ray.Origin.AddVec(ray.Dir.MulScalar(hit.T));
             if (!self.InMasks(hit_point, shape.MaskIndex)) return false;
             return switch (shape.Type) {
-                .Quad => true,
+                .Quad, .Box, .Sphere => true,
                 //the coverage test needs where in the glyph's box the hit is, against its letter's atlas entry
                 .Glyph => SDFFunc.GetMSD(hit.UV, self.mSurfShading[self.mShapeSurfaces[shape.SurfaceIndex].AtlasHandle], textures_array, sample_sampler) >= 0.5,
                 //the box only says where it could be: the program says whether it is there. Left out of a variant
@@ -914,6 +976,23 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 },
                 //left out of a variant without merges (Features), along with all it calls
                 .Merge => return if (features.Merges) self.ShadeMerge(ray, shape_ind, shape, surface, hit, sample_sampler, textures_array) else .none,
+                //its surface's color, untextured: a solid's faces have no UVs yet, only the face a box is entered by.
+                //The band along a box's edges, or round a sphere's outline, is the border's
+                .Box, .Sphere => {
+                    const in_band = if (shape.Type == .Box)
+                        SDFFunc.InIMBoxEdge(ray.Origin.AddVec(ray.Dir.MulScalar(hit.T)), shape, surface.BorderWidth)
+                    else
+                        SDFFunc.InIMSphereRim(ray, shape, surface.BorderWidth);
+                    return .{
+                        .Found = true,
+                        .Shape = shape_ind,
+                        .Type = shape.Type,
+                        .T = hit.T,
+                        .Normal = hit.Normal,
+                        .TextureUV = SDFFunc.UNTEXTURED_UV,
+                        .ShadingHandle = if (in_band) surface.BorderShadingHandle else surface.ShadingHandle,
+                    };
+                },
                 .None => return .none,
             }
         }

@@ -72,6 +72,8 @@ pub const Action = union(enum) {
     ToggleVSync,
     /// draw every pass as a heatmap of this count of each pixel's work, or the picture again for null
     SetHeatmap: ?HeatMetric,
+    /// draw every collider as well, or stop drawing them
+    ToggleShowColliders,
 };
 
 /// A Shader Heatmap item's text: what it counts, and the count shown fully red
@@ -102,6 +104,8 @@ pub const State = struct {
     VSync: bool,
     /// what the shader heatmap counts, null when the picture is drawn (Renderer.mHeatmap)
     Heatmap: ?HeatMetric = null,
+    /// whether colliders are drawn (Renderer.mShowColliders)
+    ShowColliders: bool = false,
     /// the players the play preview can follow, and the one it does
     Players: []const Player,
     Following: ?Player,
@@ -125,6 +129,7 @@ mVSync: Entity = .uninit,
 /// The Shader Heatmap submenu's items: Off, and one per count it can show
 mHeatmapOff: Entity = .uninit,
 mHeatmapItems: std.EnumArray(HeatMetric, Entity) = .initFill(.uninit),
+mShowColliders: Entity = .uninit,
 /// The Player Camera submenu, and its items, one per player, in the order of the players
 mPlayersMenu: Entity = .uninit,
 mPlayerItems: std.ArrayList(ItemAction) = .empty,
@@ -181,6 +186,8 @@ pub fn Build(engine_context: *EngineContext, bar: Entity, options: Widgets.Optio
     inline for (comptime std.enums.values(HeatMetric)) |metric| {
         self.mHeatmapItems.set(metric, try self.Add(engine_context, heatmap, HeatmapTitle(metric), check_options, .{ .SetHeatmap = metric }));
     }
+    //a debug view: every collider drawn see-through with its edges marked, in every view the editor draws
+    self.mShowColliders = try self.Add(engine_context, editor, "Show Colliders", check_options, .ToggleShowColliders);
     return self;
 }
 
@@ -212,6 +219,7 @@ pub fn Update(self: *EditorMenuBar, engine_context: *EngineContext, state: State
     for (std.enums.values(HeatMetric)) |metric| {
         try WidgetActions.SetChecked(engine_context, self.mHeatmapItems.get(metric), state.Heatmap == metric);
     }
+    try WidgetActions.SetChecked(engine_context, self.mShowColliders, state.ShowColliders);
     try WidgetActions.SetDisabled(engine_context, self.mSave, state.Selected == null);
     try WidgetActions.SetDisabled(engine_context, self.mSaveAs, state.Selected == null);
     try WidgetActions.SetDisabled(engine_context, self.mExportEntity, state.Selected != .Entity);

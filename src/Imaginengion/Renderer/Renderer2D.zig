@@ -35,7 +35,8 @@ const EntityTransformComponent = EntityComponents.TransformComponent;
 const ShapeComponent = EntityComponents.ShapeComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
-
+const ColliderComponent = EntityComponents.ColliderComponent;
+const CameraView = @import("Renderer.zig").CameraView;
 
 const StorageBufferBinding = @import("RenderPlatform.zig").StorageBufferBinding;
 const TextLayout = @import("TextLayout.zig");
@@ -107,7 +108,8 @@ pub fn ShapeAxes(center: Vec3(f32), rotation: Quat(f32)) [3]Vec4(f32).ArrayT {
 pub const ShapeSurface = extern struct {
     //what a hit on the shape is painted with: a quad's surface, a glyph's text fill (its color and texture)
     ShadingHandle: u32,
-    //a quad's border band's solid color surface, drawn instead of ShadingHandle's within BorderWidth of its edge.
+    //a quad's border band's solid color surface, drawn instead of ShadingHandle's within BorderWidth of its edge. A
+    //solid's band is along a box's edges or round a sphere's outline (SDFFunctions.InIMBoxEdge, InIMSphereRim).
     //ShadingHandle again for a shape without a border
     BorderShadingHandle: u32,
     //a quad's border: world units, already scaled and kept to at most half the smaller side. 0 for none
@@ -309,7 +311,7 @@ pub const RenderBuffers = struct {
             .Quad => self.mQuadCount += 1,
             .Glyph => self.mGlyphCount += 1,
             .Merge => self.mMergeCount += 1,
-            .None => {},
+            .Box, .Sphere, .None => {},
         }
     }
 };
@@ -555,6 +557,97 @@ pub fn DrawMerge(
         .BorderShadingHandle = @intCast(border_shading_handle),
         .BorderWidth = border_width,
     }, .{});
+}
+
+/// How colliders look when the editor shows them (Renderer.mShowColliders): a faint see-through fill, and a solid band
+/// along a box's edges or round a sphere's outline. One look for every collider for now
+const COLLIDER_FILL = Vec4(f32){ .x = 0.2, .y = 1.0, .z = 0.4, .w = 0.15 };
+const COLLIDER_EDGE = Vec4(f32){ .x = 0.2, .y = 1.0, .z = 0.4, .w = 0.9 };
+/// how wide the band is on screen, in pixels at the display's scale, however near or far the collider is
+pub const COLLIDER_EDGE_PIXELS: f32 = 2.0;
+
+/// The shadings every collider a render draws is painted with, added once for all of them
+pub const ColliderShadings = struct {
+    Fill: u32,
+    Edge: u32,
+};
+
+/// Adds the colliders' fill and edge shadings: plain white tinted by each color
+pub fn AddColliderShadings(engine_context: *EngineContext, shading_buff: *ShadingBuffers) !ColliderShadings {
+    var plain = SurfaceComponent{};
+    plain.mTexture.mManager = &engine_context.mAssetManager;
+    const texture_asset = try plain.mTexture.GetAsset(engine_context, Texture2D);
+    var fill: Texture2D.TexOptions = .default;
+    fill.mColor = COLLIDER_FILL;
+    var edge: Texture2D.TexOptions = .default;
+    edge.mColor = COLLIDER_EDGE;
+    return .{
+        .Fill = @intCast(try shading_buff.AddSurface(engine_context.EngineAllocator(), &fill, texture_asset)),
+        .Edge = @intCast(try shading_buff.AddSurface(engine_context.EngineAllocator(), &edge, texture_asset)),
+    };
+}
+
+/// Draws a collider (ColliderShape), in the overlay pass for an overlay entity
+pub fn DrawCollider(
+    self: *Renderer2D,
+    engine_context: *EngineContext,
+    transform_component: *const EntityTransformComponent,
+    collider: *const ColliderComponent,
+    canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
+    camera_view: CameraView,
+    shadings: ColliderShadings,
+) !void {
+    const drawn = ColliderShape(transform_component, collider, canvas, camera_view);
+    const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
+    try buffers.AddShape(engine_context.EngineAllocator(), drawn.Shape, .{
+        .ShadingHandle = shadings.Fill,
+        .BorderShadingHandle = shadings.Edge,
+        .BorderWidth = drawn.EdgeWidth,
+    }, .{});
+}
+
+/// A collider as it's drawn: its shape, and how wide its edge band is
+pub const DrawnCollider = struct {
+    Shape: ShapeData,
+    EdgeWidth: f32,
+};
+
+/// A collider as the solid physics tests: its box (with the corners sharp, the way picking and raycasts test it) or its
+/// sphere, see-through, with the band along its edges COLLIDER_EDGE_PIXELS wide on screen at its center's distance from
+/// the camera. Never cut by a mask, the same as raycasts against colliders, and never picked, since picking tests the
+/// entities' visuals. Its SurfaceIndex is AddShape's to fill in
+pub fn ColliderShape(transform_component: *const EntityTransformComponent, collider: *const ColliderComponent, canvas: ?CanvasTransform, camera_view: CameraView) DrawnCollider {
+    const Solid = struct { Center: Vec3(f32), Rotation: Quat(f32), Size: Vec3(f32), Type: ShapeType };
+    const solid: Solid = switch (collider.mShape) {
+        .Box => blk: {
+            const box = ShapeGeometry.ColliderBox(transform_component, collider, canvas);
+            break :blk .{ .Center = box.Center, .Rotation = box.Rotation, .Size = box.HalfExtents, .Type = .Box };
+        },
+        .Sphere => blk: {
+            const sphere = ShapeGeometry.ColliderSphere(transform_component, collider, canvas);
+            const radius = Vec3(f32){ .x = sphere.Radius, .y = sphere.Radius, .z = sphere.Radius };
+            break :blk .{ .Center = sphere.Center, .Rotation = .{ .w = 1, .x = 0, .y = 0, .z = 0 }, .Size = radius, .Type = .Sphere };
+        },
+    };
+
+    //one pixel's size in world units at the center's distance, from how much the view takes in from top to bottom
+    const distance = solid.Center.SubVec(camera_view.Pose.Position).Len();
+    const pixel_size = if (camera_view.TargetHeight > 0) 2.0 * distance * camera_view.TanHalfFov / camera_view.TargetHeight else 0;
+    const axes = ShapeAxes(solid.Center, solid.Rotation);
+    return .{
+        .Shape = .{
+            .AxisX = axes[0],
+            .AxisY = axes[1],
+            .AxisZ = axes[2],
+            .Size = solid.Size.ToArray(),
+            .Params = .{ 0, 0, 0, 0 },
+            .Type = solid.Type,
+            .MaskIndex = SDFProgram.NO_MASK,
+            .SurfaceIndex = undefined,
+            .Flags = ShapeData.FLAG_TRANSPARENT,
+        },
+        .EdgeWidth = COLLIDER_EDGE_PIXELS * camera_view.DisplayScale * pixel_size,
+    };
 }
 
 /// A plain white surface's shading, for a merge's parts that nothing paints

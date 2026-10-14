@@ -29,14 +29,14 @@ const Vec3 = @import("../Math/MathTypes.zig").Vec3;
 const NumberFieldSystem = @import("NumberFieldSystem.zig");
 const ECSComponents = @import("../ECS/Components.zig");
 const EntityChildComponent = ECSComponents.ChildComponent(Entity.Type);
-const EntityParentComponent = ECSComponents.ParentComponent(Entity.Type);
 
 //a widget's value goes in an AttribComponent, set through NumberFieldSystem.SetValue so it keeps a number field's limits
 //and sends ValueChanged
 pub const SetValue = NumberFieldSystem.SetValue;
 
-/// Checked or unchecked: adds `SelectedTag` to the entity, or takes it off. ValueChanged goes to it and its parents
-pub fn Toggle(engine_context: *EngineContext, entity: Entity) !void {
+/// Checked or unchecked: adds `SelectedTag` to the entity, or takes it off, and shows `mark` (a check mark,
+/// Widgets.AddCheckMark) only while it is checked. uninit for no mark. ValueChanged goes to it and its parents
+pub fn Toggle(engine_context: *EngineContext, entity: Entity, mark: Entity) !void {
     const checked = !entity.HasComponent(SelectedTag);
     if (checked) {
         _ = try entity.AddComponent(engine_context, SelectedTag{});
@@ -44,12 +44,11 @@ pub fn Toggle(engine_context: *EngineContext, entity: Entity) !void {
         //at once, so it is drawn unchecked this frame
         try entity.RemoveComponentSync(engine_context, SelectedTag);
     }
-    //a check mark inside it (Widgets.AddCheckMark) shows only while it is checked
-    var marks = entity.GetIterator(.Child);
-    while (marks.next()) |mark| {
-        const item = mark.GetComponent(LayoutItemComponent) orelse continue;
-        item.mCollapsed = !checked;
-        try entity.MarkLayoutDirty(engine_context);
+    if (mark.IsActive()) {
+        if (mark.GetComponent(LayoutItemComponent)) |item| {
+            item.mCollapsed = !checked;
+            try mark.MarkLayoutDirty(engine_context);
+        }
     }
     try engine_context.mUIManager.SendToChain(engine_context, entity, .ValueChanged);
 }
@@ -165,43 +164,20 @@ pub fn ClosePopups(engine_context: *EngineContext) !void {
     try engine_context.mUIManager.mPopupSystem.CloseAll(engine_context);
 }
 
-/// Folds the entity right after this one away, or out again: a tree node's header and its content. Through the
-/// content's layout item, which it is given if it has none. Nothing happens for the last of its siblings
-pub fn CollapseNext(engine_context: *EngineContext, entity: Entity) !void {
-    const next = NextSibling(entity) orelse return;
-    const item = next.GetComponent(LayoutItemComponent) orelse try next.AddComponent(engine_context, LayoutItemComponent{});
-    item.mCollapsed = !item.mCollapsed;
-    try next.MarkLayoutDirty(engine_context);
-}
-
 /// What a folding header's arrow shows while what it folds is open, and while it is folded away
 pub const ARROW_OPEN = "v";
 pub const ARROW_FOLDED = ">";
 
-/// Folds the entity right after `header` away, or out again (CollapseNext), and turns the header's arrow to match: the
-/// first of its children before its own label whose text shows ARROW_OPEN or ARROW_FOLDED (a tree node's stripe can
-/// come before it). A tree node's header, a collapsing header. A header with no such child has no arrow, and only folds
-pub fn FoldNext(engine_context: *EngineContext, header: Entity) !void {
-    try CollapseNext(engine_context, header);
-    const next = NextSibling(header) orelse return;
-    const folded = next.GetComponent(LayoutItemComponent).?.mCollapsed;
-    var children = header.GetIterator(.Child);
-    while (children.next()) |child| {
-        //the header's own label: everything that could be the arrow comes before it
-        if (child.HasComponent(TextComponent)) return;
-        const label = UIManager.LabelOf(child) orelse continue;
-        const text = label.GetComponent(TextComponent).?;
-        if (!std.mem.eql(u8, text.mText.items, ARROW_OPEN) and !std.mem.eql(u8, text.mText.items, ARROW_FOLDED)) continue;
-        try text.SetText(engine_context, if (folded) ARROW_FOLDED else ARROW_OPEN);
-        try label.MarkLayoutDirty(engine_context);
-        return;
-    }
-}
-
-/// FoldNext for the header a tree node's arrow is in, the arrow's parent
-pub fn FoldFromArrow(engine_context: *EngineContext, arrow: Entity) !void {
-    const header = Parent(arrow) orelse return;
-    try FoldNext(engine_context, header);
+/// Folds `content` away, or out again, through its layout item (given one if it has none), and turns `arrow` (an
+/// entity showing text, or one with a label in it) to ARROW_FOLDED or ARROW_OPEN to match: a tree node's content, a
+/// collapsing header's. uninit for no arrow. Nothing happens without content
+pub fn Fold(engine_context: *EngineContext, content: Entity, arrow: Entity) !void {
+    if (!content.IsActive()) return;
+    const item = content.GetComponent(LayoutItemComponent) orelse try content.AddComponent(engine_context, LayoutItemComponent{});
+    item.mCollapsed = !item.mCollapsed;
+    const folded = item.mCollapsed;
+    try content.MarkLayoutDirty(engine_context);
+    if (arrow.IsActive()) try SetText(engine_context, arrow, if (folded) ARROW_FOLDED else ARROW_OPEN);
 }
 
 /// A menu item was picked: every menu closes. What picking it does is the item's own script
@@ -379,34 +355,21 @@ pub fn DragDivider(engine_context: *EngineContext, divider: Entity, delta: Vec3(
     try split.MarkLayoutDirty(engine_context);
 }
 
-/// Shows a tab's page and hides the rest of its tabs' pages (Widgets.Tabs): the tab is selected among the tab bar's
-/// tabs (SelectedTag, the theme's "Tab" Selected color), and the page at its place among the pages is the one not
-/// collapsed. ValueChanged goes to the tab and everything it is inside, unless it was already the one shown
-pub fn SelectTab(engine_context: *EngineContext, tab: Entity) !void {
-    const bar = Parent(tab) orelse return;
-    const pages = NextSibling(bar) orelse return;
-    const index = IndexAmongSiblings(tab) orelse return;
-    var page_index: usize = 0;
-    var children = pages.GetIterator(.Child);
-    while (children.next()) |page| : (page_index += 1) {
-        const item = page.GetComponent(LayoutItemComponent) orelse continue;
-        item.mCollapsed = page_index != index;
+/// Shows a tab's page and hides the other pages beside it (Widgets.Tabs): the tab is selected among the tab bar's tabs
+/// (SelectedTag, the theme's "Tab" Selected color), and `page` is the one of its siblings not collapsed. ValueChanged
+/// goes to the tab and everything it is inside, unless it was already the one shown
+pub fn SelectTab(engine_context: *EngineContext, tab: Entity, page: Entity) !void {
+    if (page.IsActive()) {
+        if (Parent(page)) |pages| {
+            var children = pages.GetIterator(.Child);
+            while (children.next()) |other| {
+                const item = other.GetComponent(LayoutItemComponent) orelse continue;
+                item.mCollapsed = other.mID != page.mID;
+            }
+            try pages.MarkLayoutDirty(engine_context);
+        }
     }
-    try pages.MarkLayoutDirty(engine_context);
     try Select(engine_context, tab);
-}
-
-/// The page a tab shows (Widgets.Tabs), null if it has none
-pub fn PageOf(tab: Entity) ?Entity {
-    const bar = Parent(tab) orelse return null;
-    const pages = NextSibling(bar) orelse return null;
-    const index = IndexAmongSiblings(tab) orelse return null;
-    var page_index: usize = 0;
-    var children = pages.GetIterator(.Child);
-    while (children.next()) |page| : (page_index += 1) {
-        if (page_index == index) return page;
-    }
-    return null;
 }
 
 /// How far in front of the rest of its scene the backmost floating window sits, and how much further each one in front
@@ -416,9 +379,9 @@ pub const WINDOW_DEPTH: f32 = 0.2;
 pub const WINDOW_DEPTH_STEP: f32 = 0.2;
 
 /// Brings a floating window (Widgets.FloatingWindow) in front of the other floating windows of its scene: they keep the
-/// order they were in behind it. `entity` is the window or anything inside it
-pub fn RaiseWindow(engine_context: *EngineContext, entity: Entity) !void {
-    const window = WindowContaining(entity) orelse return;
+/// order they were in behind it
+pub fn RaiseWindow(engine_context: *EngineContext, window: Entity) !void {
+    if (!window.IsActive()) return;
     const scene = window.GetComponent(EntitySceneComponent).?.mScene;
 
     //the scene's other windows, back to front
@@ -441,10 +404,9 @@ pub fn RaiseWindow(engine_context: *EngineContext, entity: Entity) !void {
     try SetDepth(engine_context, window, WINDOW_DEPTH + @as(f32, @floatFromInt(others.items.len)) * WINDOW_DEPTH_STEP);
 }
 
-/// Moves a floating window by `delta` (how far its title bar was dragged): its anchored offset. `entity` is the window
-/// or anything inside it
-pub fn MoveWindow(engine_context: *EngineContext, entity: Entity, delta: Vec3(f32)) !void {
-    const window = WindowContaining(entity) orelse return;
+/// Moves a floating window by `delta` (how far its title bar was dragged): its anchored offset
+pub fn MoveWindow(engine_context: *EngineContext, window: Entity, delta: Vec3(f32)) !void {
+    if (!window.IsActive()) return;
     const item = window.GetComponent(LayoutItemComponent) orelse return;
     switch (item.mPlacement) {
         .Anchored => |*anchoring| anchoring.Offset = .{ .x = anchoring.Offset.x + delta.x, .y = anchoring.Offset.y + delta.y },
@@ -453,9 +415,9 @@ pub fn MoveWindow(engine_context: *EngineContext, entity: Entity, delta: Vec3(f3
     try window.MarkLayoutDirty(engine_context);
 }
 
-/// Hides a floating window, through its layout item. `entity` is the window or anything inside it, like its close button
-pub fn CloseWindow(engine_context: *EngineContext, entity: Entity) !void {
-    const window = WindowContaining(entity) orelse return;
+/// Hides a floating window, through its layout item
+pub fn CloseWindow(engine_context: *EngineContext, window: Entity) !void {
+    if (!window.IsActive()) return;
     const item = window.GetComponent(LayoutItemComponent) orelse return;
     if (item.mCollapsed) return;
     item.mCollapsed = true;
@@ -476,15 +438,6 @@ pub fn OpenWindow(engine_context: *EngineContext, window: Entity) !void {
 pub fn IsWindowOpen(window: Entity) bool {
     const item = window.GetComponent(LayoutItemComponent) orelse return true;
     return !item.mCollapsed;
-}
-
-/// The floating window `entity` is in: itself or the nearest entity above it whose UI element has a FloatingWindowComponent
-fn WindowContaining(entity: Entity) ?Entity {
-    var current = entity;
-    while (true) {
-        if (UIManager.HasUIComponent(current, FloatingWindowComponent)) return current;
-        current = Parent(current) orelse return null;
-    }
 }
 
 fn DepthOf(entity: Entity) f32 {
@@ -513,17 +466,6 @@ fn SizeAlong(size: @import("../Math/MathTypes.zig").Vec2(f32), direction: @impor
 fn ClampPane(size: f32, total: f32) f32 {
     const most = if (total > 0) @max(total - MIN_PANE_SIZE, MIN_PANE_SIZE) else std.math.floatMax(f32);
     return std.math.clamp(size, MIN_PANE_SIZE, most);
-}
-
-/// Where an entity is among its parent's children, 0 for the first. Null for one with no parent
-fn IndexAmongSiblings(entity: Entity) ?usize {
-    const parent = Parent(entity) orelse return null;
-    var index: usize = 0;
-    var children = parent.GetIterator(.Child);
-    while (children.next()) |child| : (index += 1) {
-        if (child.mID == entity.mID) return index;
-    }
-    return null;
 }
 
 /// A menu item's check box: its last child, if that is a quad
@@ -577,11 +519,3 @@ fn Parent(entity: Entity) ?Entity {
     return Entity{ .mID = child_component.mParent, .mManager = entity.mManager };
 }
 
-/// The sibling after `entity`, null if it is the last one: siblings are a ring, which the parent's first child closes
-fn NextSibling(entity: Entity) ?Entity {
-    const child_component = entity.GetComponent(EntityChildComponent) orelse return null;
-    const parent = Parent(entity) orelse return null;
-    const first = parent.GetComponent(EntityParentComponent).?.mFirstEntity;
-    if (child_component.mNext == first or child_component.mNext == entity.mID) return null;
-    return Entity{ .mID = child_component.mNext, .mManager = entity.mManager };
-}

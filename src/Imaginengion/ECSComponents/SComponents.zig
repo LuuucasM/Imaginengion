@@ -19,6 +19,7 @@ pub const OnSceneStartScript = ScriptTags.OnSceneStartScript;
 pub const OnUpdateScript = ScriptTags.SceneOnUpdateScript;
 pub const OnPhysicsUpdateScript = ScriptTags.SceneOnPhysicsUpdateScript;
 pub const UntypedScriptTag = ScriptTags.UntypedScriptTag;
+pub const GameEventScript = ScriptTags.GameEventScript;
 
 pub const ComponentsList = [_]type{
     //SceneLayer
@@ -40,6 +41,7 @@ pub const ComponentsList = [_]type{
     OnUpdateScript,
     OnPhysicsUpdateScript,
     UntypedScriptTag,
+    GameEventScript,
 };
 
 pub const ComponentsPanelList = [_]type{
@@ -104,4 +106,5 @@ pub const EComponents = enum(u16) {
     OnUpdateScript = ListInd(&ComponentsList, OnUpdateScript),
     OnPhysicsUpdateScript = ListInd(&ComponentsList, OnPhysicsUpdateScript),
     UntypedScriptTag = ListInd(&ComponentsList, UntypedScriptTag),
+    GameEventScript = ListInd(&ComponentsList, GameEventScript),
 };

@@ -29,6 +29,9 @@ const OnPreSolveScript = EComponents.OnPreSolveScript;
 const OnPointerEventScript = EComponents.OnPointerEventScript;
 const OnUIEventScript = EComponents.OnUIEventScript;
 const UntypedScriptTag = @import("../ECSComponents/Shared/ScriptTags.zig").UntypedScriptTag;
+const GameEventScript = @import("../ECSComponents/Shared/ScriptTags.zig").GameEventScript;
+const GameEvents = @import("GameEvents.zig");
+const GamePhase = GameEvents.GamePhase;
 const EntityPointerEvent = @import("../Events/PointerEventData.zig").EntityEvent;
 const EntityUIEvent = @import("../Events/UIEventData.zig").EntityEvent;
 
@@ -134,11 +137,13 @@ fn RunScriptsFrom(
 }
 
 /// Runs the hook `script_type` stands for (its Hook) of one script child, whose ScriptComponent is `script_component`,
-/// on `owner`. A script with nothing to run is skipped (.Continue): one that never loaded, or that was edited since it
-/// was tagged into one without the hook or for another object type (retagged by SyncScripts)
+/// on `owner`. A script with nothing to run is skipped (.Continue): one that never loaded, one that is stopped (a file
+/// it imports changed and it doesn't build), or one edited since it was tagged into one without the hook or for another
+/// object type (retagged by SyncScripts)
 fn RunHook(comptime ObjectType: type, comptime script_type: type, engine_context: *EngineContext, script_component: *const ScriptComponent, owner: *const ObjectType, args: anytype) ScriptResult {
     const id = script_component.mInstance orelse return .Continue;
     const script_asset = ScriptValues.AssetOf(script_component) orelse return .Continue;
+    if (script_asset.mStopped) return .Continue;
     if (script_asset.GetOwner() != ScriptABI.OwnerKind.Of(ObjectType) or !script_asset.HasHook(script_type.Hook)) return .Continue;
     const instance = script_asset.GetInstance(id) orelse return .Continue;
 
@@ -356,10 +361,65 @@ pub fn RunOwnScripts(comptime ObjectType: type, comptime script_type: type, engi
     return .Continue;
 }
 
-/// Catches the scripts in `worlds` up with the script files that changed last frame (AManager.FileChanged): each changed
-/// script is built again and swapped in, its script children keeping their variables (ScriptAsset.Reload), and each of
-/// its script children gets the tags of the hooks it has now (SetUpScript). A script that no longer builds keeps
-/// running the last build that did, and one that never built is loaded now if it does. Has to come before
+/// Hands the game events sent in `world` for `phase` (WorldManager.Emit) to every script in it with a handler for them,
+/// in the order they were sent. For each event: the game context's scripts first, then the players', the scenes' and
+/// the entities', top of the scene stack first, and a handler handing back .Handled keeps it from the rest. An event sent
+/// for the same phase while this runs is handled in this same pass. The phase's queue is empty after
+pub fn ProcessGameEvents(engine_context: *EngineContext, world: *WorldManager, comptime phase: GamePhase) !void {
+    const zone = Tracy.ZoneInit("ScriptsProcessor::ProcessGameEvents(" ++ @tagName(phase) ++ ")", @src());
+    defer zone.Deinit();
+
+    const queue = world.mGameEventManager.GetQueue(phase);
+    defer world.mGameEventManager.Clear(phase);
+
+    var index: usize = 0;
+    //by index: a handler can send more, which go on the end and can move the queue
+    while (index < queue.mEntries.items.len) : (index += 1) {
+        const entry = queue.mEntries.items[index];
+        //the handlers are handed a copy, aligned for any event, which a handler sending an event can't move
+        const copy = try engine_context.FrameAllocator().alignedAlloc(u8, .@"16", @max(entry.mSize, 1));
+        @memcpy(copy[0..entry.mSize], queue.BytesOf(index));
+        _ = try RunEventHandlers(engine_context, world, entry.mId, copy.ptr);
+    }
+    zone.Value(index);
+}
+
+/// Runs every handler in `world` for the game event with id `id`, whose bytes are at `event`, until one hands back
+/// .Handled
+fn RunEventHandlers(engine_context: *EngineContext, world: *WorldManager, id: u64, event: *const anyopaque) !ScriptResult {
+    inline for (.{ GameContext, Player, Scene, Entity }) |ObjectType| {
+        const manager = world.GetManager(ObjectType);
+        const script_ids = try manager.GetGroup(engine_context.FrameAllocator(), GroupQuery{ .Component = GameEventScript });
+        SortByOwnerStackPos(ObjectType, world, script_ids.items);
+        for (script_ids.items) |script_id| {
+            const script_component = manager.GetComponent(ScriptComponent, script_id) orelse continue;
+            const owner = ObjectType{ .mID = OwnerOf(ObjectType, world, script_id), .mManager = world };
+            if (RunHandler(ObjectType, engine_context, script_component, &owner, id, event) == .Handled) return .Handled;
+        }
+    }
+    return .Continue;
+}
+
+/// Runs one script child's handler for the game event with id `id`, if it has one and can run (see RunHook)
+fn RunHandler(comptime ObjectType: type, engine_context: *EngineContext, script_component: *const ScriptComponent, owner: *const ObjectType, id: u64, event: *const anyopaque) ScriptResult {
+    const instance_id = script_component.mInstance orelse return .Continue;
+    const script_asset = ScriptValues.AssetOf(script_component) orelse return .Continue;
+    if (script_asset.mStopped or script_asset.GetOwner() != ScriptABI.OwnerKind.Of(ObjectType)) return .Continue;
+    const handler = script_asset.GetInfo().HandlerFor(id) orelse return .Continue;
+    const instance = script_asset.GetInstance(instance_id) orelse return .Continue;
+
+    const script_zone = Tracy.ZoneInit("ScriptsProcessor::EventHandler", @src());
+    defer script_zone.Deinit();
+    if (Tracy.enable_tracy) script_zone.Name(script_component.mScriptAssetHandle.GetFileMetaData().mRelPath.items);
+
+    return ScriptAsset.RunHandler(ObjectType, handler, engine_context, owner, instance, event);
+}
+
+/// Catches the scripts in `worlds` up with the files that changed last frame (AManager.FileChanged): each script whose
+/// own file or a project file it imports changed is built again and swapped in, its script children keeping their
+/// variables (ScriptAsset.Reload), and each of its script children gets the tags of what it has now (SetUpScript). A
+/// script whose own file no longer builds keeps running the last build that did; one that doesn't build after a file it
+/// imports changed stops until it does. One that never built is loaded now if it does. Has to come before
 /// AManager.OnUpdate, which clears what changed. On a frame where no file changed it does nothing
 pub fn SyncScripts(engine_context: *EngineContext, worlds: []const *WorldManager) !void {
     const zone = Tracy.ZoneInit("ScriptsProcessor::SyncScripts", @src());
@@ -377,13 +437,17 @@ pub fn SyncScripts(engine_context: *EngineContext, worlds: []const *WorldManager
             const script_ids = try manager.GetGroup(frame_allocator, GroupQuery{ .Component = ScriptComponent });
             for (script_ids.items) |script_id| {
                 const script_handle = manager.GetComponent(ScriptComponent, script_id).?.mScriptAssetHandle;
-                if (script_handle.mID == AssetHandle.NullObject or !asset_manager.FileChanged(script_handle.mID)) continue;
+                if (script_handle.mID == AssetHandle.NullObject) continue;
+                const loaded = asset_manager.GetLoadedAsset(ScriptAsset, script_handle.mID);
+                const own_changed = asset_manager.FileChanged(script_handle.mID);
+                const import_changed = if (loaded) |script_asset| script_asset.DependencyChanged(engine_context) else false;
+                if (!own_changed and !import_changed) continue;
                 if (!reloaded.contains(script_handle.mID)) {
                     try reloaded.put(frame_allocator, script_handle.mID, {});
-                    if (asset_manager.GetLoadedAsset(ScriptAsset, script_handle.mID)) |script_asset| {
+                    if (loaded) |script_asset| {
                         const file_data = script_handle.GetFileMetaData();
                         const abs_path = try asset_manager.GetAbsPath(frame_allocator, file_data.mRelPath.items, file_data.mPathType);
-                        _ = try script_asset.Reload(engine_context, abs_path, file_data.mRelPath.items);
+                        _ = try script_asset.Reload(engine_context, abs_path, file_data.mRelPath.items, import_changed);
                     }
                 }
                 try SetUpScript(ObjectType, .{ .mID = script_id, .mManager = world_manager }, engine_context);
@@ -393,7 +457,8 @@ pub fn SyncScripts(engine_context: *EngineContext, worlds: []const *WorldManager
 }
 
 /// Gives a script child what it needs to run its script: its variables (an instance in the script's DLL, kept from
-/// then on) and a tag for each of the script's hooks. A script with nothing it can run here gets UntypedScriptTag
+/// then on), a tag for each of the script's hooks, and GameEventScript if it handles game events. A script with nothing
+/// it can run here gets UntypedScriptTag
 /// instead: one that doesn't load (does not compile, say), or one for another kind of object. Done when the script is
 /// added (Core.AddScript, which may build the script), and again when its file changes (SyncScripts)
 pub fn SetUpScript(comptime ObjectType: type, script: ObjectType, engine_context: *EngineContext) !void {
@@ -413,6 +478,7 @@ pub fn SetUpScript(comptime ObjectType: type, script: ObjectType, engine_context
 
     //tags carry no value to move, so they are safe to take off now
     if (script.HasComponent(UntypedScriptTag)) try script.RemoveComponentSync(engine_context, UntypedScriptTag);
+    if (script.HasComponent(GameEventScript)) try script.RemoveComponentSync(engine_context, GameEventScript);
     inline for (comptime ScriptsListFor(ObjectType)) |tag_type| {
         if (script.HasComponent(tag_type)) try script.RemoveComponentSync(engine_context, tag_type);
     }
@@ -422,6 +488,7 @@ pub fn SetUpScript(comptime ObjectType: type, script: ObjectType, engine_context
             inline for (comptime ScriptsListFor(ObjectType)) |tag_type| {
                 if (asset.HasHook(tag_type.Hook)) _ = try script.AddComponent(engine_context, tag_type{});
             }
+            if (asset.GetInfo().mHandlerCount != 0) _ = try script.AddComponent(engine_context, GameEventScript{});
             return;
         }
         std.log.warn("{s} is a script for a {s}, which doesn't go on a {s}, so it will not run", .{ script_handle.GetFileMetaData().mRelPath.items, @tagName(asset.GetOwner()), Tracy.ShortTypeName(ObjectType) });

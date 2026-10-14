@@ -9,6 +9,7 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
+const MathTypes = @import("../Math/MathTypes.zig");
 const KeyboardPressedEvent = @import("../Events/WindowEventData.zig").KeyboardPressedEvent;
 const PointerEvent = @import("../Events/PointerEventData.zig").PointerEvent;
 const UIEvent = @import("../Events/UIEventData.zig").UIEvent;
@@ -150,6 +151,27 @@ pub const FieldKind = enum(u8) {
     Player,
     GameContext,
 
+    /// The kind of a variable of type T, null for a type a variable can't be
+    pub fn Of(comptime T: type) ?FieldKind {
+        return switch (T) {
+            f32 => .F32,
+            i32 => .I32,
+            u32 => .U32,
+            bool => .Bool,
+            MathTypes.Vec2(f32) => .Vec2,
+            MathTypes.Vec3(f32) => .Vec3,
+            MathTypes.Vec4(f32) => .Vec4,
+            Entity => .Entity,
+            Scene => .Scene,
+            Player => .Player,
+            GameContext => .GameContext,
+            else => if (@typeInfo(T) == .@"enum" and switch (@sizeOf(T)) {
+                1, 2, 4 => true,
+                else => false,
+            }) .Enum else null,
+        };
+    }
+
     /// The object type of an object variable: a handle to an object in the same world, saved as the object's UUID
     pub fn ObjectType(comptime self: FieldKind) type {
         return switch (self) {
@@ -199,15 +221,54 @@ pub const ScriptInfo = extern struct {
     mGetInstance: *const fn (id: u32) callconv(.c) ?*anyopaque,
     /// frees what the DLL keeps the instances in, before it is unloaded
     mDeinit: *const fn (engine_context: *EngineContext) callconv(.c) void,
+    /// the game events it handles (see GameEvents), one handler each
+    mHandlers: [*]const EventHandler,
+    mHandlerCount: u32,
+    /// the absolute paths of the project files it imports (found by build_script.zig), which it is built again for
+    /// when one changes. Not the script's own file
+    mDependencies: [*]const [*:0]const u8,
+    mDependencyCount: u32,
 
     pub fn Fields(self: *const ScriptInfo) []const FieldDesc {
         return self.mFields[0..self.mFieldCount];
+    }
+
+    pub fn Handlers(self: *const ScriptInfo) []const EventHandler {
+        return self.mHandlers[0..self.mHandlerCount];
+    }
+
+    /// The handler for the game event with id `id`, null if it handles none
+    pub fn HandlerFor(self: *const ScriptInfo, id: u64) ?*const EventHandler {
+        for (self.Handlers()) |*handler| {
+            if (handler.mId == id) return handler;
+        }
+        return null;
+    }
+
+    pub fn Dependencies(self: *const ScriptInfo) []const [*:0]const u8 {
+        return self.mDependencies[0..self.mDependencyCount];
     }
 
     pub fn HasHook(self: *const ScriptInfo, hook: Hook) bool {
         return self.mHooks[@intFromEnum(hook)] != null;
     }
 };
+
+/// A script's function for one game event (any function whose last parameter is the event, see ScriptExport)
+pub const EventHandler = extern struct {
+    /// the event's id (GameEvents.IdOf)
+    mId: u64,
+    /// the event's name, for messages
+    mName: [*:0]const u8,
+    /// a HandlerFn for the script's owner type
+    mFn: *const anyopaque,
+};
+
+/// The function a script's DLL hands the engine for one of its event handlers: the engine context, the owner, the
+/// script's variables (the instance), and the event's bytes
+pub fn HandlerFn(comptime owner_type: type) type {
+    return *const fn (engine_context: *EngineContext, owner: *const owner_type, instance: *anyopaque, event: *const anyopaque) callconv(.c) ScriptResult;
+}
 
 /// The symbol a script's DLL exports its ScriptInfo through
 pub const INFO_SYMBOL = "IM_GetScriptInfo";

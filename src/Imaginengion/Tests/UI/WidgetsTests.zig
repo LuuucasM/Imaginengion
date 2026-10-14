@@ -105,11 +105,11 @@ test "toggling checks and unchecks, and tells it and everything it is inside" {
     const engine_context = world.mEngineContext;
     const box = try world.Child();
 
-    try WidgetActions.Toggle(engine_context, box);
+    try WidgetActions.Toggle(engine_context, box, .uninit);
     try std.testing.expect(box.HasComponent(SelectedTag));
     try ExpectTo(&.{ box, world.mList }, try world.TakeValueChanged());
 
-    try WidgetActions.Toggle(engine_context, box);
+    try WidgetActions.Toggle(engine_context, box, .uninit);
     try std.testing.expect(!box.HasComponent(SelectedTag));
     try ExpectTo(&.{ box, world.mList }, try world.TakeValueChanged());
 }
@@ -159,21 +159,18 @@ test "an opener opens the popup it names against itself and closes it again, and
     try std.testing.expectEqual(@as(usize, 0), popups.OpenPopups().len);
 }
 
-test "a header folds away the entity right after it, and the last one folds nothing" {
+test "folding folds content away and out again, giving it a layout item if it has none, and with no content does nothing" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
-    const header = try world.Child();
     const content = try world.Child();
 
-    try WidgetActions.CollapseNext(engine_context, header);
+    try WidgetActions.Fold(engine_context, content, .uninit);
     try std.testing.expect(content.GetComponent(LayoutItemComponent).?.mCollapsed);
-    try WidgetActions.CollapseNext(engine_context, header);
+    try WidgetActions.Fold(engine_context, content, .uninit);
     try std.testing.expect(!content.GetComponent(LayoutItemComponent).?.mCollapsed);
 
-    //content is the last child: the list's first child (the header) is not after it
-    try WidgetActions.CollapseNext(engine_context, content);
-    try std.testing.expect(!header.HasComponent(LayoutItemComponent));
+    try WidgetActions.Fold(engine_context, .uninit, .uninit);
 }
 
 fn StyleOf(entity: Entity) []const u8 {

@@ -1,6 +1,3 @@
-- having to manually go look through files to find their UUID and then put it into the scripts
-	- also just in general the reliance on UUIDs
-	- This can be fixed by making scripts and systems and stuff linked into the engine where the engine is a dll and then swapping out DLLs and stuff
 - not having LSP working with the scripts
 	- this is an open issue right now on ZLS becauase of the build system changes but I know andrew mentioned in recent talks that he is working closely with ZLS to get it working again
 - trying to figure out how to handle different screen sizes and what it means for different components

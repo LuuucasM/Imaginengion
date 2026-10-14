@@ -12,6 +12,8 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
+const ECSObject = @import("../ECSObjects/ECSObject.zig");
+const ScriptValues = @import("../Scripts/ScriptValues.zig");
 const UIManager = @import("UIManager.zig");
 const StyleSystem = @import("StyleSystem.zig");
 const NumberFieldSystem = @import("NumberFieldSystem.zig");
@@ -59,7 +61,6 @@ pub const StockScript = enum {
     OpenPopup,
     OpenContextMenu,
     ClosePopups,
-    Collapse,
     Choose,
     ColorField,
     Fold,
@@ -536,13 +537,11 @@ pub fn TreeNode(engine_context: *EngineContext, parent: Parent, text: []const u8
 
     const parts = try FoldHeader(engine_context, .{ .Entity = node }, text, if (options.Leaf) null else options.Open, options.Stripe);
     const header = parts.Header;
-    if (options.StockScripts) {
-        try AddStockScript(engine_context, header, .Select);
-        if (!options.Leaf) try AddStockScript(engine_context, parts.Arrow, .FoldArrow);
-    }
+    if (options.StockScripts) try AddStockScript(engine_context, header, .Select);
     if (options.Leaf) return .{ .Node = node, .Header = header, .Content = null };
 
     const content = try FoldContent(engine_context, .{ .Entity = node }, options.Open, INDENT);
+    if (options.StockScripts) try AddStockScriptWith(engine_context, parts.Arrow, .FoldArrow, .{ .mContent = content });
     return .{ .Node = node, .Header = header, .Content = content };
 }
 
@@ -550,10 +549,10 @@ pub fn TreeNode(engine_context: *EngineContext, parent: Parent, text: []const u8
 /// Fold script): a section of a panel, like a component in the components panel. The header and its content both go in
 /// `parent`, the content right after the header, so Node is the header. Style "Header"
 pub fn CollapsingHeader(engine_context: *EngineContext, parent: Parent, text: []const u8, open: bool, options: Options) !Fold {
-    const header = (try FoldHeader(engine_context, parent, text, open, null)).Header;
-    if (options.StockScripts) try AddStockScript(engine_context, header, .Fold);
+    const parts = try FoldHeader(engine_context, parent, text, open, null);
     const content = try FoldContent(engine_context, parent, open, 0);
-    return .{ .Node = header, .Header = header, .Content = content };
+    if (options.StockScripts) try AddStockScriptWith(engine_context, parts.Header, .Fold, .{ .mContent = content, .mArrow = parts.Arrow });
+    return .{ .Node = parts.Header, .Header = parts.Header, .Content = content };
 }
 
 /// A row of menus along the top of a window. Put its menus in with Menu. Style "MenuBar"
@@ -753,12 +752,12 @@ pub fn AddTab(engine_context: *EngineContext, tabs: Entity, title: []const u8, o
     _ = try tab.AddComponent(engine_context, LayoutItemComponent{});
     try UIManager.Style(engine_context, tab, "Tab");
     _ = try Label(engine_context, .{ .Entity = tab }, title);
-    if (options.StockScripts) try AddStockScript(engine_context, tab, .Tab);
     if (first) _ = try tab.AddComponent(engine_context, EntityComponents.SelectedTag{});
 
     const page = try NewEntity(engine_context, .{ .Entity = pages });
     _ = try page.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
     _ = try page.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fill = 1 }, .mCollapsed = !first });
+    if (options.StockScripts) try AddStockScriptWith(engine_context, tab, .Tab, .{ .mPage = page });
     return page;
 }
 
@@ -785,13 +784,13 @@ pub fn FloatingWindow(engine_context: *EngineContext, scene: Scene, title: []con
     _ = try title_bar.AddComponent(engine_context, LayoutComponent{ .mDirection = .Row, .mPadding = .{ .Left = PADDING, .Right = 2, .Top = 2, .Bottom = 2 }, .mCrossAlign = .Center });
     _ = try title_bar.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fixed = TITLE_SIZE } });
     try UIManager.Style(engine_context, title_bar, "Title");
-    if (options.StockScripts) try AddStockScript(engine_context, title_bar, .WindowTitle);
+    if (options.StockScripts) try AddStockScriptWith(engine_context, title_bar, .WindowTitle, .{ .mWindow = window });
     const shown_title = try Label(engine_context, .{ .Entity = title_bar }, title);
     shown_title.GetComponent(LayoutItemComponent).?.mWidth = .{ .Fill = 1 };
     const close = try ButtonFrame(engine_context, .{ .Entity = title_bar });
     close.GetComponent(LayoutComponent).?.mPadding = .{ .Left = PADDING / 2, .Right = PADDING / 2, .Top = 0, .Bottom = 0 };
     _ = try Label(engine_context, .{ .Entity = close }, "x");
-    if (options.StockScripts) try AddStockScript(engine_context, close, .CloseWindow);
+    if (options.StockScripts) try AddStockScriptWith(engine_context, close, .CloseWindow, .{ .mWindow = window });
 
     const content = try ScrollArea(engine_context, .{ .Entity = window });
 
@@ -814,6 +813,7 @@ pub fn AddCheckMark(engine_context: *EngineContext, checkbox: Entity) !Entity {
         .mCollapsed = !box.HasComponent(EntityComponents.SelectedTag),
     });
     try UIManager.Style(engine_context, mark, "CheckMark");
+    if (StockScriptOf(box, .Toggle)) |toggle| try ScriptValues.Set(toggle, "mMark", mark);
     return mark;
 }
 
@@ -857,9 +857,28 @@ pub fn ScaleSizes(engine_context: *EngineContext, root: Entity, factor: f32) !vo
 
 /// Puts one of the stock scripts on `entity`
 pub fn AddStockScript(engine_context: *EngineContext, entity: Entity, script: StockScript) !void {
+    try AddStockScriptWith(engine_context, entity, script, .{});
+}
+
+/// AddStockScript, with the script's variables set from `values`, a struct of them by name: .{ .mContent = content }
+pub fn AddStockScriptWith(engine_context: *EngineContext, entity: Entity, script: StockScript, values: anytype) !void {
     const handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = script.Path(), .path_type = .Eng } });
     //AddScript keeps the reference the handle came with
-    try entity.AddScript(engine_context, handle);
+    const script_child = try ECSObject.Core(Entity).AddScript(entity, engine_context, handle);
+    inline for (@typeInfo(@TypeOf(values)).@"struct".field_names) |name| {
+        try ScriptValues.Set(script_child, name, @field(values, name));
+    }
+}
+
+/// The script child of `entity` running the stock script `script`, null if it has none
+fn StockScriptOf(entity: Entity, script: StockScript) ?Entity {
+    var scripts = entity.GetIterator(.Script);
+    while (scripts.next()) |script_child| {
+        const handle = script_child.GetComponent(EntityComponents.ScriptComponent).?.mScriptAssetHandle;
+        if (handle.mID == AssetHandle.NullObject) continue;
+        if (std.mem.eql(u8, handle.GetFileMetaData().mRelPath.items, script.Path())) return script_child;
+    }
+    return null;
 }
 
 /// A popup list at the top of `scene` (a popup is never inside what opens it), a little in front of the rest of it, and

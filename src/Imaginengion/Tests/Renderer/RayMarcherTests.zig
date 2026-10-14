@@ -200,6 +200,42 @@ fn MakeMerge(center: Vec3(f32), half: Vec2(f32), range: SDFProgram.Range, shadin
     };
 }
 
+/// A solid box, `half` its half extents
+fn MakeBox(center: Vec3(f32), rotation: Quat(f32), half: Vec3(f32), shading: u32, flags: u32) TestShape {
+    return MakeSolid(.Box, center, rotation, half, shading, flags);
+}
+
+/// A solid sphere, its radius in every component of its Size the way Renderer2D sends one
+fn MakeSphere(center: Vec3(f32), radius: f32, shading: u32, flags: u32) TestShape {
+    return MakeSolid(.Sphere, center, IDENTITY, .{ .x = radius, .y = radius, .z = radius }, shading, flags);
+}
+
+fn MakeSolid(shape_type: Renderer.ShapeType, center: Vec3(f32), rotation: Quat(f32), size: Vec3(f32), shading: u32, flags: u32) TestShape {
+    const axes = Renderer2D.ShapeAxes(center, rotation);
+    return .{
+        .Shape = .{
+            .AxisX = axes[0],
+            .AxisY = axes[1],
+            .AxisZ = axes[2],
+            .Size = size.ToArray(),
+            .Params = .{ 0, 0, 0, 0 },
+            .Type = shape_type,
+            .MaskIndex = NO_MASK,
+            .SurfaceIndex = undefined,
+            .Flags = flags,
+        },
+        .Surface = .{ .ShadingHandle = shading, .BorderShadingHandle = shading, .BorderWidth = 0 },
+    };
+}
+
+/// `solid` with an edge band `width` wide, painted with `band_shading`
+fn WithBand(solid: TestShape, band_shading: u32, width: f32) TestShape {
+    var banded = solid;
+    banded.Surface.BorderShadingHandle = band_shading;
+    banded.Surface.BorderWidth = width;
+    return banded;
+}
+
 const TRANSPARENT = ShapeData.FLAG_TRANSPARENT;
 
 //a medium that changes nothing a ray passes through
@@ -233,9 +269,13 @@ const MAX_TEST_SHAPES = 32;
 
 /// The color one ray comes out with, found every way a shape can be: with every shape direct (a ray test straight
 /// against each, by walking the BVH and by testing them all) and with every shape marched. They all have to agree,
-/// which keeps the march working while nothing the engine draws uses it yet
+/// which keeps the march working while nothing the engine draws uses it yet. Solids are only ever direct, so a scene
+/// with one isn't marched
 fn Trace(scene: TestScene, ray: Ray) !Vec4(f32) {
     const direct = try TraceWith(scene, ray, scene.Shapes.len);
+    for (scene.Shapes) |shape| {
+        if (shape.Shape.Type == .Box or shape.Shape.Type == .Sphere) return direct;
+    }
     const marched = try TraceSearch(scene, ray, 0, .BVH, .full);
     ExpectColor(direct, marched) catch |err| {
         std.debug.print("all direct and all marched disagree: direct {any}, marched {any}\n", .{ direct, marched });
@@ -537,6 +577,136 @@ test "a quad without the see-through flag hides what is behind it, even with a s
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, NO_MASK),
     };
     try ExpectColor(half_red.Lerp(DEFAULT_COLOR, 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+}
+
+//==================================solids==================================
+
+test "a box is drawn on its sides as well as its front, unlike a plate's thin side" {
+    const shadings = [_]SurfShadingData{ColorShading(RED)};
+    const shapes = [_]TestShape{MakeBox(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1, .z = 1 }, 0, 0)};
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
+    const onto_side = Ray{ .Origin = .{ .x = -10, .y = 0, .z = 0 }, .Dir = .{ .x = 1, .y = 0, .z = 0 } };
+    try ExpectColor(RED, try Trace(scene, RayAt(0.5, 0.5)));
+    try ExpectColor(RED, try Trace(scene, onto_side));
+}
+
+test "a sphere is hit inside its radius and missed past it" {
+    const shadings = [_]SurfShadingData{ColorShading(RED)};
+    const shapes = [_]TestShape{MakeSphere(.{ .x = 0, .y = 0, .z = 0 }, 1, 0, 0)};
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
+    try ExpectColor(RED, try Trace(scene, RayAt(0.9, 0)));
+    try ExpectColor(RED, try Trace(scene, RayAt(0.6, 0.6)));
+    try ExpectColor(DEFAULT_COLOR, try Trace(scene, RayAt(0.75, 0.75)));
+}
+
+test "a solid without the see-through flag hides what is behind it" {
+    const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
+    const shapes = [_]TestShape{
+        MakeBox(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1, .z = 1 }, 0, 0),
+        MakeQuad(.{ .x = 0, .y = 0, .z = -3 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, NO_MASK),
+    };
+    try ExpectColor(RED, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+}
+
+test "a see-through box is drawn where the ray goes in and again where it comes out, however it's turned" {
+    const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
+    const shadings = [_]SurfShadingData{ ColorShading(half_red), ColorShading(BLUE) };
+    //the far side over the blue behind, then the near side over that: once each, the way out never hit again
+    const expected = half_red.Lerp(half_red.Lerp(BLUE, 0.5), 0.5);
+    const turned = Quat(f32).FromAxisAngle(.{ .x = 0, .y = 1, .z = 0 }, 0.5).MulQuat(Quat(f32).FromAxisAngle(.{ .x = 1, .y = 0, .z = 0 }, 0.35));
+    for ([_]Quat(f32){ IDENTITY, turned }) |rotation| {
+        const shapes = [_]TestShape{
+            MakeBox(.{ .x = 0, .y = 0, .z = 0 }, rotation, .{ .x = 1, .y = 1, .z = 1 }, 0, TRANSPARENT),
+            MakeQuad(.{ .x = 0, .y = 0, .z = -3 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, NO_MASK),
+        };
+        try ExpectColor(expected, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0.2, -0.1)));
+    }
+}
+
+test "a see-through sphere is drawn where the ray goes in and again where it comes out" {
+    const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
+    const shadings = [_]SurfShadingData{ ColorShading(half_red), ColorShading(BLUE) };
+    const shapes = [_]TestShape{
+        MakeSphere(.{ .x = 0, .y = 0, .z = 0 }, 1, 0, TRANSPARENT),
+        MakeQuad(.{ .x = 0, .y = 0, .z = -3 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, NO_MASK),
+    };
+    try ExpectColor(half_red.Lerp(half_red.Lerp(BLUE, 0.5), 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0.3, 0.2)));
+}
+
+test "a see-through quad inside a see-through box is seen between the box's two sides" {
+    const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
+    const half_green = Vec4(f32){ .x = 0, .y = 1, .z = 0, .w = 0.5 };
+    const shadings = [_]SurfShadingData{ ColorShading(half_red), ColorShading(half_green), ColorShading(BLUE) };
+    const shapes = [_]TestShape{
+        MakeBox(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1, .z = 1 }, 0, TRANSPARENT),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 0.5, .y = 0.5 }, 1, TRANSPARENT, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = -3 }, IDENTITY, .{ .x = 2, .y = 2 }, 2, 0, NO_MASK),
+    };
+    const far_side = half_red.Lerp(BLUE, 0.5);
+    try ExpectColor(half_red.Lerp(half_green.Lerp(far_side, 0.5), 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+}
+
+test "a ray starting inside a see-through solid sees its far side, and an opaque one's far side hides the rest" {
+    const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
+    const shadings = [_]SurfShadingData{ ColorShading(half_red), ColorShading(BLUE), ColorShading(RED) };
+    const from_inside = Ray{ .Origin = .{ .x = 0, .y = 0, .z = 0.5 }, .Dir = .{ .x = 0, .y = 0, .z = -1 } };
+
+    const see_through = [_]TestShape{
+        MakeSphere(.{ .x = 0, .y = 0, .z = 0 }, 1, 0, TRANSPARENT),
+        MakeQuad(.{ .x = 0, .y = 0, .z = -3 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, NO_MASK),
+    };
+    try ExpectColor(half_red.Lerp(BLUE, 0.5), try Trace(.{ .Shapes = &see_through, .Shadings = &shadings }, from_inside));
+
+    const opaque_box = [_]TestShape{
+        MakeBox(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1, .z = 1 }, 2, 0),
+        MakeQuad(.{ .x = 0, .y = 0, .z = -3 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, NO_MASK),
+    };
+    try ExpectColor(RED, try Trace(.{ .Shapes = &opaque_box, .Shadings = &shadings }, from_inside));
+}
+
+test "a box's band is along its edges, on its front and its sides, and the rest is its fill" {
+    const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
+    const shapes = [_]TestShape{WithBand(MakeBox(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1, .z = 1 }, 0, 0), 1, 0.1)};
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
+    try ExpectColor(RED, try Trace(scene, RayAt(0, 0)));
+    try ExpectColor(RED, try Trace(scene, RayAt(0.85, 0)));
+    try ExpectColor(BLUE, try Trace(scene, RayAt(0.95, 0)));
+    try ExpectColor(BLUE, try Trace(scene, RayAt(-0.3, -0.95)));
+    //onto its side: near the edge it shares with the front, and away from every edge
+    const onto_side = Ray{ .Origin = .{ .x = 10, .y = 0, .z = 0.95 }, .Dir = .{ .x = -1, .y = 0, .z = 0 } };
+    const side_middle = Ray{ .Origin = .{ .x = 10, .y = 0, .z = 0 }, .Dir = .{ .x = -1, .y = 0, .z = 0 } };
+    try ExpectColor(BLUE, try Trace(scene, onto_side));
+    try ExpectColor(RED, try Trace(scene, side_middle));
+}
+
+test "a see-through box's far edges show through its fill" {
+    //aimed so it goes in through the front face away from its edges, and comes out the back one at its edge
+    const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
+    const shadings = [_]SurfShadingData{ ColorShading(half_red), ColorShading(BLUE) };
+    const shapes = [_]TestShape{WithBand(MakeBox(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1, .z = 1 }, 0, TRANSPARENT), 1, 0.1)};
+    const ray = Ray{ .Origin = .{ .x = 0, .y = 0, .z = 10 }, .Dir = (Vec3(f32){ .x = 0.95, .y = 0, .z = -11 }).Dir() };
+    try ExpectColor(half_red.Lerp(BLUE, 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, ray));
+}
+
+test "a sphere's band is round its outline, as the ray sees it" {
+    const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
+    const shapes = [_]TestShape{WithBand(MakeSphere(.{ .x = 0, .y = 0, .z = 0 }, 1, 0, 0), 1, 0.1)};
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
+    try ExpectColor(RED, try Trace(scene, RayAt(0, 0)));
+    try ExpectColor(RED, try Trace(scene, RayAt(0.6, 0.6)));
+    try ExpectColor(BLUE, try Trace(scene, RayAt(0.95, 0)));
+    try ExpectColor(BLUE, try Trace(scene, RayAt(-0.66, -0.66)));
+}
+
+test "a solid with no band is its fill right up to its edges" {
+    const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
+    const shapes = [_]TestShape{
+        WithBand(MakeBox(.{ .x = -2, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1, .z = 1 }, 0, 0), 1, 0),
+        WithBand(MakeSphere(.{ .x = 2, .y = 0, .z = 0 }, 1, 0, 0), 1, 0),
+    };
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
+    try ExpectColor(RED, try Trace(scene, RayAt(-1.01, 0.99)));
+    try ExpectColor(RED, try Trace(scene, RayAt(2.99, 0)));
 }
 
 //==================================cut off and gaps==================================

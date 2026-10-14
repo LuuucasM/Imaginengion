@@ -11,6 +11,7 @@ const ScriptTags = @import("Shared/ScriptTags.zig");
 pub const OnGameStartScript = ScriptTags.OnGameStartScript;
 pub const OnUpdateScript = ScriptTags.GameContextOnUpdateScript;
 pub const UntypedScriptTag = ScriptTags.UntypedScriptTag;
+pub const GameEventScript = ScriptTags.GameEventScript;
 
 pub const ComponentsList = [_]type{
     AttribComponent,
@@ -24,6 +25,7 @@ pub const ComponentsList = [_]type{
     OnGameStartScript,
     OnUpdateScript,
     UntypedScriptTag,
+    GameEventScript,
 };
 
 pub const ComponentsPanelList = [_]type{
@@ -66,4 +68,5 @@ pub const EComponents = enum(u16) {
     OnGameStartScript = ListInd(&ComponentsList, OnGameStartScript),
     OnUpdateScript = ListInd(&ComponentsList, OnUpdateScript),
     UntypedScriptTag = ListInd(&ComponentsList, UntypedScriptTag),
+    GameEventScript = ListInd(&ComponentsList, GameEventScript),
 };

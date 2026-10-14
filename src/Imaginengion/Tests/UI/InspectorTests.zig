@@ -151,7 +151,7 @@ test "numbers, vectors, bools and colors show their fields and write edits back,
     //a bool is a checkbox's box
     const box = FirstChild(world.Widget(2));
     try std.testing.expect(box.HasComponent(SelectedTag));
-    try WidgetActions.Toggle(engine_context, box);
+    try WidgetActions.Toggle(engine_context, box, .uninit);
     try world.ProcessUIEvents();
     try std.testing.expect(!world.mObject.GetComponent(SurfaceComponent).?.mShouldRender);
 

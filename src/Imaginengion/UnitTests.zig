@@ -22,4 +22,5 @@ test {
     _ = @import("Tests/Inputs/InputTests.zig");
     _ = @import("Tests/UI/LayoutTests.zig");
     _ = @import("Tests/UI/TextEditTests.zig");
+    _ = @import("Tests/Scripts/ScriptImportsTests.zig");
 }

@@ -47,9 +47,13 @@ const Replay = struct {
             .Quad => SDFFunc.rayIMQuad(ray, shape),
             .Glyph => SDFFunc.rayIMGlyph(ray, shape),
             .Merge => SDFFunc.rayIMMerge(ray, shape),
+            .Box => SDFFunc.rayIMBox(ray, shape),
+            .Sphere => SDFFunc.rayIMSphere(ray, shape),
             .None => return null,
         };
         if (!hit.IsHit() or hit.StartedInside) return null;
+        //a solid is drawn on every face, a plate only on its front and back
+        if (shape.Type == .Box or shape.Type == .Sphere) return hit.T;
         const face = hit.Face orelse return null;
         if (face != .PosZ and face != .NegZ) return null;
         return hit.T;

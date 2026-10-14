@@ -404,17 +404,22 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             try engine_context.mSimulateWorld.ProcessEvents(PhysicsEventData, .PostPhysics, engine_context, &callback_list);
             callback_list.first = null;
             callback_list.last = null;
+            //the game events sent during the step and by what reacted to it
+            try ScriptsProcessor.ProcessGameEvents(engine_context, &engine_context.mSimulateWorld, .AfterPhysics);
 
             //the game's rules first, then each player, each scene, and what is in them
             _ = try ScriptsProcessor.RunScript(GameContext, GameContextOnUpdateScript, .Simulate, engine_context, .{});
             _ = try ScriptsProcessor.RunScript(Player, PlayerOnUpdateScript, .Simulate, engine_context, .{});
             _ = try ScriptsProcessor.RunScript(Scene, SceneOnUpdateScript, .Simulate, engine_context, .{});
             _ = try ScriptsProcessor.RunScript(Entity, OnUpdateScript, .Simulate, engine_context, .{});
+            try ScriptsProcessor.ProcessGameEvents(engine_context, &engine_context.mSimulateWorld, .AfterUpdate);
         }
+        try ScriptsProcessor.ProcessGameEvents(engine_context, &engine_context.mEditorWorld, .AfterPhysics);
         _ = try ScriptsProcessor.RunScript(GameContext, GameContextOnUpdateScript, .Editor, engine_context, .{});
         _ = try ScriptsProcessor.RunScript(Player, PlayerOnUpdateScript, .Editor, engine_context, .{});
         _ = try ScriptsProcessor.RunScript(Scene, SceneOnUpdateScript, .Editor, engine_context, .{});
         _ = try ScriptsProcessor.RunScript(Entity, OnUpdateScript, .Editor, engine_context, .{});
+        try ScriptsProcessor.ProcessGameEvents(engine_context, &engine_context.mEditorWorld, .AfterUpdate);
     }
     //-------------Game Logic End----------------
 
@@ -1150,6 +1155,7 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
         .PlayPreview = self.mShowPlayPreview,
         .VSync = engine_context.mRenderer.mPresentMode == .VSync,
         .Heatmap = engine_context.mRenderer.mHeatmap,
+        .ShowColliders = engine_context.mRenderer.mShowColliders,
         .Players = players.items,
         .Following = self.mRunPlayer,
     });
@@ -1254,6 +1260,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
         //menu actions run before this pass of the loop renders, so no frame has its window image yet
         .ToggleVSync => _ = engine_context.mRenderer.SetPresentMode(engine_context, if (engine_context.mRenderer.mPresentMode == .VSync) .Off else .VSync),
         .SetHeatmap => |metric| engine_context.mRenderer.mHeatmap = metric,
+        .ToggleShowColliders => engine_context.mRenderer.mShowColliders = !engine_context.mRenderer.mShowColliders,
         .FollowPlayer => |player| {
             const already = if (self.mRunPlayer) |run_player| run_player.mID == player.mID else false;
             self.mRunPlayer = if (already) null else player;

@@ -4,8 +4,11 @@
 //! - its variables, as a table of names, kinds and offsets (FieldDesc) the engine edits, saves and copies them with
 //! - its hooks: any of ScriptABI.Hook it has a function for, each wrapped in a C-callable function that finds the
 //!   variables for the instance it is run on
+//! - its game event handlers: any function whose last parameter is a game event (see GameEvents), whatever it is
+//!   called, each wrapped the same way and listed by the event's id
 //! - where the instances are kept: one sparse set per DLL, by the instance id the engine hands it, each instance in an
 //!   allocation of its own so it stays put
+//! - the project files it imports, which build_script.zig found and hands in, for the engine to watch
 //! A script that doesn't fit (a variable with no default, a hook with the wrong parameters) is a compile error saying
 //! what to change.
 const std = @import("std");
@@ -16,7 +19,7 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
-const MathTypes = @import("../Math/MathTypes.zig");
+const GameEvents = @import("GameEvents.zig");
 
 const Hook = ScriptABI.Hook;
 const OwnerKind = ScriptABI.OwnerKind;
@@ -25,11 +28,13 @@ const FieldDesc = ScriptABI.FieldDesc;
 const ScriptInfo = ScriptABI.ScriptInfo;
 const ScriptResult = ScriptABI.ScriptResult;
 
-/// Everything the DLL of `Script` (a script file's struct) exports. `script_name` is only for messages
-pub fn Exports(comptime Script: type, comptime script_name: []const u8) type {
+/// Everything the DLL of `Script` (a script file's struct) exports. `script_name` is only for messages. `dependencies`
+/// are the absolute paths of the project files it imports
+pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime dependencies: []const [*:0]const u8) type {
     const owner_kind = comptime OwnerOf(Script, script_name);
     const Owner = owner_kind.Type();
     const fields = comptime FieldsOf(Script, script_name);
+    const handler_names = comptime HandlerNames(Script, script_name);
 
     return struct {
         /// the instances, by the ids the engine hands out (u20 for the index, as the ECS does). Each is allocated on its
@@ -46,7 +51,36 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8) type {
             .mFreeInstance = &FreeInstance,
             .mGetInstance = &GetInstance,
             .mDeinit = &Deinit,
+            .mHandlers = &handlers,
+            .mHandlerCount = handlers.len,
+            .mDependencies = dependencies.ptr,
+            .mDependencyCount = dependencies.len,
         };
+
+        const handlers = Handlers();
+
+        fn Handlers() [handler_names.len]ScriptABI.EventHandler {
+            var table: [handler_names.len]ScriptABI.EventHandler = undefined;
+            for (handler_names, 0..) |name, i| {
+                const Event = EventOf(Script, @TypeOf(@field(Script, name))).?;
+                table[i] = .{
+                    .mId = GameEvents.IdOf(Event),
+                    .mName = GameEvents.NameOf(Event).ptr,
+                    .mFn = @ptrCast(HandlerWrapper(name, Event)),
+                };
+            }
+            return table;
+        }
+
+        /// The C-callable function for the handler `name` of `Event`: the event's bytes back into an Event
+        fn HandlerWrapper(comptime name: []const u8, comptime Event: type) ScriptABI.HandlerFn(Owner) {
+            return &struct {
+                fn Run(ec: *EngineContext, owner: *const Owner, data: *anyopaque, event: *const anyopaque) callconv(.c) ScriptResult {
+                    const self: *Script = @ptrCast(@alignCast(data));
+                    return Finish(name, @field(Script, name)(self, ec, owner.*, @as(*const Event, @ptrCast(@alignCast(event)))));
+                }
+            }.Run;
+        }
 
         fn NewInstance(engine_context: *EngineContext, id: u32, copy_from: ?*const anyopaque) callconv(.c) bool {
             const engine_allocator = engine_context.EngineAllocator();
@@ -118,10 +152,14 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8) type {
 
         fn Call(comptime hook: Hook, engine_context: *EngineContext, owner: *const Owner, data: *anyopaque, args: anytype) ScriptResult {
             const self: *Script = @ptrCast(@alignCast(data));
-            const result = @call(.auto, @field(Script, @tagName(hook)), .{ self, engine_context, owner.* } ++ args);
+            return Finish(@tagName(hook), @call(.auto, @field(Script, @tagName(hook)), .{ self, engine_context, owner.* } ++ args));
+        }
+
+        /// What a hook or handler handed back, an error logged with the script's name and carried on from
+        fn Finish(comptime function_name: []const u8, result: anytype) ScriptResult {
             if (@typeInfo(@TypeOf(result)) == .error_union) {
                 return result catch |err| {
-                    std.log.err("{s}.{s}: {s}", .{ script_name, @tagName(hook), @errorName(err) });
+                    std.log.err("{s}.{s}: {s}", .{ script_name, function_name, @errorName(err) });
                     return .Continue;
                 };
             }
@@ -135,8 +173,8 @@ fn FromAbi(value: anytype) if (@TypeOf(value) == *const Entity) Entity else @Typ
     return if (@TypeOf(value) == *const Entity) value.* else value;
 }
 
-/// The object type the script goes on, from its hooks' third parameter: every hook has to agree, and has to be one that
-/// object type has
+/// The object type the script goes on, from its hooks' and event handlers' third parameter: every one has to agree, and
+/// each hook has to be one that object type has
 fn OwnerOf(comptime Script: type, comptime script_name: []const u8) OwnerKind {
     if (@typeInfo(Script) != .@"struct") @compileError(script_name ++ ": a script is a struct file: its variables at the top, then its hooks");
     CheckNoMisspeltHooks(Script, script_name);
@@ -163,7 +201,70 @@ fn OwnerOf(comptime Script: type, comptime script_name: []const u8) OwnerKind {
         if (!hook.Takes(this_owner)) @compileError(script_name ++ ": a script whose owner is " ++ @tagName(this_owner) ++ " can't have " ++ @tagName(hook));
         CheckSignature(Script, script_name, hook, this_owner.Type(), fn_info);
     }
-    return owner orelse @compileError(script_name ++ ": has none of the hook functions, so nothing would ever run it. Add one, e.g. pub fn OnUpdate(self: *@This(), engine_context: *EngineContext, owner: Entity) !ScriptResult");
+    for (HandlerNames(Script, script_name)) |name| {
+        const fn_info = @typeInfo(@TypeOf(@field(Script, name))).@"fn";
+        if (fn_info.param_types.len != 4 or fn_info.param_types[2] == null) {
+            @compileError(script_name ++ ": " ++ name ++ " handles a game event, so it has to be (self: *@This(), engine_context: *EngineContext, owner: <Entity, SceneLayer, Player or GameContext>, event: *const <the event>) ScriptResult (or !ScriptResult)");
+        }
+        const this_owner = OwnerKind.Of(fn_info.param_types[2].?);
+        if (owner) |kind| {
+            if (kind != this_owner) @compileError(script_name ++ ": " ++ first_hook ++ "'s owner is " ++ @tagName(kind) ++ " but " ++ name ++ "'s is " ++ @tagName(this_owner) ++ ": a script goes on one kind of object");
+        } else {
+            owner = this_owner;
+            first_hook = name;
+        }
+        CheckHandlerSignature(Script, script_name, name, this_owner.Type(), fn_info);
+    }
+    return owner orelse @compileError(script_name ++ ": has none of the hook functions or game event handlers, so nothing would ever run it. Add one, e.g. pub fn OnUpdate(self: *@This(), engine_context: *EngineContext, owner: Entity) !ScriptResult");
+}
+
+/// The game event a function of the script handles: the event its last parameter points at, null for a function that
+/// isn't a handler. Only one taking the script's self first, so a helper that is handed an event isn't taken for one
+fn EventOf(comptime Script: type, comptime F: type) ?type {
+    const fn_info = switch (@typeInfo(F)) {
+        .@"fn" => |fn_info| fn_info,
+        else => return null,
+    };
+    if (fn_info.param_types.len < 2 or fn_info.param_types[0] != *Script) return null;
+    const last = fn_info.param_types[fn_info.param_types.len - 1] orelse return null;
+    const pointer = switch (@typeInfo(last)) {
+        .pointer => |pointer| pointer,
+        else => return null,
+    };
+    if (pointer.size != .one or !GameEvents.IsEvent(pointer.child)) return null;
+    return pointer.child;
+}
+
+/// The names of the script's game event handlers, in the order it declares them. Two for one event is an error
+fn HandlerNames(comptime Script: type, comptime script_name: []const u8) []const []const u8 {
+    comptime var names: []const []const u8 = &.{};
+    for (@typeInfo(Script).@"struct".decl_names) |name| {
+        const Event = EventOf(Script, @TypeOf(@field(Script, name))) orelse continue;
+        GameEvents.Check(Event);
+        for (names) |other| {
+            if (EventOf(Script, @TypeOf(@field(Script, other))).? == Event) {
+                @compileError(script_name ++ ": " ++ other ++ " and " ++ name ++ " both handle " ++ GameEvents.NameOf(Event) ++ ": a script handles an event with one function");
+            }
+        }
+        names = names ++ [_][]const u8{name};
+    }
+    return names;
+}
+
+fn CheckHandlerSignature(comptime Script: type, comptime script_name: []const u8, comptime name: []const u8, comptime Owner: type, comptime fn_info: std.builtin.Type.Fn) void {
+    const Event = EventOf(Script, @TypeOf(@field(Script, name))).?;
+    const message = script_name ++ ": " ++ name ++ " handles " ++ GameEvents.NameOf(Event) ++ ", so it has to be (self: *@This(), engine_context: *EngineContext, owner: " ++
+        @typeName(Owner) ++ ", event: *const " ++ GameEvents.NameOf(Event) ++ ") ScriptResult (or !ScriptResult)";
+    const expected = [_]type{ *Script, *EngineContext, Owner, *const Event };
+    for (fn_info.param_types, expected) |param, want| {
+        if (param != want) @compileError(message);
+    }
+    const return_type = fn_info.return_type orelse @compileError(message);
+    const result = switch (@typeInfo(return_type)) {
+        .error_union => |error_union| error_union.payload,
+        else => return_type,
+    };
+    if (result != ScriptResult) @compileError(message);
 }
 
 fn CheckSignature(comptime Script: type, comptime script_name: []const u8, comptime hook: Hook, comptime Owner: type, comptime fn_info: std.builtin.Type.Fn) void {
@@ -191,6 +292,8 @@ fn CheckNoMisspeltHooks(comptime Script: type, comptime script_name: []const u8)
         if (name.len < 3 or !std.mem.startsWith(u8, name, "On") or !std.ascii.isUpper(name[2])) continue;
         if (@typeInfo(@TypeOf(@field(Script, name))) != .@"fn") continue;
         if (std.meta.stringToEnum(Hook, name) != null) continue;
+        //a game event handler can be called anything
+        if (EventOf(Script, @TypeOf(@field(Script, name))) != null) continue;
         comptime var hooks: []const u8 = "";
         inline for (std.enums.values(Hook)) |hook| hooks = hooks ++ " " ++ @tagName(hook);
         @compileError(script_name ++ ": " ++ name ++ " is not a hook, so it would never run. The hooks are:" ++ hooks);
@@ -206,7 +309,7 @@ fn FieldsOf(comptime Script: type, comptime script_name: []const u8) [@typeInfo(
         if (attrs.default_value_ptr == null) {
             @compileError(script_name ++ ": " ++ name ++ " needs a default value, what a new script starts with, e.g. " ++ name ++ ": " ++ @typeName(T) ++ " = ...");
         }
-        const kind = KindOf(T) orelse @compileError(script_name ++ ": " ++ name ++ " is a " ++ @typeName(T) ++
+        const kind = FieldKind.Of(T) orelse @compileError(script_name ++ ": " ++ name ++ " is a " ++ @typeName(T) ++
             ", which a script variable can't be. It can be f32, i32, u32, bool, an enum, Vec2/Vec3/Vec4(f32), Entity, SceneLayer, Player or GameContext");
         fields[i] = .{
             .mName = name.ptr,
@@ -232,24 +335,4 @@ fn EnumNames(comptime T: type) [@typeInfo(T).@"enum".field_names.len][*:0]const 
     var names: [enum_info.field_names.len][*:0]const u8 = undefined;
     for (enum_info.field_names, 0..) |name, i| names[i] = name.ptr;
     return names;
-}
-
-fn KindOf(comptime T: type) ?FieldKind {
-    return switch (T) {
-        f32 => .F32,
-        i32 => .I32,
-        u32 => .U32,
-        bool => .Bool,
-        MathTypes.Vec2(f32) => .Vec2,
-        MathTypes.Vec3(f32) => .Vec3,
-        MathTypes.Vec4(f32) => .Vec4,
-        Entity => .Entity,
-        Scene => .Scene,
-        Player => .Player,
-        GameContext => .GameContext,
-        else => if (@typeInfo(T) == .@"enum" and switch (@sizeOf(T)) {
-            1, 2, 4 => true,
-            else => false,
-        }) .Enum else null,
-    };
 }

@@ -16,6 +16,7 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
 const ScriptValues = @import("../Scripts/ScriptValues.zig");
+const GameEvents = @import("../Scripts/GameEvents.zig");
 const PathType = @import("../ECSManagers/AManager.zig").PathType;
 
 const EManager = @import("../ECSManagers/EManager.zig");
@@ -52,6 +53,9 @@ mPhysicsManager: PhysicsManager = .{},
 
 /// What this world asks the program to do about the whole world, like quitting the game (Events/WorldEventData.zig)
 mEventManager: EventManagerT = .empty,
+
+/// The game events sent in this world (Emit), waiting for their phase (see Scripts/GameEvents.zig)
+mGameEventManager: GameEvents.GameEventManager = .empty,
 
 /// How every overlay scene in this world turns its units into screen pixels: one for all of them, so they all share
 /// the one screen space, and the renderer can hold all their shapes in one tree. Each view still places that space
@@ -114,6 +118,15 @@ pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
     self.mSManager.Deinit(engine_context);
     self.mPhysicsManager.Deinit(engine_context.EngineAllocator());
     self.mEventManager.Deinit(engine_context.EngineAllocator());
+    self.mGameEventManager.Deinit(engine_context.EngineAllocator());
+}
+
+/// Sends the game event `event` (an instance of an event file's struct, see Scripts/GameEvents.zig) in this world: every
+/// script in it with a handler for it is handed it at the event's phase. Copied, so it can be a temporary
+pub fn Emit(self: *WorldManager, engine_context: *EngineContext, event: anytype) !void {
+    const T = @TypeOf(event);
+    comptime GameEvents.Check(T);
+    try self.mGameEventManager.Insert(engine_context.EngineAllocator(), GameEvents.PhaseOf(T), GameEvents.IdOf(T), std.mem.asBytes(&event));
 }
 
 pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options: ClearAndFreeOptions) void {
@@ -124,6 +137,8 @@ pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options
     if (options == .All or options == .EManager) self.mPhysicsManager.Reset(engine_context.EngineAllocator());
     //asks about the world that is going. Safe from inside this world's own ProcessEvents: its loop sees the list empty
     if (options == .All) self.mEventManager.EventsReset(engine_context.EngineAllocator(), .ClearAndFree);
+    //game events too, which can name the entities going
+    if (options == .All) self.mGameEventManager.ClearAndFree(engine_context.EngineAllocator());
 
     switch (options) {
         .All => {
@@ -159,6 +174,8 @@ pub fn Copy(self: *WorldManager, engine_context: *EngineContext, other_world: *W
 
     //physics state is not copied: the copy starts its own stepping, so nothing in it has touched yet
     other_world.mPhysicsManager.Reset(engine_context.EngineAllocator());
+    //nor are game events waiting here: they were sent in this world, the copy starts with none
+    other_world.mGameEventManager.ClearAndFree(engine_context.EngineAllocator());
 }
 
 /// Points every object handle (Entity, GameContext, Player, Scene) held in this world's components at

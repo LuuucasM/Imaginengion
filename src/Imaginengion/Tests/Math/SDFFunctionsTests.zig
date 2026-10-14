@@ -388,3 +388,80 @@ test "smooth subtraction and intersection round the edge the other way, pushing 
     try std.testing.expectApproxEqAbs(@as(f32, 0.5), SDFFunc.opSmoothIntersection(0, 0, 0.5).D, eps);
     try std.testing.expectApproxEqAbs(@as(f32, 0.5), SDFFunc.opSmoothSubtraction(0, 0, 0.5).D, eps);
 }
+
+//solids: a box and a sphere drawn whole, and where a ray comes out of one
+
+fn MakeSolid(shape_type: @import("../../Renderer/Renderer.zig").ShapeType, center: Vec3(f32), rotation: Quat(f32), size: Vec3(f32)) ShapeData {
+    var shape = MakeQuad(center, rotation, size);
+    shape.Type = shape_type;
+    return shape;
+}
+
+test "a moved and turned sphere is hit where the plain one is" {
+    const center = Vec3(f32){ .x = 2, .y = -1, .z = 0.5 };
+    const rotation = Quat(f32).FromAxisAngle((Vec3(f32){ .x = 1, .y = 2, .z = -0.5 }).Dir(), 0.8);
+    const sphere = MakeSolid(.Sphere, center, rotation, .{ .x = 1.5, .y = 1.5, .z = 1.5 });
+    const ray = Ray{ .Origin = .{ .x = 0, .y = 0, .z = 10 }, .Dir = (Vec3(f32){ .x = 0.15, .y = -0.1, .z = -1 }).Dir() };
+
+    const expected = RayIntersect.RaySphere(ray, center, 1.5);
+    const hit = SDFFunc.rayIMSphere(ray, sphere);
+    try std.testing.expect(hit.IsHit());
+    try std.testing.expectApproxEqAbs(expected.T, hit.T, eps);
+    try std.testing.expectApproxEqAbs(expected.TExit, hit.TExit, eps);
+    try ExpectVec3(expected.Normal, hit.Normal);
+}
+
+test "where a ray comes out of a solid, its normal faces back toward the ray, into the solid" {
+    const rotation = Quat(f32).FromAxisAngle(.{ .x = 0, .y = 0, .z = 1 }, 0.3);
+    const box = MakeSolid(.Box, .{ .x = 0, .y = 0, .z = 0 }, rotation, .{ .x = 1, .y = 2, .z = 1 });
+    //out through the bottom face, z = -1, whatever the turn about z
+    try ExpectVec3(.{ .x = 0, .y = 0, .z = 1 }, SDFFunc.exitNormalIMBox(.{ .x = 0.2, .y = 0.3, .z = -1 }, box));
+
+    const sphere = MakeSolid(.Sphere, .{ .x = 1, .y = 0, .z = 0 }, IDENTITY, .{ .x = 2, .y = 2, .z = 2 });
+    try ExpectVec3(.{ .x = -1, .y = 0, .z = 0 }, SDFFunc.exitNormalIMSphere(.{ .x = 3, .y = 0, .z = 0 }, sphere));
+}
+
+test "a solid's bounding box is its Size around its center, a sphere's exactly its radius on every side" {
+    const sphere = MakeSolid(.Sphere, .{ .x = 1, .y = 2, .z = 3 }, IDENTITY, .{ .x = 0.5, .y = 0.5, .z = 0.5 });
+    const bounds = SDFFunc.aabbIMShape(sphere);
+    try ExpectVec3(.{ .x = 0.5, .y = 1.5, .z = 2.5 }, bounds.Min);
+    try ExpectVec3(.{ .x = 1.5, .y = 2.5, .z = 3.5 }, bounds.Max);
+}
+
+test "a box's edge band is near two of its faces at once, whichever face the point is on and however it's turned" {
+    const rotation = Quat(f32).FromAxisAngle((Vec3(f32){ .x = 0.3, .y = 1, .z = -0.2 }).Dir(), 0.7);
+    const center = Vec3(f32){ .x = 1, .y = -2, .z = 0.5 };
+    const box = MakeSolid(.Box, center, rotation, .{ .x = 1, .y = 2, .z = 0.5 });
+    const Point = struct {
+        fn At(c: Vec3(f32), r: Quat(f32), local: Vec3(f32)) Vec3(f32) {
+            return c.AddVec(local.QuatRotate(r));
+        }
+    };
+    //on the front face (z = 0.5): its middle, near its x edge, near its y edge, and near the corner
+    try std.testing.expect(!SDFFunc.InIMBoxEdge(Point.At(center, rotation, .{ .x = 0, .y = 0, .z = 0.5 }), box, 0.1));
+    try std.testing.expect(SDFFunc.InIMBoxEdge(Point.At(center, rotation, .{ .x = 0.95, .y = 0, .z = 0.5 }), box, 0.1));
+    try std.testing.expect(SDFFunc.InIMBoxEdge(Point.At(center, rotation, .{ .x = 0, .y = -1.95, .z = 0.5 }), box, 0.1));
+    try std.testing.expect(SDFFunc.InIMBoxEdge(Point.At(center, rotation, .{ .x = -0.95, .y = 1.95, .z = 0.5 }), box, 0.1));
+    //just outside the band
+    try std.testing.expect(!SDFFunc.InIMBoxEdge(Point.At(center, rotation, .{ .x = 0.85, .y = 0, .z = 0.5 }), box, 0.1));
+    //on a side face (x = 1): near the back edge, and its middle
+    try std.testing.expect(SDFFunc.InIMBoxEdge(Point.At(center, rotation, .{ .x = 1, .y = 0.3, .z = -0.45 }), box, 0.1));
+    try std.testing.expect(!SDFFunc.InIMBoxEdge(Point.At(center, rotation, .{ .x = 1, .y = 0.3, .z = 0 }), box, 0.1));
+    //no band at all
+    try std.testing.expect(!SDFFunc.InIMBoxEdge(Point.At(center, rotation, .{ .x = 1, .y = 2, .z = 0.5 }), box, 0));
+}
+
+test "a sphere's rim band is where the ray passes near its outline, from any side" {
+    const sphere = MakeSolid(.Sphere, .{ .x = 0, .y = 0, .z = -5 }, IDENTITY, .{ .x = 2, .y = 2, .z = 2 });
+    const down = Vec3(f32){ .x = 0, .y = 0, .z = -1 };
+    try std.testing.expect(!SDFFunc.InIMSphereRim(.{ .Origin = .{ .x = 0, .y = 0, .z = 0 }, .Dir = down }, sphere, 0.2));
+    try std.testing.expect(!SDFFunc.InIMSphereRim(.{ .Origin = .{ .x = 1.75, .y = 0, .z = 0 }, .Dir = down }, sphere, 0.2));
+    try std.testing.expect(SDFFunc.InIMSphereRim(.{ .Origin = .{ .x = 0, .y = -1.85, .z = 0 }, .Dir = down }, sphere, 0.2));
+    //sideways, from inside it: the same distance from its center decides
+    const across = Vec3(f32){ .x = 1, .y = 0, .z = 0 };
+    try std.testing.expect(SDFFunc.InIMSphereRim(.{ .Origin = .{ .x = 0, .y = 1.9, .z = -5 }, .Dir = across }, sphere, 0.2));
+    try std.testing.expect(!SDFFunc.InIMSphereRim(.{ .Origin = .{ .x = 0, .y = 0.5, .z = -5 }, .Dir = across }, sphere, 0.2));
+    //a band as wide as the radius is all of it, and none is nothing
+    try std.testing.expect(SDFFunc.InIMSphereRim(.{ .Origin = .{ .x = 0, .y = 0, .z = 0 }, .Dir = down }, sphere, 2));
+    try std.testing.expect(!SDFFunc.InIMSphereRim(.{ .Origin = .{ .x = 0, .y = -1.85, .z = 0 }, .Dir = down }, sphere, 0));
+}
