@@ -60,6 +60,7 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime
         const handlers = Handlers();
 
         fn Handlers() [handler_names.len]ScriptABI.EventHandler {
+            @setEvalBranchQuota(100_000);
             var table: [handler_names.len]ScriptABI.EventHandler = undefined;
             for (handler_names, 0..) |name, i| {
                 const Event = EventOf(Script, @TypeOf(@field(Script, name))).?;
@@ -112,6 +113,7 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime
         }
 
         fn Hooks() [ScriptABI.HOOK_COUNT]?*const anyopaque {
+            @setEvalBranchQuota(100_000);
             var hooks: [ScriptABI.HOOK_COUNT]?*const anyopaque = @splat(null);
             for (std.enums.values(Hook)) |hook| {
                 if (@hasDecl(Script, @tagName(hook))) hooks[@intFromEnum(hook)] = @ptrCast(Wrapper(hook));
@@ -176,6 +178,8 @@ fn FromAbi(value: anytype) if (@TypeOf(value) == *const Entity) Entity else @Typ
 /// The object type the script goes on, from its hooks' and event handlers' third parameter: every one has to agree, and
 /// each hook has to be one that object type has
 fn OwnerOf(comptime Script: type, comptime script_name: []const u8) OwnerKind {
+    //looking over every declaration and hook takes more compile-time steps than Zig allows by default
+    @setEvalBranchQuota(100_000);
     if (@typeInfo(Script) != .@"struct") @compileError(script_name ++ ": a script is a struct file: its variables at the top, then its hooks");
     CheckNoMisspeltHooks(Script, script_name);
 
@@ -237,6 +241,8 @@ fn EventOf(comptime Script: type, comptime F: type) ?type {
 
 /// The names of the script's game event handlers, in the order it declares them. Two for one event is an error
 fn HandlerNames(comptime Script: type, comptime script_name: []const u8) []const []const u8 {
+    //looking over every declaration and hook takes more compile-time steps than Zig allows by default
+    @setEvalBranchQuota(100_000);
     comptime var names: []const []const u8 = &.{};
     for (@typeInfo(Script).@"struct".decl_names) |name| {
         const Event = EventOf(Script, @TypeOf(@field(Script, name))) orelse continue;
@@ -288,6 +294,8 @@ fn CheckSignature(comptime Script: type, comptime script_name: []const u8, compt
 
 /// A public function named like a hook that isn't one (OnUpate) would never run, so it is an error
 fn CheckNoMisspeltHooks(comptime Script: type, comptime script_name: []const u8) void {
+    //looking over every declaration and hook takes more compile-time steps than Zig allows by default
+    @setEvalBranchQuota(100_000);
     for (@typeInfo(Script).@"struct".decl_names) |name| {
         if (name.len < 3 or !std.mem.startsWith(u8, name, "On") or !std.ascii.isUpper(name[2])) continue;
         if (@typeInfo(@TypeOf(@field(Script, name))) != .@"fn") continue;

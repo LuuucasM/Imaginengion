@@ -36,31 +36,21 @@ const MAX_EXTENSION_LEN = 5;
 /// The engine's assets folder, from the engine's folder (an engine file's path starts with it)
 const ENGINE_ASSETS_PATH = "src/Imaginengion/EngineAssets";
 
-/// A script New Script makes: one of the engine's script templates, each a kind of script
+/// What New Script makes: one of the engine's templates (Scripts/Templates/), a script for one kind of object, with
+/// every hook that kind of object has written out, or a game event
 pub const ScriptTemplate = struct {
-    /// the submenu of New Script it is in, and its item there
-    Group: []const u8,
+    /// its item in New Script
     Name: []const u8,
     Text: []const u8,
 };
 
-/// Every script template, a group's together
 pub const SCRIPT_TEMPLATES = [_]ScriptTemplate{
-    .{ .Group = "GameObject", .Name = "On Update", .Text = @embedFile("../Scripts/GameObject/OnUpdateInputTemplate.zig") },
-    .{ .Group = "GameObject", .Name = "On Input Pressed", .Text = @embedFile("../Scripts/GameObject/OnInputPressedTemplate.zig") },
-    .{ .Group = "GameObject", .Name = "On Physics Update", .Text = @embedFile("../Scripts/GameObject/OnPhysicsUpdateTemplate.zig") },
-    .{ .Group = "GameObject", .Name = "On Pointer Event", .Text = @embedFile("../Scripts/GameObject/OnPointerEventTemplate.zig") },
-    .{ .Group = "Physics", .Name = "On Collision Begin", .Text = @embedFile("../Scripts/Physics/OnCollisionBeginTemplate.zig") },
-    .{ .Group = "Physics", .Name = "On Collision End", .Text = @embedFile("../Scripts/Physics/OnCollisionEndTemplate.zig") },
-    .{ .Group = "Physics", .Name = "On Pre Solve", .Text = @embedFile("../Scripts/Physics/OnPreSolveTemplate.zig") },
-    .{ .Group = "Scene", .Name = "On Scene Start", .Text = @embedFile("../Scripts/Scene/OnSceneStartTemplate.zig") },
-    .{ .Group = "Scene", .Name = "On Physics Update", .Text = @embedFile("../Scripts/Scene/OnPhysicsUpdateTemplate.zig") },
-    .{ .Group = "UI", .Name = "On UI Event", .Text = @embedFile("../Scripts/UI/OnUIEventTemplate.zig") },
-    .{ .Group = "Player", .Name = "On Update", .Text = @embedFile("../Scripts/Player/OnUpdateTemplate.zig") },
-    .{ .Group = "Player", .Name = "On Input Pressed", .Text = @embedFile("../Scripts/Player/OnInputPressedTemplate.zig") },
-    .{ .Group = "Game Mode", .Name = "On Game Start", .Text = @embedFile("../Scripts/GameContext/OnGameStartTemplate.zig") },
+    .{ .Name = "Entity Script", .Text = @embedFile("../Scripts/Templates/EntityScript.zig") },
+    .{ .Name = "Scene Script", .Text = @embedFile("../Scripts/Templates/SceneScript.zig") },
+    .{ .Name = "Player Script", .Text = @embedFile("../Scripts/Templates/PlayerScript.zig") },
+    .{ .Name = "Game Mode Script", .Text = @embedFile("../Scripts/Templates/GameModeScript.zig") },
     //not a script but what scripts send each other, see Scripts/GameEvents.zig
-    .{ .Group = "Game Event", .Name = "Game Event", .Text = @embedFile("../Scripts/Event/EventTemplate.zig") },
+    .{ .Name = "Game Event", .Text = @embedFile("../Scripts/Templates/GameEvent.zig") },
 };
 
 /// What a tile is
@@ -178,14 +168,10 @@ pub fn Build(engine_context: *EngineContext, page: Entity, icons: Icons, options
         .mIcons = icons,
         .mOptions = options,
     };
-    //New Script, then a submenu per group of templates
+    //New Script, an item per template
     const new_script = try Widgets.Submenu(engine_context, menu, "New Script", options);
-    var group: Entity = .uninit;
     for (SCRIPT_TEMPLATES, 0..) |template, i| {
-        if (i == 0 or !std.mem.eql(u8, template.Group, SCRIPT_TEMPLATES[i - 1].Group)) {
-            group = try Widgets.Submenu(engine_context, new_script, template.Group, options);
-        }
-        self.mNewScripts[i] = try Widgets.MenuItem(engine_context, group, template.Name, .{ .StockScripts = options.StockScripts });
+        self.mNewScripts[i] = try Widgets.MenuItem(engine_context, new_script, template.Name, .{ .StockScripts = options.StockScripts });
     }
     return self;
 }
