@@ -30,7 +30,7 @@ mCornerRadius: f32 = 0.0,
 mCollisionFilter: CollisionFilter = .default,
 //hand this collider's solid contacts to OnPreSolve scripts every substep before the solver acts on them, which can
 //switch a contact off (e.g. a one way platform). Off by default, since that is a script call per contact per substep.
-//Either collider of a pair asking is enough, and the scripts of both game objects are run
+//Either collider of a pair asking is enough, and the scripts of both main objects are run
 mPreSolveEvents: bool = false,
 
 pub fn Deinit(_: *ColliderComponent, _: *EngineContext) void {}

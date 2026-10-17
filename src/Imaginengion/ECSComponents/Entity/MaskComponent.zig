@@ -8,7 +8,7 @@ const MaskComponent = @This();
 pub const Editable: bool = true;
 pub const Name: []const u8 = "MaskComponent";
 
-/// Cuts everything under the entity (its children, and theirs, game objects of their own too) with the entity's own
+/// Cuts everything under the entity (its children, and theirs, main objects of their own too) with the entity's own
 /// shape (ShapeComponent), rounded corners and all: Intersect keeps only what is inside it, Subtract cuts it out. Each
 /// thing under it stays its own shape, cut separately, so it is still drawn and clicked as itself. The entity's own
 /// shape isn't cut, and is only drawn if it has a surface, so a mask can be invisible. A 2D shape cuts straight through

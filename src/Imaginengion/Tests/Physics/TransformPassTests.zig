@@ -184,7 +184,7 @@ test "the transform pass and walking up the hierarchy agree" {
     try ExpectVec3Near(expected_world, pass_position);
 }
 
-test "a hit shape's game object is its nearest main object ancestor, or the root" {
+test "a hit shape's main object is its nearest main object ancestor, or the root" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;

@@ -2,7 +2,7 @@
 //! and the selected object's components side by side, with dividers to drag. Closing the window saves it and takes it
 //! away. The template is loaded from its file into its own scene in EngineContext.mTmplEditWorld, where nothing runs,
 //! and written back to the same file. The selection is the window's own, not the editor's. A scene template's tree is
-//! the scene, then its entities; players and game modes have no preview. The editor keeps one per open template
+//! the scene, then its entities; players and game contexts have no preview. The editor keeps one per open template
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");

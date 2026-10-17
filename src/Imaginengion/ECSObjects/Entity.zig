@@ -132,13 +132,13 @@ pub fn GetViewpointComponent(self: Entity) ?*ViewpointComponent {
     return viewpoint_entity.GetComponent(ViewpointComponent);
 }
 
-/// The entity that actually holds this game object's viewpoint: itself, or a convenience child.
+/// The entity that actually holds this main object's viewpoint: itself, or a convenience child.
 /// Anything that needs the camera's transform should read it from here rather than from self.
 pub fn GetViewpointEntity(self: Entity) ?Entity {
     if (self.HasComponent(ViewpointComponent)) return self;
 
-    //the viewpoint may live on a convenience child instead of on the game object itself.
-    //a child that is its own MainObject is a nested game object, so its viewpoint is not ours.
+    //the viewpoint may live on a convenience child instead of on the main object itself.
+    //a child that is its own MainObject is a nested main object, so its viewpoint is not ours.
     var iter = self.GetIterator(.Child);
     while (iter.next()) |child_entity| {
         if (child_entity.HasComponent(MainObjectComponent)) continue;
@@ -147,7 +147,7 @@ pub fn GetViewpointEntity(self: Entity) ?Entity {
     return null;
 }
 
-/// The game object this entity is part of: itself if it is a MainObject, otherwise the nearest ancestor
+/// The main object this entity is part of: itself if it is a MainObject, otherwise the nearest ancestor
 /// that is, otherwise the root of its hierarchy. What a click on one of its shapes should select, since
 /// a shape may sit on a convenience child (a button's label) rather than on the object itself.
 pub fn GetMainObject(self: Entity) Entity {
@@ -239,10 +239,9 @@ pub fn ClearLayoutDirty(self: Entity, engine_context: *EngineContext) !void {
 /// type is adding the new tag, which takes the others off (see OnBodyTypeTagAdded)
 pub const BodyTypeTags = [_]type{ StaticBodyTag, KinematicBodyTag, DynamicBodyTag };
 
-/// Brings a rigid body in step with its type tag. One with no tag yet gets one: static if it was given no
-/// mass, which is how a body was made static before there were body types, and dynamic otherwise. Then its
-/// mass is kept at RigidBodyComponent.MIN_MASS or above, and the inverse mass the solver divides by is
-/// worked out, 0 unless it is dynamic. A static body also loses any velocity it was given, it never moves.
+/// Brings a rigid body in step with its type tag. One with no tag yet is made dynamic. Then its mass is kept
+/// at RigidBodyComponent.MIN_MASS or above, and the inverse mass the solver divides by is worked out, 0
+/// unless it is dynamic. A static body also loses any velocity it was given, it never moves.
 ///
 /// Runs whenever a rigid body or a type tag is added (Manager.AddComponent) and after the mass is edited in
 /// the components panel, so every way a body comes into being goes through it: code, a file, a template.
@@ -253,11 +252,7 @@ pub fn SyncRigidBody(self: Entity, engine_context: *EngineContext) anyerror!void
 
     if (!self.HasBodyTypeTag()) {
         //adding the tag comes back through here (OnBodyTypeTagAdded), which does the rest
-        if (rigid_body._Mass > 0.0) {
-            _ = try self.AddComponent(engine_context, DynamicBodyTag{});
-        } else {
-            _ = try self.AddComponent(engine_context, StaticBodyTag{});
-        }
+        _ = try self.AddComponent(engine_context, DynamicBodyTag{});
         return;
     }
 
@@ -292,7 +287,6 @@ pub fn SetBodyType(self: Entity, engine_context: *EngineContext, comptime body_t
 /// The way to change a mass from code. Does nothing on an entity with no rigid body
 pub fn SetMass(self: Entity, engine_context: *EngineContext, mass: f32) !void {
     const rigid_body = self.GetComponent(RigidBodyComponent) orelse return;
-    //clamped here as well: a mass of 0 or less reads as static to a body that has no type tag yet
     rigid_body._Mass = @max(mass, RigidBodyComponent.MIN_MASS);
     try self.SyncRigidBody(engine_context);
 }

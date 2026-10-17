@@ -203,7 +203,7 @@ const MergeFinder = struct {
 };
 
 /// The merge `entity` is a part of, the outermost one: the furthest entity up from it (itself included) with a
-/// MergeComponent, not past one with a MainObjectComponent, which is a game object of its own. Null for one that isn't
+/// MergeComponent, not past one with a MainObjectComponent, which is a main object of its own. Null for one that isn't
 /// a part of any, or isn't a shape or a merge at all (text under a merge is drawn on its own)
 pub fn MergeRootOf(entity: Entity) ?Entity {
     if (!entity.HasComponent(ShapeComponent) and !entity.HasComponent(MergeComponent)) return null;

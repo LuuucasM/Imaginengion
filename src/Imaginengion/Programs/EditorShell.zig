@@ -40,7 +40,7 @@ mPlayPane: Entity = .uninit,
 mScenesPage: Entity = .uninit,
 mEntitiesPage: Entity = .uninit,
 mPlayersPage: Entity = .uninit,
-mGameModesPage: Entity = .uninit,
+mGameContextsPage: Entity = .uninit,
 mComponentsPage: Entity = .uninit,
 mScriptsPage: Entity = .uninit,
 mContentBrowserPane: Entity = .uninit,
@@ -70,7 +70,7 @@ pub fn Build(engine_context: *EngineContext, root: Entity, options: Widgets.Opti
     self.mScenesPage = try Widgets.AddTab(engine_context, hierarchy, "Scenes", options);
     self.mEntitiesPage = try Widgets.AddTab(engine_context, hierarchy, "Entities", options);
     self.mPlayersPage = try Widgets.AddTab(engine_context, hierarchy, "Players", options);
-    self.mGameModesPage = try Widgets.AddTab(engine_context, hierarchy, "Game Modes", options);
+    self.mGameContextsPage = try Widgets.AddTab(engine_context, hierarchy, "Game Contexts", options);
 
     const lower = try Widgets.Split(engine_context, .{ .Entity = right.Second }, .Column, .Second, CONTENT_BROWSER_HEIGHT, options);
     const inspector = try Widgets.Tabs(engine_context, .{ .Entity = lower.First });

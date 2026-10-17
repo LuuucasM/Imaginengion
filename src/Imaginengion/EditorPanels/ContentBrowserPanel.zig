@@ -4,8 +4,9 @@
 //! (.zig), audio, fonts (.ttf, .otf) and themes (.imtheme, for a StyleComponent's Theme). Double clicking a folder goes into it, Back goes up a folder, and an object file opens as a
 //! template. Every file's tile can be dragged, carrying the file (FileRefComponent), e.g. a script onto the Scripts
 //! panel. At the top of the project an EngineAssets tile goes into the engine's own assets (the white texture, the
-//! fonts...), browsed the same way, its files carried as engine files; Back from its top comes out to the project. Right clicking the pane offers New Scene Layer, and New Script: a copy of one of the engine's script
-//! templates, named and put where the save dialog says (the folder being shown to start with). Every frame the folder is listed and checked against what
+//! fonts...), browsed the same way, its files carried as engine files; Back from its top comes out to the project. Right clicking the pane offers New Scene Layer, New Script: a copy of one of the engine's script
+//! templates, and New Enum: an enum file with the enum named after the file, each named and put where the save dialog
+//! says (the folder being shown to start with). Every frame the folder is listed and checked against what
 //! the tiles were built from, so files added or removed on disk show up
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
@@ -48,10 +49,15 @@ pub const SCRIPT_TEMPLATES = [_]ScriptTemplate{
     .{ .Name = "Entity Script", .Text = @embedFile("../Scripts/Templates/EntityScript.zig") },
     .{ .Name = "Scene Script", .Text = @embedFile("../Scripts/Templates/SceneScript.zig") },
     .{ .Name = "Player Script", .Text = @embedFile("../Scripts/Templates/PlayerScript.zig") },
-    .{ .Name = "Game Mode Script", .Text = @embedFile("../Scripts/Templates/GameModeScript.zig") },
+    .{ .Name = "Game Context Script", .Text = @embedFile("../Scripts/Templates/GameContextScript.zig") },
     //not a script but what scripts send each other, see Scripts/GameEvents.zig
     .{ .Name = "Game Event", .Text = @embedFile("../Scripts/Templates/GameEvent.zig") },
 };
+
+/// What New Enum writes, with ENUM_TEMPLATE_NAME swapped for the file's name, which an enum file's enum is named
+/// after (see ECSComponents/Asset/EnumAsset.zig)
+const ENUM_TEMPLATE = @embedFile("../Scripts/Templates/Enum.zig");
+const ENUM_TEMPLATE_NAME = "EnumName";
 
 /// What a tile is
 pub const Kind = enum { Back, Folder, EngineAssets, Texture, Object, Script, Audio, Font, Theme };
@@ -112,6 +118,8 @@ pub const Action = union(enum) {
     NewScene,
     /// a new script, a copy of the script template at this place in SCRIPT_TEMPLATES, from the pane's right-click menu
     NewScript: usize,
+    /// a new enum file, from the pane's right-click menu
+    NewEnum,
 };
 
 /// A file or folder in the folder being shown
@@ -136,6 +144,8 @@ mMessage: Entity = .uninit,
 mNewScene: Entity = .uninit,
 /// New Script's items, one per script template
 mNewScripts: [SCRIPT_TEMPLATES.len]Entity = @splat(.uninit),
+/// The New Enum item of the pane's right-click menu
+mNewEnum: Entity = .uninit,
 /// The grid of tiles, null while none is built
 mGrid: ?Entity = null,
 mTiles: std.ArrayList(Tile) = .empty,
@@ -173,6 +183,7 @@ pub fn Build(engine_context: *EngineContext, page: Entity, icons: Icons, options
     for (SCRIPT_TEMPLATES, 0..) |template, i| {
         self.mNewScripts[i] = try Widgets.MenuItem(engine_context, new_script, template.Name, .{ .StockScripts = options.StockScripts });
     }
+    self.mNewEnum = try Widgets.MenuItem(engine_context, menu, "New Enum", .{ .StockScripts = options.StockScripts });
     return self;
 }
 
@@ -257,13 +268,14 @@ pub fn Update(self: *ContentBrowserPanel, engine_context: *EngineContext) !void 
     try self.Rebuild(engine_context, listing, built_from.items);
 }
 
-/// What a click on `entity` does: a double click on a folder, Back, or an object file, or New Scene Layer or a New
-/// Script item from the pane's menu. Null for anything else
+/// What a click on `entity` does: a double click on a folder, Back, or an object file, or New Scene Layer, a New
+/// Script item or New Enum from the pane's menu. Null for anything else
 pub fn ActionOf(self: *const ContentBrowserPanel, entity: Entity, clicks: u8) ?Action {
     if (Same(entity, self.mNewScene)) return .NewScene;
     for (self.mNewScripts, 0..) |item, i| {
         if (Same(entity, item)) return .{ .NewScript = i };
     }
+    if (Same(entity, self.mNewEnum)) return .NewEnum;
     if (clicks != 2) return null;
     for (self.mTiles.items, 0..) |tile, i| {
         if (!Same(tile.Entity, entity)) continue;
@@ -320,7 +332,20 @@ pub fn Run(self: *ContentBrowserPanel, engine_context: *EngineContext, action: A
             if (abs_path.len == 0) return;
             try std.Io.Dir.cwd().writeFile(engine_context.Io(), .{ .sub_path = abs_path, .data = SCRIPT_TEMPLATES[index].Text });
         },
+        .NewEnum => {
+            if (self.mPath.items.len == 0) return;
+            const frame_allocator = engine_context.FrameAllocator();
+            const abs_path = try PlatformUtils.SaveFile(frame_allocator, ".zig", self.mPath.items);
+            if (abs_path.len == 0) return;
+            const text = try EnumFileText(frame_allocator, std.fs.path.stem(abs_path));
+            try std.Io.Dir.cwd().writeFile(engine_context.Io(), .{ .sub_path = abs_path, .data = text });
+        },
     }
+}
+
+/// What New Enum writes for an enum called `enum_name`, the new file's name, in a string from `allocator`
+pub fn EnumFileText(allocator: std.mem.Allocator, enum_name: []const u8) ![]const u8 {
+    return try std.mem.replaceOwned(u8, allocator, ENUM_TEMPLATE, ENUM_TEMPLATE_NAME, enum_name);
 }
 
 fn NameOf(self: ContentBrowserPanel, index: usize) []const u8 {

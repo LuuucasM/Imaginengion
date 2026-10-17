@@ -1,4 +1,4 @@
-//! The project's entries (Core/Project.zig), the scene, player and game mode the game starts from: set from object
+//! The project's entries (Core/Project.zig), the scene, player and game context the game starts from: set from object
 //! files inside the project, written to the project file, and read back when the project is opened in a fresh engine. Run with `zig build test-engine`.
 const std = @import("std");
 
@@ -79,4 +79,41 @@ test "the entries are kept from the project folder, and opening the project brin
     try std.testing.expectEqualStrings("Scenes/Main.imsc", loaded_context.mProject.GetEntry(.Scene));
     try std.testing.expectEqualStrings("Hero.impl", loaded_context.mProject.GetEntry(.Player));
     try std.testing.expectEqualStrings("", loaded_context.mProject.GetEntry(.GameContext));
+}
+
+test "the game's name starts as the folder's, and it and the window icon are kept apart from the project file's name" {
+    const saved_engine = try TestEngine.Init();
+    defer saved_engine.Deinit();
+    const saved_context = saved_engine.mEngineContext;
+    const project = &saved_context.mProject;
+    const frame_allocator = saved_context.FrameAllocator();
+
+    const project_folder = try saved_engine.TmpDirAbsPath();
+    try project.New(saved_context, project_folder);
+    try std.testing.expectEqualStrings(std.fs.path.basename(project_folder), project.GetName());
+    try std.testing.expectEqualStrings("", project.GetWindowIcon());
+
+    try project.SetName(saved_context, "Space Pong");
+    try project.SetWindowIcon(saved_context, try std.fs.path.join(frame_allocator, &.{ project_folder, "Art", "Icon.png" }));
+    try std.testing.expectEqualStrings("Art/Icon.png", project.GetWindowIcon());
+
+    //only a PNG, and only one in the project
+    try std.testing.expectError(error.WrongFileKind, project.SetWindowIcon(saved_context, try std.fs.path.join(frame_allocator, &.{ project_folder, "Icon.jpg" })));
+    const outside_path = try std.fs.path.join(frame_allocator, &.{ std.fs.path.dirname(project_folder).?, "Icon.png" });
+    try std.testing.expectError(error.NotInProject, project.SetWindowIcon(saved_context, outside_path));
+    try std.testing.expectEqualStrings("Art/Icon.png", project.GetWindowIcon());
+
+    //the project file keeps its own name, and opening it brings both back
+    const loaded_engine = try TestEngine.Init();
+    defer loaded_engine.Deinit();
+    const loaded_context = loaded_engine.mEngineContext;
+    const project_file_name = try std.fmt.allocPrint(loaded_context.FrameAllocator(), "{s}{s}", .{ std.fs.path.basename(project_folder), Project.FILE_EXTENSION });
+    const project_file_path = try std.fs.path.join(loaded_context.FrameAllocator(), &.{ project_folder, project_file_name });
+    try loaded_context.mProject.Open(loaded_context, project_file_path);
+    try std.testing.expectEqualStrings("Space Pong", loaded_context.mProject.GetName());
+    try std.testing.expectEqualStrings("Art/Icon.png", loaded_context.mProject.GetWindowIcon());
+
+    //an empty path takes the icon away
+    try loaded_context.mProject.SetWindowIcon(loaded_context, "");
+    try std.testing.expectEqualStrings("", loaded_context.mProject.GetWindowIcon());
 }

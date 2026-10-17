@@ -1053,7 +1053,7 @@ test "a ball that bounces off a wall does not go into the trigger behind it" {
     try std.testing.expect(!QueuedCollisions(engine_context)[0].CollisionBegin.mIsTrigger);
 }
 
-/// A dynamic game object at `position` with no collider of its own, and a collider on a convenience child of it
+/// A dynamic main object at `position` with no collider of its own, and a collider on a convenience child of it
 /// at `child_offset`. The child has no MainObjectComponent, so it is part of the parent's body
 fn MakeBodyWithChildCollider(engine_context: *EngineContext, scene: Scene, position: Vec3(f32), child_collider: ColliderComponent, child_offset: Vec3(f32)) !struct { body: Entity, collider: Entity } {
     const body = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
@@ -1066,7 +1066,7 @@ fn MakeBodyWithChildCollider(engine_context: *EngineContext, scene: Scene, posit
     return .{ .body = body, .collider = collider };
 }
 
-test "two colliders of one game object never collide with each other" {
+test "two colliders of one main object never collide with each other" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
@@ -1085,7 +1085,7 @@ test "two colliders of one game object never collide with each other" {
     try std.testing.expectEqual(@as(usize, 0), QueuedCount(engine_context, .CollisionBegin));
 }
 
-test "a game object whose collider is on a child lands as one body" {
+test "a main object whose collider is on a child lands as one body" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
@@ -1110,7 +1110,7 @@ test "a game object whose collider is on a child lands as one body" {
     try std.testing.expectApproxEqAbs(@as(f32, 1.25), parts.body.GetComponent(TransformComponent).?.GetTranslation().y, 0.001);
     try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(parts.body).y, 0.001);
 
-    //the event is about the game object, and says which of its colliders touched
+    //the event is about the main object, and says which of its colliders touched
     try std.testing.expectEqual(@as(usize, 1), QueuedCount(engine_context, .CollisionBegin));
     const event = QueuedCollisions(engine_context)[0].CollisionBegin;
     try std.testing.expectEqual(parts.body.mID, event.mOrigin.mID);
@@ -1119,7 +1119,7 @@ test "a game object whose collider is on a child lands as one body" {
     try std.testing.expectEqual(floor.mID, event.mTargetCollider.mID);
 }
 
-test "a child tagged MainObjectComponent is a game object of its own" {
+test "a child tagged MainObjectComponent is a main object of its own" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
@@ -1129,7 +1129,7 @@ test "a child tagged MainObjectComponent is a game object of its own" {
     try collision_manager.Init(engine_context.EngineAllocator());
     defer collision_manager.Deinit(engine_context.EngineAllocator());
 
-    //the same overlapping pair as two colliders of one object, but the child is its own game object: a static
+    //the same overlapping pair as two colliders of one object, but the child is its own main object: a static
     //one, having no rigid body, so the two are a pair like any other
     const parts = try MakeBodyWithChildCollider(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, CollidingShape(.Box), .{ .x = 0.9, .y = 0, .z = 0 });
     _ = try parts.body.AddComponent(engine_context, CollidingShape(.Box));

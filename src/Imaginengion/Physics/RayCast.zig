@@ -34,7 +34,7 @@ pub const RayHitKind = enum {
 
 /// A ray hitting one of an entity's shapes. No hit is a null ?RayHit, never a half filled one.
 pub const RayHit = struct {
-    //the entity that owns the shape, which may be a convenience child rather than the game object.
+    //the entity that owns the shape, which may be a convenience child rather than the main object.
     //walking up to the MainObjectComponent is the caller's decision.
     Entity: Entity,
     T: f32, //distance along the ray

@@ -29,7 +29,6 @@ const STRINGIFY_OPTIONS: std.json.Stringify.Options = .{ .whitespace = .indent_2
 const PARSE_OPTIONS: std.json.ParseOptions = .{
     .allocate = .alloc_if_needed,
     .max_value_len = std.json.default_max_value_len,
-    .ignore_unknown_fields = true,
 };
 
 // File layout, the same for every object type (entity, scene, player, game context):
@@ -206,9 +205,8 @@ fn DeserializeObject(engine_context: *EngineContext, scanner: *std.json.Scanner,
         } else if (obj_t == Scene and std.mem.eql(u8, key, "Entities")) {
             try DeserializeSceneEntities(engine_context, scanner, object);
         } else {
-            //a component that no longer exists or is no longer serialized, skip it so the rest of the file still loads
-            std.log.warn("Skipping unknown key '{s}' while deserializing {s}", .{ key, @typeName(obj_t) });
-            try scanner.skipValue();
+            std.log.err("Unknown key '{s}' while deserializing {s}", .{ key, @typeName(obj_t) });
+            return error.UnknownField;
         }
     }
 }

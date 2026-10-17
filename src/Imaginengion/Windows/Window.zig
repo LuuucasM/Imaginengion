@@ -30,6 +30,16 @@ pub fn GetNativeWindow(self: Window) *anyopaque {
     return self._Impl.GetNativeWindow();
 }
 
+/// Sets the title bar / taskbar icon from a PNG's bytes
+pub fn SetIcon(self: Window, png_bytes: []const u8) !void {
+    try self._Impl.SetIcon(png_bytes);
+}
+
+/// Sets the text in the title bar. `allocator` is only used for the copy handed to the OS
+pub fn SetTitle(self: Window, allocator: std.mem.Allocator, title: []const u8) !void {
+    try self._Impl.SetTitle(allocator, title);
+}
+
 pub fn PollInputEvents(self: *Window, engine_context: *EngineContext) !void {
     try self._Impl.PollInputEvents(engine_context);
 }

@@ -1,5 +1,5 @@
 //! The editor's menu bar, built out of the editor UI's menu widgets (Widgets.MenuBar, Menu, MenuItem, Submenu): File,
-//! Project (the scene, player and game mode the game starts from, the collision layers' names), Window and Editor (theme, play options, vsync, shader heatmap). Opening, closing and switching menus is the stock menu scripts'.
+//! Project (the Project Settings panel, with the scene, player and game context the game starts from, and the collision layers' names), Window and Editor (theme, play options, vsync, shader heatmap). Opening, closing and switching menus is the stock menu scripts'.
 //! What an item does is the editor's: this keeps which item is which action (ActionOf), and the editor runs the action when the item is clicked. Every frame
 //! Update puts the editor's state on the items: which panels are shown (check marks), what can't be done right now
 //! (greyed out, DisabledTag, e.g. saving with nothing selected), and the players the play preview can follow, a list rebuilt when they change.
@@ -8,7 +8,6 @@ const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const Player = @import("../ECSObjects/Player.zig");
-const Project = @import("../Core/Project.zig");
 const ObjectKind = @import("../Serializer/Serializer.zig").ObjectKind;
 const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
@@ -49,7 +48,7 @@ pub const Action = union(enum) {
     NewOverlayScene,
     OpenScene,
     /// save the file the selected object is kept in over itself (asking for one the first time): a selected entity's
-    /// scene, or the selected scene, player or game mode. Ctrl+S
+    /// scene, or the selected scene, player or game context. Ctrl+S
     Save,
     /// save the file the selected object is kept in, as Save does, to a file picked now. Ctrl+Shift+S
     SaveAs,
@@ -58,8 +57,8 @@ pub const Action = union(enum) {
     NewProject,
     OpenProject,
     SaveProject,
-    /// pick the file the game starts from for this entry
-    SetProjectEntry: Project.Entry,
+    /// show the Project Settings panel if it is hidden, hide it if it is shown
+    ToggleProjectSettings,
     /// show the Collision Layer Names panel if it is hidden, hide it if it is shown
     ToggleCollisionLayers,
     Exit,
@@ -99,6 +98,8 @@ pub const State = struct {
     ProjectOpen: bool,
     /// whether the Collision Layer Names panel is shown
     CollisionLayersShown: bool = false,
+    /// whether the Project Settings panel is shown
+    ProjectSettingsShown: bool = false,
     /// the kind of the selected object: Save and Save As... need one, Export Entity... an entity
     Selected: ?ObjectKind,
     /// whether Play/Stop can be used: stopping always, starting with a run player that can be drawn
@@ -126,7 +127,7 @@ mSaveProject: Entity = .uninit,
 mSave: Entity = .uninit,
 mSaveAs: Entity = .uninit,
 mExportEntity: Entity = .uninit,
-mEntryItems: std.EnumArray(Project.Entry, Entity) = .initFill(.uninit),
+mProjectSettings: Entity = .uninit,
 mCollisionLayers: Entity = .uninit,
 mPlayStop: Entity = .uninit,
 mPlayPreview: Entity = .uninit,
@@ -166,10 +167,7 @@ pub fn Build(engine_context: *EngineContext, bar: Entity, options: Widgets.Optio
     _ = try self.Add(engine_context, file, "Exit", item_options, .Exit);
 
     const project = try Widgets.Menu(engine_context, bar, "Project", options);
-    const entry = try Widgets.Submenu(engine_context, project, "Set Project Entry", options);
-    self.mEntryItems.set(.Scene, try self.Add(engine_context, entry, "Scene...", item_options, .{ .SetProjectEntry = .Scene }));
-    self.mEntryItems.set(.Player, try self.Add(engine_context, entry, "Player...", item_options, .{ .SetProjectEntry = .Player }));
-    self.mEntryItems.set(.GameContext, try self.Add(engine_context, entry, "Game Mode...", item_options, .{ .SetProjectEntry = .GameContext }));
+    self.mProjectSettings = try self.Add(engine_context, project, "Project Settings", check_options, .ToggleProjectSettings);
     self.mCollisionLayers = try self.Add(engine_context, project, "Collision Layer Names", check_options, .ToggleCollisionLayers);
 
     const window = try Widgets.Menu(engine_context, bar, "Window", options);
@@ -227,13 +225,14 @@ pub fn Update(self: *EditorMenuBar, engine_context: *EngineContext, state: State
     }
     try WidgetActions.SetChecked(engine_context, self.mShowColliders, state.ShowColliders);
     try WidgetActions.SetChecked(engine_context, self.mCollisionLayers, state.CollisionLayersShown);
-    //the names are the project's, so with none open there is nowhere to keep them
+    try WidgetActions.SetChecked(engine_context, self.mProjectSettings, state.ProjectSettingsShown);
+    //the names and entries are the project's, so with none open there is nowhere to keep them
     try WidgetActions.SetDisabled(engine_context, self.mCollisionLayers, !state.ProjectOpen);
+    try WidgetActions.SetDisabled(engine_context, self.mProjectSettings, !state.ProjectOpen);
     try WidgetActions.SetDisabled(engine_context, self.mSave, state.Selected == null);
     try WidgetActions.SetDisabled(engine_context, self.mSaveAs, state.Selected == null);
     try WidgetActions.SetDisabled(engine_context, self.mExportEntity, state.Selected != .Entity);
     try WidgetActions.SetDisabled(engine_context, self.mSaveProject, !state.ProjectOpen);
-    for (self.mEntryItems.values) |item| try WidgetActions.SetDisabled(engine_context, item, !state.ProjectOpen);
     try WidgetActions.SetDisabled(engine_context, self.mPlayStop, !state.CanPlayStop);
 
     try self.UpdatePlayers(engine_context, state.Players);

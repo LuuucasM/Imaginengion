@@ -34,7 +34,7 @@ pub const QueryOptions = struct {
     CategoryMask: CollisionMask = .full,
     /// triggers are passed through unless this is set
     HitTriggers: bool = false,
-    /// a game object whose colliders are passed through, e.g. the one casting from inside itself
+    /// a main object whose colliders are passed through, e.g. the one casting from inside itself
     Ignore: ?Entity = null,
     /// a collider the cast starts inside of (or touching, for a shape) is passed through, the way a shot fired from
     /// inside a box should not stop at its own box
@@ -43,9 +43,9 @@ pub const QueryOptions = struct {
 
 /// The first collider a query hit
 pub const PhysicsHit = struct {
-    /// the collider that was hit, which may be a convenience child of the game object
+    /// the collider that was hit, which may be a convenience child of the main object
     Collider: Entity,
-    /// the game object it is part of (Entity.GetMainObject), whose rigid body moves it
+    /// the main object it is part of (Entity.GetMainObject), whose rigid body moves it
     Body: Entity,
     /// how far along the ray the cast got, in world units
     T: f32,

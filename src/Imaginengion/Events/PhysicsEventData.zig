@@ -36,10 +36,10 @@ pub const StepBeginEvent = struct {
 /// The solver is about to act on a solid contact, one of whose colliders asked for this (ColliderComponent
 /// mPreSolveEvents). Dispatched synchronously like StepBegin, never queued, once per such contact every substep, and
 /// from the middle of the step: the contact lists are live, so whatever listens may only read the world and decide
-/// mEnabled. It must not create, delete or move anything. The program runs the two game objects' OnPreSolve scripts
+/// mEnabled. It must not create, delete or move anything. The program runs the two main objects' OnPreSolve scripts
 /// on it. Trigger contacts are never handed over, nothing solves them
 pub const PreSolveEvent = struct {
-    //the game objects in contact (Entity.GetMainObject of each collider), which their scripts run for
+    //the main objects in contact (Entity.GetMainObject of each collider), which their scripts run for
     mOrigin: Entity,
     mTarget: Entity,
     //the colliders in contact
@@ -56,12 +56,12 @@ pub const PreSolveEvent = struct {
 
 /// Two colliders that were apart on the last physics substep touch on this one: the solver stopped them at each
 /// other's surface, or they overlap. Sent once per pair of colliders, nothing more while they stay in contact, so a
-/// game object with several colliders can begin touching the same thing once for each of its colliders that does
+/// main object with several colliders can begin touching the same thing once for each of its colliders that does
 pub const CollisionBeginEvent = struct {
-    //the game objects that touched (Entity.GetMainObject of each collider), which their scripts run for
+    //the main objects that touched (Entity.GetMainObject of each collider), which their scripts run for
     mOrigin: Entity,
     mTarget: Entity,
-    //the colliders that touched, each one its game object or a convenience child of it
+    //the colliders that touched, each one its main object or a convenience child of it
     mOriginCollider: Entity,
     mTargetCollider: Entity,
     //points from mOrigin to mTarget
@@ -76,7 +76,7 @@ pub const CollisionBeginEvent = struct {
 /// an entity deleted. So any of the four entities may no longer exist by the time this is handled. No normal: the
 /// two are apart, or one of them is gone
 pub const CollisionEndEvent = struct {
-    //the game objects that were touching (Entity.GetMainObject of each collider), as they were when they last touched
+    //the main objects that were touching (Entity.GetMainObject of each collider), as they were when they last touched
     mOrigin: Entity,
     mTarget: Entity,
     //the colliders that were touching

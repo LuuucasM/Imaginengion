@@ -6,6 +6,8 @@ test {
     _ = @import("Tests/ECSComponents/Asset/ObjectAssetTests.zig");
     _ = @import("Tests/ECSComponents/Asset/PendingDeleteTests.zig");
     _ = @import("Tests/ECSComponents/Asset/LoadFailedTagTests.zig");
+    _ = @import("Tests/ECSComponents/Asset/EnumAssetTests.zig");
+    _ = @import("Tests/ECSComponents/EnumComponentTests.zig");
     _ = @import("Tests/ECSComponents/RenderTargetTests.zig");
     _ = @import("Tests/ECSObjects/TmplTests.zig");
     _ = @import("Tests/ECSObjects/LayerTagTests.zig");
@@ -48,6 +50,7 @@ test {
     _ = @import("Tests/UI/ComponentRowsTests.zig");
     _ = @import("Tests/EditorPanels/StatsPanelTests.zig");
     _ = @import("Tests/EditorPanels/AudioBusesPanelTests.zig");
+    _ = @import("Tests/EditorPanels/ProjectSettingsPanelTests.zig");
     _ = @import("Tests/EditorPanels/UIElementPanelTests.zig");
     _ = @import("Tests/EditorPanels/PickingDebugPanelTests.zig");
     _ = @import("Tests/EditorPanels/ScriptsPanelTests.zig");
@@ -73,7 +76,7 @@ pub const GameProgram = @import("Programs/GameProgram.zig");
 pub const EngineContext = @import("Core/EngineContext.zig");
 pub const Tracy = @import("Core/Tracy.zig");
 
-//Game Object stuff -------------------------------
+//Entity stuff ------------------------------------
 pub const Entity = @import("ECSObjects/Entity.zig");
 pub const EntityComponents = @import("ECSComponents/EComponents.zig");
 

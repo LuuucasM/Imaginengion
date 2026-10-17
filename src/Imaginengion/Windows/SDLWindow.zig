@@ -4,6 +4,7 @@ const WindowEvent = @import("../Events/WindowEventData.zig").Event;
 const TextTypedEvent = @import("../Events/WindowEventData.zig").TextTypedEvent;
 
 const sdl = @import("../Core/CImports.zig").sdl;
+const stb = @import("../Core/CImports.zig").stb;
 
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -54,6 +55,34 @@ pub fn GetPixelDensity(self: SDLWindow) f32 {
 /// The OS content scale for the display the window is on, e.g. 1.5 at 150% Windows scaling.
 pub fn GetDisplayScale(self: SDLWindow) f32 {
     return sdl.SDL_GetWindowDisplayScale(self._Window);
+}
+
+/// Sets the icon in the title bar and taskbar from a PNG's bytes. SDL keeps its own copy, so the bytes can go away after.
+/// Does nothing if there is no window (tests)
+pub fn SetIcon(self: SDLWindow, png_bytes: []const u8) !void {
+    const window = self._Window orelse return;
+
+    var width: c_int = 0;
+    var height: c_int = 0;
+    var channels: c_int = 0;
+    //the texture loaders turn flipping on for the GPU, the icon wants rows top to bottom
+    stb.stbi_set_flip_vertically_on_load(0);
+    const pixels = stb.stbi_load_from_memory(png_bytes.ptr, @intCast(png_bytes.len), &width, &height, &channels, 4) orelse return error.IconDecodeFailed;
+    defer stb.stbi_image_free(pixels);
+
+    const surface = sdl.SDL_CreateSurfaceFrom(width, height, sdl.SDL_PIXELFORMAT_RGBA32, pixels, width * 4) orelse return error.IconSurfaceFailed;
+    defer sdl.SDL_DestroySurface(surface);
+
+    if (!sdl.SDL_SetWindowIcon(window, surface)) return error.SetIconFailed;
+}
+
+/// Sets the text in the title bar. SDL wants it ending in a zero, so it is copied with one. Does nothing if there is no
+/// window (tests)
+pub fn SetTitle(self: SDLWindow, allocator: std.mem.Allocator, title: []const u8) !void {
+    const window = self._Window orelse return;
+    const terminated = try allocator.dupeSentinel(u8, title, 0);
+    defer allocator.free(terminated);
+    if (!sdl.SDL_SetWindowTitle(window, terminated.ptr)) return error.SetTitleFailed;
 }
 
 /// Asks SDL for typed text (SDL_EVENT_TEXT_INPUT), which it only sends while this is on. On a phone it would also

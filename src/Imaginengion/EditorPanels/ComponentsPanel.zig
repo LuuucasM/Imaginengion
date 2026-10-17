@@ -26,6 +26,7 @@ const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const AudioComponent = EntityComponents.AudioComponent;
+const EnumComponent = EntityComponents.EnumComponent;
 const UIElementComponent = EntityComponents.UIElementComponent;
 const TmplRefComponent = EntityComponents.TmplRefComponent;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
@@ -139,7 +140,7 @@ pub fn Update(self: *ComponentsPanel, engine_context: *EngineContext, selected: 
 
     const present = PresentOf(object);
     const layer_names = engine_context.mCollisionLayers.mVersion;
-    const stale = if (self.mBuiltFor) |built| !SameObject(built, object) or present != self.mBuiltPresent or layer_names != self.mBuiltLayerNames or self.TakeRebuild(engine_context) else true;
+    const stale = if (self.mBuiltFor) |built| !SameObject(built, object) or present != self.mBuiltPresent or layer_names != self.mBuiltLayerNames or EnumFileChanged(engine_context, object) or self.TakeRebuild(engine_context) else true;
     if (stale) try self.Rebuild(engine_context, object, present);
     try ShowLine(engine_context, self.mTitle, NameOf(object));
     try ShowLine(engine_context, self.mMessage, if (present == 0) "No components yet. Right click to add one" else "");
@@ -329,6 +330,16 @@ fn Clear(self: *ComponentsPanel, engine_context: *EngineContext) !void {
 }
 
 /// Whether the selected object's list asked to be built again, by a field that decides what else is shown
+/// Whether the selected object's enum file changed last frame: its EnumComponent's dropdown lists the file's values
+fn EnumFileChanged(engine_context: *EngineContext, object: SelectedObject) bool {
+    const asset_manager = &engine_context.mAssetManager;
+    if (!asset_manager.AnyFileChanged()) return false;
+    const component = switch (object) {
+        inline else => |typed| typed.GetComponent(EnumComponent),
+    } orelse return false;
+    return component.mEnumFile.IsIDValid() and asset_manager.FileChanged(component.mEnumFile.mID);
+}
+
 fn TakeRebuild(self: *ComponentsPanel, engine_context: *EngineContext) bool {
     const root = switch (self.mBuiltFor.?) {
         .entity => self.mEntityList.mRoot,

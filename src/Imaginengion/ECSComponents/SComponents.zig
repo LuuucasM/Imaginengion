@@ -1,6 +1,7 @@
 const ListInd = @import("../ECS/Components.zig").ListInd;
 const std = @import("std");
 pub const AttribComponent = @import("Shared/AttribComponent.zig");
+pub const EnumComponent = @import("Shared/EnumComponent.zig");
 pub const AudioComponent = @import("Shared/AudioComponent.zig");
 pub const UUIDComponent = @import("Shared/UUIDComponent.zig");
 pub const NameComponent = @import("Shared/NameComponent.zig");
@@ -24,6 +25,7 @@ pub const GameEventScript = ScriptTags.GameEventScript;
 pub const ComponentsList = [_]type{
     //SceneLayer
     AttribComponent,
+    EnumComponent,
     AudioComponent,
     UUIDComponent,
     NameComponent,
@@ -48,6 +50,7 @@ pub const ComponentsPanelList = [_]type{
     UUIDComponent,
     NameComponent,
     AttribComponent,
+    EnumComponent,
     SceneComponent,
     PhysicsComponent,
     AudioComponent,
@@ -60,6 +63,7 @@ pub const SerializeList = [_]type{
     UUIDComponent,
     NameComponent,
     AttribComponent,
+    EnumComponent,
     AudioComponent,
     PhysicsComponent,
     SceneComponent,
@@ -90,6 +94,7 @@ pub const ScriptsList = [_]type{
 
 pub const EComponents = enum(u16) {
     AttribComponent = ListInd(&ComponentsList, AttribComponent),
+    EnumComponent = ListInd(&ComponentsList, EnumComponent),
     AudioComponent = ListInd(&ComponentsList, AudioComponent),
     UUIDComponent = ListInd(&ComponentsList, UUIDComponent),
     NameComponent = ListInd(&ComponentsList, NameComponent),

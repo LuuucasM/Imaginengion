@@ -1,7 +1,7 @@
 //! A set of collision layers, one bit per layer (named in CollisionLayers): which layers a collider is on, which it
 //! collides with (CollisionFilter), which a physics query hits (PhysicsQueries.QueryOptions). Its own type rather than
 //! a plain std.StaticBitSet so the editor can tell a set of layers from any other set of bits and show the layers'
-//! names, on a script variable too. Saved as the bits' integer, {"mask": 5}, the way a plain bit set is
+//! names, on a script variable too
 const std = @import("std");
 const CollisionLayers = @import("CollisionLayers.zig");
 
@@ -44,15 +44,4 @@ pub fn intersects(self: CollisionMask, other: CollisionMask) bool {
 
 pub fn count(self: CollisionMask) usize {
     return self.mBits.count();
-}
-
-const Saved = struct { mask: Bits.MaskInt = 0 };
-
-pub fn jsonStringify(self: *const CollisionMask, jw: anytype) !void {
-    try jw.write(Saved{ .mask = self.mBits.mask });
-}
-
-pub fn jsonParse(allocator: std.mem.Allocator, source: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(source.*))!CollisionMask {
-    const saved = try std.json.innerParse(Saved, allocator, source, options);
-    return .{ .mBits = .{ .mask = saved.mask } };
 }

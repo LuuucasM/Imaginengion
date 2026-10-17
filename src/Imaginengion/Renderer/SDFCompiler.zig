@@ -2,7 +2,7 @@
 //! join, and each part placed in the world the way drawing and picking place it (ShapeGeometry.QuadBox).
 //!
 //! A level is one merge root and its parts. Its parts are every entity below the root with a ShapeComponent, walked
-//! through entities without one, but not into a game object of its own (MainObjectComponent). A merge below it is one
+//! through entities without one, but not into a main object of its own (MainObjectComponent). A merge below it is one
 //! part, compiled as a level of its own and put in like brackets. Within a level every add comes first, then every
 //! subtract, then every intersect: ((A u B u C) - D - E) n F, so the hierarchy's order never changes the shape.
 //! The adds go deepest first (Sethi-Ullman), since it doesn't matter which a union starts from, which keeps the stack

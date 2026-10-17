@@ -1,7 +1,7 @@
 const std = @import("std");
 const IM = @import("IM");
 
-//Variables: shown in the Scripts panel and saved, one set per game mode the script is on. Each needs a default
+//Variables: shown in the Scripts panel and saved, one set per game context the script is on. Each needs a default
 //mPlayerScore: u32 = 0,
 
 //Hooks: take the // off any you want. Return .Continue to let the next script have its turn, .Handled to stop it here, .Warning when something didn't go as planned. An error (try) is logged and hands back .Error

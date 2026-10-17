@@ -20,8 +20,8 @@ pub const Contact = struct {
     //the two colliders, which the shapes are measured from
     mOrigin: Entity = .uninit,
     mTarget: Entity = .uninit,
-    //the game objects they are part of (Entity.GetMainObject), whose rigid bodies the solver moves. The collider
-    //itself when it is on its game object rather than on a convenience child of it
+    //the main objects they are part of (Entity.GetMainObject), whose rigid bodies the solver moves. The collider
+    //itself when it is on its main object rather than on a convenience child of it
     mOriginBody: Entity = .uninit,
     mTargetBody: Entity = .uninit,
     //points from mOrigin to mTarget
@@ -60,7 +60,7 @@ pub const CollisionInfo = struct {
     mNormal: Vec3(f32),
     //one of the two colliders is a trigger, so they pass through each other instead of being pushed apart
     mIsTrigger: bool,
-    //which of each game object's colliders touched, for an object with several (e.g. a head and feet). The game
+    //which of each main object's colliders touched, for an object with several (e.g. a head and feet). The game
     //object itself when its collider is on it rather than on a convenience child
     mSelfCollider: Entity,
     mOtherCollider: Entity,
@@ -75,7 +75,7 @@ pub const PreSolveInfo = struct {
     //the gap between the two along mNormal: negative while they overlap, by how deep. A contact can be handed over
     //before the two touch, when they are close enough to meet on this substep
     mSeparation: f32,
-    //which of each game object's colliders this contact is between, see CollisionInfo
+    //which of each main object's colliders this contact is between, see CollisionInfo
     mSelfCollider: Entity,
     mOtherCollider: Entity,
     //set to false and the two pass through each other this substep: the solver does not stop or push them, and

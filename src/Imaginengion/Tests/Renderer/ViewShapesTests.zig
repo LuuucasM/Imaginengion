@@ -363,13 +363,13 @@ test "a subtract mask keeps what is outside it, and a mask with no shape leaves 
     try std.testing.expect(!view.Masks.CutsOff(mask, far));
 }
 
-test "a merge is gathered once, as its root, in place of its parts, but not text or a game object of its own under it" {
+test "a merge is gathered once, as its root, in place of its parts, but not text or a main object of its own under it" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
-    //a merge root with no shape or surface, two parts (one under a merge of its own), a label and a held game object
+    //a merge root with no shape or surface, two parts (one under a merge of its own), a label and a held main object
     const root = try level.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try root.AddComponent(engine_context, EntityComponents.MergeComponent{});
     const part = try QuadAt(engine_context, root, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 1, .y = 1 });

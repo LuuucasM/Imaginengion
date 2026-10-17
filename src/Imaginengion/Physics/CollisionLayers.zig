@@ -80,7 +80,6 @@ pub fn SaveProjectSettings(self: *CollisionLayers, _: *EngineContext, write_stre
 pub fn LoadProjectSettings(self: *CollisionLayers, engine_context: *EngineContext, scanner: *std.json.Scanner) !void {
     try self.ResetProjectSettings(engine_context);
     const settings = try std.json.innerParse(SettingsFile, engine_context.FrameAllocator(), scanner, .{
-        .ignore_unknown_fields = true,
         .allocate = .alloc_always,
         .max_value_len = std.json.default_max_value_len,
     });

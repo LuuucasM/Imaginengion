@@ -4,6 +4,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 
 pub const AISlotComponent = @import("Entity/AISlotComponent.zig");
 pub const AttribComponent = @import("Shared/AttribComponent.zig");
+pub const EnumComponent = @import("Shared/EnumComponent.zig");
 pub const AudioComponent = @import("Shared/AudioComponent.zig");
 pub const ColliderComponent = @import("Entity/ColliderComponent.zig");
 pub const ConstantForceComponent = @import("Entity/ConstantForceComponent.zig");
@@ -47,7 +48,7 @@ pub const ViewpointComponent = @import("Entity/ViewpointComponent.zig");
 pub const RenderTargetComponent = @import("Shared/RenderTargetComponent.zig");
 pub const TmplRefComponent = @import("Shared/TmplRefComponent.zig");
 
-//the ECS supplies this one itself: it marks an entity as a real game object rather than a
+//the ECS supplies this one itself: it marks an entity as a main object, a real object in the game, rather than a
 //convenience entity that only exists to carry a bundle of components for its parent
 pub const MainObjectComponent = @import("../ECS/Components.zig").MainObjectComponent;
 
@@ -69,6 +70,7 @@ pub const ComponentsList = [_]type{
     //components
     AISlotComponent,
     AttribComponent,
+    EnumComponent,
     AudioComponent,
     ColliderComponent,
     ConstantForceComponent,
@@ -132,6 +134,7 @@ pub const ComponentsList = [_]type{
 pub const SerializeList = [_]type{
     AISlotComponent,
     AttribComponent,
+    EnumComponent,
     AudioComponent,
     ColliderComponent,
     ConstantForceComponent,
@@ -178,6 +181,7 @@ pub const ShellList = [_]type{
 pub const ComponentPanelList = [_]type{
     AISlotComponent,
     AttribComponent,
+    EnumComponent,
     AudioComponent,
     ColliderComponent,
     ConstantForceComponent,
@@ -218,6 +222,7 @@ pub const ScriptsList = [_]type{
 pub const EComponents = enum(u16) {
     AISlotComponent = ListInd(&ComponentsList, AISlotComponent),
     AttribComponent = ListInd(&ComponentsList, AttribComponent),
+    EnumComponent = ListInd(&ComponentsList, EnumComponent),
     AudioComponent = ListInd(&ComponentsList, AudioComponent),
     ColliderComponent = ListInd(&ComponentsList, ColliderComponent),
     ConstantForceComponent = ListInd(&ComponentsList, ConstantForceComponent),

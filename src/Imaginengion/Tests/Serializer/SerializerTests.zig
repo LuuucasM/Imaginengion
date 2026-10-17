@@ -96,16 +96,6 @@ test "an entity tree round trips, children included" {
     try std.testing.expect(grandchild_iter.next() != null);
 }
 
-test "a scene component from before the scale mode moved to the world still loads, its old key skipped" {
-    const world = try TestWorld.Init();
-    defer world.Deinit();
-    const engine_context = world.mEngineContext;
-
-    const json = "{\"OverlayScaleMode\":\"ConstantPixelSize\"}";
-    const scene_component = try std.json.parseFromSliceLeaky(SceneComponent, engine_context.FrameAllocator(), json, .{});
-    try std.testing.expect(scene_component.mLayoutArea == null);
-}
-
 test "a scene round trips with its entities and takes its slot in the scene stack" {
     const world = try TestWorld.Init();
     defer world.Deinit();
@@ -225,26 +215,6 @@ test "a rigid body round trips with its type and mass" {
         }
         try std.testing.expectEqual(@as(f32, 3), loaded.GetComponent(RigidBodyComponent).?.GetMass());
     }
-}
-
-test "a rigid body saved before body types loads as the type its mass meant" {
-    const world = try TestWorld.Init();
-    defer world.Deinit();
-    const engine_context = world.mEngineContext;
-    const RigidBodyComponent = EntityComponents.RigidBodyComponent;
-
-    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
-
-    //mass 0 was how a body was made static, and there were no type tags to save
-    const path = try world.FilePath("old_static.imen");
-    try std.Io.Dir.cwd().writeFile(engine_context.Io(), .{ .sub_path = path, .data = "{ \"RigidBodyComponent\": { \"Mass\": 0 } }" });
-
-    const loaded = try scene.CreateEntity(engine_context, Entity.BlankConfig);
-    try TextSerializer.DeserializeECSObj(engine_context, loaded, path);
-
-    try std.testing.expect(loaded.HasComponent(EntityComponents.StaticBodyTag));
-    try std.testing.expect(!loaded.HasComponent(EntityComponents.DynamicBodyTag));
-    try std.testing.expectEqual(RigidBodyComponent.MIN_MASS, loaded.GetComponent(RigidBodyComponent).?.GetMass());
 }
 
 test "a constant force round trips" {

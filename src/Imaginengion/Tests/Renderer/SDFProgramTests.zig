@@ -142,7 +142,7 @@ test "a card with a round hole cut in it is solid around the hole, and nothing i
     try std.testing.expectApproxEqAbs(@as(f32, 1), world.Eval(compiled, 3, 0).D, eps);
 }
 
-test "a merge's parts are its whole subtree, through entities with no shape, but not a game object of its own or a hidden part" {
+test "a merge's parts are its whole subtree, through entities with no shape, but not a main object of its own or a hidden part" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
@@ -153,7 +153,7 @@ test "a merge's parts are its whole subtree, through entities with no shape, but
     const pivot = try root.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     try pivot.SetTranslation(engine_context, .{ .x = 10, .y = 0, .z = 0 });
     _ = try world.Quad(pivot, ORIGIN, .{ .x = 1, .y = 1 }, RED);
-    //a game object of its own, not a part
+    //a main object of its own, not a part
     const held = try world.Quad(root, .{ .x = -10, .y = 0, .z = 0 }, .{ .x = 1, .y = 1 }, RED);
     _ = try held.AddComponent(engine_context, MainObjectComponent{});
     //hidden, so left out

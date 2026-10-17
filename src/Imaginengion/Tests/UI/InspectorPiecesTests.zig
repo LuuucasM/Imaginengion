@@ -294,3 +294,28 @@ test "a bit set's checkboxes are named by Names, and a collider's by its collisi
     try std.testing.expectEqualStrings("Player", UIManager.LabelOf(first).?.GetComponent(TextComponent).?.mText.items);
     try std.testing.expectEqualStrings("2", UIManager.LabelOf(second).?.GetComponent(TextComponent).?.mText.items);
 }
+
+/// Reads every field as a choice past the end of any list: a value that isn't one of a dropdown's choices
+const PAST_THE_END = Inspector.Access{
+    .Read = struct {
+        fn Read(_: *anyopaque) Inspector.Value {
+            return .{ .Choice = std.math.maxInt(usize) };
+        }
+    }.Read,
+    .Write = struct {
+        fn Write(_: *EngineContext, _: *anyopaque, _: Inspector.Value) anyerror!void {}
+    }.Write,
+};
+
+test "a choice past the end of a dropdown's choices shows as none chosen" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const state = try world.mObject.AddComponent(engine_context, EntityComponents.EnumComponent{});
+    var state_ui = world.Builder(EntityComponents.EnumComponent);
+    try state_ui.Choice(state, "Value", &.{ "Playing", "Paused" }, &PAST_THE_END, .{});
+    const dropdown = world.Part(0, 1);
+    try std.testing.expectEqual(@as(?usize, null), WidgetActions.ChosenIndex(dropdown));
+    try std.testing.expectEqualStrings("", UIManager.LabelOf(dropdown).?.GetComponent(TextComponent).?.mText.items);
+}

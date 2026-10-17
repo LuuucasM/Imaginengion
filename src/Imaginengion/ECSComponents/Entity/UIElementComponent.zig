@@ -69,7 +69,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, source: anytype, options: s
                 break;
             }
         } else {
-            try source.skipValue();
+            return error.UnknownField;
         }
     }
     return .{ .mElement = element };

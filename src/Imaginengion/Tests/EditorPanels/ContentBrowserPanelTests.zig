@@ -1,7 +1,7 @@
 //! The Content Browser in the editor's own UI (EditorPanels/ContentBrowserPanel.zig), on a temporary folder: a tile per
 //! folder and shown file, folders first and each by name, other files left out, long names shortened, going into a
 //! folder and back up by double clicking, a new file showing up, files' tiles carrying their path when dragged, going
-//! into the engine's assets from the top of the project and back out, and New Scene Layer from the pane's menu. Also the Scripts panel taking a drop: which object a script type goes on, and a
+//! into the engine's assets from the top of the project and back out, New Scene Layer, New Script and New Enum from the pane's menu, and the enum file New Enum writes. Also the Scripts panel taking a drop: which object a script type goes on, and a
 //! file that isn't a script ignored (adding a real script compiles it, so that part isn't run here). No window or
 //! renderer needed. Run with `zig build test-engine`.
 const std = @import("std");
@@ -11,6 +11,7 @@ const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
 const ContentBrowserPanel = @import("../../EditorPanels/ContentBrowserPanel.zig");
 const ScriptsPanel = @import("../../EditorPanels/ScriptsPanel.zig");
+const EnumAsset = @import("../../ECSComponents/Asset/EnumAsset.zig");
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const TextComponent = EntityComponents.TextComponent;
 const LayoutComponent = EntityComponents.LayoutComponent;
@@ -177,6 +178,20 @@ test "double clicking a folder goes into it, Back comes up again, and a single c
     for (browser.mPanel.mNewScripts, 0..) |item, i| {
         try std.testing.expectEqual(i, browser.mPanel.ActionOf(item, 1).?.NewScript);
     }
+    try std.testing.expect(browser.mPanel.ActionOf(browser.mPanel.mNewEnum, 1).? == .NewEnum);
+}
+
+test "New Enum writes an enum named after its file, which the editor can read the values of" {
+    const allocator = std.testing.allocator;
+    const text = try ContentBrowserPanel.EnumFileText(allocator, "GameState");
+    defer allocator.free(text);
+    const source = try allocator.dupeSentinel(u8, text, 0);
+    defer allocator.free(source);
+    const names = try EnumAsset.ParseNames(allocator, source, "GameState");
+    defer allocator.free(names);
+    try std.testing.expectEqual(@as(usize, 2), names.len);
+    try std.testing.expectEqualStrings("First", names[0]);
+    try std.testing.expectEqualStrings("Second", names[1]);
 }
 
 test "EngineAssets goes into the engine's assets, whose files are engine files, and Back from its top comes out to the project" {

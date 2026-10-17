@@ -44,10 +44,10 @@ const SManager = @This();
 const Core = ECSCore(SManager);
 
 pub const ECSType = enum {
-    GameObj,
+    Entities,
     Scenes,
     Players,
-    GameModes,
+    GameContexts,
 };
 
 pub const ECSManagerT = ECSManager(Scene.Type, &SceneComponentsList, "SceneECS");

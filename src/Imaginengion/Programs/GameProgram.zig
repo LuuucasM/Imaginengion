@@ -90,6 +90,7 @@ pub fn Init(self: *GameProgram, engine_context: *EngineContext, args: std.proces
         try std.fs.path.join(frame_allocator, &.{ engine_context.mAssetManager.mCWDPath.items, arg_list[1] });
 
     try engine_context.mProject.Open(engine_context, project_path);
+    SetUpWindow(engine_context);
     engine_context.mUIManager.LoadTheme(engine_context);
 
     try StartGame(engine_context);
@@ -97,14 +98,33 @@ pub fn Init(self: *GameProgram, engine_context: *EngineContext, args: std.proces
 
 pub fn Deinit(_: *GameProgram, _: *EngineContext) void {}
 
-/// Loads the entry scene, player and game mode, and runs the game mode's then the scenes' start
+/// The window shows the project's name in its title bar and its icon, each only if the project has one: without, the
+/// window keeps what it was made with. Neither stops the game if it fails, it is only logged
+fn SetUpWindow(engine_context: *EngineContext) void {
+    const project = &engine_context.mProject;
+    const window = &engine_context.mAppWindow;
+
+    const name = project.GetName();
+    if (name.len > 0) window.SetTitle(engine_context.FrameAllocator(), name) catch |err| {
+        std.log.err("Could not set the window's title to {s}: {s}", .{ name, @errorName(err) });
+    };
+
+    const icon_path = project.GetWindowIcon();
+    if (icon_path.len == 0) return;
+    const icon = project.GetDirectory().readFileAlloc(engine_context.Io(), icon_path, engine_context.FrameAllocator(), .unlimited) catch |err| {
+        return std.log.err("Could not read the window icon {s}: {s}", .{ icon_path, @errorName(err) });
+    };
+    window.SetIcon(icon) catch |err| std.log.err("Could not set the window icon to {s}: {s}", .{ icon_path, @errorName(err) });
+}
+
+/// Loads the entry scene, player and game context, and runs the game context's then the scenes' start
 /// scripts. The project is already open
 pub fn StartGame(engine_context: *EngineContext) !void {
     const project = &engine_context.mProject;
     var missing = false;
     for (std.enums.values(Project.Entry)) |entry| {
         if (project.GetEntry(entry).len == 0) {
-            std.log.err("The project has no entry {s}, set it in the editor under Project > Set Project Entry", .{@tagName(entry)});
+            std.log.err("The project has no entry {s}, set it in the editor under Project > Project Settings", .{@tagName(entry)});
             missing = true;
         }
     }
@@ -115,10 +135,10 @@ pub fn StartGame(engine_context: *EngineContext) !void {
     _ = try engine_context.mGameWorld.Load(Player, engine_context, project.GetEntry(.Player), .Prj);
     _ = try engine_context.mGameWorld.Load(GameContext, engine_context, project.GetEntry(.GameContext), .Prj);
 
-    //the game mode's start scripts set up the game's rules first
+    //the game context's start scripts set up the game's rules first
     _ = try ScriptsProcessor.RunScript(GameContext, OnGameStartScript, .Game, engine_context, .{});
     //the program isn't listening yet while it starts (Application.Init), so loading the entry scene didn't start it
-    //(SceneLoaded): it starts here, once the player and game mode its scripts set up are in
+    //(SceneLoaded): it starts here, once the player and game context its scripts set up are in
     _ = try ScriptsProcessor.RunScript(Scene, OnSceneStartScript, .Game, engine_context, .{});
 }
 

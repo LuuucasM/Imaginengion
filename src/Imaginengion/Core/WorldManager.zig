@@ -382,7 +382,7 @@ pub fn GetPlayerGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, c
     return try self.mPManager.GetGroup(frame_allocator, query);
 }
 
-//===============================Game Contexts (formerly GameModes)==============================================
+//===============================Game Contexts==============================================
 pub fn CreateGameContext(self: *WorldManager, engine_context: *EngineContext, config: GameContext.CreateConfig) !GameContext {
     return try self.mGCManager.CreateGameContext(engine_context, config);
 }

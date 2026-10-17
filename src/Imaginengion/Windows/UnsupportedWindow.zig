@@ -1,3 +1,4 @@
+const std = @import("std");
 const builtin = @import("builtin");
 const UnsupportedWindow = @This();
 
@@ -41,6 +42,19 @@ pub fn OnWindowResize(self: UnsupportedWindow, width: usize, height: usize) void
     _ = self;
     _ = width;
     _ = height;
+    Unsupported();
+}
+
+pub fn SetIcon(self: UnsupportedWindow, png_bytes: []const u8) !void {
+    _ = self;
+    _ = png_bytes;
+    Unsupported();
+}
+
+pub fn SetTitle(self: UnsupportedWindow, allocator: std.mem.Allocator, title: []const u8) !void {
+    _ = self;
+    _ = allocator;
+    _ = title;
     Unsupported();
 }
 

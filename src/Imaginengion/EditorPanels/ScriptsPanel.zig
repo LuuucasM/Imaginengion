@@ -3,7 +3,7 @@
 //! ScriptValues.BuildFields). A line says why when there is nothing to list. Every frame the selection, its scripts and
 //! the builds they run are checked against what the rows were built for, and they are built again when they differ. A
 //! script is added by dropping it on the panel from the Content Browser: an entity script onto an entity, a scene script
-//! onto a scene, a player script onto a player, a game mode script onto a game mode
+//! onto a scene, a player script onto a player, a game context script onto a game context
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");

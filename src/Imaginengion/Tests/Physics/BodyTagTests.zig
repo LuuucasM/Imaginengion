@@ -85,22 +85,6 @@ test "a new rigid body is dynamic with a mass of 1" {
     try std.testing.expectEqual(@as(f32, 1), rigid_body._InvMass);
 }
 
-test "a rigid body with no type and no mass is made static" {
-    //how a file saved a static body before there were body types
-    const world = try TestWorld.Init();
-    defer world.Deinit();
-    const engine_context = world.mEngineContext;
-    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
-
-    const entity = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try entity.AddComponent(engine_context, RigidBodyComponent{ ._Mass = 0 });
-
-    try ExpectOnlyType(entity, StaticBodyTag);
-    const rigid_body = entity.GetComponent(RigidBodyComponent).?;
-    try std.testing.expectEqual(RigidBodyComponent.MIN_MASS, rigid_body.GetMass());
-    try std.testing.expectEqual(@as(f32, 0), rigid_body._InvMass);
-}
-
 test "adding a type tag replaces the body's type, and only a dynamic body can be pushed" {
     const world = try TestWorld.Init();
     defer world.Deinit();

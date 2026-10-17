@@ -271,18 +271,3 @@ test "a project saves its buses and opening it in a fresh engine brings them bac
     try ExpectSameTree(master, loaded_engine.AudioManager().GetMasterBus());
 }
 
-test "a project without audio settings opens with just Master" {
-    const engine = try TestEngine.Init();
-    defer engine.Deinit();
-    const engine_context = engine.mEngineContext;
-
-    //a project from before audio settings existed: only its project file
-    try engine.mTmpDir.dir.writeFile(engine_context.Io(), .{ .sub_path = "Old.imprj", .data = "{\"Name\": \"Old\", \"Version\": 1}" });
-    const project_file_path = try std.fs.path.join(engine_context.FrameAllocator(), &.{ try engine.TmpDirAbsPath(), "Old.imprj" });
-    try engine_context.mProject.Open(engine_context, project_file_path);
-
-    const master = engine.AudioManager().GetMasterBus();
-    try std.testing.expectEqual(0, ChildCount(master));
-    try std.testing.expectEqual(1.0, Volume(master));
-    try std.testing.expectEqualStrings("Master", master.GetName());
-}

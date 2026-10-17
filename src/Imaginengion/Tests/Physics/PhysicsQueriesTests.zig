@@ -86,7 +86,7 @@ test "a ray only looks as far as its max distance" {
     try std.testing.expect(try world.RayCast(ALONG_X, .{ .MaxDistance = 5 }) != null);
 }
 
-test "a ray passes through triggers, other categories and the game object it ignores" {
+test "a ray passes through triggers, other categories and the main object it ignores" {
     const world = try TestWorld.Init();
     defer world.Deinit();
 

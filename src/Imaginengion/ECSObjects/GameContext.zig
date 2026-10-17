@@ -4,13 +4,13 @@ pub const NullObject: Type = std.math.maxInt(Type);
 
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
-const GameModeParentComponent = @import("../ECS/Components.zig").ParentComponent(Type);
-const GameModeChildComponent = @import("../ECS/Components.zig").ChildComponent(Type);
+const GameContextParentComponent = @import("../ECS/Components.zig").ParentComponent(Type);
+const GameContextChildComponent = @import("../ECS/Components.zig").ChildComponent(Type);
 const ChildType = @import("../ECS/ECSManager.zig").ChildType;
-const GameModeComponents = @import("../ECSComponents/GCComponents.zig");
-const UUIDComponent = GameModeComponents.UUIDComponent;
-const NameComponent = GameModeComponents.NameComponent;
-const ScriptComponent = GameModeComponents.ScriptComponent;
+const GameContextComponents = @import("../ECSComponents/GCComponents.zig");
+const UUIDComponent = GameContextComponents.UUIDComponent;
+const NameComponent = GameContextComponents.NameComponent;
+const ScriptComponent = GameContextComponents.ScriptComponent;
 const PathType = @import("../ECSManagers/AManager.zig").PathType;
 const ScriptAsset = @import("../ECSComponents/AComponents.zig").ScriptAsset;
 const GameContext = @This();
@@ -99,7 +99,7 @@ pub fn AddScript(self: GameContext, engine_context: *EngineContext, new_script_h
 pub const AddComponentScript = Core.AddComponentScript;
 
 //TODO: move to GCManager
-//pub fn CreateGameModeConfig(self: *GameMode, engine_context: *EngineContext, config: NewGameModeConfig) !void {
+//pub fn CreateGameContextConfig(self: *GameContext, engine_context: *EngineContext, config: NewGameContextConfig) !void {
 //    if (config.bAddUUIDComponent) {
 //        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
 //        const new_random = io_source.interface();

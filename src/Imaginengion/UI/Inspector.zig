@@ -205,11 +205,12 @@ pub const Builder = struct {
     }
 
     /// A dropdown of `choices` for a field that isn't an enum, read and written by `access`, whose Read gives the
-    /// .Choice shown: e.g. a preset that sets several values at once
+    /// .Choice shown: e.g. a preset that sets several values at once. A .Choice past the end of `choices` shows as none
+    /// chosen, for a value that isn't one of them (nothing picked yet, or one that is no longer there)
     pub fn Choice(self: *Builder, field: anytype, label: []const u8, choices: []const []const u8, access: *const Access, options: FieldOptions) !void {
         const row = try self.Row(label);
         const chosen: ?usize = switch (access.Read(@ptrCast(field))) {
-            .Choice => |index| index,
+            .Choice => |index| if (index < choices.len) index else null,
             else => null,
         };
         const dropdown = try Widgets.Dropdown(self.mEngineContext, .{ .Entity = row }, choices, chosen, self.mOptions);

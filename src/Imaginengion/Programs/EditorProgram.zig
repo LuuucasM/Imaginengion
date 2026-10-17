@@ -99,6 +99,7 @@ const EditorMenuBar = @import("EditorMenuBar.zig");
 const AssetHandlesPanel = @import("../EditorPanels/AssetHandlesPanel.zig");
 const AudioBusesPanel = @import("../EditorPanels/AudioBusesPanel.zig");
 const CollisionLayersPanel = @import("../EditorPanels/CollisionLayersPanel.zig");
+const ProjectSettingsPanel = @import("../EditorPanels/ProjectSettingsPanel.zig");
 const ComponentsPanel = @import("../EditorPanels/ComponentsPanel.zig");
 const ContentBrowserPanel = @import("../EditorPanels/ContentBrowserPanel.zig");
 const TmplEditPanel = @import("../EditorPanels/TmplEditPanel.zig");
@@ -158,6 +159,8 @@ mAssetHandlesPanel: AssetHandlesPanel = .{},
 mAudioBusesPanel: AudioBusesPanel = .{},
 /// The Collision Layer Names window, in the editor UI, opened from the Project menu
 mCollisionLayersPanel: CollisionLayersPanel = .{},
+/// The Project Settings window, in the editor UI, opened from the Project menu: the game's name, window icon and entries
+mProjectSettingsPanel: ProjectSettingsPanel = .{},
 /// The Components tab, in the editor UI
 mComponentsPanel: ComponentsPanel = .{},
 /// The Content Browser pane, in the editor UI
@@ -183,7 +186,7 @@ mShowPlayPreview: bool = true,
 mScenePanel: HierarchyPanel(Scene) = .{},
 mEntityPanel: HierarchyPanel(Entity) = .{},
 mPlayerPanel: HierarchyPanel(Player) = .{},
-mGameModePanel: HierarchyPanel(GameContext) = .{},
+mGameContextPanel: HierarchyPanel(GameContext) = .{},
 
 mSelectedObj: ?SelectedObject = null,
 
@@ -224,6 +227,10 @@ mActiveWorldType: EngineContext.WorldType = .Game,
 pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process.Args) !void {
     const zone = Tracy.ZoneInit("EditorProgram::Init", @src());
     defer zone.Deinit();
+    engine_context.mAppWindow.SetIcon(@embedFile("../EngineAssets/textures/Cloud.png")) catch |err| {
+        std.log.err("could not set the editor window icon: {s}", .{@errorName(err)});
+    };
+
     //EDITOR UI STUFF================================================
     //the theme and its fonts now, rather than in the middle of the first frame
     engine_context.mUIManager.LoadTheme(engine_context);
@@ -269,6 +276,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process
     self.mAssetHandlesPanel = try AssetHandlesPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mAudioBusesPanel = try AudioBusesPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mCollisionLayersPanel = try CollisionLayersPanel.Build(engine_context, self.mEditorUIScene, .{});
+    self.mProjectSettingsPanel = try ProjectSettingsPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mUIElementPanel = try UIElementPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mPickingDebugPanel = try PickingDebugPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mScriptsPanel = try ScriptsPanel.Build(engine_context, self.mShell.mScriptsPage, .{});
@@ -276,7 +284,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process
     self.mScenePanel = try HierarchyPanel(Scene).Build(engine_context, self.mShell.mScenesPage, .{});
     self.mEntityPanel = try HierarchyPanel(Entity).Build(engine_context, self.mShell.mEntitiesPage, .{});
     self.mPlayerPanel = try HierarchyPanel(Player).Build(engine_context, self.mShell.mPlayersPage, .{});
-    self.mGameModePanel = try HierarchyPanel(GameContext).Build(engine_context, self.mShell.mGameModesPage, .{});
+    self.mGameContextPanel = try HierarchyPanel(GameContext).Build(engine_context, self.mShell.mGameContextsPage, .{});
     self.mContentBrowserPanel = try ContentBrowserPanel.Build(engine_context, self.mShell.mContentBrowserPane, try ContentBrowserPanel.Icons.Load(engine_context), .{});
     //=================================================================
 
@@ -323,7 +331,7 @@ pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) void {
     self.mScenePanel.Deinit(engine_context.EngineAllocator());
     self.mEntityPanel.Deinit(engine_context.EngineAllocator());
     self.mPlayerPanel.Deinit(engine_context.EngineAllocator());
-    self.mGameModePanel.Deinit(engine_context.EngineAllocator());
+    self.mGameContextPanel.Deinit(engine_context.EngineAllocator());
 }
 
 //Note other systems to consider in the on update loop
@@ -678,6 +686,7 @@ pub fn OnPointerEvent(editor_program: *anyopaque, engine_context: *EngineContext
         .PointerClicked => |click| if (click.mButton == .BUTTON_LEFT) {
             if (self.mMenuBar.ActionOf(entity)) |action| try self.RunMenuAction(engine_context, action);
             if (self.mAudioBusesPanel.ActionOf(entity)) |action| try AudioBusesPanel.Run(engine_context, action);
+            if (self.mProjectSettingsPanel.ActionOf(entity)) |action| try ProjectSettingsPanel.Run(engine_context, action);
             if (self.mUIElementPanel.ActionOf(entity)) |action| try self.mUIElementPanel.Run(engine_context, action);
             if (self.mScriptsPanel.ActionOf(entity)) |script| try ScriptsPanel.Run(engine_context, script);
             if (self.mComponentsPanel.ActionOf(entity)) |action| switch (action) {
@@ -691,7 +700,7 @@ pub fn OnPointerEvent(editor_program: *anyopaque, engine_context: *EngineContext
             if (self.mScenePanel.ActionOf(entity)) |action| try self.mScenePanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
             if (self.mEntityPanel.ActionOf(entity)) |action| try self.mEntityPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
             if (self.mPlayerPanel.ActionOf(entity)) |action| try self.mPlayerPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
-            if (self.mGameModePanel.ActionOf(entity)) |action| try self.mGameModePanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
+            if (self.mGameContextPanel.ActionOf(entity)) |action| try self.mGameContextPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
             for (self.mTmplEditPanels.items) |*panel| {
                 if (panel.IsSaveButton(entity)) {
                     try self.NoticeSave(engine_context, panel.Name(), panel.Save(engine_context));
@@ -703,16 +712,17 @@ pub fn OnPointerEvent(editor_program: *anyopaque, engine_context: *EngineContext
             try self.mScenePanel.OnRightClick(engine_context, entity);
             try self.mEntityPanel.OnRightClick(engine_context, entity);
             try self.mPlayerPanel.OnRightClick(engine_context, entity);
-            try self.mGameModePanel.OnRightClick(engine_context, entity);
+            try self.mGameContextPanel.OnRightClick(engine_context, entity);
         },
         .PointerDropped => |dropped| {
             try self.mScriptsPanel.OnDrop(engine_context, entity, dropped, self.mSelectedObj);
             self.mComponentsPanel.OnDrop(entity, dropped);
+            try self.mProjectSettingsPanel.OnDrop(engine_context, entity, dropped);
             for (self.mTmplEditPanels.items) |panel| panel.OnDrop(entity, dropped);
             try self.mScenePanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, &self.mSelectedObj);
             try self.mEntityPanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, &self.mSelectedObj);
             try self.mPlayerPanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, &self.mSelectedObj);
-            try self.mGameModePanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, &self.mSelectedObj);
+            try self.mGameContextPanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, &self.mSelectedObj);
         },
         else => {},
     }
@@ -735,6 +745,7 @@ pub fn OnUIEvent(editor_program: *anyopaque, engine_context: *EngineContext, eve
     try self.mComponentsPanel.OnUIEvent(engine_context, entity_event);
     //a collision layer renamed
     try self.mCollisionLayersPanel.OnUIEvent(engine_context, entity_event);
+    try self.mProjectSettingsPanel.OnUIEvent(engine_context, entity_event);
     for (self.mTmplEditPanels.items) |panel| try panel.OnUIEvent(engine_context, entity_event);
     try self.mEventScripts.OnUIEvent(engine_context, entity_event);
     return .Continue;
@@ -894,7 +905,7 @@ fn CastAtView(self: *EditorProgram, engine_context: *EngineContext, view: ViewUn
     return try self.CastInView(engine_context, view.Camera, view.World, pointer_view);
 }
 
-/// Selects what was clicked in a view, a viewport quad: the game object owning the shape under the mouse, or nothing if
+/// Selects what was clicked in a view, a viewport quad: the main object owning the shape under the mouse, or nothing if
 /// the click missed everything. A click outside any view is left alone.
 fn OnViewportClick(self: *EditorProgram, engine_context: *EngineContext, click_position: Vec2(f32)) !void {
     const view = try self.ViewUnder(engine_context, click_position) orelse return;
@@ -1099,7 +1110,7 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
                 self.mActiveWorld = &engine_context.mSimulateWorld;
                 self.mActiveWorldType = .Simulate;
                 self.mEditorState = .Play;
-                //the game starting, the same as in a built game (GameProgram): its game modes' start scripts set up
+                //the game starting, the same as in a built game (GameProgram): its game contexts' start scripts set up
                 //its rules, then its scenes' start scripts set it up
                 _ = try ScriptsProcessor.RunScript(GameContext, OnGameStartScript, .Simulate, engine_context, .{});
                 _ = try ScriptsProcessor.RunScript(Scene, OnSceneStartScript, .Simulate, engine_context, .{});
@@ -1156,6 +1167,7 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
         .Shown = shown,
         .ProjectOpen = engine_context.mProject.IsOpen(),
         .CollisionLayersShown = self.mCollisionLayersPanel.IsOpen(),
+        .ProjectSettingsShown = self.mProjectSettingsPanel.IsOpen(),
         .Selected = if (self.mSelectedObj) |selected_object| selected_object.Kind() else null,
         //stopping is always allowed, starting needs a run player that can be drawn
         .CanPlayStop = self.mEditorState == .Play or (if (self.mRunPlayer) |run_player| run_player.GetRenderView() != null else false),
@@ -1168,7 +1180,7 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
     });
 }
 
-/// Saves the file the selected object is kept in: an entity's is its scene's, a scene, player or game mode is its own.
+/// Saves the file the selected object is kept in: an entity's is its scene's, a scene, player or game context is its own.
 /// `as` asks for the file, otherwise it goes over the one it was last saved to or loaded from (asking the first time)
 fn SaveSelected(self: *EditorProgram, engine_context: *EngineContext, as: bool) !void {
     const selected_object = self.mSelectedObj orelse return;
@@ -1237,17 +1249,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
         },
         .ToggleCollisionLayers => try self.mCollisionLayersPanel.Toggle(engine_context),
         .SaveProject => if (engine_context.mProject.IsOpen()) try self.NoticeSave(engine_context, "project", engine_context.mProject.Save(engine_context)),
-        .SetProjectEntry => |entry| {
-            const extension = entry.FileExtension();
-            const abs_path = try PlatformUtils.OpenFile(engine_context.FrameAllocator(), extension);
-            if (abs_path.len > 0) {
-                engine_context.mProject.SetEntry(engine_context, entry, abs_path) catch |err| switch (err) {
-                    error.NotInProject, error.WrongFileKind => return std.log.warn("The project's entry {s} has to be a {s} file inside the project folder, not {s}", .{ @tagName(entry), std.mem.span(extension), abs_path }),
-                    else => return err,
-                };
-                std.log.info("Project entry {s} set to {s}", .{ @tagName(entry), engine_context.mProject.GetEntry(entry) });
-            }
-        },
+        .ToggleProjectSettings => try self.mProjectSettingsPanel.Toggle(engine_context),
         .Exit => try engine_context.mSystemEventManager.Insert(engine_allocator, .WindowEvent, .{
             .WindowClose = .{ ._Window = &engine_context.mAppWindow },
         }),
@@ -1288,6 +1290,7 @@ fn UpdateShell(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self.mAssetHandlesPanel.Update(engine_context);
     try self.mAudioBusesPanel.Update(engine_context);
     try self.mCollisionLayersPanel.Update(engine_context);
+    try self.mProjectSettingsPanel.Update(engine_context);
     try self.mUIElementPanel.Update(engine_context, self.mSelectedObj);
     try self.mScriptsPanel.Update(engine_context, self.mSelectedObj);
     try self.mComponentsPanel.Update(engine_context, self.mSelectedObj);
@@ -1295,7 +1298,7 @@ fn UpdateShell(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self.mScenePanel.Update(engine_context, self.mActiveWorld, self.mSelectedObj);
     try self.mEntityPanel.Update(engine_context, self.mActiveWorld, self.mSelectedObj);
     try self.mPlayerPanel.Update(engine_context, self.mActiveWorld, self.mSelectedObj);
-    try self.mGameModePanel.Update(engine_context, self.mActiveWorld, self.mSelectedObj);
+    try self.mGameContextPanel.Update(engine_context, self.mActiveWorld, self.mSelectedObj);
     try self.UpdateTmplEditPanels(engine_context);
     try self.mContentBrowserPanel.Update(engine_context);
     //before this frame's views are drawn, so it reads last frame's view rects the way input picking will

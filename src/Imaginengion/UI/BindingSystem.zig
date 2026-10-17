@@ -109,7 +109,7 @@ pub fn OnPointerEvent(self: *BindingSystem, engine_context: *EngineContext, even
                 .entity => "an entity",
                 .scene_layer => "a scene",
                 .player => "a player",
-                .gamecontext => "a game mode",
+                .gamecontext => "a game context",
             };
             std.log.warn("Only {s} can go in this field", .{kind_name});
             return;

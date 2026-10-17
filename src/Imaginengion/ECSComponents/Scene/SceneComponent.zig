@@ -20,7 +20,7 @@ mLayoutArea: ?Vec2(f32) = null,
 
 pub fn Deinit(_: *SceneComponent, _: *EngineContext) void {}
 
-//nothing of it is saved any more. an old file's OverlayScaleMode key is skipped
+//nothing of it is saved
 const Json = JsonUtils.JsonFields(SceneComponent, .{});
 pub const jsonStringify = Json.jsonStringify;
 pub const jsonParse = Json.jsonParse;

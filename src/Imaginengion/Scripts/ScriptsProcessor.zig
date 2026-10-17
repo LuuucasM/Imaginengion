@@ -198,7 +198,7 @@ pub fn RunCollisionEndScripts(engine_context: *EngineContext, event: CollisionEn
     }
 }
 
-/// Runs the OnPreSolve scripts of both game objects in a solid contact the solver is about to act on, and writes
+/// Runs the OnPreSolve scripts of both main objects in a solid contact the solver is about to act on, and writes
 /// whether it should back into the event. From the middle of the physics step, see PreSolveEvent. The contact stays
 /// enabled only if both sides leave it so, and once one side has switched it off the other's scripts are not asked
 pub fn RunPreSolveScripts(engine_context: *EngineContext, event: PreSolveEvent) !void {

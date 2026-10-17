@@ -55,7 +55,7 @@ test "each item has its action, and the editor's state shows as check marks and 
     defer menu_bar.Deinit(engine_context.EngineAllocator());
 
     try std.testing.expectEqual(EditorMenuBar.Action.SaveProject, menu_bar.ActionOf(menu_bar.mSaveProject).?);
-    try std.testing.expectEqual(.Player, menu_bar.ActionOf(menu_bar.mEntryItems.get(.Player)).?.SetProjectEntry);
+    try std.testing.expectEqual(EditorMenuBar.Action.ToggleProjectSettings, menu_bar.ActionOf(menu_bar.mProjectSettings).?);
     try std.testing.expectEqual(EditorMenuBar.Panel.Stats, menu_bar.ActionOf(menu_bar.mPanelItems.get(.Stats)).?.TogglePanel);
     //a menu itself is no item
     try std.testing.expect(menu_bar.ActionOf(world.mBar) == null);
@@ -66,7 +66,7 @@ test "each item has its action, and the editor's state shows as check marks and 
     try std.testing.expect(!WidgetActions.IsChecked(menu_bar.mPlayPreview));
     //no project to save
     try std.testing.expect(menu_bar.mSaveProject.HasComponent(DisabledTag));
-    try std.testing.expect(menu_bar.mEntryItems.get(.Scene).HasComponent(DisabledTag));
+    try std.testing.expect(menu_bar.mProjectSettings.HasComponent(DisabledTag));
     try std.testing.expect(!menu_bar.mPlayStop.HasComponent(DisabledTag));
 }
 

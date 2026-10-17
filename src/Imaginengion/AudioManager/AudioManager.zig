@@ -326,8 +326,8 @@ pub fn LoadProjectSettings(self: *AudioManager, engine_context: *EngineContext, 
             try TextSerializer.ReadObject(engine_context, scanner, new_master);
             try self.ReplaceMasterBus(engine_context, new_master);
         } else {
-            std.log.warn("Skipping unknown key '{s}' in the audio settings", .{key});
-            try scanner.skipValue();
+            std.log.err("Unknown key '{s}' in the audio settings", .{key});
+            return error.UnknownField;
         }
     }
 }

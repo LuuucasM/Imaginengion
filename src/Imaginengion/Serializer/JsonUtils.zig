@@ -19,7 +19,7 @@ pub fn EngineContextFromAllocator(frame_allocator: std.mem.Allocator) *EngineCon
 /// their own jsonStringify/jsonParse (AssetHandle, TexOptions, ...) cascade automatically.
 /// std.ArrayList(u8) fields are written as JSON strings and read back into the engine allocator.
 /// Keys missing from the JSON keep the struct's default value (T.default if declared, otherwise .{}),
-/// and unknown keys are skipped so old files keep loading after fields are removed.
+/// and an unknown key is an error.
 pub fn JsonFields(comptime T: type, comptime fields: anytype) type {
     const keys = @typeInfo(@TypeOf(fields)).@"struct".field_names;
     comptime {
@@ -71,7 +71,7 @@ pub fn JsonFields(comptime T: type, comptime fields: anytype) type {
                         break;
                     }
                 } else {
-                    try source.skipValue();
+                    return error.UnknownField;
                 }
             }
 

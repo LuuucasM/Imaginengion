@@ -325,7 +325,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             };
         }
 
-        /// Matches every side, what used to be EntityListIntersection
+        /// Matches every side
         fn AndNode(comptime ands: []const GroupQuery) type {
             return struct {
                 const MaxSources = blk: {
@@ -360,7 +360,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             };
         }
 
-        /// Matches any side, what used to be EntityListUnion
+        /// Matches any side
         fn OrNode(comptime ors: []const GroupQuery) type {
             return struct {
                 const MaxSources = blk: {
@@ -394,7 +394,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             };
         }
 
-        /// Matches the first side but not the second, what used to be EntityListDifference
+        /// Matches the first side but not the second
         fn NotNode(comptime first: GroupQuery, comptime second: GroupQuery) type {
             return struct {
                 const MaxSources = QueryNode(first).MaxSources;

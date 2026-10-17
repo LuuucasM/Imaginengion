@@ -18,7 +18,6 @@ const Project = @This();
 
 pub const FILE_EXTENSION = ".imprj";
 pub const SETTINGS_FOLDER = "ProjectSettings";
-const FORMAT_VERSION: u32 = 1;
 
 /// The engine level systems that keep settings per project, by their EngineContext field. Each one's type declares:
 ///     pub const ProjectSettingsName: []const u8, so its file is ProjectSettings/<ProjectSettingsName>.json
@@ -34,7 +33,7 @@ const SETTINGS_OWNERS = [_][]const u8{
 
 const STRINGIFY_OPTIONS: std.json.Stringify.Options = .{ .whitespace = .indent_2 };
 
-/// What a built game starts from: the scene it opens, the player that views it and the game mode it runs. Each one is
+/// What a built game starts from: the scene it opens, the player that views it and the game context it runs. Each one is
 /// an object file in the project
 pub const Entry = enum {
     Scene,
@@ -56,11 +55,13 @@ pub const Entry = enum {
     }
 };
 
-/// What the project file holds: it marks the folder as a project, has the version so a later format change can tell
-/// old projects apart, and the settings that are the whole project's rather than one engine system's
+/// What the project file holds: it marks the folder as a project, and has the settings that are the whole project's
+/// rather than one engine system's
 const ProjectFile = struct {
+    /// The game's name, see mName
     Name: []const u8,
-    Version: u32,
+    /// The game window's icon, see mWindowIcon
+    WindowIcon: []const u8 = "",
     /// The game's entries, see mEntries. Empty while one isn't set
     EntryScene: []const u8 = "",
     EntryPlayer: []const u8 = "",
@@ -75,6 +76,15 @@ mFileName: std.ArrayList(u8) = .empty,
 /// The files the game starts from, each as a path from the project folder with / between folders. What building the
 /// game starts from. Empty while one isn't set
 mEntries: std.EnumArray(Entry, std.ArrayList(u8)) = .initFill(.empty),
+/// The game's name, which its window's title shows. Its own setting, not the project file's name: a new project starts
+/// with its folder's name
+mName: std.ArrayList(u8) = .empty,
+/// The image the game's window shows as its icon (title bar, taskbar), as a path from the project folder with / between
+/// folders. Empty while it isn't set, and the window keeps the one it has
+mWindowIcon: std.ArrayList(u8) = .empty,
+/// Goes up whenever what the project holds changes (opened, closed, a setting set), so what shows it can tell it is
+/// out of date
+mVersion: u32 = 0,
 
 /// Frees what the project holds without saving. The editor saves when it closes, before this runs
 pub fn Deinit(self: *Project, engine_context: *EngineContext) void {
@@ -82,6 +92,8 @@ pub fn Deinit(self: *Project, engine_context: *EngineContext) void {
     self.mPath.deinit(engine_context.EngineAllocator());
     self.mFileName.deinit(engine_context.EngineAllocator());
     for (&self.mEntries.values) |*entry| entry.deinit(engine_context.EngineAllocator());
+    self.mName.deinit(engine_context.EngineAllocator());
+    self.mWindowIcon.deinit(engine_context.EngineAllocator());
 }
 
 pub fn IsOpen(self: Project) bool {
@@ -116,18 +128,53 @@ pub fn GetEntry(self: *const Project, entry: Entry) []const u8 {
 /// Makes the file at abs_path the game's `entry`, and writes the project file. The file has to be the entry's kind
 /// of object file, inside the project folder
 pub fn SetEntry(self: *Project, engine_context: *EngineContext, entry: Entry, abs_path: []const u8) !void {
+    try self.SetFileSetting(engine_context, self.mEntries.getPtr(entry), abs_path, std.mem.span(entry.FileExtension()));
+}
+
+/// The game's name, which its window's title shows
+pub fn GetName(self: *const Project) []const u8 {
+    return self.mName.items;
+}
+
+/// Gives the game the name `name`, and writes the project file
+pub fn SetName(self: *Project, engine_context: *EngineContext, name: []const u8) !void {
     if (!self.IsOpen()) return error.NoProjectOpen;
-    if (!std.mem.eql(u8, std.fs.path.extension(abs_path), std.mem.span(entry.FileExtension()))) return error.WrongFileKind;
+    self.mName.clearRetainingCapacity();
+    try self.mName.appendSlice(engine_context.EngineAllocator(), name);
+    self.mVersion +%= 1;
+    try self.SaveProjectFile(engine_context);
+}
+
+/// The image the game's window shows as its icon, from the project folder. Empty while it isn't set
+pub fn GetWindowIcon(self: *const Project) []const u8 {
+    return self.mWindowIcon.items;
+}
+
+/// Makes the image at abs_path the game window's icon, and writes the project file. It has to be a PNG inside the
+/// project folder. An empty abs_path takes the icon away, so the game's window keeps the one it has
+pub fn SetWindowIcon(self: *Project, engine_context: *EngineContext, abs_path: []const u8) !void {
+    if (abs_path.len > 0) return try self.SetFileSetting(engine_context, &self.mWindowIcon, abs_path, ".png");
+    if (!self.IsOpen()) return error.NoProjectOpen;
+    self.mWindowIcon.clearRetainingCapacity();
+    self.mVersion +%= 1;
+    try self.SaveProjectFile(engine_context);
+}
+
+/// Makes `setting` the path from the project folder of the file at abs_path, and writes the project file. The file
+/// has to end in `extension`, and be inside the project folder
+fn SetFileSetting(self: *Project, engine_context: *EngineContext, setting: *std.ArrayList(u8), abs_path: []const u8, extension: []const u8) !void {
+    if (!self.IsOpen()) return error.NoProjectOpen;
+    if (!std.ascii.eqlIgnoreCase(std.fs.path.extension(abs_path), extension)) return error.WrongFileKind;
     const inside = abs_path.len > self.mPath.items.len + 1 and
         std.mem.startsWith(u8, abs_path, self.mPath.items) and
         std.fs.path.isSep(abs_path[self.mPath.items.len]);
     if (!inside) return error.NotInProject;
 
-    const path = self.mEntries.getPtr(entry);
-    path.clearRetainingCapacity();
-    try path.appendSlice(engine_context.EngineAllocator(), self.GetRelPath(abs_path));
+    setting.clearRetainingCapacity();
+    try setting.appendSlice(engine_context.EngineAllocator(), self.GetRelPath(abs_path));
     //the same path on every platform
-    std.mem.replaceScalar(u8, path.items, '\\', '/');
+    std.mem.replaceScalar(u8, setting.items, '\\', '/');
+    self.mVersion +%= 1;
 
     try self.SaveProjectFile(engine_context);
 }
@@ -142,6 +189,7 @@ pub fn New(self: *Project, engine_context: *EngineContext, folder_abs_path: []co
 
     const file_name = try std.fmt.allocPrint(engine_context.FrameAllocator(), "{s}{s}", .{ std.fs.path.basename(folder_abs_path), FILE_EXTENSION });
     try self.OpenFolder(engine_context, folder_abs_path, file_name);
+    try self.mName.appendSlice(engine_context.EngineAllocator(), std.fs.path.basename(folder_abs_path));
 
     inline for (SETTINGS_OWNERS) |owner_field| {
         try @field(engine_context, owner_field).ResetProjectSettings(engine_context);
@@ -150,8 +198,8 @@ pub fn New(self: *Project, engine_context: *EngineContext, folder_abs_path: []co
     try self.Save(engine_context);
 }
 
-/// Opens the project whose project file is project_file_abs_path, reads the project file and loads every owner's settings. An owner without a
-/// settings file (a project older than it) gets its defaults. The project that was open is saved and closed first
+/// Opens the project whose project file is project_file_abs_path, reads the project file and loads every owner's settings.
+/// The project that was open is saved and closed first
 pub fn Open(self: *Project, engine_context: *EngineContext, project_file_abs_path: []const u8) !void {
     const zone = Tracy.ZoneInit("Project::Open", @src());
     defer zone.Deinit();
@@ -207,10 +255,13 @@ fn CloseFolder(self: *Project, engine_context: *EngineContext) void {
     self.mPath.clearRetainingCapacity();
     self.mFileName.clearRetainingCapacity();
     for (&self.mEntries.values) |*entry| entry.clearRetainingCapacity();
+    self.mName.clearRetainingCapacity();
+    self.mWindowIcon.clearRetainingCapacity();
+    self.mVersion +%= 1;
 }
 
 fn SaveProjectFile(self: *Project, engine_context: *EngineContext) !void {
-    var project_file: ProjectFile = .{ .Name = std.fs.path.stem(self.mFileName.items), .Version = FORMAT_VERSION };
+    var project_file: ProjectFile = .{ .Name = self.GetName(), .WindowIcon = self.GetWindowIcon() };
     inline for (comptime std.enums.values(Entry)) |entry| @field(project_file, entry.FieldName()) = self.GetEntry(entry);
     try self.WriteJson(engine_context, self.mFileName.items, project_file);
 }
@@ -218,10 +269,13 @@ fn SaveProjectFile(self: *Project, engine_context: *EngineContext) !void {
 fn LoadProjectFile(self: *Project, engine_context: *EngineContext) !void {
     const frame_allocator = engine_context.FrameAllocator();
     const contents = try self.GetDirectory().readFileAlloc(engine_context.Io(), self.mFileName.items, frame_allocator, .unlimited);
-    const project_file = try std.json.parseFromSliceLeaky(ProjectFile, frame_allocator, contents, .{ .ignore_unknown_fields = true });
+    const project_file = try std.json.parseFromSliceLeaky(ProjectFile, frame_allocator, contents, .{});
     inline for (comptime std.enums.values(Entry)) |entry| {
         try self.mEntries.getPtr(entry).appendSlice(engine_context.EngineAllocator(), @field(project_file, entry.FieldName()));
     }
+    try self.mName.appendSlice(engine_context.EngineAllocator(), project_file.Name);
+    try self.mWindowIcon.appendSlice(engine_context.EngineAllocator(), project_file.WindowIcon);
+    self.mVersion +%= 1;
 }
 
 fn SettingsPath(comptime owner_field: []const u8) []const u8 {
@@ -242,10 +296,7 @@ fn SaveOwnerSettings(self: *Project, engine_context: *EngineContext, comptime ow
 fn LoadOwnerSettings(self: *Project, engine_context: *EngineContext, comptime owner_field: []const u8) !void {
     const owner = &@field(engine_context, owner_field);
 
-    const contents = self.GetDirectory().readFileAlloc(engine_context.Io(), comptime SettingsPath(owner_field), engine_context.FrameAllocator(), .unlimited) catch |err| switch (err) {
-        error.FileNotFound => return try owner.ResetProjectSettings(engine_context),
-        else => return err,
-    };
+    const contents = try self.GetDirectory().readFileAlloc(engine_context.Io(), comptime SettingsPath(owner_field), engine_context.FrameAllocator(), .unlimited);
 
     var scanner = std.json.Scanner.initCompleteInput(engine_context.FrameAllocator(), contents);
     defer scanner.deinit();

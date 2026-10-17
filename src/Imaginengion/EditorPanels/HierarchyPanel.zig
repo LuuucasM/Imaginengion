@@ -1,5 +1,5 @@
 //! A hierarchy panel, in the editor's own UI, in one of the shell's hierarchy tabs: a tree of the world's objects of one
-//! type (entities, scenes, players or game modes), the top level ones with what is under each nested below it. Scenes
+//! type (entities, scenes, players or game contexts), the top level ones with what is under each nested below it. Scenes
 //! come in stack order, the top layer first. Clicking a row selects its object, and the selected object's row is
 //! highlighted however it was selected. Every row can be dragged, carrying its object (ObjectRefComponent). Right
 //! clicking a row offers New Child, Make Template, Duplicate and Delete (and New Entity for a scene), right clicking the panel New
@@ -199,7 +199,7 @@ pub fn HierarchyPanel(comptime T: type) type {
                     try self.mAreaItems.append(engine_allocator, .{ .Item = try Widgets.MenuItem(engine_context, area_menu, "New Overlay Scene", item_options), .Action = .NewOverlay });
                 },
                 Player => try self.mAreaItems.append(engine_allocator, .{ .Item = try Widgets.MenuItem(engine_context, area_menu, "New Player", item_options), .Action = .New }),
-                GameContext => try self.mAreaItems.append(engine_allocator, .{ .Item = try Widgets.MenuItem(engine_context, area_menu, "New Game Mode", item_options), .Action = .New }),
+                GameContext => try self.mAreaItems.append(engine_allocator, .{ .Item = try Widgets.MenuItem(engine_context, area_menu, "New Game Context", item_options), .Action = .New }),
                 else => @compileError("Not an object type: " ++ @typeName(T)),
             }
         }
@@ -499,7 +499,7 @@ pub fn HierarchyPanel(comptime T: type) type {
         }
 
         /// The stripe a row starts with, in the scene's color: every scene's row, and a top level entity's (what is under
-        /// it is in the same scene). Nothing for players and game modes, which aren't in a scene
+        /// it is in the same scene). Nothing for players and game contexts, which aren't in a scene
         fn StripeOf(object: T, depth: usize) ?MathTypes.Vec4(f32) {
             return switch (T) {
                 Scene => SceneColor(object),
@@ -528,7 +528,7 @@ pub fn HierarchyPanel(comptime T: type) type {
                 Entity => "Entity",
                 Scene => "Scene",
                 Player => "Player",
-                GameContext => "Game Mode",
+                GameContext => "Game Context",
                 else => unreachable,
             };
         }

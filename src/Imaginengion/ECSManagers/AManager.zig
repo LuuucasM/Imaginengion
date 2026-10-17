@@ -19,6 +19,7 @@ const GenMetaData = AssetComponents.GenMetaData;
 const Texture2D = AssetComponents.Texture2D;
 const TextAsset = AssetComponents.TextAsset;
 const AudioAsset = AssetComponents.AudioAsset;
+const EnumAsset = AssetComponents.EnumAsset;
 const EngineContext = @import("../Core/EngineContext.zig");
 const Project = @import("../Core/Project.zig");
 
@@ -95,17 +96,21 @@ const InternalData = struct {
         .DefaultTexture2D = .{},
         .DefaultTextAsset = .{},
         .DefaultAudioAsset = .{},
+        .DefaultEnumAsset = .{},
     };
     pub fn Deinit(self: *InternalData, engine_context: *EngineContext) void {
         self.DefaultFileMetaData.Deinit(engine_context);
         self.DefaultTexture2D.Deinit(engine_context);
         self.DefaultTextAsset.Deinit(engine_context);
         self.DefaultAudioAsset.Deinit(engine_context);
+        self.DefaultEnumAsset.Deinit(engine_context);
     }
     DefaultFileMetaData: FileMetaData,
     DefaultTexture2D: Texture2D,
     DefaultTextAsset: TextAsset,
     DefaultAudioAsset: AudioAsset,
+    /// no values: an enum file that can't be read shows an empty dropdown
+    DefaultEnumAsset: EnumAsset,
 };
 
 pub const empty: AManager = .{
@@ -570,6 +575,8 @@ fn GetDefaultAsset(self: *AManager, asset_type: type) !*asset_type {
         return &self._internal.DefaultTextAsset;
     } else if (asset_type == AudioAsset) {
         return &self._internal.DefaultAudioAsset;
+    } else if (asset_type == EnumAsset) {
+        return &self._internal.DefaultEnumAsset;
     } else {
         //not every asset type has a stand-in; those just fail the load instead
         std.log.err("No default asset available for asset type {s}", .{@typeName(asset_type)});

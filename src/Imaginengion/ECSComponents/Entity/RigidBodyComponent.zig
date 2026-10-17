@@ -33,7 +33,7 @@ pub fn Deinit(_: *RigidBodyComponent, _: *EngineContext) void {}
 
 pub fn UIRender(self: *RigidBodyComponent, ui: *Inspector.Builder) !void {
     //an edit keeps the mass at its minimum or above and the inverse mass in step (the inspector's after-edit)
-    try ui.Float(&self._Mass, "Mass", .{ .Speed = 0.1, .Min = 0 });
+    try ui.Float(&self._Mass, "Mass", .{ .Speed = 0.1, .Min = MIN_MASS });
     try ui.Vec3Field(&self.mGravityScale, "Gravity Scale", .{ .Speed = 0.05 });
     try ui.Union(&self.mMaterialData, "Material", .{});
 }

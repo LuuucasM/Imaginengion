@@ -1,5 +1,5 @@
 //! Starting a game from a project's entries (Programs/GameProgram.zig): the entry scene loaded into the game world and
-//! the entry player and game mode loaded there too, UUIDs and all. No window or renderer needed. Run with `zig build test-engine`.
+//! the entry player and game context loaded there too, UUIDs and all. No window or renderer needed. Run with `zig build test-engine`.
 const std = @import("std");
 
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -88,7 +88,7 @@ fn SetName(engine_context: *EngineContext, object: anytype, comptime name_t: typ
     try name_list.appendSlice(engine_context.EngineAllocator(), name);
 }
 
-test "starting a game loads the entry scene, player and game mode into the game world" {
+test "starting a game loads the entry scene, player and game context into the game world" {
     const engine = try TestEngine.Init();
     defer engine.Deinit();
     const engine_context = engine.mEngineContext;
@@ -111,9 +111,9 @@ test "starting a game loads the entry scene, player and game mode into the game 
     });
     try engine.SaveEntry(player, .Player, "Hero.impl");
 
-    const game_mode = try engine_context.mSimulateWorld.CreateGameContext(engine_context, GameContext.DefaultConfig);
-    try SetName(engine_context, game_mode, GCNameComponent, "Rules");
-    try engine.SaveEntry(game_mode, .GameContext, "Rules.imgc");
+    const game_context = try engine_context.mSimulateWorld.CreateGameContext(engine_context, GameContext.DefaultConfig);
+    try SetName(engine_context, game_context, GCNameComponent, "Rules");
+    try engine.SaveEntry(game_context, .GameContext, "Rules.imgc");
 
     try GameProgram.StartGame(engine_context);
     const game_world = &engine_context.mGameWorld;
@@ -131,8 +131,8 @@ test "starting a game loads the entry scene, player and game mode into the game 
     //loaded rather than copied, so scripts can find them by the UUIDs saved in their files
     try std.testing.expectEqual(player_ids.items[0], game_world.GetObjectByUUID(Player, player.GetUUID()).?.mID);
 
-    const game_mode_ids = try game_world.GetGameContextGroup(frame_allocator, .{ .Component = GCNameComponent });
-    try std.testing.expectEqual(@as(usize, 1), game_mode_ids.items.len);
-    try std.testing.expectEqualStrings("Rules", game_world.GetGameContext(game_mode_ids.items[0]).GetName());
-    try std.testing.expectEqual(game_mode_ids.items[0], game_world.GetObjectByUUID(GameContext, game_mode.GetUUID()).?.mID);
+    const game_context_ids = try game_world.GetGameContextGroup(frame_allocator, .{ .Component = GCNameComponent });
+    try std.testing.expectEqual(@as(usize, 1), game_context_ids.items.len);
+    try std.testing.expectEqualStrings("Rules", game_world.GetGameContext(game_context_ids.items[0]).GetName());
+    try std.testing.expectEqual(game_context_ids.items[0], game_world.GetObjectByUUID(GameContext, game_context.GetUUID()).?.mID);
 }

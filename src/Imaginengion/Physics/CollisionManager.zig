@@ -26,9 +26,9 @@ const CollisionMask = @import("CollisionMask.zig");
 
 const ColliderQuery = GroupQuery{ .Component = ColliderComponent };
 
-/// One collider and the body it is part of: the game object it belongs to (Entity.GetMainObject), whose rigid body
+/// One collider and the body it is part of: the main object it belongs to (Entity.GetMainObject), whose rigid body
 /// and body type tag decide how the collider moves. That is the collider's own entity when it is a MainObject,
-/// otherwise the nearest ancestor that is, otherwise the root of its hierarchy. So a game object can have colliders
+/// otherwise the nearest ancestor that is, otherwise the root of its hierarchy. So a main object can have colliders
 /// on convenience children, and they all move with it as one body
 pub const BodyCollider = struct {
     mCollider: Entity.Type,
@@ -42,9 +42,9 @@ pub const ColliderGroups = struct {
     mStatic: []const BodyCollider,
 };
 
-/// Sorts every collider by its body's type. The type is on the game object the collider is part of, not on the
+/// Sorts every collider by its body's type. The type is on the main object the collider is part of, not on the
 /// collider's own entity when that is a convenience child, which one group query can not ask about: so each
-/// collider is walked up to its game object instead. A body with no rigid body, or a static one, is static: a
+/// collider is walked up to its main object instead. A body with no rigid body, or a static one, is static: a
 /// collider with no rigid body anywhere above it still collides, as a static body would
 pub fn QueryColliderGroups(world_manager: *WorldManager, frame_allocator: std.mem.Allocator) !ColliderGroups {
     const colliders = try world_manager.GetEntityGroup(frame_allocator, ColliderQuery);
@@ -101,7 +101,7 @@ const Touch = struct {
     //only good for the substep that made it, the contact lists are rebuilt on the next one
     mContactInd: u32,
     mIsTrigger: bool,
-    //the contact's colliders and game objects, kept here rather than read through mContactInd: the pair's end
+    //the contact's colliders and main objects, kept here rather than read through mContactInd: the pair's end
     //is found a substep later, once its contact is gone
     mOrigin: Entity,
     mTarget: Entity,
@@ -227,7 +227,7 @@ pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_
 
 /// Classifies one pair and records it if the two can interact at all.
 fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, origin: BodyCollider, target: BodyCollider, comptime pairing: Pairing) !void {
-    //two colliders of the same game object are one body, which never collides with itself
+    //two colliders of the same main object are one body, which never collides with itself
     if (origin.mBody == target.mBody) return;
 
     const entity_origin = world_manager.GetEntity(origin.mCollider);
@@ -691,7 +691,7 @@ fn Bounce(contact: *Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*R
 /// Moves the pair `distance` further apart along the normal (toward each other when negative), split by how
 /// pushable each side is. Callers make sure at least one side has a nonzero inverse mass
 fn MoveAlongNormal(engine_context: *EngineContext, contact: Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent, distance: f32) !void {
-    //the game objects, which their colliders on convenience children follow through the transform hierarchy
+    //the main objects, which their colliders on convenience children follow through the transform hierarchy
     const entity_origin = contact.mOriginBody;
     const entity_target = contact.mTargetBody;
     const inv_mass_origin = InvMassOf(q_rb_origin);
