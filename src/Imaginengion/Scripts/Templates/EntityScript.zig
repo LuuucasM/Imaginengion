@@ -5,7 +5,7 @@ const IM = @import("IM");
 //mSpeed: f32 = 5.0,
 //mTarget: IM.Entity = .uninit,
 
-//Hooks: take the // off any you want. Return .Continue to let the next script have its turn, .Handled to stop it here
+//Hooks: take the // off any you want. Return .Continue to let the next script have its turn, .Handled to stop it here, .Warning when something didn't go as planned. An error (try) is logged and hands back .Error
 
 //every frame
 pub fn OnUpdate(self: *@This(), engine_context: *IM.EngineContext, owner: IM.Entity) !IM.ScriptResult {

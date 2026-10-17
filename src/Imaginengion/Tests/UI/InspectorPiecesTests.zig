@@ -202,7 +202,7 @@ test "a readout shows its field as it changes, a bit set is a checkbox a bit, an
 
     const collider = try world.mObject.AddComponent(engine_context, ColliderComponent{});
     var collider_ui = world.Builder(ColliderComponent);
-    try collider_ui.Flags(&collider.mCollisionFilter.CategoryMask, "Category Mask", .{});
+    try collider_ui.Flags(&collider.mCollisionFilter.CategoryMask.mBits, "Category Mask", .{});
     const grid = world.Part(1, 1);
     var boxes: [32]Entity = undefined;
     var count: usize = 0;
@@ -275,4 +275,22 @@ test "extras add rows after a component's own, and for a component with no UIRen
     try std.testing.expectEqual(@as(usize, 1), extras.mCalls);
     try std.testing.expectEqualStrings("UUIDComponent", extras.mLastType);
     try std.testing.expectEqualStrings("extra", world.Row(world.RowCount() - 1).GetComponent(TextComponent).?.mText.items);
+}
+
+test "a bit set's checkboxes are named by Names, and a collider's by its collision layers' names" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    engine_context.mCollisionLayers.SetName(0, "Player");
+
+    const collider = try world.mObject.AddComponent(engine_context, ColliderComponent{});
+    var collider_ui = world.Builder(ColliderComponent);
+    try collider.mCollisionFilter.UIRender(&collider_ui);
+    //Trigger, then On Layers' grid
+    const grid = world.Part(1, 1);
+    var children = grid.GetIterator(.Child);
+    const first = children.next().?;
+    const second = children.next().?;
+    try std.testing.expectEqualStrings("Player", UIManager.LabelOf(first).?.GetComponent(TextComponent).?.mText.items);
+    try std.testing.expectEqualStrings("2", UIManager.LabelOf(second).?.GetComponent(TextComponent).?.mText.items);
 }

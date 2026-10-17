@@ -50,16 +50,38 @@ pub fn InstanceOf(component: *const ScriptComponent) ?Instance {
 
 /// Sets the variable called `name` of `script` (a script child, any of the four object types) to `value`: for code that
 /// puts a script on an object and fills it in, the way a widget builder does its stock script's. Nothing for a script
-/// that never loaded (why is already logged). error.NoSuchVariable if it has no variable of that name of value's kind
+/// that never loaded (why is already logged). error.NoSuchVariable if it has no variable of that name of value's kind.
+/// An enum variable is set by its value's name, so the caller needn't have the script's enum type: `.Wait` does.
+/// error.NoSuchValue if the variable's enum has no value of that name. An enum set is set by its values' names the same
+/// way (error.NoSuchValue for one the variable's hasn't), and a bit set has to have as many bits as the variable. A
+/// CollisionMask is set as it is
 pub fn Set(script: anytype, name: []const u8, value: anytype) !void {
     const T = @TypeOf(value);
-    const kind = comptime ScriptABI.FieldKind.Of(T) orelse @compileError(@typeName(T) ++ " is not something a script variable can be");
-    if (kind == .Enum) @compileError("an enum variable is set by its value's name, which Set doesn't do yet");
+    const kind: ScriptABI.FieldKind = comptime switch (@typeInfo(T)) {
+        .enum_literal, .@"enum" => .Enum,
+        else => ScriptABI.FieldKind.Of(T) orelse @compileError(@typeName(T) ++ " is not something a script variable can be"),
+    };
     const component = script.GetComponent(ScriptComponent) orelse return;
     const instance = InstanceOf(component) orelse return;
     for (instance.mInfo.Fields()) |field| {
         if (field.mKind != kind or !std.mem.eql(u8, field.Name(), name)) continue;
-        At(T, instance.mData, field).* = value;
+        const data = instance.mData;
+        switch (kind) {
+            .Enum => return SetEnumIndex(field, data, ValueIndex(field, @tagName(value)) orelse return error.NoSuchValue),
+            .Bits => {
+                if (field.mCount != T.bit_length) continue;
+                for (0..T.bit_length) |bit| SetBit(field, data, bit, value.isSet(bit));
+            },
+            .EnumSet => {
+                //every name checked before any bit is set, so a wrong one changes nothing
+                var keys = value.iterator();
+                while (keys.next()) |key| _ = ValueIndex(field, @tagName(key)) orelse return error.NoSuchValue;
+                ClearBits(field, data);
+                keys = value.iterator();
+                while (keys.next()) |key| SetBit(field, data, ValueIndex(field, @tagName(key)).?, true);
+            },
+            else => At(T, data, field).* = value,
+        }
         return;
     }
     return error.NoSuchVariable;
@@ -82,7 +104,18 @@ pub fn Write(info: *const ScriptInfo, data: *anyopaque, jw: anytype) !void {
             .Bool => try WriteField(jw, field, At(bool, data, field).*),
             .Enum => {
                 const index = EnumIndex(field, data);
-                if (index < field.mEnumCount) try WriteField(jw, field, field.EnumName(index));
+                if (index < field.mCount) try WriteField(jw, field, field.ValueName(index));
+            },
+            //the bits that are set: an enum set's by name, the others' by number. A collision layer's name can be changed
+            //in the editor, so its number is what it is
+            .Bits, .EnumSet, .CollisionMask => {
+                try jw.objectField(field.Name());
+                try jw.beginArray();
+                for (0..field.mCount) |bit| {
+                    if (!IsBitSet(field, data, bit)) continue;
+                    if (field.mKind == .EnumSet) try jw.write(field.ValueName(bit)) else try jw.write(bit);
+                }
+                try jw.endArray();
             },
             .Vec2 => {
                 const v = At(Vec2, data, field).*;
@@ -129,8 +162,21 @@ pub fn Read(engine_context: *EngineContext, script: anytype, values: std.json.Va
             .Bool => At(bool, data, field).* = if (value == .bool) value.bool else continue,
             .Enum => {
                 if (value != .string) continue;
-                for (0..field.mEnumCount) |i| {
-                    if (std.mem.eql(u8, field.EnumName(i), value.string)) SetEnumIndex(field, data, i);
+                SetEnumIndex(field, data, ValueIndex(field, value.string) orelse continue);
+            },
+            //a bit number past the variable's bits, or a name its enum no longer has, is left out
+            .Bits, .EnumSet, .CollisionMask => {
+                if (value != .array) continue;
+                ClearBits(field, data);
+                for (value.array.items) |item| {
+                    const bit = if (field.mKind == .EnumSet) switch (item) {
+                        .string => |item_name| ValueIndex(field, item_name) orelse continue,
+                        else => continue,
+                    } else switch (item) {
+                        .integer => |n| if (n >= 0 and n < field.mCount) @as(usize, @intCast(n)) else continue,
+                        else => continue,
+                    };
+                    SetBit(field, data, bit, true);
                 }
             },
             .Vec2 => {
@@ -224,7 +270,8 @@ pub fn RemapRefs(instance: Instance, ref_map: *const RefMap, world: *WorldManage
 }
 
 /// Copies variables from an old build's instance into a new build's, by name: one that is still there with the same
-/// kind keeps its value (an enum by its value's name), anything else keeps the new build's default
+/// kind keeps its value (an enum by its value's name, an enum set by its values' names, a bit set by its bits' numbers),
+/// anything else keeps the new build's default
 pub fn CarryOver(old_info: *const ScriptInfo, old_data: *anyopaque, new_info: *const ScriptInfo, new_data: *anyopaque) void {
     for (new_info.Fields()) |new_field| {
         const old_field = for (old_info.Fields()) |old_field| {
@@ -232,13 +279,27 @@ pub fn CarryOver(old_info: *const ScriptInfo, old_data: *anyopaque, new_info: *c
         } else continue;
         if (old_field.mKind != new_field.mKind) continue;
 
-        if (new_field.mKind == .Enum) {
-            const old_index = EnumIndex(old_field, old_data);
-            if (old_index >= old_field.mEnumCount) continue;
-            for (0..new_field.mEnumCount) |i| {
-                if (std.mem.eql(u8, new_field.EnumName(i), old_field.EnumName(old_index))) SetEnumIndex(new_field, new_data, i);
-            }
-            continue;
+        switch (new_field.mKind) {
+            .Enum => {
+                const old_index = EnumIndex(old_field, old_data);
+                if (old_index >= old_field.mCount) continue;
+                SetEnumIndex(new_field, new_data, ValueIndex(new_field, old_field.ValueName(old_index)) orelse continue);
+                continue;
+            },
+            .Bits, .CollisionMask => {
+                ClearBits(new_field, new_data);
+                for (0..@min(old_field.mCount, new_field.mCount)) |bit| SetBit(new_field, new_data, bit, IsBitSet(old_field, old_data, bit));
+                continue;
+            },
+            .EnumSet => {
+                ClearBits(new_field, new_data);
+                for (0..old_field.mCount) |old_bit| {
+                    if (!IsBitSet(old_field, old_data, old_bit)) continue;
+                    SetBit(new_field, new_data, ValueIndex(new_field, old_field.ValueName(old_bit)) orelse continue, true);
+                }
+                continue;
+            },
+            else => {},
         }
         if (old_field.mSize != new_field.mSize) continue;
         const from = @as([*]const u8, @ptrCast(old_data)) + old_field.mOffset;
@@ -280,10 +341,22 @@ pub fn BuildFields(engine_context: *EngineContext, parent: Entity, root: Entity,
             .U32 => try builder.UInt(At(u32, data, field), label, .{}),
             .Bool => try builder.Bool(At(bool, data, field), label, .{}),
             .Enum => {
-                const choices = try frame_allocator.alloc([]const u8, field.mEnumCount);
-                for (choices, 0..) |*choice, i| choice.* = field.EnumName(i);
+                const choices = try frame_allocator.alloc([]const u8, field.mCount);
+                for (choices, 0..) |*choice, i| choice.* = field.ValueName(i);
                 const field_ptr: *u8 = @ptrCast(@as([*]u8, @ptrCast(data)) + field.mOffset);
                 try builder.Choice(field_ptr, label, choices, EnumAccess(field.mSize), .{});
+            },
+            .Bits => try builder.BitFlags(@as([*]u8, @ptrCast(data)) + field.mOffset, field.mCount, label, .{}),
+            .EnumSet => {
+                const names = try frame_allocator.alloc([]const u8, field.mCount);
+                for (names, 0..) |*name, i| name.* = field.ValueName(i);
+                try builder.BitFlags(@as([*]u8, @ptrCast(data)) + field.mOffset, field.mCount, label, .{ .Names = names });
+            },
+            .CollisionMask => {
+                const layers = &engine_context.mCollisionLayers;
+                const names = try frame_allocator.alloc([]const u8, field.mCount);
+                for (names, 0..) |*name, layer| name.* = layers.GetName(layer);
+                try builder.BitFlags(@as([*]u8, @ptrCast(data)) + field.mOffset, field.mCount, label, .{ .Names = names });
             },
             .Vec2 => try builder.Vec2Field(At(Vec2, data, field), label, .{}),
             .Vec3 => try builder.Vec3Field(At(Vec3, data, field), label, .{}),
@@ -350,7 +423,7 @@ fn EnumIndex(field: FieldDesc, data: *anyopaque) usize {
     const bytes = @as([*]const u8, @ptrCast(data)) + field.mOffset;
     var raw: u32 = 0;
     for (0..field.mSize) |i| raw |= @as(u32, bytes[i]) << @intCast(i * 8);
-    const bits = std.math.log2_int_ceil(u32, @max(field.mEnumCount, 1));
+    const bits = std.math.log2_int_ceil(u32, @max(field.mCount, 1));
     const mask: u32 = if (bits >= 32) std.math.maxInt(u32) else (@as(u32, 1) << @intCast(bits)) - 1;
     return raw & mask;
 }
@@ -359,6 +432,35 @@ fn SetEnumIndex(field: FieldDesc, data: *anyopaque, index: usize) void {
     const bytes = @as([*]u8, @ptrCast(data)) + field.mOffset;
     const value: u32 = @intCast(index);
     for (0..field.mSize) |i| bytes[i] = @truncate(value >> @intCast(i * 8));
+}
+
+/// Where the value called `name` is among an enum's values or an enum set's bits, null if it has none of that name
+fn ValueIndex(field: FieldDesc, name: []const u8) ?usize {
+    for (0..field.mCount) |i| {
+        if (std.mem.eql(u8, field.ValueName(i), name)) return i;
+    }
+    return null;
+}
+
+//a Bits or EnumSet variable's bits are an integer, lowest bit first, so on a little endian machine bit i is in byte i / 8
+comptime {
+    std.debug.assert(@import("builtin").cpu.arch.endian() == .little);
+}
+
+fn IsBitSet(field: FieldDesc, data: *anyopaque, bit: usize) bool {
+    const bytes = @as([*]const u8, @ptrCast(data)) + field.mOffset;
+    return bytes[bit / 8] & (@as(u8, 1) << @intCast(bit % 8)) != 0;
+}
+
+fn SetBit(field: FieldDesc, data: *anyopaque, bit: usize, on: bool) void {
+    const bytes = @as([*]u8, @ptrCast(data)) + field.mOffset;
+    const mask = @as(u8, 1) << @intCast(bit % 8);
+    if (on) bytes[bit / 8] |= mask else bytes[bit / 8] &= ~mask;
+}
+
+fn ClearBits(field: FieldDesc, data: *anyopaque) void {
+    const bytes = @as([*]u8, @ptrCast(data)) + field.mOffset;
+    @memset(bytes[0..field.mSize], 0);
 }
 
 fn Float(value: std.json.Value) ?f32 {

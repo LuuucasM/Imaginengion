@@ -4,7 +4,7 @@ const IM = @import("IM");
 //Variables: shown in the Scripts panel and saved, one set per player the script is on. Each needs a default
 //mMoveSpeed: f32 = 10.0,
 
-//Hooks: take the // off any you want. Return .Continue to let the next script have its turn, .Handled to stop it here
+//Hooks: take the // off any you want. Return .Continue to let the next script have its turn, .Handled to stop it here, .Warning when something didn't go as planned. An error (try) is logged and hands back .Error
 
 //every frame
 pub fn OnUpdate(self: *@This(), engine_context: *IM.EngineContext, owner: IM.Player) !IM.ScriptResult {

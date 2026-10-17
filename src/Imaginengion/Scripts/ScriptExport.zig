@@ -157,12 +157,12 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime
             return Finish(@tagName(hook), @call(.auto, @field(Script, @tagName(hook)), .{ self, engine_context, owner.* } ++ args));
         }
 
-        /// What a hook or handler handed back, an error logged with the script's name and carried on from
+        /// What a hook or handler handed back, an error logged with the script's name and handed back as .Error
         fn Finish(comptime function_name: []const u8, result: anytype) ScriptResult {
             if (@typeInfo(@TypeOf(result)) == .error_union) {
                 return result catch |err| {
                     std.log.err("{s}.{s}: {s}", .{ script_name, function_name, @errorName(err) });
-                    return .Continue;
+                    return .Error;
                 };
             }
             return result;
@@ -318,21 +318,33 @@ fn FieldsOf(comptime Script: type, comptime script_name: []const u8) [@typeInfo(
             @compileError(script_name ++ ": " ++ name ++ " needs a default value, what a new script starts with, e.g. " ++ name ++ ": " ++ @typeName(T) ++ " = ...");
         }
         const kind = FieldKind.Of(T) orelse @compileError(script_name ++ ": " ++ name ++ " is a " ++ @typeName(T) ++
-            ", which a script variable can't be. It can be f32, i32, u32, bool, an enum, Vec2/Vec3/Vec4(f32), Entity, SceneLayer, Player or GameContext");
+            ", which a script variable can't be. It can be f32, i32, u32, bool, an enum, a std.StaticBitSet or std.EnumSet (up to 64 bits), IM.CollisionMask, Vec2/Vec3/Vec4(f32), Entity, SceneLayer, Player or GameContext");
         fields[i] = .{
             .mName = name.ptr,
             .mKind = kind,
             .mOffset = @offsetOf(Script, name),
             .mSize = @sizeOf(T),
         };
-        if (kind == .Enum) {
-            const enum_info = @typeInfo(T).@"enum";
-            for (enum_info.field_values, 0..) |value, index| {
-                if (value != index) @compileError(script_name ++ ": " ++ name ++ "'s enum has to number its values 0, 1, 2... in order");
-            }
-            const names = EnumNames(T);
-            fields[i].mEnumNames = &names;
-            fields[i].mEnumCount = names.len;
+        switch (kind) {
+            .Enum => {
+                const enum_info = @typeInfo(T).@"enum";
+                for (enum_info.field_values, 0..) |value, index| {
+                    if (value != index) @compileError(script_name ++ ": " ++ name ++ "'s enum has to number its values 0, 1, 2... in order");
+                }
+                const names = EnumNames(T);
+                fields[i].mNames = &names;
+                fields[i].mCount = names.len;
+            },
+            .Bits => fields[i].mCount = T.bit_length,
+            .CollisionMask => fields[i].mCount = T.Bits.bit_length,
+            .EnumSet => {
+                //its only field is its bits, so they are where it is
+                if (@sizeOf(T) != @sizeOf(std.StaticBitSet(T.len))) @compileError(script_name ++ ": " ++ name ++ "'s enum set isn't only its bits");
+                const names = EnumSetNames(T);
+                fields[i].mNames = &names;
+                fields[i].mCount = names.len;
+            },
+            else => {},
         }
     }
     return fields;
@@ -342,5 +354,12 @@ fn EnumNames(comptime T: type) [@typeInfo(T).@"enum".field_names.len][*:0]const 
     const enum_info = @typeInfo(T).@"enum";
     var names: [enum_info.field_names.len][*:0]const u8 = undefined;
     for (enum_info.field_names, 0..) |name, i| names[i] = name.ptr;
+    return names;
+}
+
+/// An enum set's value names, in the order of its bits (which is its Indexer's, not always the enum's)
+fn EnumSetNames(comptime T: type) [T.len][*:0]const u8 {
+    var names: [T.len][*:0]const u8 = undefined;
+    for (0..T.len) |i| names[i] = @tagName(T.Indexer.keyForIndex(i)).ptr;
     return names;
 }

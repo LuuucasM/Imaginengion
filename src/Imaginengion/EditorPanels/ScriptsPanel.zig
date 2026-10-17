@@ -46,6 +46,8 @@ mItems: std.ArrayList(ItemAction) = .empty,
 mBuiltFor: ?SelectedObject = null,
 mBuiltScripts: std.ArrayList(SelectedObject) = .empty,
 mBuiltVersions: std.ArrayList(u32) = .empty,
+/// The collision layer names the rows were built with (CollisionLayers.mVersion): a CollisionMask variable shows them
+mBuiltLayerNames: u32 = 0,
 mOptions: Widgets.Options = .{},
 
 /// Builds the panel into `page`, the shell's Scripts tab
@@ -84,8 +86,8 @@ pub fn Toggle(self: ScriptsPanel, engine_context: *EngineContext) !void {
     try self.mArea.MarkLayoutDirty(engine_context);
 }
 
-/// Once a frame, before layout, while it is shown: the rows built again if the selection or its scripts changed, and
-/// the lines above them
+/// Once a frame, before layout, while it is shown: the rows built again if the selection or its scripts changed or the
+/// collision layers were renamed, and the lines above them
 pub fn Update(self: *ScriptsPanel, engine_context: *EngineContext, selected: ?SelectedObject) !void {
     const zone = Tracy.ZoneInit("ScriptsPanel::Update", @src());
     defer zone.Deinit();
@@ -107,7 +109,8 @@ pub fn Update(self: *ScriptsPanel, engine_context: *EngineContext, selected: ?Se
         message = "Select an object to see its scripts";
     }
 
-    if (!self.IsBuiltFor(listed, scripts.items)) try self.Rebuild(engine_context, listed, scripts.items);
+    const layer_names_changed = self.mBuiltLayerNames != engine_context.mCollisionLayers.mVersion;
+    if (layer_names_changed or !self.IsBuiltFor(listed, scripts.items)) try self.Rebuild(engine_context, listed, scripts.items);
     try ShowLine(engine_context, self.mTitle, title);
     try ShowLine(engine_context, self.mMessage, message);
 }
@@ -206,6 +209,7 @@ fn Rebuild(self: *ScriptsPanel, engine_context: *EngineContext, listed: ?Selecte
     try self.mBuiltScripts.appendSlice(engine_allocator, scripts);
     for (scripts) |script| try self.mBuiltVersions.append(engine_allocator, Version(script));
     self.mBuiltFor = listed;
+    self.mBuiltLayerNames = engine_context.mCollisionLayers.mVersion;
     try self.mArea.MarkLayoutDirty(engine_context);
     if (scripts.len == 0) return;
 

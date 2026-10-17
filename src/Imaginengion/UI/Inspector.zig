@@ -147,6 +147,14 @@ pub const FieldOptions = struct {
     Rebuilds: bool = false,
 };
 
+/// For a set of bits
+pub const FlagsOptions = struct {
+    OnChange: ?OnChange = null,
+    Rebuilds: bool = false,
+    /// each bit's checkbox's name, one per bit, copied when the checkboxes are made. Numbered from 0 without them
+    Names: ?[]const []const u8 = null,
+};
+
 /// What UIRender is handed: makes a row for each field asked for, in order, under the component's section
 pub const Builder = struct {
     mEngineContext: *EngineContext,
@@ -281,16 +289,26 @@ pub const Builder = struct {
         UIManager.GetUIComponent(item, FieldBindingComponent).?.mCopies = true;
     }
 
-    /// A set of bits (a std.StaticBitSet): a numbered checkbox for each, as many to a row as fit
-    pub fn Flags(self: *Builder, field: anytype, label: []const u8, options: FieldOptions) !void {
+    /// A set of bits (a std.StaticBitSet): a checkbox for each, as many to a row as fit, each named by Names or else
+    /// numbered from 0
+    pub fn Flags(self: *Builder, field: anytype, label: []const u8, options: FlagsOptions) !void {
         const T = @typeInfo(@TypeOf(field)).pointer.child;
+        try self.BitFlags(@ptrCast(field), T.bit_length, label, options);
+    }
+
+    /// `count` bits kept as an integer, lowest bit first, starting at `field` (a std.StaticBitSet, a std.EnumSet, or a
+    /// script variable of either whose type isn't known here): a checkbox for each, as Flags makes. At most MAX_FLAGS
+    pub fn BitFlags(self: *Builder, field: [*]u8, count: usize, label: []const u8, options: FlagsOptions) !void {
+        std.debug.assert(count <= MAX_FLAGS);
+        if (options.Names) |names| std.debug.assert(names.len == count);
         const row = try self.Row(label);
         const grid = try Widgets.Grid(self.mEngineContext, .{ .Entity = row }, Widgets.PADDING / 2);
-        inline for (0..T.bit_length) |bit| {
+        for (0..count) |bit| {
             var number: [4]u8 = undefined;
-            const checkbox = try Widgets.Checkbox(self.mEngineContext, .{ .Entity = grid }, try std.fmt.bufPrint(&number, "{d}", .{bit}), self.mOptions);
+            const name = if (options.Names) |names| names[bit] else try std.fmt.bufPrint(&number, "{d}", .{bit});
+            const checkbox = try Widgets.Checkbox(self.mEngineContext, .{ .Entity = grid }, name, self.mOptions);
             var parts = checkbox.GetIterator(.Child);
-            try self.Bind(parts.next().?, field, BitAccess(T, bit), options.OnChange, null, options.Rebuilds);
+            try self.Bind(parts.next().?, field, BIT_ACCESSES[bit], options.OnChange, null, options.Rebuilds);
         }
     }
 
@@ -751,18 +769,34 @@ fn PayloadDefault(comptime P: type) P {
 }
 
 /// One bit of a bit set, as a Bool
-fn BitAccess(comptime T: type, comptime bit: usize) *const Access {
+/// The most checkboxes a Flags or BitFlags row has
+pub const MAX_FLAGS = 64;
+
+//bits kept as an integer, lowest bit first, so on a little endian machine bit i is in byte i / 8
+comptime {
+    std.debug.assert(@import("builtin").cpu.arch.endian() == .little);
+}
+
+/// Reading and writing each bit of a set of bits kept as an integer, by the bit's number
+const BIT_ACCESSES = blk: {
+    var accesses: [MAX_FLAGS]*const Access = undefined;
+    for (&accesses, 0..) |*access, bit| access.* = BitAccess(bit);
+    break :blk accesses;
+};
+
+fn BitAccess(comptime bit: usize) *const Access {
     return &struct {
         const access = Access{ .Read = Read, .Write = Write };
+        const MASK: u8 = 1 << (bit % 8);
 
         fn Read(field: *anyopaque) Value {
-            const value: *T = @ptrCast(@alignCast(field));
-            return .{ .Bool = value.isSet(bit) };
+            const bytes: [*]const u8 = @ptrCast(field);
+            return .{ .Bool = bytes[bit / 8] & MASK != 0 };
         }
 
         fn Write(_: *EngineContext, field: *anyopaque, written: Value) anyerror!void {
-            const value: *T = @ptrCast(@alignCast(field));
-            value.setValue(bit, written.Bool);
+            const bytes: [*]u8 = @ptrCast(field);
+            if (written.Bool) bytes[bit / 8] |= MASK else bytes[bit / 8] &= ~MASK;
         }
     }.access;
 }

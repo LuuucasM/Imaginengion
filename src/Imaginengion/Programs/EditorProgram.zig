@@ -98,6 +98,7 @@ const EditorShell = @import("EditorShell.zig");
 const EditorMenuBar = @import("EditorMenuBar.zig");
 const AssetHandlesPanel = @import("../EditorPanels/AssetHandlesPanel.zig");
 const AudioBusesPanel = @import("../EditorPanels/AudioBusesPanel.zig");
+const CollisionLayersPanel = @import("../EditorPanels/CollisionLayersPanel.zig");
 const ComponentsPanel = @import("../EditorPanels/ComponentsPanel.zig");
 const ContentBrowserPanel = @import("../EditorPanels/ContentBrowserPanel.zig");
 const TmplEditPanel = @import("../EditorPanels/TmplEditPanel.zig");
@@ -155,6 +156,8 @@ pub const EditorState = enum(u2) {
 mAssetHandlesPanel: AssetHandlesPanel = .{},
 /// The Audio Buses window, in the editor UI
 mAudioBusesPanel: AudioBusesPanel = .{},
+/// The Collision Layer Names window, in the editor UI, opened from the Project menu
+mCollisionLayersPanel: CollisionLayersPanel = .{},
 /// The Components tab, in the editor UI
 mComponentsPanel: ComponentsPanel = .{},
 /// The Content Browser pane, in the editor UI
@@ -265,6 +268,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process
     self.mSaveNotice = try SaveNotice.Build(engine_context, self.mEditorUIScene);
     self.mAssetHandlesPanel = try AssetHandlesPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mAudioBusesPanel = try AudioBusesPanel.Build(engine_context, self.mEditorUIScene, .{});
+    self.mCollisionLayersPanel = try CollisionLayersPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mUIElementPanel = try UIElementPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mPickingDebugPanel = try PickingDebugPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mScriptsPanel = try ScriptsPanel.Build(engine_context, self.mShell.mScriptsPage, .{});
@@ -729,6 +733,8 @@ pub fn OnUIEvent(editor_program: *anyopaque, engine_context: *EngineContext, eve
     self.mPickingDebugPanel.OnUIEvent(entity_event);
     //a rigid body's type picked
     try self.mComponentsPanel.OnUIEvent(engine_context, entity_event);
+    //a collision layer renamed
+    try self.mCollisionLayersPanel.OnUIEvent(engine_context, entity_event);
     for (self.mTmplEditPanels.items) |panel| try panel.OnUIEvent(engine_context, entity_event);
     try self.mEventScripts.OnUIEvent(engine_context, entity_event);
     return .Continue;
@@ -1149,6 +1155,7 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self.mMenuBar.Update(engine_context, .{
         .Shown = shown,
         .ProjectOpen = engine_context.mProject.IsOpen(),
+        .CollisionLayersShown = self.mCollisionLayersPanel.IsOpen(),
         .Selected = if (self.mSelectedObj) |selected_object| selected_object.Kind() else null,
         //stopping is always allowed, starting needs a run player that can be drawn
         .CanPlayStop = self.mEditorState == .Play or (if (self.mRunPlayer) |run_player| run_player.GetRenderView() != null else false),
@@ -1228,6 +1235,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
                 try self.mContentBrowserPanel.SetRoot(engine_context, engine_context.mProject.GetPath());
             }
         },
+        .ToggleCollisionLayers => try self.mCollisionLayersPanel.Toggle(engine_context),
         .SaveProject => if (engine_context.mProject.IsOpen()) try self.NoticeSave(engine_context, "project", engine_context.mProject.Save(engine_context)),
         .SetProjectEntry => |entry| {
             const extension = entry.FileExtension();
@@ -1279,6 +1287,7 @@ fn UpdateShell(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self.mStatsPanel.Update(engine_context, &engine_context.mEngineStats);
     try self.mAssetHandlesPanel.Update(engine_context);
     try self.mAudioBusesPanel.Update(engine_context);
+    try self.mCollisionLayersPanel.Update(engine_context);
     try self.mUIElementPanel.Update(engine_context, self.mSelectedObj);
     try self.mScriptsPanel.Update(engine_context, self.mSelectedObj);
     try self.mComponentsPanel.Update(engine_context, self.mSelectedObj);

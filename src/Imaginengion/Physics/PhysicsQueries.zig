@@ -13,6 +13,7 @@ const ColliderComponent = EntityComponents.ColliderComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 
 const Collisions = @import("Collisions.zig");
+const CollisionMask = @import("CollisionMask.zig");
 const UpdateWorldTransforms = @import("PhysicsManager.zig").UpdateWorldTransforms;
 
 const RayIntersect = @import("../Math/RayIntersect.zig");
@@ -28,9 +29,9 @@ const inf = std.math.inf(f32);
 pub const QueryOptions = struct {
     /// how far along the ray to look, in world units
     MaxDistance: f32 = inf,
-    /// the collision categories it hits: a collider is hit when its CategoryMask shares a bit with this. Every
-    /// category by default. A collider with no category collides with nothing in the step, and is not hit here either
-    CategoryMask: std.StaticBitSet(32) = .full,
+    /// the collision layers it hits: a collider is hit when it is on one of them (its CategoryMask shares a layer with
+    /// this). Every layer by default. A collider on no layer collides with nothing in the step, and is not hit here either
+    CategoryMask: CollisionMask = .full,
     /// triggers are passed through unless this is set
     HitTriggers: bool = false,
     /// a game object whose colliders are passed through, e.g. the one casting from inside itself
@@ -93,7 +94,7 @@ pub fn ShapeCast(engine_context: *EngineContext, world: *WorldManager, shape: Ca
         const transform = entity.GetComponent(TransformComponent) orelse continue;
 
         if (collider.mCollisionFilter.IsTrigger and !options.HitTriggers) continue;
-        if (collider.mCollisionFilter.CategoryMask.intersectWith(options.CategoryMask).findFirstSet() == null) continue;
+        if (!collider.mCollisionFilter.CategoryMask.intersects(options.CategoryMask)) continue;
         if (ignore_body) |ignore_id| {
             if (entity.GetMainObject().mID == ignore_id) continue;
         }

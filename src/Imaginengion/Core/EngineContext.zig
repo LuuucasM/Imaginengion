@@ -3,6 +3,7 @@ const Window = @import("../Windows/Window.zig");
 const AssetManager = @import("../ECSManagers/AManager.zig");
 const Project = @import("Project.zig");
 const AudioManager = @import("../AudioManager/AudioManager.zig");
+const CollisionLayers = @import("../Physics/CollisionLayers.zig");
 const InputManager = @import("../Inputs/Input.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 const Program = @import("../Programs/Program.zig");
@@ -73,6 +74,8 @@ mAppWindow: Window = .{},
 mProject: Project = .{},
 mAssetManager: AssetManager = .empty,
 mAudioManager: AudioManager = .{},
+/// The names of the collision layers, kept per project
+mCollisionLayers: CollisionLayers = .{},
 mInputManager: InputManager = .empty,
 mRenderer: Renderer = .{},
 

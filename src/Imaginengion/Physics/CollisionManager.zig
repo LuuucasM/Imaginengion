@@ -21,6 +21,8 @@ const CollisionType = @import("Collisions.zig").CollisionType;
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
 const Material = @import("Material.zig");
+const CollisionLayers = @import("CollisionLayers.zig");
+const CollisionMask = @import("CollisionMask.zig");
 
 const ColliderQuery = GroupQuery{ .Component = ColliderComponent };
 
@@ -129,6 +131,8 @@ pub fn PairKey(a: Entity.Type, b: Entity.Type) u64 {
     return @as(u64, @min(a, b)) << 32 | @as(u64, @max(a, b));
 }
 
+/// Which collision layers a collider is on and which it collides with, one bit per layer (named in CollisionLayers).
+/// Two colliders collide when each is on a layer the other collides with
 pub const CollisionFilter = struct {
     pub const default: CollisionFilter = .{
         .IsTrigger = false,
@@ -136,13 +140,16 @@ pub const CollisionFilter = struct {
         .RespondMask = .empty,
     };
     pub fn UIRender(self: *CollisionFilter, ui: *Inspector.Builder) !void {
+        const layers = &ui.mEngineContext.mCollisionLayers;
+        var names: [CollisionLayers.COUNT][]const u8 = undefined;
+        for (&names, 0..) |*name, layer| name.* = layers.GetName(layer);
         try ui.Bool(&self.IsTrigger, "Trigger", .{});
-        try ui.Flags(&self.CategoryMask, "Category", .{});
-        try ui.Flags(&self.RespondMask, "Responds To", .{});
+        try ui.Flags(&self.CategoryMask.mBits, "On Layers", .{ .Names = &names });
+        try ui.Flags(&self.RespondMask.mBits, "Collides With", .{ .Names = &names });
     }
     IsTrigger: bool,
-    CategoryMask: std.StaticBitSet(32),
-    RespondMask: std.StaticBitSet(32),
+    CategoryMask: CollisionMask,
+    RespondMask: CollisionMask,
 };
 
 pub const empty: CollisionManager = .{
@@ -544,9 +551,10 @@ pub fn EndPass(self: *CollisionManager, engine_context: *EngineContext) void {
 }
 
 fn GetCollisionType(collider_origin: *ColliderComponent, collider_target: *ColliderComponent) CollisionType {
-    const intersection_a = collider_origin.mCollisionFilter.CategoryMask.intersectWith(collider_target.mCollisionFilter.RespondMask);
-    const intersection_b = collider_target.mCollisionFilter.CategoryMask.intersectWith(collider_origin.mCollisionFilter.RespondMask);
-    if (intersection_a.findFirstSet() == null or intersection_b.findFirstSet() == null) { //if either results in an empty bitset then they do not collide at all
+    const origin_filter = collider_origin.mCollisionFilter;
+    const target_filter = collider_target.mCollisionFilter;
+    //each has to be on a layer the other collides with
+    if (!origin_filter.CategoryMask.intersects(target_filter.RespondMask) or !target_filter.CategoryMask.intersects(origin_filter.RespondMask)) {
         return .Ignore;
     }
 

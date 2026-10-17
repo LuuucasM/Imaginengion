@@ -19,6 +19,8 @@ test {
     _ = @import("Tests/Physics/PauseTests.zig");
     _ = @import("Tests/Physics/RayCastTests.zig");
     _ = @import("Tests/Physics/PhysicsQueriesTests.zig");
+    _ = @import("Tests/Physics/CollisionLayersTests.zig");
+    _ = @import("Tests/Physics/CollisionMaskTests.zig");
     _ = @import("Tests/Math/SDFFunctionsTests.zig");
     _ = @import("Tests/Renderer/ViewShapesTests.zig");
     _ = @import("Tests/Renderer/RayMarcherTests.zig");
@@ -114,6 +116,7 @@ pub const Widgets = @import("UI/Widgets.zig");
 pub const CollisionInfo = @import("Physics/Collisions.zig").CollisionInfo;
 pub const PreSolveInfo = @import("Physics/Collisions.zig").PreSolveInfo;
 pub const PhysicsQueries = @import("Physics/PhysicsQueries.zig");
+pub const CollisionMask = @import("Physics/CollisionMask.zig");
 
 //Rendering Stuff -------------------------------------------
 pub const PushConstants = @import("Renderer/RenderPipeline.zig").PushConstants;

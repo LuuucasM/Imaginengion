@@ -10,6 +10,7 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
 const MathTypes = @import("../Math/MathTypes.zig");
+const CollisionMask = @import("../Physics/CollisionMask.zig");
 const KeyboardPressedEvent = @import("../Events/WindowEventData.zig").KeyboardPressedEvent;
 const PointerEvent = @import("../Events/PointerEventData.zig").PointerEvent;
 const UIEvent = @import("../Events/UIEventData.zig").UIEvent;
@@ -22,6 +23,12 @@ pub const ScriptResult = enum(u8) {
     Handled = 0,
     /// on to the next: the object's other scripts with this hook, the scenes below for a key, the parents for a click
     Continue = 1,
+    /// the script ran but something didn't go as planned (not an error): a script hands this back itself. For now it
+    /// goes on to the next one the same as .Continue
+    Warning = 2,
+    /// something went wrong in the script: a hook that returns an error hands this back. For now it goes on to the
+    /// next one the same as .Continue
+    Error = 3,
 };
 
 /// Which of the four object types a script goes on, from the type of its hooks' owner parameter
@@ -143,6 +150,12 @@ pub const FieldKind = enum(u8) {
     Bool,
     /// an enum whose values are 0, 1, 2... in order, 8, 16 or 32 bits
     Enum,
+    /// a std.StaticBitSet of up to MAX_BITS bits, each shown by its number
+    Bits,
+    /// a std.EnumSet of an enum with up to MAX_BITS values, each bit named after its value
+    EnumSet,
+    /// a set of collision layers, each bit shown by its layer's name (CollisionLayers)
+    CollisionMask,
     Vec2,
     Vec3,
     Vec4,
@@ -165,11 +178,26 @@ pub const FieldKind = enum(u8) {
             Scene => .Scene,
             Player => .Player,
             GameContext => .GameContext,
-            else => if (@typeInfo(T) == .@"enum" and switch (@sizeOf(T)) {
+            CollisionMask => .CollisionMask,
+            else => if (IsStaticBitSet(T)) .Bits else if (IsEnumSet(T)) .EnumSet else if (@typeInfo(T) == .@"enum" and switch (@sizeOf(T)) {
                 1, 2, 4 => true,
                 else => false,
             }) .Enum else null,
         };
+    }
+
+    /// The most bits a Bits or EnumSet variable can have: each is a checkbox
+    pub const MAX_BITS = 64;
+
+    fn IsStaticBitSet(comptime T: type) bool {
+        if (@typeInfo(T) != .@"struct" or !@hasDecl(T, "bit_length")) return false;
+        return T.bit_length > 0 and T.bit_length <= MAX_BITS and T == std.StaticBitSet(T.bit_length);
+    }
+
+    fn IsEnumSet(comptime T: type) bool {
+        if (@typeInfo(T) != .@"struct" or !@hasDecl(T, "Key")) return false;
+        if (@typeInfo(T.Key) != .@"enum") return false;
+        return T == std.EnumSet(T.Key) and T.len > 0 and T.len <= MAX_BITS;
     }
 
     /// The object type of an object variable: a handle to an object in the same world, saved as the object's UUID
@@ -191,16 +219,19 @@ pub const FieldDesc = extern struct {
     /// where it is in the script's struct, and how many bytes it takes
     mOffset: u32,
     mSize: u32,
-    /// an enum's value names, in value order
-    mEnumNames: ?[*]const [*:0]const u8 = null,
-    mEnumCount: u32 = 0,
+    /// an enum's value names, in value order, or an enum set's, in the order of its bits. Null for anything else
+    mNames: ?[*]const [*:0]const u8 = null,
+    /// how many values an enum has, or bits a Bits, EnumSet or CollisionMask has. Those keep their bits as an integer,
+    /// lowest first, so bit i is in byte i / 8 (the engine is little endian)
+    mCount: u32 = 0,
 
     pub fn Name(self: FieldDesc) []const u8 {
         return std.mem.span(self.mName);
     }
 
-    pub fn EnumName(self: FieldDesc, index: usize) []const u8 {
-        return std.mem.span(self.mEnumNames.?[index]);
+    /// The name of an enum's value, or an enum set's bit, by its place among them
+    pub fn ValueName(self: FieldDesc, index: usize) []const u8 {
+        return std.mem.span(self.mNames.?[index]);
     }
 };
 

@@ -6,6 +6,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
 const PhysicsQueries = @import("../../Physics/PhysicsQueries.zig");
+const CollisionMask = @import("../../Physics/CollisionMask.zig");
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const ColliderComponent = EntityComponents.ColliderComponent;
@@ -98,8 +99,7 @@ test "a ray passes through triggers, other categories and the game object it ign
     const last = try world.Collider(.Box, .{ .x = 4, .y = 0, .z = 0 });
 
     //category 0 only, so the category 3 box is passed through too
-    var only_zero: std.StaticBitSet(32) = .empty;
-    only_zero.set(0);
+    const only_zero: CollisionMask = .initOne(0);
     const hit = (try world.RayCast(ALONG_X, .{ .CategoryMask = only_zero, .Ignore = ignored })).?;
     try std.testing.expectEqual(last.mID, hit.Collider.mID);
 

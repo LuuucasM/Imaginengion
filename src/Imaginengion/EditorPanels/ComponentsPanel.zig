@@ -75,6 +75,8 @@ mGameContextList: GameContextList = .{},
 /// The object the components were built for, and which of its list's components it had then
 mBuiltFor: ?SelectedObject = null,
 mBuiltPresent: u64 = 0,
+/// The collision layer names it was built with (CollisionLayers.mVersion): a collider's checkboxes show them
+mBuiltLayerNames: u32 = 0,
 /// The buttons it added under components, and the rigid body type dropdown, if there is one
 mButtons: std.ArrayList(ButtonAction) = .empty,
 mBodyType: ?Entity = null,
@@ -136,7 +138,8 @@ pub fn Update(self: *ComponentsPanel, engine_context: *EngineContext, selected: 
     }
 
     const present = PresentOf(object);
-    const stale = if (self.mBuiltFor) |built| !SameObject(built, object) or present != self.mBuiltPresent or self.TakeRebuild(engine_context) else true;
+    const layer_names = engine_context.mCollisionLayers.mVersion;
+    const stale = if (self.mBuiltFor) |built| !SameObject(built, object) or present != self.mBuiltPresent or layer_names != self.mBuiltLayerNames or self.TakeRebuild(engine_context) else true;
     if (stale) try self.Rebuild(engine_context, object, present);
     try ShowLine(engine_context, self.mTitle, NameOf(object));
     try ShowLine(engine_context, self.mMessage, if (present == 0) "No components yet. Right click to add one" else "");
@@ -303,6 +306,7 @@ fn Rebuild(self: *ComponentsPanel, engine_context: *EngineContext, object: Selec
     self.mPossessBox = null;
     self.mBuiltFor = object;
     self.mBuiltPresent = present;
+    self.mBuiltLayerNames = engine_context.mCollisionLayers.mVersion;
     switch (object) {
         .entity => |entity| try self.mEntityList.Build(engine_context, self.mArea, self.mArea, entity, self.mOptions, self),
         .scene_layer => |scene| try self.mSceneList.Build(engine_context, self.mArea, self.mArea, scene, self.mOptions, self),
