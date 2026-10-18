@@ -64,7 +64,7 @@ test "a tree of only the roots it is handed, with no menu of its own and no Dele
     try std.testing.expectEqual(@as(usize, 0), tree.mAreaItems.items.len);
 
     //its own selection, not the editor's
-    try tree.Run(engine_context, tree.ActionOf(tree.mRows.items[1].Header).?, &engine_context.mTmplEditWorld, &selected);
+    try tree.Run(engine_context, tree.ActionOf(tree.mRows.items[1].Header, tree.mRows.items[1].Header).?, &engine_context.mTmplEditWorld, &selected);
     try std.testing.expectEqual(child.mID, selected.?.entity.mID);
 
     const Delete = struct {

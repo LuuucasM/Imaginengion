@@ -209,7 +209,7 @@ pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, asset_sou
     } else {
         const new_asset_id = switch (asset_source) {
             .File => |f| try self.CreateAssetFile(engine_context, f),
-            .Computed => try self.CreateAssetGen(engine_allocator),
+            .Computed => try self.CreateAssetGen(engine_context),
             .Default => unreachable,
         };
 
@@ -283,12 +283,12 @@ pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_
             asset_component.Init(engine_context, abs_path, file_data.mRelPath.items, asset_file) catch |err| {
                 if (err == error.AssetInitFailed) {
                     std.log.err("Failed To initialize asset {s} for asset type {s}\n", .{ abs_path, @typeName(asset_type) });
-                    _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), asset_id, LoadFailedTag{});
+                    _ = try self.mECSManager.AddComponentSync(engine_context, asset_id, LoadFailedTag{});
                     return try self.GetDefaultAsset(asset_type);
                 } else return err;
             };
 
-            return self.mECSManager.AddComponent(engine_context.EngineAllocator(), asset_id, asset_component);
+            return self.mECSManager.AddComponentSync(engine_context, asset_id, asset_component);
         }
     } else {
         return try self.GetDefaultAsset(asset_type);
@@ -502,7 +502,7 @@ pub fn OnManagerEvents(self: *AManager, engine_context: *EngineContext, event: E
             }
             //for the next frame, so what was built from the old contents can catch up (see FileChangedTag)
             if (!self.mECSManager.HasComponent(FileChangedTag, e.mAssetID)) {
-                _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), e.mAssetID, FileChangedTag{});
+                _ = try self.mECSManager.AddComponentSync(engine_context, e.mAssetID, FileChangedTag{});
             }
         },
         .ToDestroyAsset => |e| {
@@ -531,13 +531,13 @@ fn CreateAssetFile(self: *AManager, engine_context: *EngineContext, file_source:
 
     const new_asset_id = try self.mECSManager.CreateEntity(engine_allocator);
 
-    _ = try self.mECSManager.AddComponent(engine_allocator, new_asset_id, AssetMetaData{ .mRefs = 0 });
+    _ = try self.mECSManager.AddComponentSync(engine_context, new_asset_id, AssetMetaData{ .mRefs = 0 });
 
     var file_meta_data = FileMetaData{
         .mPathType = file_source.path_type,
     };
     _ = try file_meta_data.mRelPath.print(engine_allocator, "{s}", .{file_source.rel_path});
-    const new_file_data = try self.mECSManager.AddComponent(engine_allocator, new_asset_id, file_meta_data);
+    const new_file_data = try self.mECSManager.AddComponentSync(engine_context, new_asset_id, file_meta_data);
 
     const file = try self.OpenFile(engine_context, file_source.rel_path, file_source.path_type);
     defer self.CloseFile(engine_context.Io(), file);
@@ -548,14 +548,14 @@ fn CreateAssetFile(self: *AManager, engine_context: *EngineContext, file_source:
     return new_asset_id;
 }
 
-fn CreateAssetGen(self: *AManager, engine_allocator: std.mem.Allocator) !AssetHandle.Type {
+fn CreateAssetGen(self: *AManager, engine_context: *EngineContext) !AssetHandle.Type {
     const zone = Tracy.ZoneInit("AssetManager::CreateAssetGen", @src());
     defer zone.Deinit();
 
-    const new_asset_id = try self.mECSManager.CreateEntity(engine_allocator);
+    const new_asset_id = try self.mECSManager.CreateEntity(engine_context.EngineAllocator());
 
-    _ = try self.mECSManager.AddComponent(engine_allocator, new_asset_id, AssetMetaData{ .mRefs = 0 });
-    _ = try self.mECSManager.AddComponent(engine_allocator, new_asset_id, GenMetaData{});
+    _ = try self.mECSManager.AddComponentSync(engine_context, new_asset_id, AssetMetaData{ .mRefs = 0 });
+    _ = try self.mECSManager.AddComponentSync(engine_context, new_asset_id, GenMetaData{});
 
     return new_asset_id;
 }
@@ -596,7 +596,7 @@ fn MarkForDelete(self: *AManager, engine_context: *EngineContext, asset_id: Asse
         return;
     }
 
-    _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), asset_id, PendingDelete{
+    _ = try self.mECSManager.AddComponentSync(engine_context, asset_id, PendingDelete{
         .mReason = error_flags,
         .mTime = std.Io.Timestamp.now(engine_context.Io(), .awake),
     });

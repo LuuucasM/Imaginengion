@@ -173,7 +173,7 @@ test "a click selects, and the selected object's row is highlighted however it w
     const villain_row = for (entities.mRows.items) |row| {
         if (row.Object.mID == villain.mID) break row;
     } else unreachable;
-    try entities.Run(engine_context, entities.ActionOf(villain_row.Header).?, game_world, &selected);
+    try entities.Run(engine_context, entities.ActionOf(villain_row.Header, villain_row.Header).?, game_world, &selected);
     try std.testing.expectEqual(villain.mID, selected.?.entity.mID);
     try entities.Update(engine_context, game_world, selected);
     try std.testing.expect(villain_row.Header.HasComponent(SelectedTag));
@@ -183,6 +183,28 @@ test "a click selects, and the selected object's row is highlighted however it w
     try std.testing.expect(!villain_row.Header.HasComponent(SelectedTag));
     try entities.Update(engine_context, game_world, .{ .scene_layer = level });
     for (entities.mRows.items) |row| try std.testing.expect(!row.Header.HasComponent(SelectedTag));
+}
+
+test "clicking a top level entity's stripe selects its scene, and a child row has no stripe" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+    const level = try game_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const hero = try level.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try hero.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    var entities = try world.Panel(Entity);
+    defer entities.Deinit(engine_context.EngineAllocator());
+    try entities.Update(engine_context, game_world, null);
+
+    const hero_row = entities.mRows.items[0];
+    const stripe = hero_row.Stripe.?.Bar;
+    var selected: ?SelectedObject = null;
+    //the click goes to the stripe and then to the row it is in: the row's is the one with the action
+    try std.testing.expect(entities.ActionOf(stripe, stripe) == null);
+    try entities.Run(engine_context, entities.ActionOf(hero_row.Header, stripe).?, game_world, &selected);
+    try std.testing.expectEqual(level.mID, selected.?.scene_layer.mID);
+    try std.testing.expect(entities.mRows.items[1].Stripe == null);
 }
 
 test "the row menu acts on the row it was opened on, and the panel's menu makes new objects" {

@@ -1,6 +1,7 @@
 //! An entity's UI element (UIElementComponent and the UIManager's elements): every way an entity gets the component
-//! leaves it with an element of its own pointing back at it, and an element nothing points at any more is let go at
-//! the end of the frame. No window or renderer needed. Run with `zig build test-engine`.
+//! leaves it with an element of its own pointing back at it, and however the component goes (removed, its entity or a
+//! parent deleted, its world cleared) its element goes with it at the end of the frame. No window or renderer needed.
+//! Run with `zig build test-engine`.
 const std = @import("std");
 
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -113,25 +114,30 @@ test "removing the component or deleting the entity lets the element go at the e
     try std.testing.expect(!deleted_element.IsActive());
 }
 
-test "an element no entity points at is let go of" {
+test "deleting an entity lets the elements of everything inside it go, and no other" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
 
-    const stray = try engine_context.mUIManager.NewElement(engine_context);
-    try world.EndFrame();
-    try std.testing.expect(!stray.IsActive());
+    const parent = try world.EntityWithElement();
+    const parent_element = try ExpectOwnElement(parent);
+    const child = try parent.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    _ = try child.AddComponent(engine_context, UIElementComponent{});
+    const child_element = try ExpectOwnElement(child);
+    const grandchild = try child.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    _ = try grandchild.AddComponent(engine_context, UIElementComponent{});
+    const grandchild_element = try ExpectOwnElement(grandchild);
+    const other = try world.EntityWithElement();
+    const other_element = try ExpectOwnElement(other);
 
-    //nor one an entity has moved on from: given a new element, the old one goes
-    const entity = try world.EntityWithElement();
-    const old = try ExpectOwnElement(entity);
-    entity.GetComponent(UIElementComponent).?.mElement = .uninit;
-    try engine_context.mUIManager.Adopt(engine_context, entity);
-    const new = try ExpectOwnElement(entity);
-    try std.testing.expect(old.mID != new.mID);
+    try parent.Delete(engine_context);
+    //still there until the end of the frame, like the entities
+    try std.testing.expect(parent_element.IsActive());
     try world.EndFrame();
-    try std.testing.expect(!old.IsActive());
-    try std.testing.expect(new.IsActive());
+    try std.testing.expect(!parent_element.IsActive());
+    try std.testing.expect(!child_element.IsActive());
+    try std.testing.expect(!grandchild_element.IsActive());
+    try std.testing.expect(other_element.IsActive());
 }
 
 test "a duplicated entity gets an element of its own" {

@@ -113,6 +113,7 @@ const UIECSEvent = UIManager.ECSManagerT.ECSEventManager.EventType;
 const HierarchyPanel = @import("../EditorPanels/HierarchyPanel.zig").HierarchyPanel;
 
 const WorldManager = @import("../Core/WorldManager.zig");
+const WorldBVH = @import("../Core/WorldBVH.zig");
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
 const ScreenRect = @import("../Math/ScreenRect.zig");
@@ -354,6 +355,25 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     }
     //==============End Incoming Network packets
 
+    //----------------Start Build BVH------------------
+    //before the inputs: picking (UpdatePointer) walks it. Right after last frame's commit, so what is in each world
+    //can't change until the next one
+    {
+        const build_bvh_zone = Tracy.ZoneInit("Build BVH", @src());
+        defer build_bvh_zone.Deinit();
+        const stats = &engine_context.mEngineStats;
+        try engine_context.mGameWorld.BuildBVH(engine_context);
+        stats.GameWorldStats.mBVHStats.Collect(engine_context.mGameWorld.mBVH);
+        try engine_context.mEditorWorld.BuildBVH(engine_context);
+        stats.EditorWorldStats.mBVHStats.Collect(engine_context.mEditorWorld.mBVH);
+        try engine_context.mTmplEditWorld.BuildBVH(engine_context);
+        if (self.mEditorState == .Play) {
+            try engine_context.mSimulateWorld.BuildBVH(engine_context);
+            stats.SimulateWorldStats.mBVHStats.Collect(engine_context.mSimulateWorld.mBVH);
+        }
+    }
+    //------------------END BUild BVH
+
     //-------------Inputs Begin------------------
     {
         const input_zone = Tracy.ZoneInit("Inputs Section", @src());
@@ -492,6 +512,20 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     }
     //---------------End World Transform Update ------------
 
+    //----------------Start Refit BVH------------------
+    //everything where it is drawn: moved by physics, scripts and layout since the build. What the render walks
+    {
+        const refit_bvh_zone = Tracy.ZoneInit("Refit BVH", @src());
+        defer refit_bvh_zone.Deinit();
+        engine_context.mGameWorld.mBVH.Refit(engine_context, &engine_context.mGameWorld, WorldBVH.ALL_ITEMS);
+        engine_context.mEditorWorld.mBVH.Refit(engine_context, &engine_context.mEditorWorld, WorldBVH.ALL_ITEMS);
+        engine_context.mTmplEditWorld.mBVH.Refit(engine_context, &engine_context.mTmplEditWorld, WorldBVH.ALL_ITEMS);
+        if (self.mEditorState == .Play) {
+            engine_context.mSimulateWorld.mBVH.Refit(engine_context, &engine_context.mSimulateWorld, WorldBVH.ALL_ITEMS);
+        }
+    }
+    //------------------END Refit BVH
+
     //---------Render Begin-------------
     {
         const render_zone = Tracy.ZoneInit("Render Section", @src());
@@ -520,9 +554,9 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     }
     //--------------Outgoing Networking End---------------
 
-    //-----------------Start End of Frame-----------------
+    //-----------------Start Frame Cleanup-----------------
     {
-        const end_frame_zone = Tracy.ZoneInit("End Frame Section", @src());
+        const end_frame_zone = Tracy.ZoneInit("Frame Cleanup", @src());
         defer end_frame_zone.Deinit();
 
         //Process window events
@@ -584,8 +618,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         engine_context.mSystemEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);
         engine_context.mEditorEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);
     }
-    //-----------------End End of Frame-------------------
-
+    //-----------------End Frame Cleanup-------------------
 }
 
 /// The single synchronous entry point for every event type in the engine. Every event manager's
@@ -603,7 +636,6 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 ///
 /// The event pointer is only valid for the duration of this call: copy, never store it.
 pub fn OnEvent(self: *EditorProgram, engine_context: *EngineContext, event: anytype) anyerror!EventResult {
-
     const T = @TypeOf(event.*);
 
     if (T == WindowEvent) {
@@ -697,14 +729,14 @@ pub fn OnPointerEvent(editor_program: *anyopaque, engine_context: *EngineContext
                 .NewScene => try self.RunMenuAction(engine_context, .NewGameScene),
                 else => try self.mContentBrowserPanel.Run(engine_context, action),
             };
-            if (self.mScenePanel.ActionOf(entity)) |action| try self.mScenePanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
-            if (self.mEntityPanel.ActionOf(entity)) |action| try self.mEntityPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
-            if (self.mPlayerPanel.ActionOf(entity)) |action| try self.mPlayerPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
-            if (self.mGameContextPanel.ActionOf(entity)) |action| try self.mGameContextPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
+            if (self.mScenePanel.ActionOf(entity, click.mTarget)) |action| try self.mScenePanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
+            if (self.mEntityPanel.ActionOf(entity, click.mTarget)) |action| try self.mEntityPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
+            if (self.mPlayerPanel.ActionOf(entity, click.mTarget)) |action| try self.mPlayerPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
+            if (self.mGameContextPanel.ActionOf(entity, click.mTarget)) |action| try self.mGameContextPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
             for (self.mTmplEditPanels.items) |*panel| {
                 if (panel.IsSaveButton(entity)) {
                     try self.NoticeSave(engine_context, panel.Name(), panel.Save(engine_context));
-                } else try panel.OnLeftClick(engine_context, entity);
+                } else try panel.OnLeftClick(engine_context, entity, click.mTarget);
             }
         } else if (click.mButton == .BUTTON_RIGHT) {
             for (self.mTmplEditPanels.items) |*panel| try panel.OnRightClick(engine_context, entity);

@@ -392,3 +392,57 @@ test "a walk passes over branches with none of its mask" {
     //the root's mask says what is anywhere under it
     try std.testing.expectEqual(@as(u32, BVH.Mask.PHYSICS), nodes.items[0].ItemMask());
 }
+
+test "a box walk reaches every item whose box overlaps the query and has the mask, and an item of another mask never" {
+    var prng = std.Random.DefaultPrng.init(0xB0B5);
+    const random = prng.random();
+    const items = try RandomItems(random, 300);
+    defer std.testing.allocator.free(items);
+    //half the items physics' instead, so whole branches can be skipped by mask
+    for (items, 0..) |*item, i| item.Mask = if (i % 2 == 0) BVH.Mask.RENDER else BVH.Mask.PHYSICS;
+    var nodes = try BuildTree(items);
+    defer nodes.deinit(std.testing.allocator);
+
+    const Collect = struct {
+        mItems: []const BVH.Item,
+        mBox: Aabb,
+        mFound: std.ArrayList(u32) = .empty,
+
+        pub fn Visit(self: *@This(), item_ind: u32) !void {
+            const item = self.mItems[item_ind];
+            if (item.Mask & BVH.Mask.PHYSICS == 0 or !item.Bounds.Overlaps(self.mBox)) return;
+            try self.mFound.append(std.testing.allocator, item.Id);
+        }
+    };
+
+    var queries_with_hits: usize = 0;
+    for (0..200) |_| {
+        const center = Vec3(f32){ .x = random.float(f32) * 24 - 12, .y = random.float(f32) * 24 - 12, .z = random.float(f32) * 24 - 12 };
+        const box = BoxAt(center, 0.1 + random.float(f32) * 3);
+
+        var collect = Collect{ .mItems = items, .mBox = box };
+        defer collect.mFound.deinit(std.testing.allocator);
+        try BVH.WalkBox(nodes.items, box, BVH.Mask.PHYSICS, &collect);
+
+        //what trying every item finds
+        var expected: std.ArrayList(u32) = .empty;
+        defer expected.deinit(std.testing.allocator);
+        for (items) |item| {
+            if (item.Mask & BVH.Mask.PHYSICS != 0 and item.Bounds.Overlaps(box)) try expected.append(std.testing.allocator, item.Id);
+        }
+        std.sort.pdq(u32, collect.mFound.items, {}, std.sort.asc(u32));
+        std.sort.pdq(u32, expected.items, {}, std.sort.asc(u32));
+        try std.testing.expectEqualSlices(u32, expected.items, collect.mFound.items);
+        if (expected.items.len > 0) queries_with_hits += 1;
+    }
+    //the queries weren't all misses
+    try std.testing.expect(queries_with_hits > 50);
+}
+
+test "boxes overlap when they share any point, edges touching included" {
+    const a = BoxAt(.{ .x = 0, .y = 0, .z = 0 }, 1);
+    try std.testing.expect(a.Overlaps(BoxAt(.{ .x = 2, .y = 0, .z = 0 }, 1)));
+    try std.testing.expect(!a.Overlaps(BoxAt(.{ .x = 2.01, .y = 0, .z = 0 }, 1)));
+    try std.testing.expect(!a.Overlaps(BoxAt(.{ .x = 0, .y = 0, .z = -2.5 }, 1)));
+    try std.testing.expect(a.Grow(0.5).Overlaps(BoxAt(.{ .x = 0, .y = 0, .z = -2.5 }, 1)));
+}

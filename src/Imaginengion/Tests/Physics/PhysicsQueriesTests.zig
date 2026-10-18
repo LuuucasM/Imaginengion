@@ -49,11 +49,14 @@ const TestWorld = struct {
         return entity;
     }
 
+    /// A query in a new frame: the world's tree built over what is in it now, the way the top of a frame builds it
     fn RayCast(self: *TestWorld, ray: PhysicsQueries.Ray, options: PhysicsQueries.QueryOptions) !?PhysicsQueries.PhysicsHit {
+        try self.mEngineContext.mEditorWorld.BuildBVH(self.mEngineContext);
         return PhysicsQueries.RayCast(self.mEngineContext, &self.mEngineContext.mEditorWorld, ray, options);
     }
 
     fn ShapeCast(self: *TestWorld, shape: PhysicsQueries.CastShape, ray: PhysicsQueries.Ray, options: PhysicsQueries.QueryOptions) !?PhysicsQueries.PhysicsHit {
+        try self.mEngineContext.mEditorWorld.BuildBVH(self.mEngineContext);
         return PhysicsQueries.ShapeCast(self.mEngineContext, &self.mEngineContext.mEditorWorld, shape, ray, options);
     }
 };
@@ -187,4 +190,107 @@ test "a box cast against a turned box stops at its corner" {
     try std.testing.expectApproxEqAbs(@as(f32, -0.5 - std.math.sqrt1_2), hit.Position.x, 0.002);
     try std.testing.expectApproxEqAbs(@as(f32, -1), hit.Normal.x, 0.01);
     try std.testing.expect(!hit.StartedInside);
+}
+
+//--------------------------------------------on the world's tree--------------------------------------------
+
+/// The same query by walking the tree and by testing every collider: the same collider, distance and normal
+fn ExpectSameAsLinear(world: *TestWorld, shape: PhysicsQueries.CastShape, ray: PhysicsQueries.Ray, options: PhysicsQueries.QueryOptions) !bool {
+    const engine_context = world.mEngineContext;
+    const by_tree = try PhysicsQueries.ShapeCast(engine_context, &engine_context.mEditorWorld, shape, ray, options);
+    const by_testing_all = try PhysicsQueries.ShapeCastLinear(engine_context, &engine_context.mEditorWorld, shape, ray, options);
+    try std.testing.expectEqual(by_testing_all == null, by_tree == null);
+    const expected = by_testing_all orelse return false;
+    const actual = by_tree.?;
+    try std.testing.expectEqual(expected.Collider.mID, actual.Collider.mID);
+    try std.testing.expectEqual(expected.T, actual.T);
+    try std.testing.expectEqual(expected.Normal.x, actual.Normal.x);
+    try std.testing.expectEqual(expected.Normal.y, actual.Normal.y);
+    try std.testing.expectEqual(expected.Normal.z, actual.Normal.z);
+    return true;
+}
+
+test "a query on the world's tree hits the same collider as testing every one" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    //spheres and boxes, some turned, rounded, scaled or triggers, in a 30 unit cube
+    var prng = std.Random.DefaultPrng.init(0x9E661E);
+    const random = prng.random();
+    var ignored: Entity = undefined;
+    for (0..150) |i| {
+        const position = Vec3(f32){ .x = random.float(f32) * 30 - 15, .y = random.float(f32) * 30 - 15, .z = random.float(f32) * 30 - 15 };
+        const entity = try world.Collider(if (i % 2 == 0) .Box else .Sphere, position);
+        const collider = entity.GetComponent(ColliderComponent).?;
+        if (i % 3 == 0) try entity.SetRotation(engine_context, (Vec3(f32){ .x = random.float(f32) * 3, .y = random.float(f32) * 3, .z = random.float(f32) * 3 }).RadiansToQuat());
+        if (i % 4 == 0) try entity.SetScale(engine_context, .{ .x = 1 + random.float(f32) * 2, .y = 1 + random.float(f32), .z = 1 });
+        if (i % 5 == 0) collider.mCornerRadius = 0.2;
+        if (i % 7 == 0) collider.mCollisionFilter.IsTrigger = true;
+        if (i == 10) ignored = entity;
+    }
+    try engine_context.mEditorWorld.BuildBVH(engine_context);
+
+    var hits: usize = 0;
+    for (0..300) |i| {
+        const origin = Vec3(f32){ .x = random.float(f32) * 40 - 20, .y = random.float(f32) * 40 - 20, .z = random.float(f32) * 40 - 20 };
+        //aimed at a point among the colliders, so most rays pass through the crowd
+        const target = Vec3(f32){ .x = random.float(f32) * 20 - 10, .y = random.float(f32) * 20 - 10, .z = random.float(f32) * 20 - 10 };
+        var dir = target.SubVec(origin);
+        dir.Normalize();
+        const ray = PhysicsQueries.Ray{ .Origin = origin, .Dir = dir };
+        const shape: PhysicsQueries.CastShape = switch (i % 3) {
+            0 => .{ .Sphere = 0 },
+            1 => .{ .Sphere = 0.1 + random.float(f32) },
+            else => .{ .Box = .{ .HalfExtents = .{ .x = 0.3, .y = 0.6, .z = 0.2 }, .Rotation = (Vec3(f32){ .x = 0, .y = 0, .z = 0.7 }).RadiansToQuat() } },
+        };
+        const options = PhysicsQueries.QueryOptions{
+            .MaxDistance = if (i % 4 == 0) 10 else std.math.inf(f32),
+            .HitTriggers = i % 5 == 0,
+            .Ignore = if (i % 6 == 0) ignored else null,
+            .SkipStartedInside = i % 8 != 0,
+        };
+        if (try ExpectSameAsLinear(world, shape, ray, options)) hits += 1;
+    }
+    //enough of them hit something to have checked the walk
+    try std.testing.expect(hits > 60);
+}
+
+test "a query right after something moves finds it where it was moved to, with no new frame" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const editor_world = &engine_context.mEditorWorld;
+
+    const wall = try world.Collider(.Box, .{ .x = 0, .y = 0, .z = 0 });
+    _ = try world.Collider(.Box, .{ .x = 0, .y = 50, .z = 0 });
+    try editor_world.BuildBVH(engine_context);
+
+    //moved far off the ray, where the tree built this frame doesn't have it
+    try wall.SetTranslation(engine_context, .{ .x = 0, .y = 30, .z = 0 });
+    try std.testing.expect(try PhysicsQueries.RayCast(engine_context, editor_world, ALONG_X, .{}) == null);
+
+    //and a ray along y through where it is now finds it
+    const along_y = PhysicsQueries.Ray{ .Origin = .{ .x = 0, .y = 20, .z = 0 }, .Dir = .{ .x = 0, .y = 1, .z = 0 } };
+    const hit = (try PhysicsQueries.RayCast(engine_context, editor_world, along_y, .{})).?;
+    try std.testing.expectEqual(wall.mID, hit.Collider.mID);
+    try std.testing.expectApproxEqAbs(@as(f32, 9.5), hit.T, eps);
+}
+
+test "a query only hits colliders in its own layer" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const hud = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const game_wall = try world.Collider(.Box, .{ .x = 0, .y = 0, .z = 0 });
+    const hud_wall = try hud.CreateEntity(engine_context, Entity.DefaultConfig);
+    var collider: ColliderComponent = .{ .mShape = .Box };
+    collider.mCollisionFilter.CategoryMask.set(0);
+    _ = try hud_wall.AddComponent(engine_context, collider);
+    try hud_wall.SetTranslation(engine_context, .{ .x = -2, .y = 0, .z = 0 });
+
+    //the overlay box is nearer along the ray, but it is in canvas units, not the game's
+    try std.testing.expectEqual(game_wall.mID, (try world.RayCast(ALONG_X, .{})).?.Collider.mID);
+    try std.testing.expectEqual(hud_wall.mID, (try world.RayCast(ALONG_X, .{ .Layer = .OverlayLayer })).?.Collider.mID);
 }

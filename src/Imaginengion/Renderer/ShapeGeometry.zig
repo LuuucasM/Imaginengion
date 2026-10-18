@@ -361,6 +361,37 @@ pub fn GetTextParams(transform: *const TransformComponent, text: *const TextComp
     };
 }
 
+/// One laid out letter's box (TextLayout.GlyphPlacement): its pen placed by the text's transform, then the letter's box
+/// off the pen in its own plane, stretched by the text's scale. Placed by the canvas for overlay text, and in canvas
+/// units with none. What the renderer draws and the world's tree bounds, so the two can't disagree
+pub fn GlyphBox(transform: *const TransformComponent, params: TextParams, glyph: TextLayout.GlyphPlacement, canvas: ?CanvasTransform) Box {
+    const text_pos = transform.GetWorldPosition();
+    const text_rot = transform.GetWorldRotation();
+    const stretch = params.Stretch;
+
+    //every glyph turns with the text, and with the canvas on top of that
+    const glyph_rot = if (canvas) |c| c.ToWorldRotation(text_rot) else text_rot;
+    const size_scale: f32 = if (canvas) |c| c.Scale else 1.0;
+
+    //the layout is in the text's own space, so the whole line turns with the transform instead of each glyph turning in
+    //place along world x
+    const local_pen = Vec3(f32){ .x = (glyph.Pen.x - params.LeftBound) * stretch.x, .y = glyph.Pen.y * stretch.y, .z = 0 };
+    var pen_pos = text_pos.AddVec(local_pen.QuatRotate(text_rot));
+    if (canvas) |c| pen_pos = c.ToWorldPoint(pen_pos);
+
+    //the box sits PlaneCenter off the pen in the glyph's own plane
+    const plane_offset = (Vec3(f32){ .x = glyph.PlaneCenter.x * stretch.x * size_scale, .y = glyph.PlaneCenter.y * stretch.y * size_scale, .z = 0 }).QuatRotate(glyph_rot);
+    return .{
+        .Center = pen_pos.AddVec(plane_offset),
+        .Rotation = glyph_rot,
+        .HalfExtents = .{
+            .x = glyph.HalfExtents.x * @abs(stretch.x) * size_scale,
+            .y = glyph.HalfExtents.y * @abs(stretch.y) * size_scale,
+            .z = THICKNESS_2D,
+        },
+    };
+}
+
 /// The whole text area: across the full left to right bounds, and from the first line's ascender down
 /// to the last line's descender, since the bounds say nothing about height. Placed by the text's own
 /// transform, then by the canvas for overlay text. Generic over the font like TextLayout, so a test

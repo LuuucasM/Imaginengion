@@ -17,6 +17,12 @@ const WorldManager = @import("../Core/WorldManager.zig");
 const SkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const UpdateWorldTransforms = @import("PhysicsManager.zig").UpdateWorldTransforms;
 const PhysicsEventManager = @import("PhysicsManager.zig").EventManagerT;
+const SUB_STEP_DT = @import("PhysicsManager.zig").SUB_STEP_DT;
+const WorldBVH = @import("../Core/WorldBVH.zig");
+const BVH = @import("../Core/BVH.zig");
+const Aabb = @import("../Math/Aabb.zig");
+const OverlayLayerTag = EntityComponents.OverlayLayerTag;
+const GameLayerTag = EntityComponents.GameLayerTag;
 const CollisionType = @import("Collisions.zig").CollisionType;
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
@@ -184,13 +190,103 @@ pub fn Reset(self: *CollisionManager, engine_allocator: std.mem.Allocator) void 
     _ = engine_allocator;
 }
 
-///Checks the whole scene for objects that can possibly collide.
-/// For the contact sets the entity origin, target, and collision type.
-/// groups is QueryColliderGroups, fetched once by the caller for every substep rather than re-queried
-/// here each time.
+/// How a collider's body moves, which decides what the broad pass pairs it with
+const BodyKind = enum { Dynamic, Kinematic, Static };
+
+/// A collider the broad pass can pair, by its id: its body and how that moves
+const Pairable = struct {
+    mBodyCollider: BodyCollider,
+    mKind: BodyKind,
+};
+
+/// Finds every pair of colliders that might meet this substep: each moving collider walks its layer's tree in the
+/// world's BVH with its box, grown by how far it can reach (WorldBVH.ColliderBounds), and pairs with the colliders whose
+/// boxes it overlaps. Only pairs that can interact are kept, the same as BroadPassLinear, which tries every pair:
+/// - a dynamic body can be pushed, so it pairs with anything. Two dynamic ones are paired from the lower collider id
+/// - a kinematic body against a static or another kinematic one: neither can be pushed, so all such a pair can give is
+///   the event of them touching. Built only when one side is a trigger (see AddBroadPair's TriggerOnly)
+/// - static colliders never walk: neither side of a static pair ever moves
+/// A layer's tree only holds its own colliders, so game and overlay colliders never pair. The tree has to be refit to
+/// this substep (PhysicsManager.Step). groups is QueryColliderGroups, fetched once by the caller for every substep
 pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, groups: ColliderGroups) !void {
     const zone = Tracy.ZoneInit("CollisionManager::BroadPass", @src());
     defer zone.Deinit();
+
+    //what each collider the tree can hand back is, by id
+    const frame_allocator = engine_context.FrameAllocator();
+    var pairables: std.AutoHashMapUnmanaged(Entity.Type, Pairable) = .empty;
+    try pairables.ensureTotalCapacity(frame_allocator, @intCast(groups.mDynamic.len + groups.mKinematic.len + groups.mStatic.len));
+    for (groups.mDynamic) |body_collider| pairables.putAssumeCapacity(body_collider.mCollider, .{ .mBodyCollider = body_collider, .mKind = .Dynamic });
+    for (groups.mKinematic) |body_collider| pairables.putAssumeCapacity(body_collider.mCollider, .{ .mBodyCollider = body_collider, .mKind = .Kinematic });
+    for (groups.mStatic) |body_collider| pairables.putAssumeCapacity(body_collider.mCollider, .{ .mBodyCollider = body_collider, .mKind = .Static });
+
+    for (groups.mDynamic) |origin| try self.PairNearby(engine_context, world_manager, &pairables, origin, .Dynamic);
+    for (groups.mKinematic) |origin| try self.PairNearby(engine_context, world_manager, &pairables, origin, .Kinematic);
+
+    Tracy.Plot("Physics/Broad Pairs", .{ .color = 0x795548 }, self._BlockingContacts.items.len + self._OverlapContacts.items.len);
+}
+
+/// Pairs one moving collider with the colliders in its layer's tree whose boxes overlap its own
+fn PairNearby(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, pairables: *const std.AutoHashMapUnmanaged(Entity.Type, Pairable), origin: BodyCollider, comptime origin_kind: BodyKind) !void {
+    const entity = world_manager.GetEntity(origin.mCollider);
+    const box = WorldBVH.ColliderBounds(entity) orelse return;
+    const tree = if (entity.HasComponent(OverlayLayerTag))
+        world_manager.mBVH.Tree(.OverlayLayer)
+    else if (entity.HasComponent(GameLayerTag))
+        world_manager.mBVH.Tree(.GameLayer)
+    else
+        return;
+
+    const Visitor = struct {
+        mManager: *CollisionManager,
+        mEngineContext: *EngineContext,
+        mWorld: *WorldManager,
+        mPairables: *const std.AutoHashMapUnmanaged(Entity.Type, Pairable),
+        mTree: *const WorldBVH.LayerTree,
+        mOrigin: BodyCollider,
+        mBox: Aabb,
+
+        pub fn Visit(visitor: *const @This(), item_ind: u32) !void {
+            const item = visitor.mTree.mBVHItems.items[item_ind];
+            if (item.Mask & BVH.Mask.PHYSICS == 0 or !item.Bounds.Overlaps(visitor.mBox)) return;
+            const target_id = visitor.mTree.mItems.items[item_ind].Entity;
+            if (target_id == visitor.mOrigin.mCollider) return;
+            const target = visitor.mPairables.get(target_id) orelse return;
+            const lower = visitor.mOrigin.mCollider < target_id;
+            switch (origin_kind) {
+                .Dynamic => switch (target.mKind) {
+                    .Dynamic => if (lower) try visitor.Pair(target, .Any),
+                    .Kinematic, .Static => try visitor.Pair(target, .Any),
+                },
+                //a dynamic one has already found it
+                .Kinematic => switch (target.mKind) {
+                    .Dynamic => {},
+                    .Kinematic => if (lower) try visitor.Pair(target, .TriggerOnly),
+                    .Static => try visitor.Pair(target, .TriggerOnly),
+                },
+                .Static => unreachable,
+            }
+        }
+
+        fn Pair(visitor: *const @This(), target: Pairable, comptime pairing: Pairing) !void {
+            try visitor.mManager.AddBroadPair(visitor.mEngineContext, visitor.mWorld, visitor.mOrigin, target.mBodyCollider, pairing);
+        }
+    };
+    const visitor = Visitor{
+        .mManager = self,
+        .mEngineContext = engine_context,
+        .mWorld = world_manager,
+        .mPairables = pairables,
+        .mTree = tree,
+        .mOrigin = origin,
+        .mBox = box,
+    };
+    try BVH.WalkBox(tree.mNodes.items, box, BVH.Mask.PHYSICS, &visitor);
+}
+
+/// BroadPass by trying every pair that can interact, with no tree: what BroadPass's pairs are checked against in the
+/// tests. Never called by the engine, so it isn't compiled into it
+pub fn BroadPassLinear(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, groups: ColliderGroups) !void {
 
     //a dynamic body can be pushed, so every pair with one in it can need solving: dynamic against everything
     for (0..groups.mDynamic.len) |i| {
@@ -221,8 +317,6 @@ pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_
             try self.AddBroadPair(engine_context, world_manager, groups.mKinematic[i], groups.mKinematic[j], .TriggerOnly);
         }
     }
-
-    Tracy.Plot("Physics/Broad Pairs", .{ .color = 0x795548 }, self._BlockingContacts.items.len + self._OverlapContacts.items.len);
 }
 
 /// Classifies one pair and records it if the two can interact at all.
@@ -570,6 +664,15 @@ fn GetCollisionType(collider_origin: *ColliderComponent, collider_target: *Colli
 /// A collider without a rigid body cannot be moved by the solver, which is exactly a static body
 fn InvMassOf(q_rb: ?*RigidBodyComponent) f32 {
     return if (q_rb) |rb| rb._InvMass else 0.0;
+}
+
+/// How far past its shape a collider can reach in one substep: as far as its body moves at the speed it has now, plus
+/// half of SPECULATIVE_MARGIN. Two colliders the narrow pass would keep as a pair (SpeculativeReach) are never further
+/// apart than their two reaches added up, so boxes grown by them always overlap: what the broad pass finds pairs by
+pub fn SubstepReach(collider: Entity) f32 {
+    const body = collider.GetMainObject();
+    const speed = VelocityOf(body, body.GetComponent(RigidBodyComponent)).Len();
+    return speed * SUB_STEP_DT + SPECULATIVE_MARGIN * 0.5;
 }
 
 /// A static body never moves, so whatever velocity it was given is not what it hits with

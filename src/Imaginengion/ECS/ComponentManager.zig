@@ -154,29 +154,15 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
         }
 
-        /// Copies the original's components onto an already created entity.
-        /// The hierarchy components and the entity/script tag are left out: the caller owns those,
-        /// because a copy belongs in its own place in the hierarchy rather than the original's.
-        pub fn DuplicateEntity(self: *Self, engine_context: *EngineContext, original_entity_id: entity_t, new_entity_id: entity_t) !void {
-            std.debug.assert(self.IsActiveEntity(original_entity_id));
-            std.debug.assert(self.IsActiveEntity(new_entity_id));
+        /// A copy of one of the entity's components in `arena`, for DuplicateEntity to stage onto the copy
+        pub fn StageDuplicate(self: *Self, engine_context: *EngineContext, arena: std.mem.Allocator, component_ind: usize, original_entity_id: entity_t) !*anyopaque {
+            std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(original_entity_id));
+            return try self.mComponentsArrays.items[component_ind].StageDuplicate(engine_context, arena, original_entity_id);
+        }
 
-            // a copy of the skipfield, because the arrays below move as components are added
-            var original_skipfield = self.GetComponent(SkipFieldComponent, original_entity_id).?.mSkipField;
-
-            var field_iter = original_skipfield.Iterator();
-            while (field_iter.next()) |comp_arr_ind| {
-                if (comp_arr_ind == ParentComponent.Ind) continue;
-                if (comp_arr_ind == ChildComponent.Ind) continue;
-                if (comp_arr_ind == SkipFieldComponent.Ind) continue;
-                if (comp_arr_ind == EntityTagComponent.Ind) continue;
-                if (comp_arr_ind == ScriptTagComponent.Ind) continue;
-
-                try self.mComponentsArrays.items[comp_arr_ind].DuplicateEntity(engine_context, original_entity_id, new_entity_id);
-
-                // the copy tracks its own components, and the skipfield is refetched because that add moved things
-                self.GetComponent(SkipFieldComponent, new_entity_id).?.mSkipField.ChangeToUnskipped(comp_arr_ind);
-            }
+        /// A copy of a staged component in `arena`, for an ECS copy to have staged adds of its own
+        pub fn CloneStaged(self: *Self, engine_context: *EngineContext, arena: std.mem.Allocator, component_ind: usize, source: *const anyopaque) !*anyopaque {
+            return try self.mComponentsArrays.items[component_ind].CloneStaged(engine_context, arena, source);
         }
 
         pub fn AddComponent(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component: anytype) !*@TypeOf(component) {
@@ -200,6 +186,27 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             entity_skipfield.mSkipField.ChangeToSkipped(component_ind);
 
             self.mComponentsArrays.items[component_ind].RemoveComponent(engine_context, entity_id);
+        }
+
+        /// Copies a staged component (see ECSManager.AddComponent) onto the entity
+        pub fn AddStaged(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize, staged: *anyopaque) !void {
+            std.debug.assert(component_ind < components_types.len + BuiltinComponentCount);
+            std.debug.assert(component_ind != SkipFieldComponent.Ind); // only added through entity creation
+            std.debug.assert(!self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
+
+            // added before the skipfield bit is set, so a failed add leaves the entity as it was
+            try self.mComponentsArrays.items[component_ind].AddStaged(engine_allocator, entity_id, staged);
+            self.GetComponent(SkipFieldComponent, entity_id).?.mSkipField.ChangeToUnskipped(component_ind);
+        }
+
+        /// Whether the component in this slot is zero sized
+        pub fn IsTag(self: Self, component_ind: usize) bool {
+            return self.mComponentsArrays.items[component_ind].mIsTag;
+        }
+
+        /// Deinitializes a staged component that will never be added
+        pub fn DeinitStaged(self: *Self, engine_context: *EngineContext, component_ind: usize, staged: *anyopaque) void {
+            self.mComponentsArrays.items[component_ind].DeinitStaged(engine_context, staged);
         }
 
         pub fn HasComponent(self: Self, comptime component_type: type, entityID: entity_t) bool {

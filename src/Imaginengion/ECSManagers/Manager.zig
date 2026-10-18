@@ -143,78 +143,97 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn CreateChild(self: *Self, engine_context: *EngineContext, parent_id: UnderlyingObjType(Self), child_type: ECSManager.ChildType, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {
-            const new_child: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.AddChild(engine_context.EngineAllocator(), parent_id, child_type), .mManager = ObjManager(self) };
+            const new_child: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.AddChild(engine_context, parent_id, child_type), .mManager = ObjManager(self) };
             try self.ApplyConfig(engine_context, new_child.mID, config);
             return new_child;
         }
 
+        /// Adds the component, staged if its type is locked (see ECSManager.AddComponent), and sets off what adding it
+        /// does (OnComponentAdded) right away. Returns the staged copy for a staged one
         pub fn AddComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), new_component: anytype) !*@TypeOf(new_component) {
-            const component_ptr = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), obj_id, new_component);
+            const component_t = @TypeOf(new_component);
+            _ = try self.mECSManager.AddComponent(engine_context, obj_id, new_component);
+            try OnComponentAdded(self, engine_context, obj_id, Self.ECSManagerT.ComponentInd(component_t));
+            //fetched again: what OnComponentAdded adds can move a component that went on right away
+            return self.mECSManager.GetComponent(component_t, obj_id).?;
+        }
 
-            //a transform that has just been added has never been through a transform pass, so its
-            //world values are still the InternalData defaults. Those defaults only happen to be
-            //right for a root sitting at the origin: a child needs the pass to pick up its parent's
-            //world transform, or it renders at the origin at its own local size. This is the one
-            //place every route goes through (ApplyConfig, Entity's own AddComponent, the components
-            //panel, deserialization), so none of them has to remember to tag. The tag lands in a
-            //different sparse set, so component_ptr stays valid.
-            if (comptime Self == EManager and @TypeOf(new_component) == EntityTransformComponent) {
-                if (!self.mECSManager.HasComponent(TransformDirtyTag, obj_id)) {
-                    _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), obj_id, TransformDirtyTag{});
-                }
-            }
+        /// Adds the component now, see ECSManager.AddComponentSync for when that is safe, and runs OnComponentAdded
+        /// for it before returning
+        pub fn AddComponentSync(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), new_component: anytype) !*@TypeOf(new_component) {
+            const component_t = @TypeOf(new_component);
+            _ = try self.mECSManager.AddComponentSync(engine_context, obj_id, new_component);
+            try OnComponentAdded(self, engine_context, obj_id, Self.ECSManagerT.ComponentInd(component_t));
+            //fetched again: what OnComponentAdded adds can move it
+            return self.mECSManager.GetComponent(component_t, obj_id).?;
+        }
 
-            //what a layout tree is laid out from: the settings, and the text a leaf fits to. The same one place every
-            //route goes through as the transform above, so a component added in the panel, from code, from a file
-            //or from a template all lay their tree out. On an entity that isn't in any layout the tag is just
-            //cleared by the next layout pass
-            if (comptime Self == EManager and (@TypeOf(new_component) == LayoutComponent or
-                @TypeOf(new_component) == LayoutItemComponent or
-                @TypeOf(new_component) == TextComponent))
-            {
+        /// What adding a component to an object sets off, run by AddComponent and AddComponentSync as soon as the
+        /// component is added. Every route a component comes in by ends in one of the two (code, the components panel,
+        /// a file, a template), so none of them has to remember any of this. A staged component reads as on its object
+        /// (see ECSManager.AddComponent), so all of it can read the component it is about either way.
+        /// anyerror because it adds components through AddComponent, which comes back here
+        pub fn OnComponentAdded(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), component_ind: usize) anyerror!void {
+            const ECSManagerT = Self.ECSManagerT;
+
+            if (comptime Self == EManager) {
                 const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
-                try entity.MarkLayoutDirty(engine_context);
+
+                //a transform that has just been added has never been through a transform pass, so its
+                //world values are still the InternalData defaults. Those defaults only happen to be
+                //right for a root sitting at the origin: a child needs the pass to pick up its parent's
+                //world transform, or it renders at the origin at its own local size
+                if (component_ind == ECSManagerT.ComponentInd(EntityTransformComponent)) {
+                    if (!self.mECSManager.HasComponent(TransformDirtyTag, obj_id)) {
+                        _ = try self.mECSManager.AddComponentSync(engine_context, obj_id, TransformDirtyTag{});
+                    }
+                }
+
+                //what a layout tree is laid out from: the settings, and the text a leaf fits to. On an entity that
+                //isn't in any layout the tag is just cleared by the next layout pass
+                if (component_ind == ECSManagerT.ComponentInd(LayoutComponent) or
+                    component_ind == ECSManagerT.ComponentInd(LayoutItemComponent) or
+                    component_ind == ECSManagerT.ComponentInd(TextComponent))
+                {
+                    try entity.MarkLayoutDirty(engine_context);
+                }
+
+                //what a style reads: the state tags, and the parts it colors. A styled entity is restyled only when
+                //one of these comes or goes (see StyleSystem)
+                if (_IsStateTagInd(component_ind) or
+                    component_ind == ECSManagerT.ComponentInd(ShapeComponent) or
+                    component_ind == ECSManagerT.ComponentInd(SurfaceComponent) or
+                    component_ind == ECSManagerT.ComponentInd(TextComponent))
+                {
+                    try MarkStyleDirty(engine_context, entity, component_ind);
+                }
+
+                //an entity taking a UI element: a new one if the component came without, and either way pointed back
+                //at the entity
+                if (component_ind == ECSManagerT.ComponentInd(UIElementComponent)) {
+                    try engine_context.mUIManager.Adopt(engine_context, entity);
+                }
+
+                //a new rigid body gets a type tag if it has none, and its mass and inverse mass put in step with it
+                if (component_ind == ECSManagerT.ComponentInd(RigidBodyComponent)) {
+                    try entity.SyncRigidBody(engine_context);
+                }
+
+                //a body type tag replaces the type the body had, see Entity.OnBodyTypeTagAdded
+                inline for (Entity.BodyTypeTags) |tag_type| {
+                    if (component_ind == ECSManagerT.ComponentInd(tag_type)) try entity.OnBodyTypeTagAdded(engine_context, tag_type);
+                }
             }
 
             //a UI element's component may need another to go with it, e.g. a scroll needs a scroll state
-            if (comptime Self == UIManager) try self.OnElementComponentAdded(engine_context, obj_id, @TypeOf(new_component));
+            if (comptime Self == UIManager) try self.OnElementComponentAdded(engine_context, obj_id, component_ind);
+        }
 
-            //what a style reads: the state tags, and the parts it colors. The same one place every route goes through,
-            //so a styled entity is restyled only when one of these comes or goes (see StyleSystem)
-            if (comptime Self == EManager and (StyleSystem.IsStateTag(@TypeOf(new_component)) or
-                @TypeOf(new_component) == ShapeComponent or
-                @TypeOf(new_component) == SurfaceComponent or
-                @TypeOf(new_component) == TextComponent))
-            {
-                const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
-                try MarkStyleDirty(engine_context, entity, @TypeOf(new_component));
+        fn _IsStateTagInd(component_ind: usize) bool {
+            inline for (StyleSystem.StateTags) |tag_type| {
+                if (component_ind == Self.ECSManagerT.ComponentInd(tag_type)) return true;
             }
-
-            //an entity taking a UI element: a new one if the component came without, and either way pointed back at the
-            //entity. Every route a component comes in by ends here: code, the panel, a file, a template
-            if (comptime Self == EManager and @TypeOf(new_component) == UIElementComponent) {
-                const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
-                try engine_context.mUIManager.Adopt(engine_context, entity);
-            }
-
-            //a new rigid body gets a type tag if it has none, and its mass and inverse mass put in step with it.
-            //every way a body comes in goes through here: code, the panel, a file, a template
-            if (comptime Self == EManager and @TypeOf(new_component) == RigidBodyComponent) {
-                const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
-                try entity.SyncRigidBody(engine_context);
-            }
-
-            //a body type tag replaces the type the body had, see Entity.OnBodyTypeTagAdded
-            if (comptime Self == EManager) {
-                inline for (Entity.BodyTypeTags) |tag_type| {
-                    if (@TypeOf(new_component) == tag_type) {
-                        const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
-                        try entity.OnBodyTypeTagAdded(engine_context, tag_type);
-                    }
-                }
-            }
-
-            return component_ptr;
+            return false;
         }
 
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), comptime component_type: type) !void {
@@ -241,14 +260,14 @@ pub fn Core(comptime Self: type) type {
             try self.mECSManager.RemoveComponentSync(engine_context, obj_id, @TypeOf(self.mECSManager).ComponentInd(component_type));
             if (comptime Self == EManager and StyleSystem.IsStateTag(component_type)) {
                 const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
-                try MarkStyleDirty(engine_context, entity, component_type);
+                try MarkStyleDirty(engine_context, entity, Self.ECSManagerT.ComponentInd(component_type));
             }
         }
 
-        /// A styled entity restyled after `component_type` came or went: it alone, or everything inside it too for
-        /// DisabledTag, which they all show
-        fn MarkStyleDirty(engine_context: *EngineContext, entity: Entity, comptime component_type: type) !void {
-            if (component_type == DisabledTag) {
+        /// A styled entity restyled after the component in `component_ind` came or went: it alone, or everything
+        /// inside it too for DisabledTag, which they all show
+        fn MarkStyleDirty(engine_context: *EngineContext, entity: Entity, component_ind: usize) !void {
+            if (component_ind == Self.ECSManagerT.ComponentInd(DisabledTag)) {
                 try engine_context.mUIManager.MarkStyleDirtyTree(engine_context, entity);
             } else {
                 try engine_context.mUIManager.MarkStyleDirty(engine_context, entity);

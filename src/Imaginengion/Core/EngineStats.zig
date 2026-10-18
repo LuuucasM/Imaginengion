@@ -4,6 +4,7 @@ const EngineContext = @import("EngineContext.zig");
 const WorldManager = @import("WorldManager.zig");
 const Tracy = @import("Tracy.zig");
 const BVH = @import("BVH.zig");
+const WorldBVH = @import("WorldBVH.zig");
 const EntityTagComponent = @import("../ECS/Components.zig").EntityTagComponent;
 const ScriptTagComponent = @import("../ECS/Components.zig").ScriptTagComponent;
 
@@ -73,13 +74,26 @@ pub const RateCounter = struct {
     }
 };
 
+/// The world's own trees (WorldBVH), as built at the start of the frame
+pub const WorldBVHStats = struct {
+    Overlay: BVH.TreeStats = .{},
+    Game: BVH.TreeStats = .{},
+
+    pub fn Collect(self: *WorldBVHStats, world_bvh: WorldBVH) void {
+        self.Overlay = world_bvh.mOverlay.Stats();
+        self.Game = world_bvh.mGame.Stats();
+    }
+};
+
 pub const WorldStats = struct {
     mRenderStats: RenderStats = .{},
     mECSStats: ECSStats = .{},
+    mBVHStats: WorldBVHStats = .{},
 
     pub fn ResetStats(self: *WorldStats) void {
         self.mRenderStats.ResetStats();
         self.mECSStats.ResetStats();
+        self.mBVHStats = .{};
     }
 
 };

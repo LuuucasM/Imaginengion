@@ -31,6 +31,7 @@ const Collisions = @import("Collisions.zig");
 const Contact = Collisions.Contact;
 
 const Tracy = @import("../Core/Tracy.zig");
+const BVH = @import("../Core/BVH.zig");
 
 const PhysicsManager = @This();
 
@@ -59,7 +60,7 @@ const SUB_STEPS: u32 = 2;
 const IDENTITY_POSITION: Vec3(f32) = .{ .x = 0.0, .y = 0.0, .z = 0.0 };
 const IDENTITY_ROTATION: Quat(f32) = .{ .w = 1.0, .x = 0.0, .y = 0.0, .z = 0.0 };
 const IDENTITY_SCALE: Vec3(f32) = .{ .x = 1.0, .y = 1.0, .z = 1.0 };
-const SUB_STEP_DT: f32 = PHYSICS_DT / @as(f32, @floatFromInt(SUB_STEPS));
+pub const SUB_STEP_DT: f32 = PHYSICS_DT / @as(f32, @floatFromInt(SUB_STEPS));
 
 /// What the steps have to report, e.g. the collisions that began. Nothing in here listens to it:
 /// whoever steps the world processes it afterwards, see ProcessEvents
@@ -190,6 +191,9 @@ fn Step(self: *PhysicsManager, engine_context: *EngineContext, world_manager: *W
 
         //where the bodies start the substep, which is what the contacts are measured from
         try UpdateWorldTransforms(world_manager, engine_context);
+        //and the world's tree with them: only the colliders, all the broad pass walks. Also takes in whatever moved
+        //since the tree was built, before physics, so no refit is needed ahead of the step
+        world_manager.mBVH.Refit(engine_context, world_manager, BVH.Mask.PHYSICS);
 
         try self._CollisionManager.BroadPass(engine_context, world_manager, collider_groups);
         self._CollisionManager.NarrowPass(SUB_STEP_DT);

@@ -10,8 +10,9 @@
 //! An element is never left without its entity, or shared by two. Every way an entity gets its component goes through
 //! Adopt, which hands it a fresh element if it has none and points the element back at it: added in the panel or from
 //! code, read from a file, copied from a template (Manager.AddComponent), duplicated (Manager.Duplicate) and copied
-//! with its whole world (WorldManager.Copy). The other way round, an element whose entity is gone or has moved on is
-//! deleted at the end of the frame (EndFrame).
+//! with its whole world (WorldManager.Copy). The other way round, an element goes with its entity's component: however
+//! the component goes (removed, its entity deleted, its world cleared), its Deinit deletes the element at the end of
+//! the frame (EndFrame).
 //!
 //! The program running the frame only talks to the UI through here, at these points of the frame:
 //!   - OnInputEvent for the window's input events, after the pointer system has had them; key presses go through
@@ -317,7 +318,7 @@ pub fn GetManager(self: *UIManager, comptime obj_t: type) *UIManager {
 pub fn NewElement(self: *UIManager, engine_context: *EngineContext) !UIElement {
     const engine_allocator = engine_context.EngineAllocator();
     const element_id = try self.mECSManager.CreateEntity(engine_allocator);
-    _ = try self.mECSManager.AddComponent(engine_allocator, element_id, ElementOwnerComponent{});
+    _ = try self.mECSManager.AddComponentSync(engine_context, element_id, ElementOwnerComponent{});
     return .{ .mID = element_id, .mManager = self };
 }
 
@@ -325,6 +326,7 @@ pub fn NewElement(self: *UIManager, engine_context: *EngineContext) !UIElement {
 /// if there is no original
 pub fn CopyElement(self: *UIManager, engine_context: *EngineContext, original: UIElement) !UIElement {
     const copy = try self.NewElement(engine_context);
+    errdefer copy.Delete(engine_context) catch {};
     if (!original.IsActive()) return copy;
     inline for (UIComponents.SerializeList) |component_type| {
         if (original.GetComponent(component_type)) |component| {
@@ -436,11 +438,11 @@ pub fn StyleOnce(root: Entity) void {
 
 /// Called by Manager.AddComponent for every component an element gets: one that scrolls gets somewhere to keep how far
 /// it is scrolled
-pub fn OnElementComponentAdded(self: *UIManager, engine_context: *EngineContext, element_id: UIElement.Type, comptime component_type: type) !void {
-    if (component_type == ScrollComponent and !self.mECSManager.HasComponent(ScrollStateComponent, element_id)) {
-        _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), element_id, ScrollStateComponent{});
+pub fn OnElementComponentAdded(self: *UIManager, engine_context: *EngineContext, element_id: UIElement.Type, component_ind: usize) !void {
+    if (component_ind == ECSManagerT.ComponentInd(ScrollComponent) and !self.mECSManager.HasComponent(ScrollStateComponent, element_id)) {
+        _ = try self.mECSManager.AddComponentSync(engine_context, element_id, ScrollStateComponent{});
     }
-    if (component_type == StyleComponent) try self.MarkElementStyleDirty(engine_context, .{ .mID = element_id, .mManager = self });
+    if (component_ind == ECSManagerT.ComponentInd(StyleComponent)) try self.MarkElementStyleDirty(engine_context, .{ .mID = element_id, .mManager = self });
 }
 
 /// Asks for `entity` to take its style again at the next style pass, because something its style depends on changed:
@@ -462,20 +464,14 @@ pub fn MarkStyleDirtyTree(self: *UIManager, engine_context: *EngineContext, enti
 pub fn MarkElementStyleDirty(self: *UIManager, engine_context: *EngineContext, element: UIElement) !void {
     if (!self.mECSManager.HasComponent(StyleComponent, element.mID)) return;
     if (self.mECSManager.HasComponent(StyleDirtyTag, element.mID)) return;
-    _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), element.mID, StyleDirtyTag{});
+    _ = try self.mECSManager.AddComponentSync(engine_context, element.mID, StyleDirtyTag{});
 }
 
-/// Once a frame, at its end: deletes every element its entity no longer points at (gone, its component removed, or
-/// given another), and then whatever was asked to be deleted
+/// Once a frame, at its end, after every world's deletes: deletes the elements asked to be deleted, among them those
+/// whose UIElementComponent went this frame (see UIElementComponent.Deinit)
 pub fn EndFrame(self: *UIManager, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("UIManager::EndFrame", @src());
     defer zone.Deinit();
-
-    const element_ids = try self.mECSManager.GetGroup(engine_context.FrameAllocator(), .{ .Component = ElementOwnerComponent });
-    for (element_ids.items) |element_id| {
-        const element = UIElement{ .mID = element_id, .mManager = self };
-        if (!Owns(element.GetOwner(), element)) try self.DeleteElement(engine_context, element);
-    }
 
     var callback_list: std.DoublyLinkedList = .{};
     var callback = EventManagerT.EventCallback{
@@ -502,11 +498,4 @@ fn OnManagerEvents(self: *UIManager, engine_context: *EngineContext, event: UIEv
         else => {},
     }
     return .Continue;
-}
-
-/// Whether `owner` is still there and its UIElementComponent still points at `element`
-fn Owns(owner: Entity, element: UIElement) bool {
-    if (!owner.IsActive()) return false;
-    const component = owner.GetComponent(UIElementComponent) orelse return false;
-    return component.mElement.mID == element.mID;
 }

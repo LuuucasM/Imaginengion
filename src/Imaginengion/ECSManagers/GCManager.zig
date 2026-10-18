@@ -101,10 +101,10 @@ pub fn ProcessEvents(self: *GCManager, comptime event_data: type, comptime event
 
 pub fn ProcessConfig(self: GCManager, engine_context: *EngineContext, gamecontext_id: GameContext.Type, config: GameContext.CreateConfig) !void {
     if (config.bAddUUIDComponent) {
-        _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), gamecontext_id, GCComponents.UUIDComponent.empty);
+        _ = try self.mECSManager.AddComponentSync(engine_context, gamecontext_id, GCComponents.UUIDComponent.empty);
     }
     if (config.bAddNameComponent) {
-        const name_component = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), gamecontext_id, GCComponents.NameComponent.empty);
+        const name_component = try self.mECSManager.AddComponentSync(engine_context, gamecontext_id, GCComponents.NameComponent.empty);
         name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Game Context");
     }
 }

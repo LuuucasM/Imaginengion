@@ -1005,7 +1005,7 @@ test "a template window's tree selects inside the window, Delete is off on its r
     //the root and its child, the child's row clicked: the window's selection, which the components pane shows
     const tree = &panel.mTrees.entity;
     try std.testing.expectEqual(@as(usize, 2), tree.mRows.items.len);
-    try panel.OnLeftClick(engine_context, tree.mRows.items[1].Header);
+    try panel.OnLeftClick(engine_context, tree.mRows.items[1].Header, tree.mRows.items[1].Header);
     try std.testing.expectEqual(tree.mRows.items[1].Object.mID, panel.mSelected.?.entity.mID);
     try panel.Update(engine_context);
     try std.testing.expectEqual(tree.mRows.items[1].Object.mID, panel.mComponents.mBuiltFor.?.entity.mID);

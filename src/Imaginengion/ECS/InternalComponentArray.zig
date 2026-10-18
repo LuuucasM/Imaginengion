@@ -23,19 +23,20 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
             self.mComponents.Deinit(engine_context.EngineAllocator());
         }
-        pub fn DuplicateEntity(self: *Self, engine_context: *EngineContext, original_entity_id: entity_t, new_entity_id: entity_t) !void {
+        /// A copy of the entity's component in `arena`, for DuplicateEntity to stage onto the copy
+        pub fn StageDuplicate(self: *Self, engine_context: *EngineContext, arena: std.mem.Allocator, original_entity_id: entity_t) !*anyopaque {
             std.debug.assert(self.mComponents.HasSparse(original_entity_id));
-
-            const original_component = self.mComponents.GetValueBySparse(original_entity_id);
-
-            // a component that owns memory copies itself, anything else is a plain value copy.
-            // the copy is made before the add below, which can move the array the original lives in
-            const component_copy = if (@hasDecl(component_type, "Clone"))
-                try original_component.Clone(engine_context)
+            return try CloneStaged(engine_context, arena, self.mComponents.GetValueBySparse(original_entity_id));
+        }
+        /// A copy of `source` in `arena`: a component that owns memory copies itself, anything else is a plain value copy
+        pub fn CloneStaged(engine_context: *EngineContext, arena: std.mem.Allocator, source: *const anyopaque) !*anyopaque {
+            const source_component: *const component_type = @ptrCast(@alignCast(source));
+            const staged_component = try arena.create(component_type);
+            staged_component.* = if (@hasDecl(component_type, "Clone"))
+                try source_component.Clone(engine_context)
             else
-                original_component.*;
-
-            _ = try self.AddComponent(engine_context.EngineAllocator(), new_entity_id, component_copy);
+                source_component.*;
+            return staged_component;
         }
         /// Deep copies this array into `other`, which must be empty.
         /// Entity ids and the free id list carry over, so the copy is addressed by the same ids.
@@ -102,6 +103,16 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) void {
             std.debug.assert(self.mComponents.HasSparse(entity_id));
             self.RemoveComponent(engine_context, entity_id);
+        }
+        /// Copies the staged value in. The value now belongs to this array, so the staged copy is left as is and
+        /// goes when the staging arena is reset.
+        pub fn AddStaged(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, staged: *anyopaque) !void {
+            const staged_component: *component_type = @ptrCast(@alignCast(staged));
+            _ = try self.AddComponent(engine_allocator, entity_id, staged_component.*);
+        }
+        pub fn DeinitStaged(engine_context: *EngineContext, staged: *anyopaque) void {
+            const staged_component: *component_type = @ptrCast(@alignCast(staged));
+            staged_component.Deinit(engine_context);
         }
     };
 }

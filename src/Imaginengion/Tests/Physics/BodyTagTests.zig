@@ -63,9 +63,11 @@ fn ExpectOnlyType(entity: Entity, comptime body_type_tag: type) !void {
     }
 }
 
-/// Queries the collider groups the way PhysicsManager.OnUpdate does, then runs the broad pass on them
+/// Builds the world's tree and queries the collider groups the way a frame and PhysicsManager.OnUpdate do, then runs
+/// the broad pass on them
 fn RunBroadPass(collision_manager: *CollisionManager, engine_context: *EngineContext) !void {
     const world_manager = &engine_context.mEditorWorld;
+    try world_manager.BuildBVH(engine_context);
     const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.FrameAllocator());
     try collision_manager.BroadPass(engine_context, world_manager, groups);
 }

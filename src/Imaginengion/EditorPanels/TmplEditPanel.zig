@@ -198,16 +198,17 @@ pub fn Name(self: TmplEditPanel) []const u8 {
     };
 }
 
-/// A left click on `entity`: a tree row or menu item, or something in the components pane. EditUIElement there does
-/// nothing: the UI Element panel shows the editor's selection, not the window's
-pub fn OnLeftClick(self: *TmplEditPanel, engine_context: *EngineContext, entity: Entity) !void {
+/// A left click on `entity`, `target` being what is deepest under the pointer: a tree row or menu item, or something in
+/// the components pane. EditUIElement there does nothing: the UI Element panel shows the editor's selection, not the
+/// window's
+pub fn OnLeftClick(self: *TmplEditPanel, engine_context: *EngineContext, entity: Entity, target: Entity) !void {
     const world = &engine_context.mTmplEditWorld;
     switch (self.mTrees) {
         .scene_layer => |*trees| {
-            if (trees.Scene.ActionOf(entity)) |action| try trees.Scene.Run(engine_context, action, world, &self.mSelected);
-            if (trees.Entities.ActionOf(entity)) |action| try trees.Entities.Run(engine_context, action, world, &self.mSelected);
+            if (trees.Scene.ActionOf(entity, target)) |action| try trees.Scene.Run(engine_context, action, world, &self.mSelected);
+            if (trees.Entities.ActionOf(entity, target)) |action| try trees.Entities.Run(engine_context, action, world, &self.mSelected);
         },
-        inline else => |*tree| if (tree.ActionOf(entity)) |action| try tree.Run(engine_context, action, world, &self.mSelected),
+        inline else => |*tree| if (tree.ActionOf(entity, target)) |action| try tree.Run(engine_context, action, world, &self.mSelected),
     }
     if (self.mComponents.ActionOf(entity)) |action| {
         if (action != .EditUIElement) try self.mComponents.Run(engine_context, action);

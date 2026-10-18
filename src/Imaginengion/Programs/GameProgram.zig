@@ -11,6 +11,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const Project = @import("../Core/Project.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
+const WorldBVH = @import("../Core/WorldBVH.zig");
 const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 const RayCast = @import("../Physics/RayCast.zig");
@@ -150,6 +151,17 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
     const engine_allocator = engine_context.EngineAllocator();
     const game_world = &engine_context.mGameWorld;
 
+    //----------------Start Build BVH------------------
+    //before the inputs: picking (PointerSystem.Update) walks it. Right after last frame's commit, so what is in the
+    //world can't change until the next one
+    {
+        const build_bvh_zone = Tracy.ZoneInit("Build BVH", @src());
+        defer build_bvh_zone.Deinit();
+        try game_world.BuildBVH(engine_context);
+        engine_context.mEngineStats.GameWorldStats.mBVHStats.Collect(game_world.mBVH);
+    }
+    //------------------END Build BVH
+
     //-------------Inputs Begin------------------
     {
         const input_zone = Tracy.ZoneInit("Inputs Section", @src());
@@ -243,6 +255,15 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
         try PhysicsManager.UpdateWorldTransforms(game_world, engine_context);
     }
     //---------------End World Transform Update ------------
+
+    //----------------Start Refit BVH------------------
+    //everything where it is drawn: moved by physics, scripts and layout since the build. What the render walks
+    {
+        const refit_bvh_zone = Tracy.ZoneInit("Refit BVH", @src());
+        defer refit_bvh_zone.Deinit();
+        game_world.mBVH.Refit(engine_context, game_world, WorldBVH.ALL_ITEMS);
+    }
+    //------------------END Refit BVH
 
     //---------Render Begin-------------
     {

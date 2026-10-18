@@ -52,7 +52,7 @@ fn CreateMissingFileAsset(engine_context: *EngineContext) !AssetHandle.Type {
     const asset_id = try asset_manager.mECSManager.CreateEntity(engine_allocator);
     var file_meta_data = FileMetaData{ .mPathType = .Eng };
     _ = try file_meta_data.mRelPath.print(engine_allocator, "{s}", .{"does/not/exist.ttf"});
-    _ = try asset_manager.mECSManager.AddComponent(engine_allocator, asset_id, file_meta_data);
+    _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, file_meta_data);
     return asset_id;
 }
 
@@ -63,7 +63,7 @@ test "a failed asset hands back the default without loading again" {
     const asset_manager = &engine_context.mAssetManager;
 
     const asset_id = try CreateMissingFileAsset(engine_context);
-    _ = try asset_manager.mECSManager.AddComponent(engine_context.EngineAllocator(), asset_id, LoadFailedTag{});
+    _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, LoadFailedTag{});
 
     //a load would try to open the missing file and error, so getting the default back means it was skipped
     const asset = try asset_manager.GetAsset(engine_context, TextAsset, asset_id);
@@ -79,7 +79,7 @@ test "a change to the file clears the mark so the next GetAsset tries again" {
     const engine_allocator = engine_context.EngineAllocator();
 
     const asset_id = try CreateMissingFileAsset(engine_context);
-    _ = try asset_manager.mECSManager.AddComponent(engine_allocator, asset_id, LoadFailedTag{});
+    _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, LoadFailedTag{});
 
     //what OnUpdate queues when it sees the file's mtime or size change
     try asset_manager.mEventManager.Insert(engine_allocator, .EndOfFrame, .{ .FileUpdate = .{ .mAssetID = asset_id } });

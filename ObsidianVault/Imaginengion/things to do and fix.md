@@ -4,3 +4,8 @@
 	- for pngs the see through parts for some reason skips the behind objects when it should continue to march forward to the next object behind this one
 - keeping track of whats modified so we can do a SAVE ALL
 - rename UI stuff that refers to Entity as GameObject
+- for text the borders are dragable in the viewport instead of just using numbers
+- make it so the color strips in the entity tab selects the scene which owns the entity so you dont have to switch back to the scene tab to make new entities
+- when anchor to top as a base entity so no parent container, and no layoutcontainer it goes outside the camera
+- add a circle shape to 2d shapes
+- when a text is set to totally transparent alpha = 0, the rest of the overlay elements are skipped. so if I put a transpararent '0' in front of a blue background that '0' shape in the background is not rendered and can see straight through to the game scene layers even tho the blue background should be solid opaque

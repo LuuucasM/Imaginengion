@@ -684,40 +684,16 @@ pub fn DrawText(
     var texture_shading_flags: u32 = 0;
     if (surface.mTexOptions.mIsTransparent) texture_shading_flags |= ShapeData.FLAG_TRANSPARENT;
 
-    //the text's own position and rotation, in canvas units for an overlay scene
-    const text_pos = transform_component.GetWorldPosition();
-    const text_rot = transform_component.GetWorldRotation();
-
-    //every glyph turns with the text, and with the canvas on top of that
-    const glyph_rot = if (canvas) |c| c.ToWorldRotation(text_rot) else text_rot;
-    const size_scale: f32 = if (canvas) |c| c.Scale else 1.0;
-
     const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
 
     //laid out in the text's own space, the same as picking measures it, then stretched by its scale on each axis
     const params = ShapeGeometry.GetTextParams(transform_component, text_component);
-    const stretch = params.Stretch;
 
     var layout = TextLayout.Iterator(TextAsset).Init(text_component.mText.items, text_asset, params.FontSize, params.WrapWidth);
     while (layout.Next()) |glyph| {
-        //the layout is in the text's own space, so the whole line turns with the transform instead
-        //of each glyph turning in place along world x
-        const local_pen = Vec3(f32){ .x = (glyph.Pen.x - params.LeftBound) * stretch.x, .y = glyph.Pen.y * stretch.y, .z = 0 };
-        var pen_pos = text_pos.AddVec(local_pen.QuatRotate(text_rot));
-        if (canvas) |c| pen_pos = c.ToWorldPoint(pen_pos);
-        const half_extents = Vec3(f32){
-            .x = glyph.HalfExtents.x * @abs(stretch.x) * size_scale,
-            .y = glyph.HalfExtents.y * @abs(stretch.y) * size_scale,
-            .z = THICKNESS_2D,
-        };
-
-        //the box sits PlaneCenter off the pen in the glyph's own plane. Worked out once here rather than for
-        //every pixel and step on the GPU
-        const plane_offset = (Vec3(f32){ .x = glyph.PlaneCenter.x * stretch.x * size_scale, .y = glyph.PlaneCenter.y * stretch.y * size_scale, .z = 0 }).QuatRotate(glyph_rot);
-        const glyph_center = pen_pos.AddVec(plane_offset);
-
+        //placed once here rather than for every pixel and step on the GPU
+        const glyph_box = ShapeGeometry.GlyphBox(transform_component, params, glyph, canvas);
         //a letter cut off altogether isn't sent
-        const glyph_box = ShapeGeometry.Box{ .Center = glyph_center, .Rotation = glyph_rot, .HalfExtents = half_extents };
         if (masks.CutsOff(mask, glyph_box)) continue;
 
         //where the letter is in the font atlas, shared with every other glyph of the same letter this render
@@ -730,12 +706,12 @@ pub fn DrawText(
             glyph.UV1,
         );
 
-        const axes = ShapeAxes(glyph_center, glyph_rot);
+        const axes = ShapeAxes(glyph_box.Center, glyph_box.Rotation);
         try buffers.AddShape(engine_context.EngineAllocator(), .{
             .AxisX = axes[0],
             .AxisY = axes[1],
             .AxisZ = axes[2],
-            .Size = half_extents.ToArray(),
+            .Size = glyph_box.HalfExtents.ToArray(),
             .Params = .{ 0, 0, 0, 0 },
             .Type = .Glyph,
             .MaskIndex = mask,

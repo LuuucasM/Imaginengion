@@ -25,6 +25,8 @@ const GPUAsserts = @import("GPUAsserts.zig");
 pub const Mask = struct {
     pub const RENDER: u4 = 1 << 0;
     pub const PHYSICS: u4 = 1 << 1;
+    /// what a click can land on: what is drawn, and see-through quads that draw nothing but still take clicks (row buttons)
+    pub const PICK: u4 = 1 << 2;
 };
 
 /// The most items a leaf holds. Fewer means a deeper tree, more boxes tested on the way down and fewer items tested
@@ -53,8 +55,8 @@ pub const Node = extern struct {
     MinY: f32,
     MinZ: f32,
     /// The node right after this one's whole subtree: where a walk goes once it has missed this node's box or
-    /// finished with it. The root's is the node count, the end of the walk. Only the CPU's stack free walk (WalkRay)
-    /// uses them now; the GPU goes into the nearer child first instead. Until WalkRay does too, for physics
+    /// finished with it. The root's is the node count, the end of the walk. The CPU's stack free walks (WalkRay,
+    /// WalkBox) use them; the GPU goes into the nearer child first instead
     Skip: u32,
     MaxX: f32,
     MaxY: f32,
@@ -448,6 +450,29 @@ pub fn Stats(nodes: []const Node) TreeStats {
     return stats;
 }
 
+/// Walks the tree with a box, the stack free way, in the tree's own fixed order: into each node whose box overlaps `box`
+/// and that has any of `mask`, and on to its Skip past any that doesn't. Every item of each leaf it reaches is handed to
+/// `visitor.Visit(item_index)`. A leaf's items can have different boxes and masks, so the visitor checks an item's own
+/// if that matters
+pub fn WalkBox(nodes: []const Node, box: Aabb, mask: u32, visitor: anytype) !void {
+    var node_ind: u32 = 0;
+    while (node_ind < nodes.len) {
+        const node = nodes[node_ind];
+        if (node.ItemMask() & mask == 0 or !node.Bounds().Overlaps(box)) {
+            node_ind = node.Skip;
+            continue;
+        }
+        if (!node.IsLeaf()) {
+            node_ind += 1;
+            continue;
+        }
+        for (node.FirstItem()..node.FirstItem() + node.ItemCount()) |item_ind| {
+            try visitor.Visit(@intCast(item_ind));
+        }
+        node_ind = node.Skip;
+    }
+}
+
 /// Walks the tree with a ray, the stack free way, in the tree's own fixed order: into each node whose box the ray
 /// reaches within how far is still worth looking and that has any of `mask`, and on to its Skip past any that it does
 /// not. Every item of each leaf it reaches is handed to `visitor.Visit(item_index)`, which returns how far along the ray
@@ -455,12 +480,19 @@ pub fn Stats(nodes: []const Node) TreeStats {
 /// past it, or `max_t` again to see them all. A leaf's items can have different masks, so the visitor checks an item's
 /// own if that matters
 pub fn WalkRay(nodes: []const Node, ray: Ray, max_t: f32, mask: u32, visitor: anytype) void {
+    WalkSweep(nodes, ray, 0, max_t, mask, visitor) catch unreachable;
+}
+
+/// WalkRay for a shape moving along the ray, as far as `radius` out from it every way (a sphere's radius, a box's
+/// half diagonal): every box is grown by it as it is tested, so the shape can't slip past a box its centre misses.
+/// The visitor's Visit can fail, and the walk stops with its error
+pub fn WalkSweep(nodes: []const Node, ray: Ray, radius: f32, max_t: f32, mask: u32, visitor: anytype) !void {
     const inv_dir = Vec3(f32).FromVector(@as(Vec3(f32).VectorT, @splat(1.0)) / ray.Dir.ToVector());
     var reach = max_t;
     var node_ind: u32 = 0;
     while (node_ind < nodes.len) {
         const node = nodes[node_ind];
-        const bounds = node.Bounds();
+        const bounds = node.Bounds().Grow(radius);
         const span = RayIntersect.RayAabb(ray.Origin, inv_dir, bounds.Min, bounds.Max);
         const reached = if (span) |s| s.Enter <= reach and node.ItemMask() & mask != 0 else false;
         if (!reached) {
@@ -472,7 +504,9 @@ pub fn WalkRay(nodes: []const Node, ray: Ray, max_t: f32, mask: u32, visitor: an
             continue;
         }
         for (node.FirstItem()..node.FirstItem() + node.ItemCount()) |item_ind| {
-            reach = @min(reach, visitor.Visit(@intCast(item_ind)));
+            const visited = visitor.Visit(@intCast(item_ind));
+            const item_reach = if (@typeInfo(@TypeOf(visited)) == .error_union) try visited else visited;
+            reach = @min(reach, item_reach);
         }
         node_ind = node.Skip;
     }

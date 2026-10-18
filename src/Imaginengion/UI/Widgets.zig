@@ -145,6 +145,8 @@ pub const Fold = struct {
     Header: Entity,
     /// where what it folds goes. Null for a leaf tree node, which folds nothing
     Content: ?Entity,
+    /// a tree node's colored stripe, null if it wasn't given one (TreeNodeOptions.Stripe)
+    Stripe: ?Entity = null,
 };
 
 pub const TreeNodeOptions = struct {
@@ -538,11 +540,11 @@ pub fn TreeNode(engine_context: *EngineContext, parent: Parent, text: []const u8
     const parts = try FoldHeader(engine_context, .{ .Entity = node }, text, if (options.Leaf) null else options.Open, options.Stripe);
     const header = parts.Header;
     if (options.StockScripts) try AddStockScript(engine_context, header, .Select);
-    if (options.Leaf) return .{ .Node = node, .Header = header, .Content = null };
+    if (options.Leaf) return .{ .Node = node, .Header = header, .Content = null, .Stripe = parts.Stripe };
 
     const content = try FoldContent(engine_context, .{ .Entity = node }, options.Open, INDENT);
     if (options.StockScripts) try AddStockScriptWith(engine_context, parts.Arrow, .FoldArrow, .{ .mContent = content });
-    return .{ .Node = node, .Header = header, .Content = content };
+    return .{ .Node = node, .Header = header, .Content = content, .Stripe = parts.Stripe };
 }
 
 /// A header row (an arrow and a label) that clicking anywhere folds the content under it away and out again (the stock
@@ -915,7 +917,7 @@ fn MenuRow(engine_context: *EngineContext, menu: Entity, text: []const u8) !Enti
 /// A folding header row: a bar of `stripe`'s color if it has one, an arrow box showing whether it is `open` (null for
 /// none, only a gap where it would be) and a label. Style "Header", the arrow box "Arrow", the stripe none, so its color
 /// stays
-fn FoldHeader(engine_context: *EngineContext, parent: Parent, text: []const u8, open: ?bool, stripe: ?Vec4(f32)) !struct { Header: Entity, Arrow: Entity } {
+fn FoldHeader(engine_context: *EngineContext, parent: Parent, text: []const u8, open: ?bool, stripe: ?Vec4(f32)) !struct { Header: Entity, Arrow: Entity, Stripe: ?Entity } {
     const header = try NewEntity(engine_context, parent);
     try AddQuad(engine_context, header, .{}, .{});
     _ = try header.AddComponent(engine_context, LayoutComponent{
@@ -927,8 +929,10 @@ fn FoldHeader(engine_context: *EngineContext, parent: Parent, text: []const u8, 
     _ = try header.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
     try UIManager.Style(engine_context, header, "Header");
 
+    var stripe_bar: ?Entity = null;
     if (stripe) |color| {
         const bar = try NewEntity(engine_context, .{ .Entity = header });
+        stripe_bar = bar;
         //on the plain white texture, as a styled shape is, so it shows its color alone
         var surface = SurfaceComponent{};
         surface.mTexOptions.mColor = color;
@@ -945,7 +949,7 @@ fn FoldHeader(engine_context: *EngineContext, parent: Parent, text: []const u8, 
         _ = try Label(engine_context, .{ .Entity = arrow }, if (is_open) WidgetActions.ARROW_OPEN else WidgetActions.ARROW_FOLDED);
     }
     _ = try Label(engine_context, .{ .Entity = header }, text);
-    return .{ .Header = header, .Arrow = arrow };
+    return .{ .Header = header, .Arrow = arrow, .Stripe = stripe_bar };
 }
 
 /// What a folding header folds: a column, indented by `indent`, shown if `open`

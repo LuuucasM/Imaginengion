@@ -128,11 +128,11 @@ const TestWorld = struct {
         const asset_manager = &engine_context.mAssetManager;
         const engine_allocator = engine_context.EngineAllocator();
         const asset_id = try asset_manager.mECSManager.CreateEntity(engine_allocator);
-        _ = try asset_manager.mECSManager.AddComponent(engine_allocator, asset_id, Assets.AssetMetaData{ .mRefs = 0 });
+        _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, Assets.AssetMetaData{ .mRefs = 0 });
         var file_meta_data = Assets.FileMetaData{ .mPathType = .Prj };
         _ = try file_meta_data.mRelPath.print(engine_allocator, "scripts/Test.zig", .{});
-        _ = try asset_manager.mECSManager.AddComponent(engine_allocator, asset_id, file_meta_data);
-        _ = try asset_manager.mECSManager.AddComponent(engine_allocator, asset_id, ScriptAsset{ ._Info = info });
+        _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, file_meta_data);
+        _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, ScriptAsset{ ._Info = info });
         return .{ .mID = asset_id, .mManager = asset_manager };
     }
 

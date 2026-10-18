@@ -24,6 +24,19 @@ pub fn Union(a: Aabb, b: Aabb) Aabb {
     };
 }
 
+/// The box pushed out by `amount` on every side
+pub fn Grow(self: Aabb, amount: f32) Aabb {
+    const reach = Vec3(f32){ .x = amount, .y = amount, .z = amount };
+    return .{ .Min = self.Min.SubVec(reach), .Max = self.Max.AddVec(reach) };
+}
+
+/// Whether the two share any point, edges touching included
+pub fn Overlaps(a: Aabb, b: Aabb) bool {
+    return a.Min.x <= b.Max.x and b.Min.x <= a.Max.x and
+        a.Min.y <= b.Max.y and b.Min.y <= a.Max.y and
+        a.Min.z <= b.Max.z and b.Min.z <= a.Max.z;
+}
+
 pub fn Center(self: Aabb) Vec3(f32) {
     return self.Min.AddVec(self.Max).MulScalar(0.5);
 }

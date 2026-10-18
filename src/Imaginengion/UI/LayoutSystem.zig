@@ -180,7 +180,7 @@ pub fn OnEntityECSEvent(ctx: *anyopaque, engine_context: *EngineContext, event: 
             if (!entity.IsActive() or !IsInLayout(entity)) return .Continue;
             if (ParentContainer(entity)) |parent| try parent.MarkLayoutDirty(engine_context);
         },
-        .Default => {},
+        .AddComponent, .Default => {},
     }
     return .Continue;
 }

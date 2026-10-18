@@ -103,10 +103,10 @@ pub fn ProcessEvents(self: *PManager, comptime event_data: type, comptime event_
 
 pub fn ProcessConfig(self: PManager, engine_context: *EngineContext, player_id: Player.Type, config: Player.CreateConfig) !void {
     if (config.bAddUUIDComponent) {
-        _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), player_id, PComponents.UUIDComponent.empty);
+        _ = try self.mECSManager.AddComponentSync(engine_context, player_id, PComponents.UUIDComponent.empty);
     }
     if (config.bAddNameComponent) {
-        const name_component = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), player_id, PComponents.NameComponent.empty);
+        const name_component = try self.mECSManager.AddComponentSync(engine_context, player_id, PComponents.NameComponent.empty);
         name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Game Context");
     }
 }

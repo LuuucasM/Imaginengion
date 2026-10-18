@@ -14,10 +14,12 @@ test {
     _ = @import("Tests/ECSObjects/OverlayTests.zig");
     _ = @import("Tests/ECSObjects/GetWorldTests.zig");
     _ = @import("Tests/ECSObjects/LoadOrGetTests.zig");
+    _ = @import("Tests/ECSObjects/ComponentAddedTests.zig");
     _ = @import("Tests/Physics/TransformPassTests.zig");
     _ = @import("Tests/Physics/BodyTagTests.zig");
     _ = @import("Tests/Physics/CollisionsTests.zig");
     _ = @import("Tests/Physics/SolverTests.zig");
+    _ = @import("Tests/Physics/BroadPhaseTests.zig");
     _ = @import("Tests/Physics/PauseTests.zig");
     _ = @import("Tests/Physics/RayCastTests.zig");
     _ = @import("Tests/Physics/PhysicsQueriesTests.zig");
@@ -62,6 +64,7 @@ test {
     _ = @import("Tests/EditorPanels/PlayPreviewTests.zig");
     _ = @import("Tests/EditorPanels/AssetHandlesPanelTests.zig");
     _ = @import("Tests/Core/WorldCopyTests.zig");
+    _ = @import("Tests/Core/WorldBVHTests.zig");
     _ = @import("Tests/Core/EngineStatsTests.zig");
     _ = @import("Tests/Core/ProjectTests.zig");
     _ = @import("Tests/Programs/GameProgramTests.zig");

@@ -32,6 +32,8 @@ const WorldLines = struct {
     GameBVH: Entity,
     /// how good each tree is (BVH.TreeStats.Cost): lower is better for the same shapes
     BVHCosts: Entity,
+    /// the world's own trees (WorldBVH), every scene in them, built once a frame
+    WorldBVH: Entity,
     Entities: Entity,
 };
 
@@ -104,6 +106,7 @@ fn World(engine_context: *EngineContext, content: Entity, title: []const u8, opt
         .OverlayBVH = try Widgets.Label(engine_context, lines, ""),
         .GameBVH = try Widgets.Label(engine_context, lines, ""),
         .BVHCosts = try Widgets.Label(engine_context, lines, ""),
+        .WorldBVH = try Widgets.Label(engine_context, lines, ""),
         .Entities = try Widgets.Label(engine_context, lines, ""),
     };
 }
@@ -129,6 +132,13 @@ fn SetWorld(engine_context: *EngineContext, lines: WorldLines, stats: EngineStat
     try SetTreeLine(engine_context, lines.OverlayBVH, "Overlay", render.OverlayBVH);
     try SetTreeLine(engine_context, lines.GameBVH, "Game", render.GameBVH);
     try SetLine(engine_context, lines.BVHCosts, "BVH cost: overlay {d:.1}, game {d:.1}", .{ render.OverlayBVH.Cost, render.GameBVH.Cost });
+    const world_bvh = stats.mBVHStats;
+    try SetLine(engine_context, lines.WorldBVH, "World BVH: overlay {d} items (depth {d}), game {d} items (depth {d})", .{
+        world_bvh.Overlay.Items,
+        world_bvh.Overlay.Depth,
+        world_bvh.Game.Items,
+        world_bvh.Game.Depth,
+    });
     try SetLine(engine_context, lines.Entities, "Entities: {d}", .{stats.mECSStats.TotalEntities});
 }
 

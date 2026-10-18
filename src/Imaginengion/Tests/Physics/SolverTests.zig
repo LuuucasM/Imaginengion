@@ -84,12 +84,19 @@ fn MakeBall(engine_context: *EngineContext, scene: Scene, position: Vec3(f32), v
 /// One physics substep's worth of time, the dt the passes below are run with
 const SUBSTEP_DT: f32 = 1.0 / 120.0;
 
+/// One frame's physics as the loop runs it: the world's tree built over what is in it now (the top of the frame),
+/// then the world's physics step
+fn PhysicsFrame(engine_context: *EngineContext) !void {
+    try engine_context.mEditorWorld.BuildBVH(engine_context);
+    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+}
+
 /// The collision half of one physics substep, in the order PhysicsManager.OnUpdate runs it, with the bodies left
-/// where they are rather than moved by their velocities: transforms, broad, narrow, pre-solve, solve, correct
-/// positions, then which pairs touch
+/// where they are rather than moved by their velocities: transforms and the world's tree, broad, narrow, pre-solve,
+/// solve, correct positions, then which pairs touch
 fn RunCollisionPasses(collision_manager: *CollisionManager, engine_context: *EngineContext) !void {
     const world_manager = &engine_context.mEditorWorld;
-    try PhysicsManager.UpdateWorldTransforms(world_manager, engine_context);
+    try world_manager.BuildBVH(engine_context);
 
     const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.FrameAllocator());
     try collision_manager.BroadPass(engine_context, world_manager, groups);
@@ -510,7 +517,7 @@ fn SpeedAfterSlidingOverTiles(corner_radius: f32) !f32 {
     //only the seams should cost it speed
     SetFriction(box, 0, 0);
 
-    for (0..60) |_| try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    for (0..60) |_| try PhysicsFrame(engine_context);
     return VelocityOf(box).x;
 }
 
@@ -539,7 +546,7 @@ test "a turned box dropped on a floor comes to rest on its corner" {
     box.GetComponent(ColliderComponent).?.mShape = .Box;
     try box.SetRotation(engine_context, Quat(f32).FromAxisAngle(.{ .x = 0, .y = 0, .z = 1 }, std.math.pi / 4.0));
 
-    for (0..120) |_| try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    for (0..120) |_| try PhysicsFrame(engine_context);
 
     try std.testing.expectApproxEqAbs(@as(f32, 0.5 + std.math.sqrt1_2), box.GetComponent(TransformComponent).?.GetTranslation().y, 0.02);
     try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(box).y, 0.05);
@@ -569,7 +576,7 @@ fn DistanceSlidOnSlope(degrees: f32) !f32 {
     box.GetComponent(ColliderComponent).?.mShape = .Box;
     try box.SetRotation(engine_context, slope);
 
-    for (0..60) |_| try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    for (0..60) |_| try PhysicsFrame(engine_context);
     return box.GetComponent(TransformComponent).?.GetTranslation().SubVec(start).Len();
 }
 
@@ -603,11 +610,11 @@ test "kinetic friction slows a sliding box by its coefficient times gravity, and
     SetFriction(box, 0.5, 0.5);
 
     //half a second at 0.5 * 9.81 takes 2.45 off the 3
-    for (0..30) |_| try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    for (0..30) |_| try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 3.0 - 0.5 * 9.81 * 0.5), VelocityOf(box).x, 0.02);
 
     //and it comes to a stop rather than turning around
-    for (0..30) |_| try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    for (0..30) |_| try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(box).x, eps);
 }
 
@@ -629,7 +636,7 @@ test "a frictionless surface makes the contact frictionless whatever touches it"
         SetFriction(entity, 0, 0);
     }
 
-    for (0..30) |_| try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    for (0..30) |_| try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 3), VelocityOf(box).x, eps);
 }
 
@@ -650,7 +657,7 @@ test "friction carries a box along on a moving platform" {
     box.GetComponent(ColliderComponent).?.mShape = .Box;
 
     //0.6 * 9.81 gets it up to the platform's speed in about a third of a second, then static friction holds it there
-    for (0..60) |_| try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    for (0..60) |_| try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 2), VelocityOf(box).x, eps);
     //the platform is not dragged back by it
     try std.testing.expectApproxEqAbs(@as(f32, 2), VelocityOf(platform).x, eps);
@@ -667,7 +674,7 @@ test "a world steps its own physics, and clearing the world forgets who was touc
 
     //the default frame time is exactly one fixed step, which is two substeps: the pair begins on the
     //first and is only still touching on the second
-    try world_manager.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     try std.testing.expectEqual(@as(usize, 1), QueuedCount(engine_context, .CollisionBegin));
     try std.testing.expectEqual(@as(usize, 1), world_manager.mPhysicsManager._CollisionManager._TouchingLast.items.len);
 
@@ -730,7 +737,7 @@ test "a body feels its scene's gravity scaled axis by axis" {
     const upside_down = try MakeFallingBody(engine_context, scene, .{ .x = 1, .y = -1, .z = 1 });
 
     //one fixed step is 1/60 s, so each body ends it moving at its scaled gravity / 60, whatever its mass
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
 
     try std.testing.expectApproxEqAbs(@as(f32, 0.1), VelocityOf(as_is).x, eps);
     try std.testing.expectApproxEqAbs(@as(f32, -0.2), VelocityOf(as_is).y, eps);
@@ -772,7 +779,7 @@ test "a kinematic body moves by its velocity alone, and a static body not at all
     kinematic.GetComponent(RigidBodyComponent).?.ApplyForce(.{ .x = 100, .y = 0, .z = 0 });
 
     //one fixed step is 1/60 s
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
 
     try std.testing.expectApproxEqAbs(@as(f32, 0.05), kinematic.GetComponent(TransformComponent).?.GetTranslation().x, eps);
     try std.testing.expectApproxEqAbs(@as(f32, 3), VelocityOf(kinematic).x, eps);
@@ -836,7 +843,7 @@ test "a fast ball stops at a thin wall instead of passing through it" {
 
     //one fixed step is two substeps. On the first the ball is 0.85 from the wall: it may close that and no more,
     //so it ends with its surface on the wall's (centre at -0.15). On the second it may not close at all
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
 
     try std.testing.expectApproxEqAbs(@as(f32, -0.15), ball.GetComponent(TransformComponent).?.GetTranslation().x, eps);
     try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(ball).x, eps);
@@ -855,7 +862,7 @@ test "a fast ball bounces off a thin wall's surface, not short of it" {
 
     //first substep: 0.85 to the surface takes 0.85 of the substep, then back out at 120 for the 0.15 left over,
     //which puts it at -0.15 - 0.15 = -0.3. Second substep: a whole unit further back, to -1.3
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
 
     try std.testing.expectApproxEqAbs(@as(f32, -1.3), ball.GetComponent(TransformComponent).?.GetTranslation().x, eps);
     try std.testing.expectApproxEqAbs(@as(f32, -120), VelocityOf(ball).x, eps);
@@ -877,7 +884,7 @@ test "a ball sliding past a wall within reach loses no speed and touches nothing
 
     const ball = try MakeBall(engine_context, scene, .{ .x = 1.015, .y = 0, .z = 0 }, .{ .x = 0, .y = 60, .z = 0 });
 
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
 
     try std.testing.expectApproxEqAbs(@as(f32, 60), VelocityOf(ball).y, eps);
     try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(ball).x, eps);
@@ -901,7 +908,7 @@ test "a ball resting on a floor stays there and begins touching it once" {
     const ball = try MakeBall(engine_context, scene, .{ .x = 0, .y = 1, .z = 0 }, .{ .x = 0, .y = 0, .z = 0 });
 
     //half a second: gravity pulls it into the floor every substep, and the floor stops it every substep
-    for (0..30) |_| try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    for (0..30) |_| try PhysicsFrame(engine_context);
 
     try std.testing.expectApproxEqAbs(@as(f32, 1), ball.GetComponent(TransformComponent).?.GetTranslation().y, eps);
     try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(ball).y, eps);
@@ -940,7 +947,7 @@ test "a fast ball that skips a thin trigger is seen crossing it" {
     _ = try MakeTrigger(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, THIN_TRIGGER);
     const ball = try MakeSmallBall(engine_context, scene, .{ .x = -1.5, .y = 0, .z = 0 }, .{ .x = 120, .y = 0, .z = 0 });
 
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
 
     try std.testing.expectEqual(@as(usize, 1), QueuedCount(engine_context, .CollisionBegin));
     try std.testing.expect(QueuedCollisions(engine_context)[0].CollisionBegin.mIsTrigger);
@@ -960,7 +967,7 @@ test "a fast ball passing beside a trigger is not seen crossing it" {
     _ = try MakeTrigger(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 0.1, .y = 1, .z = 1 });
     _ = try MakeSmallBall(engine_context, scene, .{ .x = -1.5, .y = 0.7, .z = 0 }, .{ .x = 120, .y = 0, .z = 0 });
 
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
 
     try std.testing.expectEqual(@as(usize, 0), QueuedCount(engine_context, .CollisionBegin));
 }
@@ -976,8 +983,8 @@ test "a ball that ends a substep inside a trigger begins touching it once" {
     _ = try MakeTrigger(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, THIN_TRIGGER);
     _ = try MakeSmallBall(engine_context, scene, .{ .x = -1, .y = 0, .z = 0 }, .{ .x = 120, .y = 0, .z = 0 });
 
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
+    try PhysicsFrame(engine_context);
 
     try std.testing.expectEqual(@as(usize, 1), QueuedCount(engine_context, .CollisionBegin));
 }
@@ -995,7 +1002,7 @@ fn CrossingsPastTurnedTrigger(angle: f32) !usize {
     try trigger.SetRotation(engine_context, Quat(f32).FromAxisAngle(.{ .x = 0, .y = 0, .z = 1 }, angle));
     _ = try MakeSmallBall(engine_context, scene, .{ .x = -1.5, .y = 0.65, .z = 0 }, .{ .x = 120, .y = 0, .z = 0 });
 
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     return QueuedCount(engine_context, .CollisionBegin);
 }
 
@@ -1023,7 +1030,7 @@ test "a fast box that skips a thin trigger is seen crossing it" {
     try box.SetTranslation(engine_context, .{ .x = -1.5, .y = 0, .z = 0 });
     box.GetComponent(RigidBodyComponent).?.SetVelocity(.{ .x = 120, .y = 0, .z = 0 });
 
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
 
     try std.testing.expectEqual(@as(usize, 1), QueuedCount(engine_context, .CollisionBegin));
     try std.testing.expect(QueuedCollisions(engine_context)[0].CollisionBegin.mIsTrigger);
@@ -1046,7 +1053,7 @@ test "a ball that bounces off a wall does not go into the trigger behind it" {
     const ball = try MakeSmallBall(engine_context, scene, .{ .x = -1, .y = 0, .z = 0 }, .{ .x = 120, .y = 0, .z = 0 });
     SetRestitution(ball, 1);
 
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
 
     //the wall, and only the wall
     try std.testing.expectEqual(@as(usize, 1), QueuedCount(engine_context, .CollisionBegin));
@@ -1104,7 +1111,7 @@ test "a main object whose collider is on a child lands as one body" {
     const parts = try MakeBodyWithChildCollider(engine_context, scene, .{ .x = 0, .y = 2, .z = 0 }, feet, .{ .x = 0, .y = -0.5, .z = 0 });
 
     //a second to fall and settle
-    for (0..60) |_| try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    for (0..60) |_| try PhysicsFrame(engine_context);
 
     //the object itself was stopped and moved, its child collider came with it
     try std.testing.expectApproxEqAbs(@as(f32, 1.25), parts.body.GetComponent(TransformComponent).?.GetTranslation().y, 0.001);
@@ -1269,7 +1276,7 @@ test "a one way platform made with pre-solve lets a body jump up through it and 
 
     var highest: f32 = -2;
     for (0..240) |_| {
-        try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+        try PhysicsFrame(engine_context);
         highest = @max(highest, ball.GetComponent(TransformComponent).?.GetTranslation().y);
     }
 
@@ -1314,17 +1321,17 @@ test "the physics update runs once at the start of every fixed step" {
 
     //a frame of exactly one step
     engine_context.mDT = 1.0 / 60.0;
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     try std.testing.expectEqual(@as(usize, 1), listener.mSteps);
 
     //a slow frame two and a half steps long: two steps, half a step left over
     engine_context.mDT = 2.5 / 60.0;
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     try std.testing.expectEqual(@as(usize, 3), listener.mSteps);
 
     //a fast frame a quarter of a step long: still short of one
     engine_context.mDT = 0.25 / 60.0;
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     try std.testing.expectEqual(@as(usize, 3), listener.mSteps);
 }
 
@@ -1341,11 +1348,11 @@ test "a force applied as a step begins pushes for the whole step" {
     engine_context.mEditorWorld.mPhysicsManager.SetSyncCallback(&listener, StepListener.OnEvent);
 
     //12 / 2 for the whole 1/60 of a step is 0.1, both substeps. Let go of after each substep, it was half that
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 0.1), VelocityOf(body).x, eps);
 
     //pushed again on the next step, because it was applied again
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 0.2), VelocityOf(body).x, eps);
 }
 
@@ -1361,10 +1368,10 @@ test "a force lasts only for the step it was applied in" {
     //applied once, the way a once a frame script would: it reaches the next step, and no step after that
     body.GetComponent(RigidBodyComponent).?.ApplyForce(.{ .x = 12, .y = 0, .z = 0 });
 
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 0.1), VelocityOf(body).x, eps);
 
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 0.1), VelocityOf(body).x, eps);
 }
 
@@ -1381,14 +1388,14 @@ test "a constant force pushes a dynamic body every step until it is changed" {
     _ = try body.AddComponent(engine_context, ConstantForceComponent{ .mForce = .{ .x = 12, .y = 0, .z = 0 } });
 
     //12 / 2 for a whole 1/60 of a step is 0.1 a step, with nothing applying it again
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 0.1), VelocityOf(body).x, eps);
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 0.2), VelocityOf(body).x, eps);
 
     //switched off, the way a jetpack's input script would on release: the body keeps its speed, and stops gaining
     body.GetComponent(ConstantForceComponent).?.mForce = .{ .x = 0, .y = 0, .z = 0 };
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 0.2), VelocityOf(body).x, eps);
 }
 
@@ -1408,7 +1415,7 @@ test "a constant force adds up with gravity and with the forces applied for the 
     engine_context.mEditorWorld.mPhysicsManager.SetSyncCallback(&listener, StepListener.OnEvent);
 
     //-10 from gravity, 30 / 2 = 15 from the constant force, 6 / 2 = 3 from the step's: 8 a second, for 1/60 of one
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 8.0 / 60.0), VelocityOf(body).y, eps);
 }
 
@@ -1422,7 +1429,7 @@ test "a constant force does not move a kinematic body" {
     const body = try MakeMovingBody(engine_context, scene, KinematicBodyTag, .{ .x = 1, .y = 0, .z = 0 });
     _ = try body.AddComponent(engine_context, ConstantForceComponent{ .mForce = .{ .x = 0, .y = 50, .z = 0 } });
 
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 1), VelocityOf(body).x, eps);
     try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(body).y, eps);
 }
@@ -1443,7 +1450,7 @@ test "a local constant force turns with the body" {
         .mForce = .{ .x = 6, .y = 0, .z = 0 },
     });
 
-    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try PhysicsFrame(engine_context);
     //12 / 2 up and 6 / 2 along, each for 1/60 of a second
     try std.testing.expectApproxEqAbs(@as(f32, 0.05), VelocityOf(body).x, eps);
     try std.testing.expectApproxEqAbs(@as(f32, 0.1), VelocityOf(body).y, eps);

@@ -7,6 +7,7 @@ const Tracy = @import("Tracy.zig");
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType;
 const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
+const WorldBVH = @import("WorldBVH.zig");
 const ESceneComponents = @import("../ECSComponents/SComponents.zig").EComponents;
 
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -61,6 +62,16 @@ mGameEventManager: GameEvents.GameEventManager = .empty,
 /// the one screen space, and the renderer can hold all their shapes in one tree. Each view still places that space
 /// on its own camera and resolution. Not saved yet: the editor sets its own world's, game worlds keep the default
 mOverlayScaleMode: OverlayCanvas.OverlayScaleMode = .ScaleWithScreen,
+
+/// Everything in this world that takes up space, one tree per layer: built at the start of each frame (BuildBVH), refit
+/// as things move. Names entities by id, so it goes with them
+mBVH: WorldBVH = .{},
+
+/// The world's trees over what it has now. Places what was made at the last commit first, since nothing has yet
+pub fn BuildBVH(self: *WorldManager, engine_context: *EngineContext) !void {
+    try PhysicsManager.UpdateWorldTransforms(self, engine_context);
+    try self.mBVH.Build(engine_context, self);
+}
 
 /// How many screen pixels one unit of this world's screen space covers, on a target this tall
 pub fn OverlayPixelsPerUnit(self: *const WorldManager, target_height: f32, display_scale: f32) f32 {
@@ -119,6 +130,7 @@ pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
     self.mPhysicsManager.Deinit(engine_context.EngineAllocator());
     self.mEventManager.Deinit(engine_context.EngineAllocator());
     self.mGameEventManager.Deinit(engine_context.EngineAllocator());
+    self.mBVH.Deinit(engine_context.EngineAllocator());
 }
 
 /// Sends the game event `event` (an instance of an event file's struct, see Scripts/GameEvents.zig) in this world: every
@@ -135,6 +147,8 @@ pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options
 
     //the physics state names entities by id, so it goes whenever they do
     if (options == .All or options == .EManager) self.mPhysicsManager.Reset(engine_context.EngineAllocator());
+    //so does the tree
+    if (options == .All or options == .EManager) self.mBVH.Clear();
     //asks about the world that is going. Safe from inside this world's own ProcessEvents: its loop sees the list empty
     if (options == .All) self.mEventManager.EventsReset(engine_context.EngineAllocator(), .ClearAndFree);
     //game events too, which can name the entities going

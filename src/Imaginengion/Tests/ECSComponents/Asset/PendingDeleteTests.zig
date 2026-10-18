@@ -53,7 +53,7 @@ test "a destroyed asset takes its PendingDelete with it" {
     const engine_allocator = engine_context.EngineAllocator();
 
     const asset_id = try asset_manager.mECSManager.CreateEntity(engine_allocator);
-    _ = try asset_manager.mECSManager.AddComponent(engine_allocator, asset_id, PendingDelete{
+    _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, PendingDelete{
         .mReason = 1,
         .mTime = std.Io.Timestamp.now(engine_context.Io(), .awake),
     });
@@ -85,7 +85,7 @@ test "marking is per asset and leaves others alone" {
     const marked = try asset_manager.mECSManager.CreateEntity(engine_allocator);
     const untouched = try asset_manager.mECSManager.CreateEntity(engine_allocator);
 
-    _ = try asset_manager.mECSManager.AddComponent(engine_allocator, marked, PendingDelete{
+    _ = try asset_manager.mECSManager.AddComponentSync(engine_context, marked, PendingDelete{
         .mReason = 1,
         .mTime = std.Io.Timestamp.now(engine_context.Io(), .awake),
     });
@@ -104,7 +104,7 @@ test "a mark can come off again, for a file that was only briefly missing" {
     const engine_allocator = engine_context.EngineAllocator();
 
     const asset_id = try asset_manager.mECSManager.CreateEntity(engine_allocator);
-    _ = try asset_manager.mECSManager.AddComponent(engine_allocator, asset_id, PendingDelete{
+    _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, PendingDelete{
         .mReason = 1,
         .mTime = std.Io.Timestamp.now(engine_context.Io(), .awake),
     });
@@ -117,7 +117,7 @@ test "a mark can come off again, for a file that was only briefly missing" {
     try std.testing.expect(asset_manager.mECSManager.IsActiveEntity(asset_id));
 
     //and it can be marked again later
-    _ = try asset_manager.mECSManager.AddComponent(engine_allocator, asset_id, PendingDelete{
+    _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, PendingDelete{
         .mReason = 1,
         .mTime = std.Io.Timestamp.now(engine_context.Io(), .awake),
     });

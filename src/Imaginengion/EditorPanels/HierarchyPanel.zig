@@ -1,7 +1,8 @@
 //! A hierarchy panel, in the editor's own UI, in one of the shell's hierarchy tabs: a tree of the world's objects of one
 //! type (entities, scenes, players or game contexts), the top level ones with what is under each nested below it. Scenes
-//! come in stack order, the top layer first. Clicking a row selects its object, and the selected object's row is
-//! highlighted however it was selected. Every row can be dragged, carrying its object (ObjectRefComponent). Right
+//! come in stack order, the top layer first. Clicking a row selects its object, clicking the colored stripe a scene's
+//! row or a top level entity's row starts with selects that scene, and the selected object's row is highlighted
+//! however it was selected. Every row can be dragged, carrying its object (ObjectRefComponent). Right
 //! clicking a row offers New Child, Make Template, Duplicate and Delete (and New Entity for a scene), right clicking the panel New
 //! of its type. Entities and scenes also offer ready-made UI entities (a panel, text, a button, ...), each made by its
 //! widget builder (Widgets): the panel's menu puts one in the selected scene, an entity's row under that entity, a
@@ -90,6 +91,8 @@ pub fn HierarchyPanel(comptime T: type) type {
         pub const Action = union(enum) {
             /// a row clicked: its object selected
             Select: T,
+            /// a row's stripe clicked: the scene it is the color of selected
+            SelectScene: Scene,
             /// from a row's menu, for the object it was opened on
             NewChild,
             NewEntity,
@@ -118,6 +121,13 @@ pub fn HierarchyPanel(comptime T: type) type {
             Object: T,
             /// 0 for a top row
             Depth: u32,
+            /// the stripe the row starts with and the scene it is the color of, null for none
+            Stripe: ?Stripe,
+        };
+
+        const Stripe = struct {
+            Bar: Entity,
+            Scene: Scene,
         };
 
         /// A whole world's objects, or only what it is handed (BuildForRoots)
@@ -253,11 +263,16 @@ pub fn HierarchyPanel(comptime T: type) type {
             try self.ShowSelected(engine_context, selected);
         }
 
-        /// What a left click on `entity` does: a row selects its object, a menu item does its action. Null for anything
-        /// else
-        pub fn ActionOf(self: *const Self, entity: Entity) ?Action {
+        /// What a left click on `entity` does, `target` being what is deepest under the pointer: a row selects its
+        /// object, or its scene if it was the row's stripe that was clicked, a menu item does its action. Null for
+        /// anything else
+        pub fn ActionOf(self: *const Self, entity: Entity, target: Entity) ?Action {
             for (self.mRows.items) |row| {
-                if (Same(row.Header, entity)) return .{ .Select = row.Object };
+                if (!Same(row.Header, entity)) continue;
+                if (row.Stripe) |stripe| {
+                    if (Same(stripe.Bar, target)) return .{ .SelectScene = stripe.Scene };
+                }
+                return .{ .Select = row.Object };
             }
             for ([_][]const MenuItem{ self.mRowItems.items, self.mAreaItems.items }) |items| {
                 for (items) |item| {
@@ -289,6 +304,7 @@ pub fn HierarchyPanel(comptime T: type) type {
             const engine_allocator = engine_context.EngineAllocator();
             switch (action) {
                 .Select => |object| selected.* = ToSelected(object),
+                .SelectScene => |scene| selected.* = .{ .scene_layer = scene },
                 .New => switch (T) {
                     Entity => if (selected.*) |object| {
                         if (object == .scene_layer) _ = try object.scene_layer.CreateEntity(engine_context, Entity.DefaultConfig);
@@ -453,17 +469,19 @@ pub fn HierarchyPanel(comptime T: type) type {
                 const depth: usize = @intCast(packed_shape & 0xFFFF_FFFF);
                 parents.shrinkRetainingCapacity(depth + 1);
                 const has_children = i + 1 < shape.len and (shape[i + 1] & 0xFFFF_FFFF) > depth;
+                const stripe_scene = if (self.mMode == .World) StripeSceneOf(object, depth) else null;
                 const node = try Widgets.TreeNode(engine_context, .{ .Entity = parents.items[depth] }, NameOf(object), .{
                     .Leaf = !has_children,
                     .Open = self.mOpen.contains(object.mID),
                     .StockScripts = self.mOptions.StockScripts,
-                    .Stripe = if (self.mMode == .World) StripeOf(object, depth) else null,
+                    .Stripe = if (stripe_scene) |scene| SceneColor(scene) else null,
                 });
                 //what dragging the row carries, and the row menu, opened for it
                 _ = try node.Header.AddComponent(engine_context, DragSourceComponent{});
                 _ = try node.Header.AddComponent(engine_context, ObjectRefComponent{ .mObject = .Of(object) });
                 try Widgets.ShareContextMenu(engine_context, node.Header, self.mRowMenu, self.mOptions);
-                try self.mRows.append(engine_allocator, .{ .Header = node.Header, .Label = UIManager.LabelOf(node.Header).?, .Content = node.Content, .Object = object, .Depth = @intCast(depth) });
+                const stripe: ?Stripe = if (stripe_scene) |scene| .{ .Bar = node.Stripe.?, .Scene = scene } else null;
+                try self.mRows.append(engine_allocator, .{ .Header = node.Header, .Label = UIManager.LabelOf(node.Header).?, .Content = node.Content, .Object = object, .Depth = @intCast(depth), .Stripe = stripe });
                 if (node.Content) |content| try parents.append(engine_context.FrameAllocator(), content);
             }
             try self.mArea.MarkLayoutDirty(engine_context);
@@ -498,12 +516,13 @@ pub fn HierarchyPanel(comptime T: type) type {
             };
         }
 
-        /// The stripe a row starts with, in the scene's color: every scene's row, and a top level entity's (what is under
-        /// it is in the same scene). Nothing for players and game contexts, which aren't in a scene
-        fn StripeOf(object: T, depth: usize) ?MathTypes.Vec4(f32) {
+        /// The scene whose color the stripe a row starts with is, which clicking the stripe selects: every scene's row,
+        /// and a top level entity's (what is under it is in the same scene). Nothing for players and game contexts,
+        /// which aren't in a scene
+        fn StripeSceneOf(object: T, depth: usize) ?Scene {
             return switch (T) {
-                Scene => SceneColor(object),
-                Entity => if (depth == 0) SceneColor((object.GetComponent(EntitySceneComponent) orelse return null).mScene) else null,
+                Scene => object,
+                Entity => if (depth == 0) (object.GetComponent(EntitySceneComponent) orelse return null).mScene else null,
                 else => null,
             };
         }

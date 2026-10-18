@@ -15,9 +15,15 @@ pub const Name: []const u8 = "UIElementComponent";
 /// world) gets an element of its own. Saved with the element's components inside it
 mElement: UIElement = .uninit,
 
-/// The element isn't deleted here: the UIManager lets go of an element at the end of the frame once its entity no
-/// longer points at it, the way the audio manager lets go of voices whose source has gone
-pub fn Deinit(_: *UIElementComponent, _: *EngineContext) void {}
+/// The element goes with the component, at the end of the frame. The ECS deinits a component however it goes: removed,
+/// its entity deleted (or a parent of it), or its whole world cleared, as stopping play does. Nothing else holds an
+/// element, so this is the only place one is let go of
+pub fn Deinit(self: *UIElementComponent, engine_context: *EngineContext) void {
+    if (!self.mElement.IsActive()) return;
+    self.mElement.Delete(engine_context) catch |err| {
+        std.log.err("A UI element could not be deleted with its entity's UIElementComponent: {s}", .{@errorName(err)});
+    };
+}
 
 /// A copy gets an element of its own with the same settings. The UIManager tells it which entity it belongs to once
 /// the copy is on one (UIManager.Adopt)
@@ -54,6 +60,8 @@ pub fn jsonStringify(self: *const UIElementComponent, jw: anytype) !void {
 pub fn jsonParse(frame_allocator: std.mem.Allocator, source: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(source.*))!UIElementComponent {
     const engine_context = JsonUtils.EngineContextFromAllocator(frame_allocator);
     const element = engine_context.mUIManager.NewElement(engine_context) catch return error.OutOfMemory;
+    //a file that fails to read part way leaves no element behind that nothing would ever delete
+    errdefer element.Delete(engine_context) catch {};
 
     if (.object_begin != try source.next()) return error.UnexpectedToken;
     while (true) {
