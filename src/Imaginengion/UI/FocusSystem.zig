@@ -199,12 +199,8 @@ pub fn EndEdit(self: *FocusSystem, engine_context: *EngineContext, how: EndHow) 
     self.mFocused = null;
     ReleaseKeyboard(engine_context);
 
-    //deletes wait for the end of the frame, which is after this frame is drawn
     if (self.mCaretEntity) |caret| {
-        if (caret.IsActive()) {
-            if (caret.GetComponent(SurfaceComponent)) |surface| surface.mShouldRender = false;
-            try caret.Delete(engine_context);
-        }
+        if (caret.IsActive()) try caret.Delete(engine_context);
     }
     self.mCaretEntity = null;
 

@@ -5,6 +5,7 @@ const std = @import("std");
 const EngineContext = @import("EngineContext.zig");
 const Tracy = @import("Tracy.zig");
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
+const System = @import("../ECS/System.zig");
 const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType;
 const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
 const WorldBVH = @import("WorldBVH.zig");
@@ -69,7 +70,7 @@ mBVH: WorldBVH = .{},
 
 /// The world's trees over what it has now. Places what was made at the last commit first, since nothing has yet
 pub fn BuildBVH(self: *WorldManager, engine_context: *EngineContext) !void {
-    try PhysicsManager.UpdateWorldTransforms(self, engine_context);
+    try self.RunSystem(engine_context, PhysicsManager.TransformSystem);
     try self.mBVH.Build(engine_context, self);
 }
 
@@ -415,6 +416,135 @@ pub fn GetObjectByUUID(self: *WorldManager, comptime obj_t: type, uuid: u64) ?ob
 }
 
 /// Returns the manager that owns objects of type obj_t (Entity -> EManager, Scene -> SManager, ...)
+/// Runs a system (ECS/System.zig) on this world: each component it touches is locked in every one of the world's ECSs
+/// that has it (an entity's, a scene's, a player's, a game context's), so a shared one like NameComponent is locked on
+/// all of them. Its parameters can be any of what SystemParams supplies
+pub fn RunSystem(self: *WorldManager, engine_context: *EngineContext, comptime S: type) anyerror!void {
+    comptime System.Validate(S);
+    inline for (S.Accessed) |accessed_type| {
+        const in_world = comptime blk: {
+            @setEvalBranchQuota(100_000);
+            break :blk EManager.ECSManagerT.HasType(accessed_type) or GCManager.ECSManagerT.HasType(accessed_type) or
+                PManager.ECSManagerT.HasType(accessed_type) or SManager.ECSManagerT.HasType(accessed_type);
+        };
+        if (!in_world) @compileError("System " ++ S.Name ++ " touches " ++ @typeName(accessed_type) ++ ", which none of a world's objects have");
+    }
+
+    const zone = Tracy.ZoneInit(S.Name, @src());
+    defer zone.Deinit();
+
+    self.mEManager.mECSManager.Lock(comptime _TypesIn(EManager.ECSManagerT, S.Accessed));
+    self.mGCManager.mECSManager.Lock(comptime _TypesIn(GCManager.ECSManagerT, S.Accessed));
+    self.mPManager.mECSManager.Lock(comptime _TypesIn(PManager.ECSManagerT, S.Accessed));
+    self.mSManager.mECSManager.Lock(comptime _TypesIn(SManager.ECSManagerT, S.Accessed));
+
+    //on every ECS, also one the system lists nothing in, so touching it is caught too
+    var e_record = comptime EManager.ECSManagerT.SystemRecordFor(S.Name, _TypesIn(EManager.ECSManagerT, S.Accessed));
+    var gc_record = comptime GCManager.ECSManagerT.SystemRecordFor(S.Name, _TypesIn(GCManager.ECSManagerT, S.Accessed));
+    var p_record = comptime PManager.ECSManagerT.SystemRecordFor(S.Name, _TypesIn(PManager.ECSManagerT, S.Accessed));
+    var s_record = comptime SManager.ECSManagerT.SystemRecordFor(S.Name, _TypesIn(SManager.ECSManagerT, S.Accessed));
+    self.mEManager.mECSManager.EnterSystem(&e_record);
+    self.mGCManager.mECSManager.EnterSystem(&gc_record);
+    self.mPManager.mECSManager.EnterSystem(&p_record);
+    self.mSManager.mECSManager.EnterSystem(&s_record);
+
+    System.Call(S, SystemParams{ .mEngineContext = engine_context, .mWorld = self }) catch |err| {
+        self.mSManager.mECSManager.LeaveSystem(&s_record);
+        self.mPManager.mECSManager.LeaveSystem(&p_record);
+        self.mGCManager.mECSManager.LeaveSystem(&gc_record);
+        self.mEManager.mECSManager.LeaveSystem(&e_record);
+        self._UnlockSystem(engine_context, S) catch |unlock_err| {
+            std.log.err("What " ++ S.Name ++ " changed could not all be made: {s}", .{@errorName(unlock_err)});
+        };
+        return err;
+    };
+    //left before the unlock: what the drain sets off isn't the system's doing
+    self.mSManager.mECSManager.LeaveSystem(&s_record);
+    self.mPManager.mECSManager.LeaveSystem(&p_record);
+    self.mGCManager.mECSManager.LeaveSystem(&gc_record);
+    self.mEManager.mECSManager.LeaveSystem(&e_record);
+    try self._UnlockSystem(engine_context, S);
+}
+
+// lets go of what RunSystem locked, every ECS even when one fails to drain, and hands back the first failure
+fn _UnlockSystem(self: *WorldManager, engine_context: *EngineContext, comptime S: type) !void {
+    var first_err: ?anyerror = null;
+    self.mSManager.mECSManager.Unlock(engine_context, comptime _TypesIn(SManager.ECSManagerT, S.Accessed)) catch |err| {
+        if (first_err == null) first_err = err;
+    };
+    self.mPManager.mECSManager.Unlock(engine_context, comptime _TypesIn(PManager.ECSManagerT, S.Accessed)) catch |err| {
+        if (first_err == null) first_err = err;
+    };
+    self.mGCManager.mECSManager.Unlock(engine_context, comptime _TypesIn(GCManager.ECSManagerT, S.Accessed)) catch |err| {
+        if (first_err == null) first_err = err;
+    };
+    self.mEManager.mECSManager.Unlock(engine_context, comptime _TypesIn(EManager.ECSManagerT, S.Accessed)) catch |err| {
+        if (first_err == null) first_err = err;
+    };
+    if (first_err) |err| return err;
+}
+
+// the ones of `types` that the ECS type `ECSManagerT` has
+fn _TypesIn(comptime ECSManagerT: type, comptime types: []const type) []const type {
+    //every type checked against a whole component list
+    @setEvalBranchQuota(100_000);
+    comptime var in_ecs: []const type = &.{};
+    for (types) |listed_type| {
+        if (ECSManagerT.HasType(listed_type)) in_ecs = in_ecs ++ [_]type{listed_type};
+    }
+    return in_ecs;
+}
+
+/// Unchecked records (ECSManager.UncheckedRecord) on all four of the world's ECSs, for engine work done inside a system
+/// that isn't the system's own: structural operations and the bookkeeping they set off, which reach across the world's
+/// ECSs (deleting a scene reads its entities), and scripts
+pub const UncheckedScope = struct {
+    mE: EManager.ECSManagerT.SystemRecord = EManager.ECSManagerT.UncheckedRecord,
+    mGC: GCManager.ECSManagerT.SystemRecord = GCManager.ECSManagerT.UncheckedRecord,
+    mP: PManager.ECSManagerT.SystemRecord = PManager.ECSManagerT.UncheckedRecord,
+    mS: SManager.ECSManagerT.SystemRecord = SManager.ECSManagerT.UncheckedRecord,
+
+    pub fn Enter(self: *UncheckedScope, world: *WorldManager) void {
+        world.mEManager.mECSManager.EnterSystem(&self.mE);
+        world.mGCManager.mECSManager.EnterSystem(&self.mGC);
+        world.mPManager.mECSManager.EnterSystem(&self.mP);
+        world.mSManager.mECSManager.EnterSystem(&self.mS);
+    }
+
+    pub fn Leave(self: *UncheckedScope, world: *WorldManager) void {
+        world.mSManager.mECSManager.LeaveSystem(&self.mS);
+        world.mPManager.mECSManager.LeaveSystem(&self.mP);
+        world.mGCManager.mECSManager.LeaveSystem(&self.mGC);
+        world.mEManager.mECSManager.LeaveSystem(&self.mE);
+    }
+};
+
+/// What a system run on a world (RunSystem) can take as parameters, each by its type
+pub const SystemParams = struct {
+    mEngineContext: *EngineContext,
+    mWorld: *WorldManager,
+
+    pub fn Get(self: SystemParams, comptime T: type) T {
+        if (T == *EngineContext) {
+            return self.mEngineContext;
+        } else if (T == *WorldManager) {
+            return self.mWorld;
+        } else if (T == *EManager) {
+            return &self.mWorld.mEManager;
+        } else if (T == *GCManager) {
+            return &self.mWorld.mGCManager;
+        } else if (T == *PManager) {
+            return &self.mWorld.mPManager;
+        } else if (T == *SManager) {
+            return &self.mWorld.mSManager;
+        } else if (T == *PhysicsManager) {
+            return &self.mWorld.mPhysicsManager;
+        } else {
+            @compileError("a system run on a world can't be given a " ++ @typeName(T) ++ ", see WorldManager.SystemParams");
+        }
+    }
+};
+
 pub fn GetManager(self: *WorldManager, comptime obj_t: type) *ManagerT(obj_t) {
     if (obj_t == Entity) {
         return &self.mEManager;

@@ -638,21 +638,16 @@ pub fn ScrollingMenu(engine_context: *EngineContext, menu: Entity, rows: usize) 
     try menu.MarkLayoutDirty(engine_context);
 }
 
-/// Takes `entity` and everything in it away: hidden now (its layout item folded) and deleted at the end of the frame,
-/// along with the popups the things in it open, which live at the top of the scene rather than inside them (a
-/// dropdown's list, a right-click menu, and theirs in turn). A popup in `keep` stays: a menu shared with things that
-/// aren't going (ShareContextMenu)
+/// Deletes `entity` and everything in it, along with the popups the things in it open, which live at the top of the
+/// scene rather than inside them (a dropdown's list, a right-click menu, and theirs in turn). A popup in `keep` stays:
+/// a menu shared with things that aren't going (ShareContextMenu). The layout it was in is laid out again by the
+/// delete itself (LayoutSystem.OnEntityDestroyed)
 pub fn Remove(engine_context: *EngineContext, entity: Entity, keep: []const Entity) !void {
     if (!entity.IsActive()) return;
     var popups: std.ArrayList(Entity) = .empty;
     try PopupsIn(engine_context.FrameAllocator(), entity, keep, &popups);
-    if (entity.GetComponent(LayoutItemComponent)) |item| item.mCollapsed = true;
-    try entity.MarkLayoutDirty(engine_context);
     try entity.Delete(engine_context);
-    for (popups.items) |popup| {
-        if (popup.GetComponent(LayoutItemComponent)) |item| item.mCollapsed = true;
-        try popup.Delete(engine_context);
-    }
+    for (popups.items) |popup| try popup.Delete(engine_context);
 }
 
 /// The popups `entity` and everything in it open, and the ones those open, each once

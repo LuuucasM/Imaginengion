@@ -4,6 +4,7 @@ const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
 const EventManager = @import("../Events/EventManager.zig");
+const System = @import("System.zig");
 pub const BuiltinComponentCount = @import("Components.zig").BuiltinComponentCount;
 pub const MainObjectComponent = @import("Components.zig").MainObjectComponent;
 pub const EntityTagComponent = @import("Components.zig").EntityTagComponent;
@@ -51,6 +52,17 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             .mStagingArena = .init,
             .mStaged = .empty,
             .mLockCounts = @splat(0),
+            .mLockTotal = 0,
+            .mRemovalHook = null,
+            .mCurrentSystem = null,
+        };
+
+        /// Told about each removal and destroy just before it happens, made right away or drained from the queue,
+        /// while what goes is still readable. Set once by what owns this ECS (Manager.Core hooks its
+        /// OnComponentRemoved and OnObjectDestroyed in), the way the sync callback is
+        pub const RemovalHook = struct {
+            mCtx: *anyopaque,
+            mFn: *const fn (*anyopaque, *EngineContext, ECSEventDataT.EventT) anyerror!void,
         };
 
         /// A staged component's place in mStaged
@@ -71,6 +83,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         mStaged: std.AutoHashMapUnmanaged(StagedKey, *anyopaque),
         /// How many times each component's storage is locked (see Lock), by ComponentInd
         mLockCounts: [components_types.len + BuiltinComponentCount]u16,
+        /// Every lock in mLockCounts added up: the queue drains when this gets back to 0
+        mLockTotal: u32,
+        mRemovalHook: ?RemovalHook,
+        /// The innermost system running on this ECS (see SystemRecord), for the debug checks
+        mCurrentSystem: ?*const SystemRecord,
 
         pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
             _ValidateCompList(components_types);
@@ -88,6 +105,10 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             self.mECSEventManager.Deinit(engine_context.EngineAllocator());
             self.mStagingArena.promote(engine_context.EngineAllocator()).deinit();
             self.mStaged.deinit(engine_context.EngineAllocator());
+        }
+
+        pub fn SetRemovalHook(self: *Self, hook: RemovalHook) void {
+            self.mRemovalHook = hook;
         }
 
         /// Points this ECS manager's event manager at the engine-wide synchronous listener.
@@ -161,10 +182,15 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return new_entity_id;
         }
 
-        /// Queues the destroy. The entity and its children stay alive until ProcessEvents runs.
+        /// Destroys the entity and everything under it, its children and scripts, right away. Queued instead (see
+        /// Lock) when any of them has a component whose type is locked, or something is queued already.
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
             std.debug.assert(self.IsActiveEntity(entity_id));
-            try self.mECSEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .DestroyEntity = .{ .mEntityID = entity_id } });
+            if (self._HasQueued() or self._SubtreeLocked(entity_id)) {
+                try self.mECSEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .DestroyEntity = .{ .mEntityID = entity_id } });
+                return;
+            }
+            try self._DestroyNow(engine_context, entity_id);
         }
 
         /// Every active entity, because they all carry a SkipFieldComponent.
@@ -240,12 +266,13 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             try self._InternalDuplicateChildren(engine_context, original_entity_id, new_entity_id, .Script);
         }
 
-        // puts a copy made in the staging arena on the duplicate: staged if its type is locked, the way AddComponent
+        // puts a copy made in the staging arena on the duplicate: staged if it has to wait, the way AddComponent
         // decides, and right away otherwise
         fn _StageOrAddCopy(self: *Self, engine_context: *EngineContext, new_entity_id: entity_t, component_ind: usize, staged_component: *anyopaque) !void {
             // the clone is this ECS's until it is on the entity or queued
             errdefer self.mComponentManager.DeinitStaged(engine_context, component_ind, staged_component);
-            if (self.mComponentManager.IsTag(component_ind) or self.mLockCounts[component_ind] == 0) {
+            if (self.mComponentManager.IsTag(component_ind) or !self._Queues(component_ind)) {
+                self._CheckStorageChange(component_ind, "Adding");
                 try self.mComponentManager.AddStaged(engine_context.EngineAllocator(), new_entity_id, component_ind, staged_component);
             } else {
                 try self._QueueStagedAdd(engine_context.EngineAllocator(), new_entity_id, component_ind, staged_component);
@@ -289,6 +316,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         /// ids. Only good until a component of that type is added or removed.
         pub fn GetComponentSlice(self: Self, comptime component_type: type) []component_type {
             _ValidateType(component_type);
+            self._CheckAccess(component_type);
             return self.mComponentManager.GetComponentSlice(component_type);
         }
 
@@ -403,36 +431,216 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             }
         }
 
+        //--------systems----------
+        /// Runs a system (see System.zig) on this ECS: what it touches is locked while it runs (see Lock), and the queue
+        /// drains when it is done if that was the last lock. Its parameters are supplied by type: this ECS itself as
+        /// `*Self`, anything else asked of `provider` (`provider.Get(T)`, `.{}` when the system needs nothing else).
+        /// Everything it touches has to be in this ECS; a system across several ECSs is run by what owns them
+        pub fn RunSystem(self: *Self, engine_context: *EngineContext, comptime S: type, provider: anytype) anyerror!void {
+            comptime System.Validate(S);
+            inline for (S.Accessed) |accessed_type| {
+                if (comptime !HasType(accessed_type)) @compileError("System " ++ S.Name ++ " touches " ++ @typeName(accessed_type) ++ ", which " ++ debug_name ++ " does not have");
+            }
+
+            const zone = Tracy.ZoneInit(S.Name, @src());
+            defer zone.Deinit();
+
+            self.Lock(S.Accessed);
+            var record = comptime SystemRecordFor(S.Name, S.Accessed);
+            self.EnterSystem(&record);
+            System.Call(S, SystemParams(@TypeOf(provider)){ .mECS = self, .mProvider = provider }) catch |err| {
+                self.LeaveSystem(&record);
+                self.Unlock(engine_context, S.Accessed) catch |unlock_err| {
+                    std.log.err("What " ++ S.Name ++ " changed could not all be made: {s}", .{@errorName(unlock_err)});
+                };
+                return err;
+            };
+            //left before the unlock: what the drain sets off isn't the system's doing
+            self.LeaveSystem(&record);
+            try self.Unlock(engine_context, S.Accessed);
+        }
+
+        // what RunSystem supplies a system's parameters from: this ECS, and the caller's provider for the rest
+        fn SystemParams(comptime Provider: type) type {
+            return struct {
+                mECS: *Self,
+                mProvider: Provider,
+
+                pub fn Get(params: @This(), comptime T: type) T {
+                    if (T == *Self) {
+                        return params.mECS;
+                    } else if (@hasDecl(Provider, "Get")) {
+                        return params.mProvider.Get(T);
+                    } else {
+                        @compileError("a system run on " ++ debug_name ++ " wants a " ++ @typeName(T) ++ ", and nothing given to RunSystem can supply one");
+                    }
+                }
+            };
+        }
+
+        /// Each component's slot is set when a running system may get pointers into it
+        pub const AllowedSet = std.bit_set.StaticBitSet(components_types.len + BuiltinComponentCount);
+
+        /// What RunSystem keeps on its own stack while a system runs on this ECS, so the debug checks know what it
+        /// listed. Chained: the innermost one is what is checked, a system inside another can't lean on what the outer
+        /// one listed
+        pub const SystemRecord = struct {
+            mName: [:0]const u8,
+            mAllowed: AllowedSet,
+            /// for engine code that runs inside a system without being its work (see UncheckedRecord)
+            mUnchecked: bool = false,
+            mOuter: ?*const SystemRecord = null,
+        };
+
+        /// A record for engine code that runs inside a system without being the system's own work: the bookkeeping
+        /// adding, removing, creating and deleting set off, and code run on others' behalf (scripts). Nothing it touches
+        /// is charged to the system around it
+        pub const UncheckedRecord: SystemRecord = .{ .mName = "(unchecked)", .mAllowed = .empty, .mUnchecked = true };
+
+        pub fn SystemRecordFor(comptime name: [:0]const u8, comptime types: []const type) SystemRecord {
+            const allowed = comptime blk: {
+                //each type looked up in the whole component list
+                @setEvalBranchQuota(100_000);
+                var set: AllowedSet = .empty;
+                for (types) |listed_type| set.set(ComponentInd(listed_type));
+                break :blk set;
+            };
+            return .{ .mName = name, .mAllowed = allowed };
+        }
+
+        /// Makes `record` the innermost one until LeaveSystem. It lives on the caller's stack
+        pub fn EnterSystem(self: *Self, record: *SystemRecord) void {
+            record.mOuter = self.mCurrentSystem;
+            self.mCurrentSystem = record;
+        }
+
+        pub fn LeaveSystem(self: *Self, record: *const SystemRecord) void {
+            std.debug.assert(self.mCurrentSystem == record);
+            self.mCurrentSystem = record.mOuter;
+        }
+
+        /// Whether the system running now may get pointers into `component_type`: one it listed, or anything outside a
+        /// system or inside an unchecked record. Tags (nothing to point into) and the hierarchy components (read by
+        /// engine helpers everywhere) are always allowed
+        pub fn AllowsAccess(self: Self, comptime component_type: type) bool {
+            if (comptime @sizeOf(component_type) == 0) return true;
+            if (comptime component_type == ParentComponent or component_type == ChildComponent or component_type == SkipFieldComponent) return true;
+            const record = self.mCurrentSystem orelse return true;
+            if (record.mUnchecked) return true;
+            return record.mAllowed.isSet(ComponentInd(component_type));
+        }
+
+        /// Whether an add or removal can go straight to this component's storage: a tag has none to move, and anything
+        /// else only when it isn't locked
+        pub fn CanChangeStorage(self: Self, component_ind: usize) bool {
+            return self.mComponentManager.IsTag(component_ind) or self.mLockCounts[component_ind] == 0;
+        }
+
+        // in safe builds, a panic naming the system and the component it didn't list
+        fn _CheckAccess(self: Self, comptime component_type: type) void {
+            if (!std.debug.runtime_safety) return;
+            if (self.AllowsAccess(component_type)) return;
+            std.debug.panic("System {s} used {s} without listing it in .Reads or .Writes", .{ self.mCurrentSystem.?.mName, @typeName(component_type) });
+        }
+
+        // in safe builds, a panic when a change reaches storage that is locked: it would move what a running system holds
+        fn _CheckStorageChange(self: Self, component_ind: usize, comptime change: []const u8) void {
+            if (!std.debug.runtime_safety) return;
+            if (self.CanChangeStorage(component_ind)) return;
+            std.debug.panic(change ++ " {s} while it is locked, which would move what a running system holds", .{ComponentNames[component_ind]});
+        }
+
+        // each slot's component type name, for the debug checks' messages
+        const ComponentNames = blk: {
+            var names: [components_types.len + BuiltinComponentCount][]const u8 = undefined;
+            for ([_]type{ ParentComponent, ChildComponent, SkipFieldComponent, MainObjectComponent, EntityTagComponent, ScriptTagComponent }) |builtin_type| {
+                names[ComponentInd(builtin_type)] = @typeName(builtin_type);
+            }
+            for (components_types, 0..) |listed_type, listed_ind| names[listed_ind + BuiltinComponentCount] = @typeName(listed_type);
+            break :blk names;
+        };
+
+        /// Whether `component_type` is one of this ECS's components, the builtin ones included
+        pub fn HasType(comptime component_type: type) bool {
+            if (component_type == ParentComponent or component_type == ChildComponent or component_type == SkipFieldComponent or
+                component_type == MainObjectComponent or component_type == EntityTagComponent or component_type == ScriptTagComponent) return true;
+            inline for (components_types) |listed_type| {
+                if (listed_type == component_type) return true;
+            }
+            return false;
+        }
+
         //--------components related functions----------
         /// Holds off structural changes to these components' storage until the matching Unlock, for code that keeps
-        /// pointers or slices into it while something it calls might add one: while a type is locked AddComponent
-        /// stages it (see AddComponent), which lands at the next ProcessEvents. Removals and destroys are already
-        /// queued for then whether locked or not. Counted per type, so locks nest; every one has to be unlocked again
-        /// before ProcessEvents
+        /// pointers, slices or lists of ids into it while something it calls might change it. Adds, removals and
+        /// destroys are made right away, except that while a type is locked:
+        ///   - adding one is staged (see AddComponent)
+        ///   - removing one is queued
+        ///   - destroying an entity that has one, itself or anywhere under it, is queued
+        /// Once anything is queued everything after it is queued as well, whatever its type, so changes always land
+        /// in the order they were asked for. The queue drains, in that order, when the last lock in this ECS is let go
+        /// of. Tags are the exception: with no storage to move they are always added and removed right away.
+        /// Counted per type, so locks nest.
         pub fn Lock(self: *Self, comptime locked_types: []const type) void {
             inline for (locked_types) |locked_type| {
                 _ValidateType(locked_type);
                 self.mLockCounts[ComponentInd(locked_type)] += 1;
+                self.mLockTotal += 1;
             }
         }
 
-        pub fn Unlock(self: *Self, comptime locked_types: []const type) void {
+        /// Lets go of what Lock took, and drains the queue when that was the last lock in this ECS
+        pub fn Unlock(self: *Self, engine_context: *EngineContext, comptime locked_types: []const type) !void {
             inline for (locked_types) |locked_type| {
                 _ValidateType(locked_type);
                 std.debug.assert(self.mLockCounts[ComponentInd(locked_type)] > 0);
                 self.mLockCounts[ComponentInd(locked_type)] -= 1;
+                self.mLockTotal -= 1;
             }
+            if (self.mLockTotal == 0 and self._HasQueued()) try self._Drain(engine_context);
         }
 
-        /// Adds the component now, unless its type is locked (see Lock). A locked type's add is staged instead: its
-        /// storage only takes it at ProcessEvents, so no component already in that array moves while it is locked.
-        /// Until then GetComponent and HasComponent find the staged copy, which is also what this returns, so the
-        /// entity reads as having it straight away; queries (GetGroup, GetComponentSlice, NumWithComponent) only see
-        /// it once it lands. A tag has no storage that could move, so it always goes on right away.
+        // whether a change to this slot waits in the queue: its type is locked, or something is queued already
+        fn _Queues(self: Self, component_ind: usize) bool {
+            return self.mLockCounts[component_ind] > 0 or self._HasQueued();
+        }
+
+        fn _HasQueued(self: Self) bool {
+            return self.mECSEventManager.mEventsArray.get(.EndOfFrame).items.len > 0;
+        }
+
+        // whether the entity or anything under it has a component whose type is locked
+        fn _SubtreeLocked(self: *Self, entity_id: entity_t) bool {
+            if (self.mLockTotal == 0) return false;
+
+            var skipfield = self.mComponentManager.GetComponent(SkipFieldComponent, entity_id).?.mSkipField;
+            var field_iter = skipfield.Iterator();
+            while (field_iter.next()) |component_ind| {
+                if (self.mLockCounts[component_ind] > 0) return true;
+            }
+
+            const parent_component = self.mComponentManager.GetComponent(ParentComponent, entity_id) orelse return false;
+            for ([_]entity_t{ parent_component.mFirstEntity, parent_component.mFirstScript }) |first_id| {
+                if (first_id == std.math.maxInt(entity_t)) continue;
+                var curr_id = first_id;
+                while (true) {
+                    if (self._SubtreeLocked(curr_id)) return true;
+                    curr_id = self.mComponentManager.GetComponent(ChildComponent, curr_id).?.mNext;
+                    if (curr_id == first_id) break; // the list is circular
+                }
+            }
+            return false;
+        }
+
+        /// Adds the component now, unless it has to wait (see Lock). Then it is staged instead: its storage only takes
+        /// it when the queue drains, so no component already in that array moves while it is locked. Until then
+        /// GetComponent and HasComponent find the staged copy, which is also what this returns, so the entity reads as
+        /// having it straight away; queries (GetGroup, GetComponentSlice, NumWithComponent) only see it once it lands.
+        /// A tag has no storage that could move, so it always goes on right away.
         pub fn AddComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, new_component: anytype) !*@TypeOf(new_component) {
             const component_t = @TypeOf(new_component);
             if (comptime @sizeOf(component_t) == 0) return try self.AddComponentSync(engine_context, entity_id, new_component);
-            if (self.mLockCounts[ComponentInd(component_t)] == 0) return try self.AddComponentSync(engine_context, entity_id, new_component);
+            if (!self._Queues(ComponentInd(component_t))) return try self.AddComponentSync(engine_context, entity_id, new_component);
 
             const zone = Tracy.ZoneInit(debug_name ++ "::AddComponent", @src());
             defer zone.Deinit();
@@ -491,6 +699,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             std.debug.assert(self.IsActiveEntity(entity_id));
             std.debug.assert(self._GetStaged(entity_id, ComponentInd(component_t)) == null);
 
+            self._CheckStorageChange(ComponentInd(component_t), "Adding");
             const component_ptr = try self.mComponentManager.AddComponent(engine_context.EngineAllocator(), entity_id, new_component);
 
             _ = try self.mECSEventManager.Dispatch(engine_context, .{ .AddComponent = .{
@@ -503,40 +712,57 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return self.mComponentManager.GetComponent(component_t, entity_id).?;
         }
 
-        /// Queues the removal. The component stays readable until ProcessEvents runs.
+        /// Removes the component right away, unless it has to wait (see Lock), when the removal is queued and the
+        /// component stays readable until the queue drains. A tag always comes off right away.
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
             std.debug.assert(self.IsActiveEntity(entity_id));
             std.debug.assert(components_types.len + BuiltinComponentCount > component_ind);
             std.debug.assert(component_ind != SkipFieldComponent.Ind); // entity lifetime goes through DestroyEntity
+            if (self.mComponentManager.IsTag(component_ind) or !self._Queues(component_ind)) return try self._RemoveNow(engine_context, entity_id, component_ind);
             try self.mECSEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
         }
 
-        /// Removes the component now rather than at end of frame: the sync listener is handed the
-        /// same RemoveComponent event the deferred path would have queued, and then the removal is
-        /// applied before this returns, so HasComponent is false immediately afterwards. A component that
-        /// is still staged is taken back off the stage, and its queued add skipped.
-        ///
-        /// Use this only where nothing holds a pointer into that component's storage. Applying a
-        /// removal swapRemoves from the dense array, which moves another entity's component and so
-        /// invalidates pointers the deferred path would have kept alive for the rest of the frame.
-        /// A zero-sized tag has no value storage to move, which is what makes it the safe case.
-        ///
-        /// The listener's EventResult is deliberately ignored: callers rely on the component being
-        /// gone when this returns, so .Consume must not be able to veto the removal.
+        /// RemoveComponent made right away even while the type is locked. Only where nothing holds a pointer into that
+        /// component's storage: the removal swapRemoves from the dense array, which moves another entity's component.
         pub fn RemoveComponentSync(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
             std.debug.assert(self.IsActiveEntity(entity_id));
             std.debug.assert(components_types.len + BuiltinComponentCount > component_ind);
             std.debug.assert(component_ind != SkipFieldComponent.Ind); // entity lifetime goes through DestroyEntity
-            const zone = Tracy.ZoneInit(debug_name ++ "::RemoveComponentSync", @src());
+            try self._RemoveNow(engine_context, entity_id, component_ind);
+        }
+
+        // the removal itself: the hook hears of it first, while the component can still be read. The one on the entity
+        // is the one taken off, even with an add of it staged behind this removal; one that is only staged is taken back
+        // off the stage instead, and its queued add skipped. Nothing for one that is gone
+        fn _RemoveNow(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
+            const removes_live = self.mComponentManager.HasComponentInd(component_ind, entity_id);
+            if (!removes_live and self._GetStaged(entity_id, component_ind) == null) return;
+
+            const zone = Tracy.ZoneInit(debug_name ++ "::RemoveComponent", @src());
             defer zone.Deinit();
 
-            _ = try self.mECSEventManager.Dispatch(engine_context, .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
+            try self._CallRemovalHook(engine_context, .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
 
-            if (self.mStaged.fetchRemove(.{ .mEntityID = entity_id, .mComponentInd = component_ind })) |staged| {
-                self.mComponentManager.DeinitStaged(engine_context, component_ind, staged.value);
+            if (removes_live) {
+                // the hook may have taken it off itself
+                if (self.mComponentManager.HasComponentInd(component_ind, entity_id)) {
+                    self._CheckStorageChange(component_ind, "Removing");
+                    self.mComponentManager.RemoveComponent(engine_context, entity_id, component_ind);
+                }
                 return;
             }
-            self._InternalRemoveComponent(engine_context, entity_id, component_ind);
+            if (self.mStaged.fetchRemove(.{ .mEntityID = entity_id, .mComponentInd = component_ind })) |staged| {
+                self.mComponentManager.DeinitStaged(engine_context, component_ind, staged.value);
+            }
+        }
+
+        // the hook is bookkeeping, not the work of a system it might run inside, so it runs unchecked
+        fn _CallRemovalHook(self: *Self, engine_context: *EngineContext, event: ECSEventDataT.EventT) !void {
+            const hook = self.mRemovalHook orelse return;
+            var record = UncheckedRecord;
+            self.EnterSystem(&record);
+            defer self.LeaveSystem(&record);
+            try hook.mFn(hook.mCtx, engine_context, event);
         }
 
         /// True for a component that is staged as well (see AddComponent)
@@ -558,6 +784,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         pub fn GetComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
             _ValidateType(component_type);
             std.debug.assert(self.IsActiveEntity(entity_id));
+            self._CheckAccess(component_type);
 
             if (self.mComponentManager.GetComponent(component_type, entity_id)) |component| return component;
             const staged = self._GetStaged(entity_id, ComponentInd(component_type)) orelse return null;
@@ -574,53 +801,36 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             self.mComponentManager.ResetComponent(engine_context, entity_id, component);
         }
 
-        /// Runs every queued event of this category, then empties the queue and the staging arena.
-        /// The ECS applies the events itself: adds before the listeners in `callback_list` hear about them, so they
-        /// see the entity with its new component, and destroys and removals after, so they still see what is going.
-        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, comptime event_category: ECSEventDataT.EventCategories, callback_list: *ECSCallbackList) !void {
-            const zone = Tracy.ZoneInit(debug_name ++ "::ProcessEvents", @src());
+        /// Drains whatever is queued (see Lock). Nothing normally is by now: the queue drains when the last lock is let
+        /// go of, and every lock has to be let go of before this
+        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext) !void {
+            std.debug.assert(self.mLockTotal == 0);
+            if (self._HasQueued()) try self._Drain(engine_context);
+        }
+
+        // makes every queued change, in the order they were asked for, then empties the queue and the staging arena.
+        // What the changes set off goes to the end of the queue while it drains, and is made in this same pass
+        fn _Drain(self: *Self, engine_context: *EngineContext) !void {
+            const zone = Tracy.ZoneInit(debug_name ++ "::Drain", @src());
             defer zone.Deinit();
 
-            // one at each end of the list, and both unlinked again on the way out because the list belongs to the caller
-            var apply_adds_callback = ECSEventCallback{ .mCtx = self, .mCallbackFn = OnECSEventApplyAdds };
-            callback_list.prepend(&apply_adds_callback.mNode);
-            defer callback_list.remove(&apply_adds_callback.mNode);
+            const queue = self.mECSEventManager.mEventsArray.getPtr(.EndOfFrame);
+            var event_ind: usize = 0;
+            // indexed, not sliced: draining appends to the queue
+            while (event_ind < queue.items.len) : (event_ind += 1) {
+                switch (queue.items[event_ind]) {
+                    .AddComponent => |e| try self._InternalAddComponent(engine_context, e.mEntityID, e.mComponentInd, e.mData),
+                    .RemoveComponent => |e| if (self.IsActiveEntity(e.mEntityID)) try self._RemoveNow(engine_context, e.mEntityID, e.mComponentInd),
+                    .DestroyEntity => |e| try self._DestroyNow(engine_context, e.mEntityID),
+                    .Default => unreachable,
+                }
+            }
+            zone.Value(event_ind);
 
-            var apply_removals_callback = ECSEventCallback{ .mCtx = self, .mCallbackFn = OnECSEventApplyRemovals };
-            callback_list.append(&apply_removals_callback.mNode);
-            defer callback_list.remove(&apply_removals_callback.mNode);
-
-            try self.mECSEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
-
-            self.mECSEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
+            self.mECSEventManager.ClearCategory(engine_context.EngineAllocator(), .EndOfFrame, .ClearRetainingCapacity);
             // every staged component has now been copied onto its entity or deinitialized with it
             std.debug.assert(self.mStaged.count() == 0);
-            // a lock left on would have the staged adds that just landed move the array it protects
-            for (self.mLockCounts) |lock_count| std.debug.assert(lock_count == 0);
             self._ResetStagingArena(engine_context.EngineAllocator());
-        }
-
-        /// First in the list: applies a queued add before the listeners hear about it
-        pub fn OnECSEventApplyAdds(ecs_manager: *anyopaque, engine_context: *EngineContext, event: *const ECSEventDataT.EventT) anyerror!EventManager.EventResult {
-            const self: *Self = @ptrCast(@alignCast(ecs_manager));
-            switch (event.*) {
-                .AddComponent => |e| try self._InternalAddComponent(engine_context, e.mEntityID, e.mComponentInd, e.mData),
-                .DestroyEntity, .RemoveComponent => {},
-                .Default => @panic("Default Events are not allowed!\n"),
-            }
-            return .Continue;
-        }
-
-        /// Last in the list: applies a queued destroy or removal once the listeners have seen it
-        pub fn OnECSEventApplyRemovals(ecs_manager: *anyopaque, engine_context: *EngineContext, event: *const ECSEventDataT.EventT) anyerror!EventManager.EventResult {
-            const self: *Self = @ptrCast(@alignCast(ecs_manager));
-            switch (event.*) {
-                .DestroyEntity => |e| try self._InternalDestroyEntity(engine_context, e.mEntityID),
-                .RemoveComponent => |e| self._InternalRemoveComponent(engine_context, e.mEntityID, e.mComponentInd),
-                .AddComponent => {},
-                .Default => @panic("Default Events are not allowed!\n"),
-            }
-            return .Continue;
         }
 
         /// Applies a queued AddComponent. One taken back off the stage (RemoveComponentSync) is skipped, its
@@ -678,54 +888,36 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             self.mStagingArena = staging_arena.state;
         }
 
-        /// Applies a queued DestroyEntity. Does nothing if the entity is already gone, which happens
-        /// when the same destroy was queued twice in one batch.
-        /// Children and scripts are not destroyed here: each one is queued as its own event so that
-        /// listeners hear about it, and gets destroyed when that event comes up in this same pass.
-        fn _InternalDestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) anyerror!void {
+        // the destroy itself, of the entity and everything under it: children first, so each one leaves a parent that is
+        // still there, and the hook hears of each just before it goes. Nothing for one that is gone already
+        fn _DestroyNow(self: *Self, engine_context: *EngineContext, entity_id: entity_t) anyerror!void {
             if (!self.IsActiveEntity(entity_id)) return;
 
-            const zone = Tracy.ZoneInit(debug_name ++ "::_InternalDestroyEntity", @src());
+            const zone = Tracy.ZoneInit(debug_name ++ "::DestroyEntity", @src());
             defer zone.Deinit();
 
-            try self._InternalQueueChildren(engine_context, entity_id, .Entity);
-            try self._InternalQueueChildren(engine_context, entity_id, .Script);
+            try self._DestroyChildrenNow(engine_context, entity_id, .Entity);
+            try self._DestroyChildrenNow(engine_context, entity_id, .Script);
+
+            try self._CallRemovalHook(engine_context, .{ .DestroyEntity = .{ .mEntityID = entity_id } });
+            // the hook may have destroyed it itself
+            if (!self.IsActiveEntity(entity_id)) return;
 
             try self._InternalRemoveFromHierarchy(engine_context, entity_id);
             self.mComponentManager.DestroyEntity(engine_context, entity_id);
         }
 
-        // queues a destroy for every child in one of this entity's two lists
-        fn _InternalQueueChildren(self: *Self, engine_context: *EngineContext, entity_id: entity_t, child_type: ChildType) anyerror!void {
-            const parent_component = self.GetComponent(ParentComponent, entity_id) orelse return;
-
-            const first_id = switch (child_type) {
-                .Entity => parent_component.mFirstEntity,
-                .Script => parent_component.mFirstScript,
-            };
-            if (first_id == std.math.maxInt(entity_t)) return;
-
-            var curr_id = first_id;
-            while (true) {
-                const next_id = self.GetComponent(ChildComponent, curr_id).?.mNext;
-
-                try self.mECSEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .DestroyEntity = .{ .mEntityID = curr_id } });
-
-                if (next_id == first_id) break; // the list is circular
-                curr_id = next_id;
+        // destroys one of the entity's two child lists, always its first child: each destroy unlinks the child it was,
+        // and the ParentComponent goes with the last one
+        fn _DestroyChildrenNow(self: *Self, engine_context: *EngineContext, entity_id: entity_t, child_type: ChildType) anyerror!void {
+            while (self.mComponentManager.GetComponent(ParentComponent, entity_id)) |parent_component| {
+                const first_id = switch (child_type) {
+                    .Entity => parent_component.mFirstEntity,
+                    .Script => parent_component.mFirstScript,
+                };
+                if (first_id == std.math.maxInt(entity_t)) return;
+                try self._DestroyNow(engine_context, first_id);
             }
-        }
-
-        /// Applies a queued RemoveComponent. Does nothing if the entity or the component is already gone,
-        /// which happens when the entity was destroyed, or the same removal was queued twice, in one batch.
-        fn _InternalRemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) void {
-            if (!self.IsActiveEntity(entity_id)) return;
-            if (!self.mComponentManager.mComponentsArrays.items[component_ind].HasComponent(entity_id)) return;
-
-            const zone = Tracy.ZoneInit(debug_name ++ "::_InternalRemoveComponent", @src());
-            defer zone.Deinit();
-
-            self.mComponentManager.RemoveComponent(engine_context, entity_id, component_ind);
         }
 
         // takes this entity out of its parent's child or script list, leaving that list valid
@@ -775,6 +967,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             // with both lists empty the parent is no longer a parent.
             // goes straight to the component manager so this internal bookkeeping does not raise an event
             if (parent_component.mFirstEntity == std.math.maxInt(entity_t) and parent_component.mFirstScript == std.math.maxInt(entity_t)) {
+                self._CheckStorageChange(ParentComponent.Ind, "Removing");
                 self.mComponentManager.RemoveComponent(engine_context, parent_entity, ParentComponent.Ind);
             }
         }

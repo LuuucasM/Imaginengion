@@ -165,6 +165,8 @@ const Filter = struct {
     /// `entity`'s collider and transform if the query can hit it: in its layer, a trigger only when asked for, on one
     /// of its layers, and not part of the body it ignores
     fn Hittable(self: Filter, entity: Entity) ?Target {
+        //the tree can still name an entity destroyed since it was built
+        if (!entity.IsActive()) return null;
         const collider = entity.GetComponent(ColliderComponent) orelse return null;
         const transform = entity.GetComponent(TransformComponent) orelse return null;
         const in_layer = switch (self.mOptions.Layer) {

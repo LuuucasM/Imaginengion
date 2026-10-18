@@ -215,7 +215,5 @@ test "a region that no longer overflows loses its thumb" {
     try world.Frame();
     try std.testing.expect(Clip(world.mList).mThumbY == null);
     //hidden now, gone at the end of the frame
-    try std.testing.expect(!thumb.GetComponent(SurfaceComponent).?.mShouldRender);
-    try world.EndFrame();
     try std.testing.expect(!thumb.IsActive());
 }

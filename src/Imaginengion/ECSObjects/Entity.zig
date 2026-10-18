@@ -298,9 +298,8 @@ pub fn HasBodyTypeTag(self: Entity) bool {
     return false;
 }
 
-/// Takes the body type tag off, for when the RigidBodyComponent is going away. SyncRigidBody can not do it
-/// on the removal path, because RemoveComponent only queues and the component is still readable when it
-/// returns.
+/// Takes the body type tag off, for when the RigidBodyComponent is going away (Manager.OnComponentRemoved runs it
+/// just before the body comes off).
 pub fn ClearBodyTags(self: Entity, engine_context: *EngineContext) !void {
     inline for (BodyTypeTags) |tag_type| {
         if (self.HasComponent(tag_type)) try self.RemoveComponentSync(engine_context, tag_type);

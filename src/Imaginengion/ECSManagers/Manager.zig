@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const EngineContext = @import("../Core/EngineContext.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 
 const AManager = @import("AManager.zig");
 const AudioManager = @import("../AudioManager/AudioManager.zig");
@@ -35,6 +36,7 @@ const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const TextComponent = EntityComponents.TextComponent;
 const UIElementComponent = EntityComponents.UIElementComponent;
 const StyleSystem = @import("../UI/StyleSystem.zig");
+const LayoutSystem = @import("../UI/LayoutSystem.zig");
 const ShapeComponent = EntityComponents.ShapeComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const DisabledTag = EntityComponents.DisabledTag;
@@ -55,6 +57,13 @@ pub fn Core(comptime Self: type) type {
 
         pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
             try self.mECSManager.Init(engine_allocator);
+            HookRemovals(self);
+        }
+
+        /// Has the ECS tell OnComponentRemoved and OnObjectDestroyed about every removal and destroy. Part of Init, for
+        /// a manager with an Init of its own to call
+        pub fn HookRemovals(self: *Self) void {
+            self.mECSManager.SetRemovalHook(.{ .mCtx = self, .mFn = OnECSRemoval });
         }
 
         pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
@@ -73,6 +82,24 @@ pub fn Core(comptime Self: type) type {
         /// The manager pointer an object of this type carries. The engine level managers' objects (AssetHandle,
         /// Voice) point at their manager directly; every other object points at the WorldManager, which is
         /// recoverable because the ECS managers live as fields of it.
+        const _InWorld = Self == EManager or Self == GCManager or Self == PManager or Self == SManager;
+
+        /// Structural operations (creating, deleting) and the bookkeeping adding and removing set off run unchecked (see
+        /// ECSManager.UncheckedRecord) on every ECS they can reach: for the world's objects all four of the world's,
+        /// since they reach across them (deleting a scene reads its entities), otherwise the manager's own
+        const Unchecked = struct {
+            mWorld: if (_InWorld) WorldManager.UncheckedScope else void = if (_InWorld) .{} else {},
+            mOwn: if (_InWorld) void else Self.ECSManagerT.SystemRecord = if (_InWorld) {} else Self.ECSManagerT.UncheckedRecord,
+
+            fn Enter(unchecked: *Unchecked, self: *Self) void {
+                if (_InWorld) unchecked.mWorld.Enter(ObjManager(self)) else self.mECSManager.EnterSystem(&unchecked.mOwn);
+            }
+
+            fn Leave(unchecked: *Unchecked, self: *Self) void {
+                if (_InWorld) unchecked.mWorld.Leave(ObjManager(self)) else self.mECSManager.LeaveSystem(&unchecked.mOwn);
+            }
+        };
+
         fn ObjManager(self: *Self) @FieldType(UnderlyingObj(Self), "mManager") {
             if (Self == AManager or Self == AudioManager or Self == UIManager) {
                 return self;
@@ -90,27 +117,36 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn CreateObj(self: *Self, engine_context: *EngineContext, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {
+            //building an object is structural, governed by the locks, not by what a system around it listed
+            var unchecked: Unchecked = .{};
+            unchecked.Enter(self);
+            defer unchecked.Leave(self);
+
             const new_obj: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.CreateEntity(engine_context.EngineAllocator()), .mManager = ObjManager(self) };
             try self.ApplyConfig(engine_context, new_obj.mID, config);
             return new_obj;
         }
 
-        /// Queues the object's delete for the end of the frame, when the manager's ProcessEvents hands it to
-        /// Self.OnManagerEvents, so it stays usable until then.
-        /// Deleting an object that is already gone, or that is already queued this frame, does nothing.
+        /// Deletes the object, and everything under it, right away (see ECSManager.DestroyEntity for when it waits).
+        /// A scene takes its entities along. A voice and a UI element are still queued for the end of the frame, for
+        /// their managers to delete there. Deleting an object that is already gone does nothing.
         pub fn DeleteObj(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !void {
             if (!self.mECSManager.IsActiveEntity(obj_id)) return;
 
+            //deleting is structural, governed by the locks, not by what a system around it listed
+            var unchecked: Unchecked = .{};
+            unchecked.Enter(self);
+            defer unchecked.Leave(self);
+
+            if (Self == EManager or Self == GCManager or Self == PManager) {
+                return try self.mECSManager.DestroyEntity(engine_context, obj_id);
+            }
+            if (Self == SManager) {
+                return try self.DestroyScene(engine_context, .{ .mID = obj_id, .mManager = ObjManager(self) });
+            }
+
             const obj: UnderlyingObj(Self) = .{ .mID = obj_id, .mManager = ObjManager(self) };
-            const event: Self.EventManagerT.EventType = if (Self == EManager)
-                .{ .DestroyEntity = .{ .Entity = obj } }
-            else if (Self == GCManager)
-                .{ .DestroyGameContext = .{ .GameContext = obj } }
-            else if (Self == PManager)
-                .{ .DestroyPlayer = .{ .Player = obj } }
-            else if (Self == SManager)
-                .{ .ToDestroyScene = .{ .Scene = obj } }
-            else if (Self == AudioManager)
+            const event: Self.EventManagerT.EventType = if (Self == AudioManager)
                 .{ .DestroyVoice = .{ .Voice = obj } }
             else if (Self == UIManager)
                 .{ .DestroyUIElement = .{ .Element = obj } }
@@ -123,26 +159,63 @@ pub fn Core(comptime Self: type) type {
             try self.mEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, event);
         }
 
-        /// ECS event listener each manager's ProcessEvents adds when it hands its ECS the ECSEventData category:
-        /// takes a destroyed object's UUID out of the manager's map. That covers children and scripts too,
-        /// which the ECS queues itself when their parent goes. Runs before the ECS's own handler, so the
-        /// object is still readable here.
-        pub fn RemoveDestroyedUUID(ctx: *anyopaque, _: *EngineContext, event: *const Self.ECSManagerT.ECSEventDataT.EventT) anyerror!EventResult {
+        /// The ECS's removal hook (see ECSManager.RemovalHook): hands each removal and destroy to OnComponentRemoved or
+        /// OnObjectDestroyed, just before it happens
+        fn OnECSRemoval(ctx: *anyopaque, engine_context: *EngineContext, event: Self.ECSManagerT.ECSEventDataT.EventT) anyerror!void {
             const self: *Self = @ptrCast(@alignCast(ctx));
-            switch (event.*) {
-                .DestroyEntity => |e| {
-                    //the same destroy can be queued twice in one pass, and the second one finds it gone
-                    if (!self.mECSManager.IsActiveEntity(e.mEntityID)) return .Continue;
-                    const uuid_component = self.mECSManager.GetComponent(UUIDComponent, e.mEntityID) orelse return .Continue;
-                    //only the object the map points at owns the entry
-                    if (self.GetWorldID(uuid_component.ID) == e.mEntityID) self.RemoveUUID(uuid_component.ID);
-                },
+            switch (event) {
+                .RemoveComponent => |e| try OnComponentRemoved(self, engine_context, e.mEntityID, e.mComponentInd),
+                .DestroyEntity => |e| try OnObjectDestroyed(self, engine_context, e.mEntityID),
                 else => {},
             }
-            return .Continue;
+        }
+
+        /// What taking a component off an object sets off, run just before it comes off, so it can still be read. Every
+        /// route a removal comes by ends here, made right away or drained from the ECS's queue.
+        /// anyerror because what it removes comes back here
+        pub fn OnComponentRemoved(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), component_ind: usize) anyerror!void {
+            if (comptime Self == EManager) {
+                const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
+
+                //the body type tag describes the rigid body, so it goes with it
+                if (component_ind == Self.ECSManagerT.ComponentInd(RigidBodyComponent)) try entity.ClearBodyTags(engine_context);
+
+                //a styled entity is restyled when one of its state tags comes off, so the style pass after sees it gone
+                if (_IsStateTagInd(component_ind)) try MarkStyleDirty(engine_context, entity, component_ind);
+
+                //the layout trees it leaves, or fits differently in
+                try LayoutSystem.OnComponentRemoved(engine_context, entity, component_ind);
+            }
+        }
+
+        /// What destroying an object sets off, run just before it goes, for it and for each thing under it (children
+        /// and scripts go first). Every route a destroy comes by ends here.
+        /// anyerror because what it deletes comes back here
+        pub fn OnObjectDestroyed(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) anyerror!void {
+            //out of the UUID map, if the map points at this object: only that one owns the entry
+            if (comptime _HasComponentType(UUIDComponent)) {
+                if (self.mECSManager.GetComponent(UUIDComponent, obj_id)) |uuid_component| {
+                    if (self.GetWorldID(uuid_component.ID) == obj_id) self.RemoveUUID(uuid_component.ID);
+                }
+            }
+
+            if (comptime Self == EManager) {
+                const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
+                try LayoutSystem.OnEntityDestroyed(engine_context, entity);
+            }
+        }
+
+        fn _HasComponentType(comptime component_type: type) bool {
+            for (Self.ECSManagerT.ComponentTypes) |list_type| {
+                if (list_type == component_type) return true;
+            }
+            return false;
         }
 
         pub fn CreateChild(self: *Self, engine_context: *EngineContext, parent_id: UnderlyingObjType(Self), child_type: ECSManager.ChildType, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {
+            var unchecked: Unchecked = .{};
+            unchecked.Enter(self);
+            defer unchecked.Leave(self);
             const new_child: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.AddChild(engine_context, parent_id, child_type), .mManager = ObjManager(self) };
             try self.ApplyConfig(engine_context, new_child.mID, config);
             return new_child;
@@ -174,6 +247,11 @@ pub fn Core(comptime Self: type) type {
         /// (see ECSManager.AddComponent), so all of it can read the component it is about either way.
         /// anyerror because it adds components through AddComponent, which comes back here
         pub fn OnComponentAdded(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), component_ind: usize) anyerror!void {
+            //bookkeeping, not the work of a system it might run inside
+            var unchecked: Unchecked = .{};
+            unchecked.Enter(self);
+            defer unchecked.Leave(self);
+
             const ECSManagerT = Self.ECSManagerT;
 
             if (comptime Self == EManager) {
@@ -236,21 +314,9 @@ pub fn Core(comptime Self: type) type {
             return false;
         }
 
+        /// Takes the component off, right away unless it has to wait (see ECSManager.Lock); OnComponentRemoved runs just
+        /// before it does
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), comptime component_type: type) !void {
-            //the body type tag describes a rigid body that is on its way out, so it comes off now.
-            //SyncRigidBody would re-add one instead: this removal is only queued, so the component
-            //is still readable until the end of the frame.
-            if (comptime Self == EManager and component_type == RigidBodyComponent) {
-                const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
-                try entity.ClearBodyTags(engine_context);
-            }
-
-            //a state tag comes off now rather than at the end of the frame, so the style pass after it sees it gone.
-            //It is a tag, with no storage that anything could be pointing into, which makes that safe
-            if (comptime Self == EManager and StyleSystem.IsStateTag(component_type)) {
-                return try self.RemoveComponentSync(engine_context, obj_id, component_type);
-            }
-
             try self.mECSManager.RemoveComponent(engine_context, obj_id, @TypeOf(self.mECSManager).ComponentInd(component_type));
         }
 
@@ -258,10 +324,6 @@ pub fn Core(comptime Self: type) type {
         /// it is safe to use.
         pub fn RemoveComponentSync(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), comptime component_type: type) !void {
             try self.mECSManager.RemoveComponentSync(engine_context, obj_id, @TypeOf(self.mECSManager).ComponentInd(component_type));
-            if (comptime Self == EManager and StyleSystem.IsStateTag(component_type)) {
-                const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
-                try MarkStyleDirty(engine_context, entity, Self.ECSManagerT.ComponentInd(component_type));
-            }
         }
 
         /// A styled entity restyled after the component in `component_ind` came or went: it alone, or everything

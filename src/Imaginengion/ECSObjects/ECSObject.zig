@@ -162,8 +162,8 @@ pub fn Core(comptime Self: type) type {
             }
         }
 
-        /// Immediate counterpart to RemoveComponent: the component is gone when this returns,
-        /// instead of at end of frame. See ECSManager.RemoveComponentSync for when that is safe.
+        /// RemoveComponent made right away even while the component's type is locked. See
+        /// ECSManager.RemoveComponentSync for when that is safe.
         pub fn RemoveComponentSync(self: Self, engine_context: *EngineContext, comptime component_type: type) !void {
             _ValidateComponent(Self, component_type);
             if (Self == Entity) {
@@ -393,7 +393,7 @@ pub fn Core(comptime Self: type) type {
         }
 
         /// Takes this object down to its shell (its type's ShellList): removes every other saved component, its children
-        /// and scripts, and a scene's entities. Deferred like any removal, so it all goes at the end of the frame.
+        /// and scripts, and a scene's entities, right away unless they have to wait (see ECSManager.Lock).
         /// Components that are not saved (a scene's stack slot, an entity's scene, tags, ...) are left alone
         pub fn Strip(self: Self, engine_context: *EngineContext) !void {
             if (Self == AssetHandle) @compileError("an asset handle can not be stripped");
@@ -403,15 +403,13 @@ pub fn Core(comptime Self: type) type {
                 if (HasComponent(self, component_type)) try RemoveComponent(self, engine_context, component_type);
             }
 
+            //collected before any goes: each delete takes its object out of the list being walked
+            var to_delete: std.ArrayList(Self) = .empty;
             var script_iter = self.GetIterator(.Script);
-            while (script_iter.next()) |script| {
-                try script.Delete(engine_context);
-            }
-
+            while (script_iter.next()) |script| try to_delete.append(engine_context.FrameAllocator(), script);
             var child_iter = self.GetIterator(.Child);
-            while (child_iter.next()) |child| {
-                try child.Delete(engine_context);
-            }
+            while (child_iter.next()) |child| try to_delete.append(engine_context.FrameAllocator(), child);
+            for (to_delete.items) |object| try object.Delete(engine_context);
 
             if (Self == Scene) {
                 //each one takes the rest of its tree along

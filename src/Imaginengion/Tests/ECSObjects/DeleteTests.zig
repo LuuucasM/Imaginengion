@@ -62,7 +62,7 @@ const TestWorld = struct {
     }
 };
 
-test "deleting an entity takes its children and their UUIDs along at the end of the frame" {
+test "deleting an entity takes its children and their UUIDs along right away" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
@@ -78,13 +78,6 @@ test "deleting an entity takes its children and their UUIDs along at the end of 
     const grandchild_uuid = grandchild.GetUUID();
 
     try root.Delete(engine_context);
-
-    //still usable for the rest of the frame
-    try std.testing.expect(root.IsActive());
-    try std.testing.expect(grandchild.IsActive());
-    try std.testing.expect(world.EntityByUUID(root_uuid) != null);
-
-    try world.EndFrame();
 
     try std.testing.expect(!root.IsActive());
     try std.testing.expect(!child.IsActive());
@@ -108,14 +101,11 @@ test "deleting twice in a frame, or deleting something already gone, does nothin
     const entity = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
 
     try entity.Delete(engine_context);
-    try entity.Delete(engine_context);
-    try std.testing.expectEqual(@as(usize, 1), engine_context.mEditorWorld.mEManager.mEventManager.mEventsArray.getPtr(.EndOfFrame).items.len);
-
-    try world.EndFrame();
     try std.testing.expect(!entity.IsActive());
 
+    //nothing left to delete, and nothing queued for later
     try entity.Delete(engine_context);
-    try std.testing.expectEqual(@as(usize, 0), engine_context.mEditorWorld.mEManager.mEventManager.mEventsArray.getPtr(.EndOfFrame).items.len);
+    try std.testing.expectEqual(@as(usize, 0), engine_context.mEditorWorld.mEManager.mECSManager.mECSEventManager.mEventsArray.getPtr(.EndOfFrame).items.len);
     try world.EndFrame();
 }
 
@@ -211,10 +201,6 @@ test "players and game contexts delete the same way" {
 
     try player.Delete(engine_context);
     try game_context.Delete(engine_context);
-    try std.testing.expect(player.IsActive());
-    try std.testing.expect(game_context.IsActive());
-
-    try world.EndFrame();
 
     try std.testing.expect(!player.IsActive());
     try std.testing.expect(!game_context.IsActive());

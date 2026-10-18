@@ -90,23 +90,14 @@ pub fn ProcessEvents(self: *EManager, comptime event_data: type, comptime event_
         try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
         self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
     } else if (event_data == ECSEventData) {
-        var uuid_callback = ECSManagerT.ECSEventCallback{ .mCtx = self, .mCallbackFn = Core.RemoveDestroyedUUID };
-        callback_list.append(&uuid_callback.mNode);
-        defer callback_list.remove(&uuid_callback.mNode);
-        //the layout trees that lose an element when a removal or delete really happens
-        var layout_callback = ECSManagerT.ECSEventCallback{ .mCtx = self, .mCallbackFn = LayoutSystem.OnEntityECSEvent };
-        callback_list.append(&layout_callback.mNode);
-        defer callback_list.remove(&layout_callback.mNode);
-        try self.mECSManager.ProcessEvents(engine_context, event_category, callback_list);
+        try self.mECSManager.ProcessEvents(engine_context);
     } else {
         std.log.err("EManager.ProcessEvents does not currently handle processing events of type {s}", .{@typeName(event_data)});
     }
 }
 
-pub fn OnManagerEvents(self: *EManager, engine_context: *EngineContext, event: EventData.EventT) anyerror!EventResult {
+pub fn OnManagerEvents(_: *EManager, _: *EngineContext, event: EventData.EventT) anyerror!EventResult {
     switch (event) {
-        //the ECS queues the entity's children and scripts along with it
-        .DestroyEntity => |e| try self.mECSManager.DestroyEntity(engine_context, e.Entity.mID),
         .Default => unreachable,
     }
     return .Continue;

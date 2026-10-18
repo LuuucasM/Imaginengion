@@ -252,7 +252,7 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
     {
         const world_transform_zone = Tracy.ZoneInit("World Transform Update Section", @src());
         defer world_transform_zone.Deinit();
-        try PhysicsManager.UpdateWorldTransforms(game_world, engine_context);
+        try game_world.RunSystem(engine_context, PhysicsManager.TransformSystem);
     }
     //---------------End World Transform Update ------------
 

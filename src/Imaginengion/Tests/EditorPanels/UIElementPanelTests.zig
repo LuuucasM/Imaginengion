@@ -174,7 +174,7 @@ test "a header per component, rows from UIRender, and the add and delete menus" 
     try std.testing.expect(entity.HasComponent(ShapeComponent));
     try test_panel.Update(entity);
     try std.testing.expect(panel.mList.mRoot.?.mID != old_root.mID);
-    try std.testing.expect(old_root.GetComponent(LayoutItemComponent).?.mCollapsed);
+    try std.testing.expect(!old_root.IsActive());
     try std.testing.expectEqual(@as(usize, 6), Children(panel.mList.mRoot.?, &parts));
 
     //nothing changed: not built again

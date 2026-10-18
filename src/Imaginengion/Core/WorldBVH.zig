@@ -230,6 +230,9 @@ pub fn Refit(self: *WorldBVH, engine_context: *EngineContext, world: *WorldManag
 /// Where `item` is now, or null if its entity has lost what places it
 fn ItemBounds(self: *const WorldBVH, engine_context: *EngineContext, world: *WorldManager, item: WorldItem) ?Aabb {
     const entity = world.GetEntity(item.Entity);
+    //destroyed since the build: deletes happen straight away, so the tree can name an entity that is gone until the
+    //next build. Its box stays, and whatever walks the tree checks the same before reading it
+    if (!entity.IsActive()) return null;
     switch (item.Kind) {
         .Quad => {
             const transform = entity.GetComponent(TransformComponent) orelse return null;

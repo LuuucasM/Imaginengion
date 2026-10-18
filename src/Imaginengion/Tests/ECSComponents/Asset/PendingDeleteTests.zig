@@ -63,8 +63,6 @@ test "a destroyed asset takes its PendingDelete with it" {
 
     //destroying the asset is what the sweep eventually asks for once the grace period is up
     try asset_manager.mECSManager.DestroyEntity(engine_context, asset_id);
-    var callback_list: std.DoublyLinkedList = .{};
-    try asset_manager.mECSManager.ProcessEvents(engine_context, .EndOfFrame, &callback_list);
 
     //the mark is gone with the asset. The old hash map kept it, and the next sweep re-queued a
     //destroy for an id that no longer existed

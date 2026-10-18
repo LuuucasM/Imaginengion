@@ -485,7 +485,7 @@ pub fn ProcessEvents(self: *AManager, comptime event_data: type, comptime event_
 pub fn ProcessDestroyedAssets(self: *AManager, engine_context: *EngineContext) !void {
     var callback_list: std.DoublyLinkedList = .{};
     try self.ProcessEvents(EventData, .EndOfFrame, engine_context, &callback_list);
-    try self.mECSManager.ProcessEvents(engine_context, .EndOfFrame, &callback_list);
+    try self.mECSManager.ProcessEvents(engine_context);
 }
 
 pub fn OnManagerEvents(self: *AManager, engine_context: *EngineContext, event: EventData.EventT) anyerror!EventManager.EventResult {

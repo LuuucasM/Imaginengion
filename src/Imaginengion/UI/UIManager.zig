@@ -486,8 +486,7 @@ pub fn EndFrame(self: *UIManager, engine_context: *EngineContext) !void {
     try self.mEventManager.ProcessCategory(.EndOfFrame, engine_context, callback_list);
     self.mEventManager.ClearCategory(engine_context.EngineAllocator(), .EndOfFrame, .ClearRetainingCapacity);
 
-    var ecs_callbacks: std.DoublyLinkedList = .{};
-    try self.mECSManager.ProcessEvents(engine_context, .EndOfFrame, &ecs_callbacks);
+    try self.mECSManager.ProcessEvents(engine_context);
 }
 
 fn OnManagerEvents(self: *UIManager, engine_context: *EngineContext, event: UIEventData.EventT) anyerror!EventResult {

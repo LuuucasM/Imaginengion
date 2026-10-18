@@ -1,4 +1,5 @@
 const std = @import("std");
+const System = @import("../ECS/System.zig").System;
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 
@@ -45,6 +46,29 @@ const InternalData = struct {
 
 const PHYSICS_DT: f32 = 1.0 / 60.0;
 
+/// The substeps of one fixed step (StepBodies). They hold lists of body and collider ids, and the contacts between them,
+/// across the pre-solve scripts, so adding or removing any of these waits until the step is done: a script deleting a
+/// body, or adding a collider, can't leave a dead id or a moved array behind it
+pub const StepSystem = System(.{
+    .Name = "PhysicsStep",
+    .Reads = &.{
+        ColliderComponent,
+        ConstantForceComponent,
+        //gravity: each body's scene, and that scene's physics settings
+        EntitySceneComponent,
+        ScenePhysicsComponent,
+    },
+    .Writes = &.{ RigidBodyComponent, EntityTransformComponent },
+    .Run = StepBodies,
+});
+
+/// Brings every moved transform's world values up to date (UpdateWorldTransforms), on its own: before the world's trees
+/// are built, and before drawing. Inside the physics step it is a plain call, covered by StepSystem
+pub const TransformSystem = System(.{
+    .Name = "WorldTransforms",
+    .Writes = &.{EntityTransformComponent},
+    .Run = UpdateWorldTransforms,
+});
 const RigidBodyQuery = GroupQuery{ .Component = RigidBodyComponent };
 //moved by forces, gravity and their velocity
 const DynamicBodiesQuery = GroupQuery{ .And = &.{ RigidBodyQuery, GroupQuery{ .Component = DynamicBodyTag } } };
@@ -149,8 +173,13 @@ fn Step(self: *PhysicsManager, engine_context: *EngineContext, world_manager: *W
     //what the listeners moved or turned, so the step starts from it. A local constant force reads the rotation
     try UpdateWorldTransforms(world_manager, engine_context);
 
-    //fetched after the listeners, which may have added bodies or changed their types, and once for every substep
-    //below: nothing inside the substeps adds or removes a collider or a body tag, so the lists can't go stale
+    try world_manager.RunSystem(engine_context, StepSystem);
+}
+
+/// The substeps of one fixed step, and the forces let go of after them. Run as StepSystem
+fn StepBodies(self: *PhysicsManager, engine_context: *EngineContext, world_manager: *WorldManager) !void {
+    //fetched after the step's listeners, which may have added bodies or changed their types, and once for every substep
+    //below: StepSystem's lock keeps the substeps from adding or removing a body or a collider, so the lists can't go stale
     const frame_allocator = engine_context.FrameAllocator();
     const dynamic_bodies = try world_manager.GetEntityGroup(frame_allocator, DynamicBodiesQuery);
     const kinematic_bodies = try world_manager.GetEntityGroup(frame_allocator, KinematicBodiesQuery);

@@ -122,7 +122,7 @@ test "adding a bus builds the tree again, with the new bus under its parent" {
     try AudioBusesPanel.Run(engine_context, panel.ActionOf(panel.mButtons.items[0].Button).?);
     try panel.Update(engine_context);
     //the old tree hidden until it is deleted at the end of the frame
-    try std.testing.expect(old_tree.GetComponent(LayoutItemComponent).?.mCollapsed);
+    try std.testing.expect(!old_tree.IsActive());
     try std.testing.expect(panel.mTree.?.mID != old_tree.mID);
     try std.testing.expectEqual(@as(usize, 2), panel.mBuilt.items.len);
     try std.testing.expectEqualStrings("Bus", TextOf(panel.mTitles.items[1]));

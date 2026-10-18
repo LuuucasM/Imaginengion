@@ -92,10 +92,7 @@ pub fn ProcessEvents(self: *PManager, comptime event_data: type, comptime event_
         try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
         self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
     } else if (event_data == ECSEventData) {
-        var uuid_callback = ECSManagerT.ECSEventCallback{ .mCtx = self, .mCallbackFn = Core.RemoveDestroyedUUID };
-        callback_list.append(&uuid_callback.mNode);
-        defer callback_list.remove(&uuid_callback.mNode);
-        try self.mECSManager.ProcessEvents(engine_context, event_category, callback_list);
+        try self.mECSManager.ProcessEvents(engine_context);
     } else {
         std.log.err("PManager.ProcessEvents does not currently handle processing events of type {s}", .{@typeName(event_data)});
     }
@@ -111,9 +108,8 @@ pub fn ProcessConfig(self: PManager, engine_context: *EngineContext, player_id: 
     }
 }
 
-pub fn OnManagerEvents(self: *PManager, engine_context: *EngineContext, event: EventData.EventT) anyerror!EventResult {
+pub fn OnManagerEvents(_: *PManager, _: *EngineContext, event: EventData.EventT) anyerror!EventResult {
     switch (event) {
-        .DestroyPlayer => |e| try self.mECSManager.DestroyEntity(engine_context, e.Player.mID),
         .Default => unreachable,
     }
     return .Continue;

@@ -369,8 +369,6 @@ test "the caret is a quad on a child of the text input, there only while it has 
     try world.Key(.RETURN);
     try std.testing.expect(focus.mCaretEntity == null);
     //hidden now, gone at the end of the frame
-    try std.testing.expect(!caret.GetComponent(SurfaceComponent).?.mShouldRender);
-    try world.EndFrame();
     try std.testing.expect(!caret.IsActive());
 }
 

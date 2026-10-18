@@ -134,7 +134,7 @@ test "a row per script, built again when the scripts or the selection change, an
     _ = try test_panel.AddScript(entity, "Spinner");
     try test_panel.Update(.{ .entity = entity });
     try std.testing.expect(panel.mRows.?.mID != rows.mID);
-    try std.testing.expect(IsFolded(rows));
+    try std.testing.expect(!rows.IsActive());
     try std.testing.expectEqual(@as(usize, 3), test_panel.RowNames(&names));
 
     //another entity, with none

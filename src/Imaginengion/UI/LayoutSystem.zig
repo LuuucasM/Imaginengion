@@ -143,46 +143,34 @@ fn ParentContainer(entity: Entity) ?Entity {
     return parent;
 }
 
-/// Listens to the entity ECS's end of frame events, which run when a queued removal or delete actually happens and
-/// before it does, so everything is still readable. Tagging when the removal is only asked for could be too early:
-/// a layout pass later that frame would still see the component, lay the tree out with it and clear the tag, and
-/// then nothing would be left to lay it out without it.
+/// From Manager.OnComponentRemoved, just before a component comes off `entity`, so everything is still readable. Tags
+/// the trees a layout component or text leaving changes. Tagging when the removal waits in the ECS's queue would be
+/// too early: a layout pass before it drains would still see the component, lay the tree out with it and clear the tag.
 /// There is no reparenting yet. When there is, it has to tag the tree the entity leaves and the one it joins.
-pub fn OnEntityECSEvent(ctx: *anyopaque, engine_context: *EngineContext, event: *const EManager.ECSManagerT.ECSEventDataT.EventT) anyerror!EventResult {
-    const entity_manager: *EManager = @ptrCast(@alignCast(ctx));
-    const world: *WorldManager = @fieldParentPtr("mEManager", entity_manager);
+pub fn OnComponentRemoved(engine_context: *EngineContext, entity: Entity, component_ind: usize) !void {
+    const removes_container = component_ind == EManager.ECSManagerT.ComponentInd(LayoutComponent);
+    const affects_layout = removes_container or
+        component_ind == EManager.ECSManagerT.ComponentInd(LayoutItemComponent) or
+        component_ind == EManager.ECSManagerT.ComponentInd(TextComponent);
+    if (!affects_layout) return;
 
-    switch (event.*) {
-        .RemoveComponent => |removal| {
-            const removes_container = removal.mComponentInd == EManager.ECSManagerT.ComponentInd(LayoutComponent);
-            const affects_layout = removes_container or
-                removal.mComponentInd == EManager.ECSManagerT.ComponentInd(LayoutItemComponent) or
-                removal.mComponentInd == EManager.ECSManagerT.ComponentInd(TextComponent);
-            if (!affects_layout) return .Continue;
-
-            const entity = world.GetEntity(removal.mEntityID);
-            if (!entity.IsActive()) return .Continue;
-            //the tree it leaves, or fits differently in without its text
-            if (ParentContainer(entity)) |parent| try parent.MarkLayoutDirty(engine_context);
-            //it may still be in a layout through its other component; if not, its tag is just cleared
-            try entity.MarkLayoutDirty(engine_context);
-            //a container's children are left as the roots of trees of their own
-            if (removes_container) {
-                var children = entity.GetIterator(.Child);
-                while (children.next()) |child| {
-                    if (IsInLayout(child)) try child.MarkLayoutDirty(engine_context);
-                }
-            }
-        },
-        .DestroyEntity => |destroy| {
-            const entity = world.GetEntity(destroy.mEntityID);
-            //the destroy can be queued twice, and a parent destroyed first takes its whole tree with it
-            if (!entity.IsActive() or !IsInLayout(entity)) return .Continue;
-            if (ParentContainer(entity)) |parent| try parent.MarkLayoutDirty(engine_context);
-        },
-        .AddComponent, .Default => {},
+    //the tree it leaves, or fits differently in without its text
+    if (ParentContainer(entity)) |parent| try parent.MarkLayoutDirty(engine_context);
+    //it may still be in a layout through its other component; if not, its tag is just cleared
+    try entity.MarkLayoutDirty(engine_context);
+    //a container's children are left as the roots of trees of their own
+    if (removes_container) {
+        var children = entity.GetIterator(.Child);
+        while (children.next()) |child| {
+            if (IsInLayout(child)) try child.MarkLayoutDirty(engine_context);
+        }
     }
-    return .Continue;
+}
+
+/// From Manager.OnObjectDestroyed, just before `entity` is destroyed: the container it was laid out in is laid out again
+pub fn OnEntityDestroyed(engine_context: *EngineContext, entity: Entity) !void {
+    if (!IsInLayout(entity)) return;
+    if (ParentContainer(entity)) |parent| try parent.MarkLayoutDirty(engine_context);
 }
 
 /// Lays out the tree under `root` and clears the dirty tag from all of it. An overlay tree whose scene hasn't been

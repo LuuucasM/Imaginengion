@@ -294,3 +294,18 @@ test "a query only hits colliders in its own layer" {
     try std.testing.expectEqual(game_wall.mID, (try world.RayCast(ALONG_X, .{})).?.Collider.mID);
     try std.testing.expectEqual(hud_wall.mID, (try world.RayCast(ALONG_X, .{ .Layer = .OverlayLayer })).?.Collider.mID);
 }
+
+test "a collider destroyed after the tree was built is never hit" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const editor_world = &engine_context.mEditorWorld;
+
+    const near = try world.Collider(.Box, .{ .x = 0, .y = 0, .z = 0 });
+    const far = try world.Collider(.Box, .{ .x = 3, .y = 0, .z = 0 });
+    try editor_world.BuildBVH(engine_context);
+
+    try near.Delete(engine_context);
+    const hit = (try PhysicsQueries.RayCast(engine_context, editor_world, ALONG_X, .{})).?;
+    try std.testing.expectEqual(far.mID, hit.Collider.mID);
+}

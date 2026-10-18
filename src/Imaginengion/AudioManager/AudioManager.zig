@@ -111,6 +111,8 @@ pub fn Deinit(self: *AudioManager, engine_context: *EngineContext) void {
 /// with voices and buses without a sound card. Pair it with DeinitMixer
 pub fn InitMixer(self: *AudioManager, engine_context: *EngineContext) !void {
     try self.mECSManager.Init(engine_context.EngineAllocator());
+    //a destroyed bus's UUID comes out of the map (Core.OnObjectDestroyed)
+    Core.HookRemovals(self);
     self.mMasterBus = try self.NewBus(engine_context, null, Bus.DefaultConfig, "Master");
 }
 
@@ -547,12 +549,7 @@ fn GetVoiceState(self: *AudioManager, voice_id: Voice.Type) VoiceState {
 pub fn ProcessDestroyedVoices(self: *AudioManager, engine_context: *EngineContext) !void {
     var callback_list: std.DoublyLinkedList = .{};
     try self.ProcessEvents(EventData, .EndOfFrame, engine_context, &callback_list);
-
-    //takes a destroyed bus's UUID out of the map while it can still be read
-    var uuid_callback = ECSManagerT.ECSEventCallback{ .mCtx = self, .mCallbackFn = Core.RemoveDestroyedUUID };
-    callback_list.append(&uuid_callback.mNode);
-    defer callback_list.remove(&uuid_callback.mNode);
-    try self.mECSManager.ProcessEvents(engine_context, .EndOfFrame, &callback_list);
+    try self.mECSManager.ProcessEvents(engine_context);
 }
 
 pub fn ProcessEvents(self: *AudioManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: *std.DoublyLinkedList) !void {

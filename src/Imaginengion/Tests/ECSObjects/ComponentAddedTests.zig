@@ -50,8 +50,8 @@ const TestWorld = struct {
         self.mEngineContext.mEditorWorld.mEManager.mECSManager.Lock(locked_types);
     }
 
-    fn Unlock(self: *TestWorld, comptime locked_types: []const type) void {
-        self.mEngineContext.mEditorWorld.mEManager.mECSManager.Unlock(locked_types);
+    fn Unlock(self: *TestWorld, comptime locked_types: []const type) !void {
+        try self.mEngineContext.mEditorWorld.mEManager.mECSManager.Unlock(self.mEngineContext, locked_types);
     }
 
     /// The world's ECS events at the end of the frame, listeners included
@@ -70,14 +70,13 @@ test "a transform is tagged dirty as soon as it is added" {
     const transforms_before = world.NumInArrays(TransformComponent);
     world.Lock(&.{TransformComponent});
     _ = try entity.AddComponent(engine_context, TransformComponent{});
-    world.Unlock(&.{TransformComponent});
 
     //the tag is on now, while the transform itself is only staged
     try std.testing.expect(entity.HasComponent(TransformDirtyTag));
     try std.testing.expect(entity.HasComponent(TransformComponent));
     try std.testing.expectEqual(transforms_before, world.NumInArrays(TransformComponent));
 
-    try world.EndOfFrame();
+    try world.Unlock(&.{TransformComponent});
 
     try std.testing.expectEqual(transforms_before + 1, world.NumInArrays(TransformComponent));
     try std.testing.expect(entity.HasComponent(TransformDirtyTag));
@@ -92,14 +91,13 @@ test "a rigid body gets its type tag and mass as soon as it is added, and lands 
     //below the minimum, which syncing the body brings back up
     world.Lock(&.{RigidBodyComponent});
     const staged_body = try entity.AddComponent(engine_context, RigidBodyComponent{ ._Mass = 0 });
-    world.Unlock(&.{RigidBodyComponent});
 
     //synced through the staged copy
     try std.testing.expect(entity.HasComponent(DynamicBodyTag));
     try std.testing.expectEqual(RigidBodyComponent.MIN_MASS, staged_body._Mass);
     try std.testing.expectEqual(staged_body, entity.GetComponent(RigidBodyComponent).?);
 
-    try world.EndOfFrame();
+    try world.Unlock(&.{RigidBodyComponent});
 
     const rigid_body = entity.GetComponent(RigidBodyComponent).?;
     try std.testing.expect(rigid_body != staged_body);
@@ -115,7 +113,7 @@ test "a body type tag replaces the type a staged body had" {
     const entity = try world.NewBlankEntity();
     world.Lock(&.{RigidBodyComponent});
     _ = try entity.AddComponent(engine_context, RigidBodyComponent{});
-    world.Unlock(&.{RigidBodyComponent});
+    try world.Unlock(&.{RigidBodyComponent});
     try std.testing.expect(entity.HasComponent(DynamicBodyTag));
 
     //the body is still staged, and the tag swap reaches it all the same
@@ -141,7 +139,7 @@ test "a staged add for an entity deleted the same frame goes with it" {
     _ = try entity.AddComponent(engine_context, RigidBodyComponent{});
     try engine_context.mEditorWorld.mEManager.mECSManager.DestroyEntity(engine_context, entity.mID);
     _ = try entity.AddComponent(engine_context, TransformComponent{});
-    world.Unlock(&.{ RigidBodyComponent, TransformComponent });
+    try world.Unlock(&.{ RigidBodyComponent, TransformComponent });
 
     try world.EndOfFrame();
 

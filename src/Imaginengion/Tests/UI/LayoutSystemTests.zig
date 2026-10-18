@@ -424,19 +424,14 @@ test "a duplicate in a layout asks for its tree to be laid out" {
     try std.testing.expect(copy.HasComponent(LayoutDirtyTag));
 }
 
-test "removing an element's item closes its gap, even when asked for before the layout pass" {
+test "removing an element's item closes its gap in the same frame's layout pass" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     const stack = try Stack.Build(world, try world.DrawnOverlay());
 
+    //it comes off right away, and asks for the column to be laid out without it
     try stack.mB.RemoveComponent(engine_context, LayoutItemComponent);
-    //the pass in the same frame still sees the item: the removal is only queued until the end of the frame
-    try world.Update();
-    try ExpectQuad(10, 50, stack.mColumn);
-
-    //it happens, and asks for the column to be laid out without it
-    try world.EndFrame();
     try std.testing.expect(stack.mColumn.HasComponent(LayoutDirtyTag));
     try world.Update();
     try ExpectQuad(10, 30, stack.mColumn);

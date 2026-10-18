@@ -154,38 +154,37 @@ pub fn ProcessEvents(self: *SManager, comptime event_data: type, comptime event_
         try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
         self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
     } else if (event_data == ECSEventData) {
-        var uuid_callback = ECSManagerT.ECSEventCallback{ .mCtx = self, .mCallbackFn = Core.RemoveDestroyedUUID };
-        callback_list.append(&uuid_callback.mNode);
-        defer callback_list.remove(&uuid_callback.mNode);
-        try self.mECSManager.ProcessEvents(engine_context, event_category, callback_list);
+        try self.mECSManager.ProcessEvents(engine_context);
     } else {
         std.log.err("SManager.ProcessEvents does not currently handle processing events of type {s}", .{@typeName(event_data)});
     }
 }
 
-pub fn OnManagerEvents(self: *SManager, engine_context: *EngineContext, event: EventData.EventT) anyerror!EventResult {
-    switch (event) {
-        .ToDestroyScene => |destroy_event| {
-            const scene = destroy_event.Scene;
-
-            //the scene's entities are not its ECS children, they point at it through EntitySceneComponent.
-            //only the top level ones are deleted here, the ECS takes everything below them along
-            const EntitySceneQuery = GroupQuery{ .Component = EntitySceneComponent };
-            const EntityChildQuery = GroupQuery{ .Component = EntityChildComponent };
-            const root_entities = try scene.GetEntityGroup(engine_context.FrameAllocator(), .{
-                .Not = .{
-                    .mFirst = &EntitySceneQuery,
-                    .mSecond = &EntityChildQuery,
-                },
-            });
-            for (root_entities.items) |entity_id| {
-                try scene.GetEntity(entity_id).Delete(engine_context);
-            }
-
-            //while the scene still has its stack position to close the gap with
-            try self.RemoveScene(engine_context.FrameAllocator(), scene);
-            try self.mECSManager.DestroyEntity(engine_context, scene.mID);
+/// Deletes a scene, from Scene.Delete through Core.DeleteObj: its top level entities first, each taking the rest of its
+/// tree along, then its stack slot and the scene itself. Each of those deletes waits if it has to (see
+/// ECSManager.DestroyEntity), the stack slot is given up right away
+pub fn DestroyScene(self: *SManager, engine_context: *EngineContext, scene: Scene) !void {
+    //the scene's entities are not its ECS children, they point at it through EntitySceneComponent.
+    //only the top level ones are deleted here, the ECS takes everything below them along
+    const EntitySceneQuery = GroupQuery{ .Component = EntitySceneComponent };
+    const EntityChildQuery = GroupQuery{ .Component = EntityChildComponent };
+    const root_entities = try scene.GetEntityGroup(engine_context.FrameAllocator(), .{
+        .Not = .{
+            .mFirst = &EntitySceneQuery,
+            .mSecond = &EntityChildQuery,
         },
+    });
+    for (root_entities.items) |entity_id| {
+        try scene.GetEntity(entity_id).Delete(engine_context);
+    }
+
+    //while the scene still has its stack position to close the gap with
+    try self.RemoveScene(engine_context.FrameAllocator(), scene);
+    try self.mECSManager.DestroyEntity(engine_context, scene.mID);
+}
+
+pub fn OnManagerEvents(_: *SManager, _: *EngineContext, event: EventData.EventT) anyerror!EventResult {
+    switch (event) {
         .Default => unreachable,
     }
     return .Continue;

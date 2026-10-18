@@ -6,11 +6,7 @@ pub const EventCategories = enum(u8) {
 
 pub const EventT = union(enum) {
     Default: DefaultEvent,
-    DestroyEntity: DestroyEntityEvent,
 
     pub const DefaultEvent = struct {};
 
-    pub const DestroyEntityEvent = struct {
-        Entity: Entity,
-    };
 };

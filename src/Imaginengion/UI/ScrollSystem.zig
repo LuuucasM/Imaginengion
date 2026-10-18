@@ -126,11 +126,7 @@ fn UpdateThumb(engine_context: *EngineContext, region: Entity, scroll: ScrollCom
 
     if (!overflows) {
         if (thumb_slot.*) |thumb| {
-            if (thumb.IsActive()) {
-                //deletes wait for the end of the frame, which is after this frame is drawn
-                if (thumb.GetComponent(SurfaceComponent)) |surface| surface.mShouldRender = false;
-                try thumb.Delete(engine_context);
-            }
+            if (thumb.IsActive()) try thumb.Delete(engine_context);
         }
         thumb_slot.* = null;
         return;

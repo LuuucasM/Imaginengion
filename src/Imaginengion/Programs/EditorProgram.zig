@@ -502,12 +502,12 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const world_transform_zone = Tracy.ZoneInit("World Transform Update Section", @src());
         defer world_transform_zone.Deinit();
-        try PhysicsManager.UpdateWorldTransforms(&engine_context.mGameWorld, engine_context);
-        try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+        try engine_context.mGameWorld.RunSystem(engine_context, PhysicsManager.TransformSystem);
+        try engine_context.mEditorWorld.RunSystem(engine_context, PhysicsManager.TransformSystem);
         //templates open for editing, so their previews show where things have been moved to
-        try PhysicsManager.UpdateWorldTransforms(&engine_context.mTmplEditWorld, engine_context);
+        try engine_context.mTmplEditWorld.RunSystem(engine_context, PhysicsManager.TransformSystem);
         if (self.mEditorState == .Play) {
-            try PhysicsManager.UpdateWorldTransforms(&engine_context.mSimulateWorld, engine_context);
+            try engine_context.mSimulateWorld.RunSystem(engine_context, PhysicsManager.TransformSystem);
         }
     }
     //---------------End World Transform Update ------------

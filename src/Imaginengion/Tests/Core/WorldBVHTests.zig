@@ -432,3 +432,27 @@ test "a world with items in more scenes than a view can name is an error" {
     _ = try AddQuad(engine_context, one_more, .{ .x = 0, .y = 0, .z = 0 });
     try std.testing.expectError(error.TooManyScenes, world.Build());
 }
+
+test "an entity destroyed after the build keeps its box through a refit, and the refit reads nothing of it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const editor_world = &engine_context.mEditorWorld;
+    const level = try editor_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const rock = try AddQuad(engine_context, level, .{ .x = 3, .y = 0, .z = 0 });
+    const ball = try level.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try ball.AddComponent(engine_context, ColliderComponent{});
+    const bvh = try world.Build();
+    const tree = &bvh.mGame;
+    const rock_box = tree.mBVHItems.items[IndexOf(tree, rock)].Bounds;
+
+    //gone straight away, mid frame, while the tree still names both
+    try rock.Delete(engine_context);
+    try ball.Delete(engine_context);
+    try std.testing.expect(!rock.IsActive());
+    bvh.Refit(engine_context, editor_world, WorldBVH.ALL_ITEMS);
+
+    try std.testing.expectEqual(rock_box, tree.mBVHItems.items[IndexOf(tree, rock)].Bounds);
+    try ExpectTreeHoldsItems(tree);
+}
