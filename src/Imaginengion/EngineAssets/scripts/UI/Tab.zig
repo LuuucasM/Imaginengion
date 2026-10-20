@@ -4,6 +4,11 @@ const Entity = @import("IM").Entity;
 const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
+const EntityComponents = @import("IM").EntityComponents;
+
+/// What it touches, through WidgetActions.SelectTab: the pages' layout items, and the tab's selection group through UI elements
+pub const Reads = &.{EntityComponents.UIElementComponent};
+pub const Writes = &.{EntityComponents.LayoutItemComponent};
 
 /// The page the tab shows. The pages beside it are hidden
 mPage: Entity = .uninit,

@@ -4,6 +4,11 @@ const Entity = @import("IM").Entity;
 const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
+const EntityComponents = @import("IM").EntityComponents;
+
+/// What it touches, through WidgetActions.DragDivider: the split's direction, and the panes' sizes
+pub const Reads = &.{EntityComponents.LayoutComponent};
+pub const Writes = &.{EntityComponents.LayoutItemComponent};
 
 /// Stock widget script: a split's divider (see Widgets.Split). Dragging it (left button) moves the split
 /// (WidgetActions.DragDivider)

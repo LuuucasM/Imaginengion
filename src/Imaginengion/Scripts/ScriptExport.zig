@@ -9,6 +9,7 @@
 //! - where the instances are kept: one sparse set per DLL, by the instance id the engine hands it, each instance in an
 //!   allocation of its own so it stays put
 //! - the project files it imports, which build_script.zig found and hands in, for the engine to watch
+//! - what it touches, its Reads and Writes, which every hook and handler of it runs locked by (see AccessOf)
 //! A script that doesn't fit (a variable with no default, a hook with the wrong parameters) is a compile error saying
 //! what to change.
 const std = @import("std");
@@ -20,6 +21,8 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
 const GameEvents = @import("GameEvents.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
+const System = @import("../ECS/System.zig");
 
 const Hook = ScriptABI.Hook;
 const OwnerKind = ScriptABI.OwnerKind;
@@ -35,6 +38,8 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime
     const Owner = owner_kind.Type();
     const fields = comptime FieldsOf(Script, script_name);
     const handler_names = comptime HandlerNames(Script, script_name);
+    const accessed = comptime AccessOf(Script, script_name);
+    const scope_name = std.fmt.comptimePrint("{s}", .{script_name});
 
     return struct {
         /// the instances, by the ids the engine hands out (u20 for the index, as the ECS does). Each is allocated on its
@@ -78,6 +83,9 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime
             return &struct {
                 fn Run(ec: *EngineContext, owner: *const Owner, data: *anyopaque, event: *const anyopaque) callconv(.c) ScriptResult {
                     const self: *Script = @ptrCast(@alignCast(data));
+                    var scope: Scope = .{};
+                    scope.Enter(owner.mManager);
+                    defer LeaveScope(&scope, owner.mManager, ec, name);
                     return Finish(name, @field(Script, name)(self, ec, owner.*, @as(*const Event, @ptrCast(@alignCast(event)))));
                 }
             }.Run;
@@ -154,7 +162,19 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime
 
         fn Call(comptime hook: Hook, engine_context: *EngineContext, owner: *const Owner, data: *anyopaque, args: anytype) ScriptResult {
             const self: *Script = @ptrCast(@alignCast(data));
+            var scope: Scope = .{};
+            scope.Enter(owner.mManager);
+            defer LeaveScope(&scope, owner.mManager, engine_context, @tagName(hook));
             return Finish(@tagName(hook), @call(.auto, @field(Script, @tagName(hook)), .{ self, engine_context, owner.* } ++ args));
+        }
+
+        /// The window each hook and handler runs in on its owner's world: what the script lists locked, and checked
+        const Scope = WorldManager.SystemScope(scope_name, accessed);
+
+        fn LeaveScope(scope: *Scope, world: *WorldManager, engine_context: *EngineContext, comptime function_name: []const u8) void {
+            scope.Leave(world, engine_context) catch |err| {
+                std.log.err("{s}.{s}: what it changed could not all be made: {s}", .{ script_name, function_name, @errorName(err) });
+            };
         }
 
         /// What a hook or handler handed back, an error logged with the script's name and handed back as .Error
@@ -168,6 +188,16 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime
             return result;
         }
     };
+}
+
+/// What the script touches: its `pub const Reads` and `pub const Writes`, both required (`&.{}` for none), checked the
+/// way a system's are (ECS/System.zig). While any of its hooks or handlers runs, these are locked on its owner's world,
+/// so adding or removing them waits until it is done, and a Debug build stops on anything else it gets a pointer into
+fn AccessOf(comptime Script: type, comptime script_name: []const u8) []const type {
+    if (!@hasDecl(Script, "Reads") or !@hasDecl(Script, "Writes")) {
+        @compileError(script_name ++ ": a script lists the components it touches, pub const Reads = &.{ ... }; and pub const Writes = &.{ ... }; (&.{} for none). They are locked while it runs, and a Debug build stops on anything it touches but didn't list");
+    }
+    return System.Access(script_name, Script.Reads, Script.Writes);
 }
 
 /// An object handle comes over the DLL boundary by pointer, the hook gets it as a value

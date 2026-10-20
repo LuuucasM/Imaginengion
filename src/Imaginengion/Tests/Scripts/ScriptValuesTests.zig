@@ -27,6 +27,10 @@ const CollisionMask = @import("../../Physics/CollisionMask.zig");
 
 /// A script that chases something, with one variable of most kinds
 const Chaser = struct {
+    //touches no components
+    pub const Reads = &.{};
+    pub const Writes = &.{};
+
     mTarget: Entity = .uninit,
     mSpeed: f32 = 7.0,
     mMode: enum { Chase, Wait } = .Chase,
@@ -41,6 +45,10 @@ const ChaserExports = ScriptExport.Exports(Chaser, "Chaser", &.{});
 /// Chaser after an edit: mSpeed kept, mMode's values reordered with one added, mOffset made a f32 and mTarget gone, a
 /// new variable, and a second hook
 const ChaserEdited = struct {
+    //touches no components
+    pub const Reads = &.{};
+    pub const Writes = &.{};
+
     mMode: enum { Idle, Wait, Chase } = .Idle,
     mSpeed: f32 = 1.0,
     mOffset: f32 = 0.5,
@@ -57,6 +65,10 @@ const ChaserEditedExports = ScriptExport.Exports(ChaserEdited, "ChaserEdited", &
 
 /// A scene script, to put on an entity by mistake
 const SceneRule = struct {
+    //touches no components
+    pub const Reads = &.{};
+    pub const Writes = &.{};
+
     pub fn OnSceneStart(_: *@This(), _: *EngineContext, _: Scene) ScriptABI.ScriptResult {
         return .Continue;
     }
@@ -285,6 +297,10 @@ const Team = enum { Red, Blue, Neutral };
 
 /// A script with a bit set, an enum set and a set of collision layers
 const Picker = struct {
+    //touches no components
+    pub const Reads = &.{};
+    pub const Writes = &.{};
+
     mLayers: std.StaticBitSet(8) = .empty,
     mTeams: std.EnumSet(Team) = .initOne(.Blue),
     mHits: CollisionMask = .empty,
@@ -297,6 +313,10 @@ const PickerExports = ScriptExport.Exports(Picker, "Picker", &.{});
 
 /// Picker after an edit: fewer bits, and its enum's values reordered with Blue gone and Green added
 const PickerEdited = struct {
+    //touches no components
+    pub const Reads = &.{};
+    pub const Writes = &.{};
+
     mLayers: std.StaticBitSet(4) = .empty,
     mTeams: std.EnumSet(enum { Neutral, Green, Red }) = .empty,
     mHits: CollisionMask = .initOne(0),

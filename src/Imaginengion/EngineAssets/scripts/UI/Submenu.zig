@@ -4,6 +4,11 @@ const Entity = @import("IM").Entity;
 const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
+const EntityComponents = @import("IM").EntityComponents;
+
+/// What it touches, through WidgetActions.OpenSubmenu: the submenu through its UI element, opened by its layout item
+pub const Reads = &.{EntityComponents.UIElementComponent};
+pub const Writes = &.{EntityComponents.LayoutItemComponent};
 
 /// Stock widget script: a menu row that opens a submenu beside it, the popup its UI element's PopupRefComponent names.
 /// Moving onto it or clicking it opens the submenu (see WidgetActions.OpenSubmenu)

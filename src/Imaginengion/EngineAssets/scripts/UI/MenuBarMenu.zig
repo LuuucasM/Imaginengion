@@ -4,6 +4,11 @@ const Entity = @import("IM").Entity;
 const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
+const EntityComponents = @import("IM").EntityComponents;
+
+/// What it touches, through WidgetActions.TogglePopup and HoverMenuBarButton: the popup through its UI element, opened and closed by its layout item
+pub const Reads = &.{EntityComponents.UIElementComponent};
+pub const Writes = &.{EntityComponents.LayoutItemComponent};
 
 /// Stock widget script: a menu bar's menu button. Clicking it opens its menu, the popup its UI element's
 /// PopupRefComponent names, or closes it (see WidgetActions.TogglePopup). Moving onto it while another menu of the same

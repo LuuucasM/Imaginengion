@@ -4,6 +4,11 @@ const Entity = @import("IM").Entity;
 const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
+const EntityComponents = @import("IM").EntityComponents;
+
+/// What it touches, through WidgetActions.Select: its selection group, through UI elements
+pub const Reads = &.{EntityComponents.UIElementComponent};
+pub const Writes = &.{};
 
 /// Stock widget script: clicking the entity selects it and unselects its siblings, a row of a list (see
 /// WidgetActions.Select). Selected is SelectedTag on it, and selecting it sends it and everything it is inside a

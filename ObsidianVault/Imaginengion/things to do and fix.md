@@ -9,3 +9,8 @@
 - when anchor to top as a base entity so no parent container, and no layoutcontainer it goes outside the camera
 - add a circle shape to 2d shapes
 - when a text is set to totally transparent alpha = 0, the rest of the overlay elements are skipped. so if I put a transpararent '0' in front of a blue background that '0' shape in the background is not rendered and can see straight through to the game scene layers even tho the blue background should be solid opaque
+- for the ECS we need a way to know whether during a get component whether we should return just a regular pointer or a const pointer. some devs might want a const pointer to something they wil only read instead of accidetnyl doing something to a regular pointer. 
+	- games by mason makes it so the type you provide in get component is of what u want to get back, so if you provide a \*T as the get component ten you get a \*T back. if its \*const T,  then thats what u get back, if its by value than thats what u get back. 
+	- this is a cool system but im wondering that since now im formally deciding what a system is, if we can deduce in our "block" what it should return? like for components that are set for only read, we can return a \*const T instead idk
+- need a for each function in my ECS
+	- this would be a decent time since it feels l;ike a for each function would be effectively the same as a system... a function + Read and Write definitions so once I have everything else I think this should be easily follow

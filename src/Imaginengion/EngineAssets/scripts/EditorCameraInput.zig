@@ -6,6 +6,11 @@ const Quat = @import("IM").Quat;
 const Vec2 = @import("IM").Vec2;
 const ScriptResult = @import("IM").ScriptResult;
 const TransformComponent = @import("IM").EntityComponents.TransformComponent;
+const EntityComponents = @import("IM").EntityComponents;
+
+/// What it touches: it moves and turns its transform, and SetTranslation checks whether layout places it
+pub const Reads = &.{EntityComponents.LayoutItemComponent};
+pub const Writes = &.{EntityComponents.TransformComponent};
 
 /// Function that gets executed every frame after polling inputs and input events
 /// return .Continue and it allows the event to be propegated to other layers/systems

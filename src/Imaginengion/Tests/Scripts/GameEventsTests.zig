@@ -46,6 +46,10 @@ fn Handled(mark: u8) void {
 
 /// Keeps the score, and says so when it changes
 const ScoreKeeper = struct {
+    //touches no components
+    pub const Reads = &.{};
+    pub const Writes = &.{};
+
     mTotal: u32 = 0,
 
     pub fn OnScored(self: *@This(), engine_context: *EngineContext, owner: GameContext, event: *const Scored) !ScriptResult {
@@ -59,6 +63,10 @@ const ScoreKeeperExports = ScriptExport.Exports(ScoreKeeper, "ScoreKeeper", &.{}
 
 /// An entity's script hearing both events, handling Scored so nothing after it gets it
 const ScoreText = struct {
+    //touches no components
+    pub const Reads = &.{};
+    pub const Writes = &.{};
+
     mShown: u32 = 0,
     mLastBy: Entity = .uninit,
 
@@ -77,6 +85,10 @@ const ScoreTextExports = ScriptExport.Exports(ScoreText, "ScoreText", &.{});
 
 /// A second entity script for Scored: never reached, ScoreText handles it first in its scene
 const Late = struct {
+    //touches no components
+    pub const Reads = &.{};
+    pub const Writes = &.{};
+
     pub fn OnScored(_: *@This(), _: *EngineContext, _: Entity, _: *const Scored) ScriptResult {
         Handled('L');
         return .Continue;

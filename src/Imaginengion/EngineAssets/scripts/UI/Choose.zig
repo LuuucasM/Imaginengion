@@ -4,6 +4,11 @@ const Entity = @import("IM").Entity;
 const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
+const EntityComponents = @import("IM").EntityComponents;
+
+/// What it touches, through WidgetActions.Choose: finds the popup it is in through UI elements, puts the row's text on the button, and closes the popup (folding its layout item)
+pub const Reads = &.{EntityComponents.UIElementComponent};
+pub const Writes = &.{ EntityComponents.LayoutItemComponent, EntityComponents.TextComponent };
 
 /// Stock widget script: clicking the entity makes it a dropdown's choice, a row of the dropdown's popup list (see
 /// WidgetActions.Choose). It is selected among the other rows, its text shows on the dropdown's button, the popup

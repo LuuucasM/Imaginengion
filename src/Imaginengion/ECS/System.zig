@@ -50,6 +50,13 @@ pub fn System(comptime description: anytype) type {
     };
 }
 
+/// What something that touches components the way a system does locks: its reads and writes (each a list of component
+/// types, written the way a system's are) checked and put together, each type once. For what isn't made with System
+/// but locks like one, a script for instance; `name` is for its compile errors
+pub fn Access(comptime name: []const u8, comptime reads: anytype, comptime writes: anytype) []const type {
+    return _Union(TypeList(name, "Reads", reads), TypeList(name, "Writes", writes));
+}
+
 /// Runs `S.Run` with each of its parameters asked of `provider`, by type: `provider.Get(ParamType)`. Whatever runs a
 /// system decides what it can supply; a parameter it can't is a compile error there
 pub fn Call(comptime S: type, provider: anytype) anyerror!void {

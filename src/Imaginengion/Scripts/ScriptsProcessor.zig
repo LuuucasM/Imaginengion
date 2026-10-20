@@ -144,7 +144,8 @@ fn RunScriptsFrom(
 /// Every script loop holds a list of script ids, or walks an object's script children, while the scripts it runs can
 /// delete things, so ScriptComponent is locked in each of the world's object ECSs for the loop (see ECSManager.Lock): a
 /// delete of anything with a script in it, the running script's own object among them, waits until the loop is done.
-/// The scripts run unchecked: they don't list what they touch yet (their own Reads and Writes will replace this)
+/// The runner's own work (finding owners, ordering by the scene stack) runs unchecked; each script then locks and is
+/// checked by what it lists itself, its Reads and Writes, in the window its DLL puts around every hook (ScriptExport)
 const ScriptScope = struct {
     mUnchecked: WorldManager.UncheckedScope = .{},
 

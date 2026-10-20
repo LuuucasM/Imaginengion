@@ -4,6 +4,11 @@ const Entity = @import("IM").Entity;
 const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
+const EntityComponents = @import("IM").EntityComponents;
+
+/// What it touches, through WidgetActions.Toggle: shows or folds the check mark's layout item
+pub const Reads = &.{};
+pub const Writes = &.{EntityComponents.LayoutItemComponent};
 
 /// The check mark shown only while the entity is checked (Widgets.AddCheckMark). None needed: a theme can color the
 /// box by its state instead

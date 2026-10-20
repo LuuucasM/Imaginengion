@@ -41,6 +41,7 @@ test {
     _ = @import("Tests/UI/StyleSystemTests.zig");
     _ = @import("Tests/Scripts/EventScriptsTests.zig");
     _ = @import("Tests/Scripts/ScriptValuesTests.zig");
+    _ = @import("Tests/Scripts/ScriptAccessTests.zig");
     _ = @import("Tests/Scripts/GameEventsTests.zig");
     _ = @import("Tests/UI/WidgetsTests.zig");
     _ = @import("Tests/UI/NumberFieldSystemTests.zig");

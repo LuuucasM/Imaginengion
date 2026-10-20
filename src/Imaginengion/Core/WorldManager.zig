@@ -416,72 +416,87 @@ pub fn GetObjectByUUID(self: *WorldManager, comptime obj_t: type, uuid: u64) ?ob
 }
 
 /// Returns the manager that owns objects of type obj_t (Entity -> EManager, Scene -> SManager, ...)
-/// Runs a system (ECS/System.zig) on this world: each component it touches is locked in every one of the world's ECSs
-/// that has it (an entity's, a scene's, a player's, a game context's), so a shared one like NameComponent is locked on
-/// all of them. Its parameters can be any of what SystemParams supplies
+/// Runs a system (ECS/System.zig) on this world, in a SystemScope: each component it touches is locked in every one of
+/// the world's ECSs that has it (an entity's, a scene's, a player's, a game context's), so a shared one like
+/// NameComponent is locked on all of them. Its parameters can be any of what SystemParams supplies
 pub fn RunSystem(self: *WorldManager, engine_context: *EngineContext, comptime S: type) anyerror!void {
     comptime System.Validate(S);
-    inline for (S.Accessed) |accessed_type| {
+
+    const zone = Tracy.ZoneInit(S.Name, @src());
+    defer zone.Deinit();
+
+    var scope: SystemScope(S.Name, S.Accessed) = .{};
+    scope.Enter(self);
+    System.Call(S, SystemParams{ .mEngineContext = engine_context, .mWorld = self }) catch |err| {
+        scope.Leave(self, engine_context) catch |leave_err| {
+            std.log.err("What " ++ S.Name ++ " changed could not all be made: {s}", .{@errorName(leave_err)});
+        };
+        return err;
+    };
+    try scope.Leave(self, engine_context);
+}
+
+/// The window a system runs in on a world, for whatever touches components the way a system does: RunSystem's, and a
+/// script's hook (ScriptExport). While it is entered the components in `accessed` are locked in each of the world's
+/// ECSs that has them, and each of the four ECSs holds a record of what may be touched there (for the debug checks),
+/// one where nothing in `accessed` lives included
+pub fn SystemScope(comptime name: [:0]const u8, comptime accessed: []const type) type {
+    inline for (accessed) |accessed_type| {
         const in_world = comptime blk: {
             @setEvalBranchQuota(100_000);
             break :blk EManager.ECSManagerT.HasType(accessed_type) or GCManager.ECSManagerT.HasType(accessed_type) or
                 PManager.ECSManagerT.HasType(accessed_type) or SManager.ECSManagerT.HasType(accessed_type);
         };
-        if (!in_world) @compileError("System " ++ S.Name ++ " touches " ++ @typeName(accessed_type) ++ ", which none of a world's objects have");
+        if (!in_world) @compileError(name ++ " touches " ++ @typeName(accessed_type) ++ ", which none of a world's objects have");
     }
 
-    const zone = Tracy.ZoneInit(S.Name, @src());
-    defer zone.Deinit();
+    return struct {
+        const Scope = @This();
+        const e_types = _TypesIn(EManager.ECSManagerT, accessed);
+        const gc_types = _TypesIn(GCManager.ECSManagerT, accessed);
+        const p_types = _TypesIn(PManager.ECSManagerT, accessed);
+        const s_types = _TypesIn(SManager.ECSManagerT, accessed);
 
-    self.mEManager.mECSManager.Lock(comptime _TypesIn(EManager.ECSManagerT, S.Accessed));
-    self.mGCManager.mECSManager.Lock(comptime _TypesIn(GCManager.ECSManagerT, S.Accessed));
-    self.mPManager.mECSManager.Lock(comptime _TypesIn(PManager.ECSManagerT, S.Accessed));
-    self.mSManager.mECSManager.Lock(comptime _TypesIn(SManager.ECSManagerT, S.Accessed));
+        mE: EManager.ECSManagerT.SystemRecord = EManager.ECSManagerT.SystemRecordFor(name, e_types),
+        mGC: GCManager.ECSManagerT.SystemRecord = GCManager.ECSManagerT.SystemRecordFor(name, gc_types),
+        mP: PManager.ECSManagerT.SystemRecord = PManager.ECSManagerT.SystemRecordFor(name, p_types),
+        mS: SManager.ECSManagerT.SystemRecord = SManager.ECSManagerT.SystemRecordFor(name, s_types),
 
-    //on every ECS, also one the system lists nothing in, so touching it is caught too
-    var e_record = comptime EManager.ECSManagerT.SystemRecordFor(S.Name, _TypesIn(EManager.ECSManagerT, S.Accessed));
-    var gc_record = comptime GCManager.ECSManagerT.SystemRecordFor(S.Name, _TypesIn(GCManager.ECSManagerT, S.Accessed));
-    var p_record = comptime PManager.ECSManagerT.SystemRecordFor(S.Name, _TypesIn(PManager.ECSManagerT, S.Accessed));
-    var s_record = comptime SManager.ECSManagerT.SystemRecordFor(S.Name, _TypesIn(SManager.ECSManagerT, S.Accessed));
-    self.mEManager.mECSManager.EnterSystem(&e_record);
-    self.mGCManager.mECSManager.EnterSystem(&gc_record);
-    self.mPManager.mECSManager.EnterSystem(&p_record);
-    self.mSManager.mECSManager.EnterSystem(&s_record);
+        pub fn Enter(scope: *Scope, world: *WorldManager) void {
+            world.mEManager.mECSManager.Lock(e_types);
+            world.mGCManager.mECSManager.Lock(gc_types);
+            world.mPManager.mECSManager.Lock(p_types);
+            world.mSManager.mECSManager.Lock(s_types);
+            world.mEManager.mECSManager.EnterSystem(&scope.mE);
+            world.mGCManager.mECSManager.EnterSystem(&scope.mGC);
+            world.mPManager.mECSManager.EnterSystem(&scope.mP);
+            world.mSManager.mECSManager.EnterSystem(&scope.mS);
+        }
 
-    System.Call(S, SystemParams{ .mEngineContext = engine_context, .mWorld = self }) catch |err| {
-        self.mSManager.mECSManager.LeaveSystem(&s_record);
-        self.mPManager.mECSManager.LeaveSystem(&p_record);
-        self.mGCManager.mECSManager.LeaveSystem(&gc_record);
-        self.mEManager.mECSManager.LeaveSystem(&e_record);
-        self._UnlockSystem(engine_context, S) catch |unlock_err| {
-            std.log.err("What " ++ S.Name ++ " changed could not all be made: {s}", .{@errorName(unlock_err)});
-        };
-        return err;
-    };
-    //left before the unlock: what the drain sets off isn't the system's doing
-    self.mSManager.mECSManager.LeaveSystem(&s_record);
-    self.mPManager.mECSManager.LeaveSystem(&p_record);
-    self.mGCManager.mECSManager.LeaveSystem(&gc_record);
-    self.mEManager.mECSManager.LeaveSystem(&e_record);
-    try self._UnlockSystem(engine_context, S);
-}
+        /// The records go first, so what the drains set off isn't charged to it. Every ECS is let go of even when one
+        /// fails to drain, and the first failure is handed back
+        pub fn Leave(scope: *Scope, world: *WorldManager, engine_context: *EngineContext) !void {
+            world.mSManager.mECSManager.LeaveSystem(&scope.mS);
+            world.mPManager.mECSManager.LeaveSystem(&scope.mP);
+            world.mGCManager.mECSManager.LeaveSystem(&scope.mGC);
+            world.mEManager.mECSManager.LeaveSystem(&scope.mE);
 
-// lets go of what RunSystem locked, every ECS even when one fails to drain, and hands back the first failure
-fn _UnlockSystem(self: *WorldManager, engine_context: *EngineContext, comptime S: type) !void {
-    var first_err: ?anyerror = null;
-    self.mSManager.mECSManager.Unlock(engine_context, comptime _TypesIn(SManager.ECSManagerT, S.Accessed)) catch |err| {
-        if (first_err == null) first_err = err;
+            var first_err: ?anyerror = null;
+            world.mSManager.mECSManager.Unlock(engine_context, s_types) catch |err| {
+                if (first_err == null) first_err = err;
+            };
+            world.mPManager.mECSManager.Unlock(engine_context, p_types) catch |err| {
+                if (first_err == null) first_err = err;
+            };
+            world.mGCManager.mECSManager.Unlock(engine_context, gc_types) catch |err| {
+                if (first_err == null) first_err = err;
+            };
+            world.mEManager.mECSManager.Unlock(engine_context, e_types) catch |err| {
+                if (first_err == null) first_err = err;
+            };
+            if (first_err) |err| return err;
+        }
     };
-    self.mPManager.mECSManager.Unlock(engine_context, comptime _TypesIn(PManager.ECSManagerT, S.Accessed)) catch |err| {
-        if (first_err == null) first_err = err;
-    };
-    self.mGCManager.mECSManager.Unlock(engine_context, comptime _TypesIn(GCManager.ECSManagerT, S.Accessed)) catch |err| {
-        if (first_err == null) first_err = err;
-    };
-    self.mEManager.mECSManager.Unlock(engine_context, comptime _TypesIn(EManager.ECSManagerT, S.Accessed)) catch |err| {
-        if (first_err == null) first_err = err;
-    };
-    if (first_err) |err| return err;
 }
 
 // the ones of `types` that the ECS type `ECSManagerT` has

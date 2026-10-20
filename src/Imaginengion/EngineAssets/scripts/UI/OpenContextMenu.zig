@@ -4,6 +4,11 @@ const Entity = @import("IM").Entity;
 const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
+const EntityComponents = @import("IM").EntityComponents;
+
+/// What it touches, through WidgetActions.OpenContextMenu: the popup through its UI element, opened by its layout item
+pub const Reads = &.{EntityComponents.UIElementComponent};
+pub const Writes = &.{EntityComponents.LayoutItemComponent};
 
 /// Stock widget script: right clicking the entity opens the popup its UI element's PopupRefComponent names where the
 /// pointer is, a right-click menu (see WidgetActions.OpenContextMenu)

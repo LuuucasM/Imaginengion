@@ -4,6 +4,11 @@ const Entity = @import("IM").Entity;
 const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
+const EntityComponents = @import("IM").EntityComponents;
+
+/// What it touches, through WidgetActions.Fold: folds the content's layout item and turns the arrow's text
+pub const Reads = &.{};
+pub const Writes = &.{ EntityComponents.LayoutItemComponent, EntityComponents.TextComponent };
 
 /// What clicking folds away and out again
 mContent: Entity = .uninit,

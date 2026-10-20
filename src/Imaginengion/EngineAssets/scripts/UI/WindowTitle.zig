@@ -4,6 +4,11 @@ const Entity = @import("IM").Entity;
 const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
+const EntityComponents = @import("IM").EntityComponents;
+
+/// What it touches, through WidgetActions.MoveWindow: the window's anchored offset, in its layout item
+pub const Reads = &.{};
+pub const Writes = &.{EntityComponents.LayoutItemComponent};
 
 /// The window dragging the title bar moves
 mWindow: Entity = .uninit,

@@ -1,6 +1,13 @@
 const std = @import("std");
 const IM = @import("IM");
 
+//What this script touches: every component it gets from an object (GetComponent), its owner's or anything else's. Both are
+//needed, &.{} for none. They are locked while it runs, so making or deleting things that have them waits until it is
+//done, and a Debug build stops on anything it touches but didn't list. Writes for the ones it changes, Reads for the rest
+pub const Reads = &.{};
+pub const Writes = &.{};
+//e.g. pub const Writes = &.{IM.EntityComponents.TransformComponent};
+
 //Variables: shown in the Scripts panel and saved, one set per game context the script is on. Each needs a default
 //mPlayerScore: u32 = 0,
 

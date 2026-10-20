@@ -536,11 +536,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return self.mComponentManager.IsTag(component_ind) or self.mLockCounts[component_ind] == 0;
         }
 
-        // in safe builds, a panic naming the system and the component it didn't list
+        // in safe builds, a panic naming the system (or script) and the component it didn't list
         fn _CheckAccess(self: Self, comptime component_type: type) void {
             if (!std.debug.runtime_safety) return;
             if (self.AllowsAccess(component_type)) return;
-            std.debug.panic("System {s} used {s} without listing it in .Reads or .Writes", .{ self.mCurrentSystem.?.mName, @typeName(component_type) });
+            std.debug.panic("{s} used {s} without listing it in its .Reads or .Writes", .{ self.mCurrentSystem.?.mName, @typeName(component_type) });
         }
 
         // in safe builds, a panic when a change reaches storage that is locked: it would move what a running system holds

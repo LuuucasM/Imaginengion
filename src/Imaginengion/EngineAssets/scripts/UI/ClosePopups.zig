@@ -4,6 +4,11 @@ const Entity = @import("IM").Entity;
 const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
+const EntityComponents = @import("IM").EntityComponents;
+
+/// What it touches, through WidgetActions.ClosePopups: closing a popup folds its layout item
+pub const Reads = &.{};
+pub const Writes = &.{EntityComponents.LayoutItemComponent};
 
 /// Stock widget script: clicking the entity closes every open popup, a menu's item once it is picked (see
 /// WidgetActions.ClosePopups). Put the item's own script on it too, for what picking it does
