@@ -28,6 +28,7 @@ test {
     _ = @import("Tests/Physics/CollisionMaskTests.zig");
     _ = @import("Tests/Math/SDFFunctionsTests.zig");
     _ = @import("Tests/Renderer/ViewShapesTests.zig");
+    _ = @import("Tests/Renderer/WorldRenderTests.zig");
     _ = @import("Tests/Renderer/RayMarcherTests.zig");
     _ = @import("Tests/Renderer/ShadingBuffersTests.zig");
     _ = @import("Tests/Renderer/SDFProgramTests.zig");

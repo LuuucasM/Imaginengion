@@ -18,6 +18,7 @@ const ShapeComponent = EntityComponents.ShapeComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
+const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
 const OverlayLayerTag = @import("../../ECSComponents/SComponents.zig").OverlayLayerTag;
 
 const MathTypes = @import("../../Math/MathTypes.zig");
@@ -75,8 +76,27 @@ fn Cast(engine_context: *EngineContext, pose: CameraRay.Pose, ray: CameraRay.Ray
     return CastIn(engine_context, .{ .Overlays = overlays.items }, pose, ray, options);
 }
 
+/// A cast in a new frame: the world's tree built over what is in it now, the way the top of a frame builds it. Every
+/// cast is also made by testing every shape (CastRayLinear), which has to hit the same thing
 fn CastIn(engine_context: *EngineContext, view_scenes: RayCast.ViewScenes, pose: CameraRay.Pose, ray: CameraRay.Ray, options: RayCast.CastOptions) !?RayCast.RayHit {
-    return RayCast.CastRay(engine_context, &engine_context.mEditorWorld, ray, View(pose), view_scenes, options);
+    try engine_context.mEditorWorld.BuildBVH(engine_context);
+    return CastBoth(engine_context, view_scenes, pose, ray, options);
+}
+
+/// CastRay on the tree as it is, checked against CastRayLinear
+fn CastBoth(engine_context: *EngineContext, view_scenes: RayCast.ViewScenes, pose: CameraRay.Pose, ray: CameraRay.Ray, options: RayCast.CastOptions) !?RayCast.RayHit {
+    const world = &engine_context.mEditorWorld;
+    const by_tree = try RayCast.CastRay(engine_context, world, ray, View(pose), view_scenes, options);
+    const by_testing_all = try RayCast.CastRayLinear(engine_context, world, ray, View(pose), view_scenes, options);
+    try std.testing.expectEqual(by_testing_all == null, by_tree == null);
+    if (by_testing_all) |expected| {
+        const actual = by_tree.?;
+        try std.testing.expectEqual(expected.Entity.mID, actual.Entity.mID);
+        try std.testing.expectEqual(expected.Kind, actual.Kind);
+        try std.testing.expectEqual(expected.Layer, actual.Layer);
+        try std.testing.expectEqual(expected.T, actual.T);
+    }
+    return by_tree;
 }
 
 fn AddQuad(engine_context: *EngineContext, scene: Scene, position: Vec3(f32), size: Vec2(f32)) !Entity {
@@ -459,4 +479,128 @@ test "corner radii and borders grow with the quad's smaller axis and stay within
     try std.testing.expectApproxEqAbs(@as(f32, 4), box.CornerRadii.z, eps);
     try std.testing.expectApproxEqAbs(@as(f32, 1), box.CornerRadii.w, eps);
     try std.testing.expectApproxEqAbs(@as(f32, 0.5), box.BorderWidth, eps);
+}
+
+//--------------------------------------------on the world's tree--------------------------------------------
+
+fn RandomIn(random: std.Random, low: f32, high: f32) f32 {
+    return low + random.float(f32) * (high - low);
+}
+
+/// A quad under `parent` (a scene or an entity) at `position`, turned a little about z, some rounded or see-through
+fn RandomQuad(engine_context: *EngineContext, random: std.Random, entity: Entity, position: Vec3(f32), size: f32) !void {
+    try entity.SetTranslation(engine_context, position);
+    try entity.SetRotation(engine_context, (Vec3(f32){ .x = 0, .y = 0, .z = RandomIn(random, -0.6, 0.6) }).RadiansToQuat());
+    var quad = ShapeComponent.MakeQuad(.{ .Size = .{ .x = size * RandomIn(random, 0.5, 2), .y = size * RandomIn(random, 0.5, 2) } });
+    if (random.boolean()) quad.GetQuad().?.CornerRadii = .{ .x = size * 0.3, .y = size * 0.3, .z = 0, .w = size * 0.3 };
+    _ = try entity.AddComponent(engine_context, quad);
+    var surface = SurfaceComponent{};
+    if (random.uintLessThan(u8, 4) == 0) {
+        surface.mTexOptions.mIsTransparent = true;
+        surface.mTexOptions.mColor.w = 0;
+    }
+    _ = try entity.AddComponent(engine_context, surface);
+}
+
+test "a cast on the world's tree hits the same as testing every shape, through masks, merges, colliders and views" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const editor_world = &engine_context.mEditorWorld;
+    var prng = std.Random.DefaultPrng.init(0x91C4);
+    const random = prng.random();
+
+    const levels = [_]Scene{
+        try editor_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig),
+        try editor_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig),
+    };
+    const huds = [_]Scene{
+        try editor_world.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig),
+        try editor_world.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig),
+    };
+
+    for (levels) |level| {
+        //loose quads and colliders in front of the camera, which looks down -z
+        for (0..60) |_| {
+            const position = Vec3(f32){ .x = RandomIn(random, -4, 4), .y = RandomIn(random, -3, 3), .z = RandomIn(random, -20, -4) };
+            if (random.uintLessThan(u8, 4) == 0) {
+                var collider: ColliderComponent = .{ .mShape = if (random.boolean()) .Box else .Sphere };
+                collider.mRadius = RandomIn(random, 0.2, 1);
+                _ = try AddCollider(engine_context, level, position, collider);
+            } else {
+                try RandomQuad(engine_context, random, try level.CreateEntity(engine_context, Entity.DefaultConfig), position, 1);
+            }
+        }
+        //a mask with quads under it, some reaching past its edge
+        const region = try level.CreateEntity(engine_context, Entity.DefaultConfig);
+        try region.SetTranslation(engine_context, .{ .x = 0, .y = 0, .z = -8 });
+        _ = try region.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 3, .y = 2 } }));
+        _ = try region.AddComponent(engine_context, SurfaceComponent{});
+        _ = try region.AddComponent(engine_context, EntityComponents.MaskComponent{});
+        for (0..6) |_| try RandomQuad(engine_context, random, try region.CreateChild(engine_context, .Entity, Entity.DefaultConfig), .{ .x = RandomIn(random, -2, 2), .y = RandomIn(random, -1.5, 1.5), .z = 0.1 }, 0.8);
+        //a merge of two quads
+        const merge = try level.CreateEntity(engine_context, Entity.DefaultConfig);
+        try merge.SetTranslation(engine_context, .{ .x = RandomIn(random, -3, 3), .y = RandomIn(random, -2, 2), .z = -12 });
+        _ = try merge.AddComponent(engine_context, EntityComponents.MergeComponent{});
+        for ([_]f32{ -0.5, 0.5 }) |x| {
+            const part = try merge.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+            try part.SetTranslation(engine_context, .{ .x = x, .y = 0, .z = 0 });
+            _ = try part.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 1, .y = 1 } }));
+            _ = try part.AddComponent(engine_context, SurfaceComponent{});
+        }
+    }
+    for (huds) |hud| {
+        //screen space, canvas units around the middle of the screen, at a few depths
+        for (0..30) |_| {
+            const position = Vec3(f32){ .x = RandomIn(random, -700, 700), .y = RandomIn(random, -400, 400), .z = RandomIn(random, 0, 0.3) };
+            try RandomQuad(engine_context, random, try hud.CreateEntity(engine_context, Entity.DefaultConfig), position, 120);
+        }
+    }
+    try editor_world.BuildBVH(engine_context);
+
+    const views = [_]RayCast.ViewScenes{
+        .{ .Overlays = &.{ huds[0].mID, huds[1].mID } },
+        .{ .Game = .{ .One = levels[1].mID }, .Overlays = &.{huds[1].mID} },
+        .{ .Game = .All, .Overlays = &.{} },
+        .{ .Game = .None, .Overlays = &.{huds[0].mID} },
+    };
+    var overlay_hits: usize = 0;
+    var game_hits: usize = 0;
+    for (0..400) |i| {
+        const ray = PixelRay(ORIGIN_POSE, .{ .x = RandomIn(random, 0, WIDTH), .y = RandomIn(random, 0, HEIGHT) });
+        const options = RayCast.CastOptions{ .Targets = if (i % 5 == 0) .Colliders else .Visuals };
+        const hit = try CastBoth(engine_context, views[i % views.len], ORIGIN_POSE, ray, options) orelse continue;
+        switch (hit.Layer) {
+            .OverlayLayer => overlay_hits += 1,
+            .GameLayer => game_hits += 1,
+        }
+    }
+    //both layers were really reached
+    try std.testing.expect(overlay_hits > 40);
+    try std.testing.expect(game_hits > 40);
+}
+
+test "a shape hidden or deleted after the tree was built can't be hit" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const editor_world = &engine_context.mEditorWorld;
+    const level = try editor_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //three quads one behind another, straight down the middle of the view
+    const front = try AddQuad(engine_context, level, .{ .x = 0, .y = 0, .z = -5 }, .{ .x = 1, .y = 1 });
+    const middle = try AddQuad(engine_context, level, .{ .x = 0, .y = 0, .z = -10 }, .{ .x = 1, .y = 1 });
+    const back = try AddQuad(engine_context, level, .{ .x = 0, .y = 0, .z = -15 }, .{ .x = 1, .y = 1 });
+    const behind_all = try AddQuad(engine_context, level, .{ .x = 0, .y = 0, .z = -20 }, .{ .x = 1, .y = 1 });
+    try editor_world.BuildBVH(engine_context);
+    const view: RayCast.ViewScenes = .{ .Overlays = &.{} };
+    try ExpectEntity(front, try CastBoth(engine_context, view, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{}));
+
+    //folded away, switched off and deleted mid frame, while the tree still has all three
+    _ = try front.AddComponent(engine_context, LayoutHiddenTag{});
+    try ExpectEntity(middle, try CastBoth(engine_context, view, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{}));
+    middle.GetComponent(SurfaceComponent).?.mShouldRender = false;
+    try ExpectEntity(back, try CastBoth(engine_context, view, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{}));
+    try back.Delete(engine_context);
+    try ExpectEntity(behind_all, try CastBoth(engine_context, view, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{}));
 }

@@ -52,6 +52,10 @@ pub const SDFPushConstants = extern struct {
     //(SDFRayMarcher.HeatMetric) and the count shown fully red
     mHeatMetric: u32,
     mHeatRedAt: f32,
+    //world units per unit of distance along this pass's rays: 1, except the overlay pass whose shapes are in canvas
+    //units (Renderer.OverlayPushConstants), where it is the canvas's scale. What the air a ray goes through thins its
+    //color by, so it is thinned the same whichever units the pass works in
+    mMediumScale: f32,
 };
 
 comptime {

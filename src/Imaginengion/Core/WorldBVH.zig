@@ -45,7 +45,11 @@ pub const MAX_SCENES: usize = 64;
 
 pub const ItemKind = enum(u8) {
     Quad,
+    /// one letter of a text, what is drawn (BVH.Mask.RENDER)
     Glyph,
+    /// a whole text, from its first line's ascender down to its last one's descender: what is clicked
+    /// (BVH.Mask.PICK), so a click between two letters still lands on it
+    Text,
     /// a merge's root, standing for every part of it
     Merge,
     Collider,
@@ -57,8 +61,13 @@ pub const WorldItem = struct {
     Kind: ItemKind,
     /// the item's scene, as its place in mScenes
     SceneSlot: u8,
-    /// a glyph's placement in mGlyphs, which a refit places again without laying its text out again. 0 for the rest
-    Glyph: u32 = 0,
+    /// a glyph's placement in mGlyphs, or a text's measurement in mTexts, which a refit places again without laying the
+    /// text out again. 0 for the rest
+    Index: u32 = 0,
+    /// where it was added in its layer, before the build reordered them: the order entities come in, which doesn't
+    /// change as they move. What the renderer breaks a tie between two shapes at exactly the same depth by, so the tie
+    /// doesn't flip from frame to frame as the tree's shape changes
+    Order: u32 = 0,
 };
 
 /// One layer's tree. mItems[i] is what mBVHItems[i] stands for, both in the order the build left them, so a leaf's
@@ -91,6 +100,7 @@ pub const LayerTree = struct {
         const added = try frame_allocator.dupe(WorldItem, self.mItems.items);
         for (self.mBVHItems.items, self.mItems.items, 0..) |*bvh_item, *item, i| {
             item.* = added[bvh_item.Id];
+            item.Order = bvh_item.Id;
             bvh_item.Id = @intCast(i);
         }
     }
@@ -104,6 +114,8 @@ mGame: LayerTree = .{},
 mOverlay: LayerTree = .{},
 /// every laid out letter, which glyph items point into
 mGlyphs: std.ArrayList(TextLayout.GlyphPlacement) = .empty,
+/// every text's measured size, which text items point into
+mTexts: std.ArrayList(TextLayout.Metrics) = .empty,
 /// the scenes items are in, each one's place here its SceneSlot
 mScenes: std.ArrayList(Scene.Type) = .empty,
 
@@ -111,6 +123,7 @@ pub fn Deinit(self: *WorldBVH, engine_allocator: std.mem.Allocator) void {
     self.mGame.Deinit(engine_allocator);
     self.mOverlay.Deinit(engine_allocator);
     self.mGlyphs.deinit(engine_allocator);
+    self.mTexts.deinit(engine_allocator);
     self.mScenes.deinit(engine_allocator);
 }
 
@@ -119,6 +132,7 @@ pub fn Clear(self: *WorldBVH) void {
     self.mGame.Clear();
     self.mOverlay.Clear();
     self.mGlyphs.clearRetainingCapacity();
+    self.mTexts.clearRetainingCapacity();
     self.mScenes.clearRetainingCapacity();
 }
 
@@ -187,7 +201,7 @@ pub fn BuildWith(self: *WorldBVH, engine_context: *EngineContext, world: *WorldM
             const mask = if (QuadDrawsNothing(surface.*)) BVH.Mask.PICK else BVH.Mask.RENDER | BVH.Mask.PICK;
             try builder.Add(entity, .Quad, 0, BoxBounds(ShapeGeometry.QuadBox(transform, quad.*, surface.mBorderWidth, null)), mask);
         }
-        if (entity.GetComponent(TextComponent)) |text| try builder.AddGlyphs(entity, transform, text, try fonts.Get(text));
+        if (entity.GetComponent(TextComponent)) |text| try builder.AddText(entity, transform, text, try fonts.Get(text));
     }
 
     //what physics collides: every collider, the same as its own query (CollisionManager.QueryColliderGroups)
@@ -244,7 +258,12 @@ fn ItemBounds(self: *const WorldBVH, engine_context: *EngineContext, world: *Wor
             const transform = entity.GetComponent(TransformComponent) orelse return null;
             const text = entity.GetComponent(TextComponent) orelse return null;
             const params = ShapeGeometry.GetTextParams(transform, text);
-            return BoxBounds(ShapeGeometry.GlyphBox(transform, params, self.mGlyphs.items[item.Glyph], null));
+            return BoxBounds(ShapeGeometry.GlyphBox(transform, params, self.mGlyphs.items[item.Index], null));
+        },
+        .Text => {
+            const transform = entity.GetComponent(TransformComponent) orelse return null;
+            const text = entity.GetComponent(TextComponent) orelse return null;
+            return BoxBounds(ShapeGeometry.TextBoxFromMetrics(transform, text, self.mTexts.items[item.Index], null));
         },
         .Merge => return MergeBounds(engine_context.FrameAllocator(), entity) catch null,
         .Collider => return ColliderBounds(entity),
@@ -263,7 +282,7 @@ const Builder = struct {
 
     /// Adds an item to `entity`'s layer, in its scene. Left out if it is in no layer or no scene, the way a view leaves
     /// out an entity with no layer tag
-    fn Add(self: *Builder, entity: Entity, kind: ItemKind, glyph: u32, bounds: Aabb, mask: u4) !void {
+    fn Add(self: *Builder, entity: Entity, kind: ItemKind, index: u32, bounds: Aabb, mask: u4) !void {
         const tree = if (entity.HasComponent(OverlayLayerTag))
             &self.mBVH.mOverlay
         else if (entity.HasComponent(GameLayerTag))
@@ -272,7 +291,7 @@ const Builder = struct {
             return;
         const scene = entity.GetComponent(EntitySceneComponent) orelse return;
         const slot = try self.SceneSlot(scene.mScene.mID);
-        try tree.Add(self.mEngineAllocator, .{ .Entity = entity.mID, .Kind = kind, .SceneSlot = slot, .Glyph = glyph }, bounds, mask);
+        try tree.Add(self.mEngineAllocator, .{ .Entity = entity.mID, .Kind = kind, .SceneSlot = slot, .Index = index }, bounds, mask);
     }
 
     fn SceneSlot(self: *Builder, scene_id: Scene.Type) !u8 {
@@ -300,7 +319,9 @@ const Builder = struct {
     }
 
     /// One item per letter `text` draws, laid out once here and kept for refits and the renderer
-    fn AddGlyphs(self: *Builder, entity: Entity, transform: *const TransformComponent, text: *const TextComponent, font: anytype) !void {
+    /// One item per letter `text` draws, laid out once here and kept for refits and the renderer, and one for the whole
+    /// text that clicks land on, from the size the same layout measured
+    fn AddText(self: *Builder, entity: Entity, transform: *const TransformComponent, text: *const TextComponent, font: anytype) !void {
         const params = ShapeGeometry.GetTextParams(transform, text);
         const glyphs = &self.mBVH.mGlyphs;
         var layout = TextLayout.Iterator(@TypeOf(font.*)).Init(text.mText.items, font, params.FontSize, params.WrapWidth);
@@ -308,8 +329,14 @@ const Builder = struct {
             const glyph_ind: u32 = @intCast(glyphs.items.len);
             try glyphs.append(self.mEngineAllocator, glyph);
             const bounds = BoxBounds(ShapeGeometry.GlyphBox(transform, params, glyph, null));
-            try self.Add(entity, .Glyph, glyph_ind, bounds, BVH.Mask.RENDER | BVH.Mask.PICK);
+            try self.Add(entity, .Glyph, glyph_ind, bounds, BVH.Mask.RENDER);
         }
+
+        const texts = &self.mBVH.mTexts;
+        const text_ind: u32 = @intCast(texts.items.len);
+        const metrics = layout.GetMetrics();
+        try texts.append(self.mEngineAllocator, metrics);
+        try self.Add(entity, .Text, text_ind, BoxBounds(ShapeGeometry.TextBoxFromMetrics(transform, text, metrics, null)), BVH.Mask.PICK);
     }
 };
 

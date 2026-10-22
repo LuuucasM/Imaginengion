@@ -65,6 +65,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .mSurfShading = &SurfShadingSSBO.ptr,
         .mMedShading = &MedShadingSSBO.ptr,
         .mPerspectiveFar = CameraUBO.mPerspectiveFar,
+        .mMediumScale = CameraUBO.mMediumScale,
     };
 
     marcher.Start(ray);

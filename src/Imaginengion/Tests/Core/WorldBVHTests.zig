@@ -196,8 +196,9 @@ test "quads, letters, merges and colliders each get items in their own layer, wi
     try std.testing.expectEqual(@as(usize, 1), ItemsOf(game, rock));
     try std.testing.expectEqual(@as(usize, 1), ItemsOf(game, wall));
     try std.testing.expectEqual(@as(usize, 1), ItemsOf(game, merge));
-    try std.testing.expectEqual(@as(usize, 3), overlay.mItems.items.len);
-    try std.testing.expectEqual(@as(usize, 2), ItemsOf(overlay, label));
+    //two letters and the whole text
+    try std.testing.expectEqual(@as(usize, 4), overlay.mItems.items.len);
+    try std.testing.expectEqual(@as(usize, 3), ItemsOf(overlay, label));
     try std.testing.expectEqual(@as(usize, 1), ItemsOf(overlay, row_button));
 
     const Expected = struct { Tree: *const WorldBVH.LayerTree, Entity: Entity, Kind: WorldBVH.ItemKind, Mask: u4 };
@@ -212,11 +213,20 @@ test "quads, letters, merges and colliders each get items in their own layer, wi
         try std.testing.expectEqual(want.Kind, want.Tree.mItems.items[ind].Kind);
         try std.testing.expectEqual(want.Mask, want.Tree.mBVHItems.items[ind].Mask);
     }
+    //the letters are drawn, the whole text is what is clicked
+    var letters: usize = 0;
     for (overlay.mItems.items, overlay.mBVHItems.items) |item, bvh_item| {
         if (item.Entity != label.mID) continue;
-        try std.testing.expectEqual(WorldBVH.ItemKind.Glyph, item.Kind);
-        try std.testing.expectEqual(BVH.Mask.RENDER | BVH.Mask.PICK, bvh_item.Mask);
+        switch (item.Kind) {
+            .Glyph => {
+                letters += 1;
+                try std.testing.expectEqual(BVH.Mask.RENDER, bvh_item.Mask);
+            },
+            .Text => try std.testing.expectEqual(BVH.Mask.PICK, bvh_item.Mask),
+            else => return error.TestUnexpectedResult,
+        }
     }
+    try std.testing.expectEqual(@as(usize, 2), letters);
 
     //each item knows its scene, and a view showing only the HUD names only its slot
     for (game.mItems.items) |item| try std.testing.expectEqual(level.mID, bvh.mScenes.items[item.SceneSlot]);
@@ -241,15 +251,17 @@ test "each letter's item is placed from its own layout, after the build has reor
 
     const bvh = try world.Build();
     const tree = &bvh.mGame;
-    try std.testing.expectEqual(@as(usize, 12), tree.mItems.items.len);
+    //twelve letters and the whole text
+    try std.testing.expectEqual(@as(usize, 13), tree.mItems.items.len);
 
     const transform = text.GetComponent(TransformComponent).?;
     const params = ShapeGeometry.GetTextParams(transform, text.GetComponent(TextComponent).?);
     var placements_seen: [12]bool = @splat(false);
     for (tree.mItems.items, tree.mBVHItems.items) |item, bvh_item| {
-        try std.testing.expect(!placements_seen[item.Glyph]);
-        placements_seen[item.Glyph] = true;
-        const box = ShapeGeometry.GlyphBox(transform, params, bvh.mGlyphs.items[item.Glyph], null);
+        if (item.Kind != .Glyph) continue;
+        try std.testing.expect(!placements_seen[item.Index]);
+        placements_seen[item.Index] = true;
+        const box = ShapeGeometry.GlyphBox(transform, params, bvh.mGlyphs.items[item.Index], null);
         try ExpectNear(box.Center, bvh_item.Bounds.Center());
     }
     try ExpectTreeHoldsItems(tree);
@@ -359,7 +371,8 @@ test "a physics refit places only colliders again, and the tree still holds ever
     const bvh = try world.Build();
     const tree = &bvh.mGame;
     const rock_before = tree.mBVHItems.items[IndexOf(tree, rock)].Bounds;
-    var sign_before: [2]Aabb = undefined;
+    //its two letters and the whole text
+    var sign_before: [3]Aabb = undefined;
     var sign_count: usize = 0;
     for (tree.mItems.items, tree.mBVHItems.items) |item, bvh_item| {
         if (item.Entity != sign.mID) continue;
@@ -455,4 +468,31 @@ test "an entity destroyed after the build keeps its box through a refit, and the
 
     try std.testing.expectEqual(rock_box, tree.mBVHItems.items[IndexOf(tree, rock)].Bounds);
     try ExpectTreeHoldsItems(tree);
+}
+
+test "a text's click box is the whole text area, the same box picking tests, and a refit moves it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const editor_world = &engine_context.mEditorWorld;
+    const level = try editor_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const sign = try AddText(engine_context, level, "A A\nAA", .{ .x = 2, .y = 1, .z = 0 });
+    const bvh = try world.Build();
+    const tree = &bvh.mGame;
+
+    var text_ind: ?usize = null;
+    for (tree.mItems.items, 0..) |item, i| {
+        if (item.Kind == .Text) text_ind = i;
+    }
+    const transform = sign.GetComponent(TransformComponent).?;
+    const text = sign.GetComponent(TextComponent).?;
+    const expected = WorldBVH.BoxBounds(ShapeGeometry.TextBox(TestFont, transform, text, &TEST_FONT, null));
+    try std.testing.expectEqual(expected, tree.mBVHItems.items[text_ind.?].Bounds);
+
+    try sign.SetTranslation(engine_context, .{ .x = -20, .y = 1, .z = 0 });
+    try PhysicsManager.UpdateWorldTransforms(editor_world, engine_context);
+    bvh.Refit(engine_context, editor_world, BVH.Mask.PICK);
+    const moved = WorldBVH.BoxBounds(ShapeGeometry.TextBox(TestFont, transform, text, &TEST_FONT, null));
+    try std.testing.expectEqual(moved, tree.mBVHItems.items[text_ind.?].Bounds);
 }

@@ -428,6 +428,10 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         mSurfShading: surf_shading_type,
         mMedShading: med_shading_type,
         mPerspectiveFar: f32,
+        /// world units per unit of distance along the rays (SDFPushConstants.mMediumScale): what an edge's length is
+        /// turned into before the medium it goes through thins its color, so the overlay pass, in canvas units, is
+        /// thinned the same as in world space
+        mMediumScale: f32 = 1.0,
         /// the work this pixel's ray did, counted only by the heatmap variant (Features.Heatmap)
         mCounters: Counters = .{},
 
@@ -1080,11 +1084,12 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
 
             // Beer-Lambert for absorbtion  over edge length
             const extinction = Vec3(f32).FromArray(material.Absorption).AddVec(.FromArray(material.Scattering));
-            const transmittance = extinction.Neg().MulScalar(curr_edge.Length).Exp();
+            const length = curr_edge.Length * self.mMediumScale;
+            const transmittance = extinction.Neg().MulScalar(length).Exp();
 
             //scattering
             const ONE = Vec3(f32){ .x = 1, .y = 1, .z = 1 };
-            const scatter_amount = ONE.SubVec(Vec3(f32).FromArray(material.Scattering).Neg().MulScalar(curr_edge.Length).Exp());
+            const scatter_amount = ONE.SubVec(Vec3(f32).FromArray(material.Scattering).Neg().MulScalar(length).Exp());
 
             const transmitted = transmittance.MulVec(.{ .x = child_accum.x, .y = child_accum.y, .z = child_accum.z });
             const inscattered = scatter_amount.MulVec(SKY_COLOR);

@@ -231,8 +231,9 @@ pub fn MergeBox(compiled: SDFCompiler.Compiled) Box {
 }
 
 /// Works out which mask each shape is cut by, compiling each mask the first time one of its shapes asks and remembering
-/// it for the rest of the gather: a long scrolled list's rows all ask about the same one
-const MaskFinder = struct {
+/// it for the rest of the gather: a long scrolled list's rows all ask about the same one. Picking asks it only about
+/// what its ray hits, into masks of its own
+pub const MaskFinder = struct {
     mAllocator: std.mem.Allocator,
     mMasks: *ViewMasks,
     /// each mask entity's mask, or the one around it for a mask entity with no shape to cut with
@@ -240,7 +241,7 @@ const MaskFinder = struct {
 
     /// The mask `entity` is cut by: its nearest parent (or further up) with a MaskComponent. Its own isn't one: the
     /// mask entity's own shape is what it cuts with
-    fn MaskOf(self: *MaskFinder, entity: Entity, canvas: ?CanvasTransform) !u32 {
+    pub fn MaskOf(self: *MaskFinder, entity: Entity, canvas: ?CanvasTransform) !u32 {
         const region = MaskRegionAbove(entity) orelse return NO_MASK;
         return try self.RegionMask(region, canvas);
     }
@@ -399,6 +400,12 @@ pub fn GlyphBox(transform: *const TransformComponent, params: TextParams, glyph:
 pub fn TextBox(comptime FontT: type, transform: *const TransformComponent, text: *const TextComponent, font: *const FontT, canvas: ?CanvasTransform) Box {
     const params = GetTextParams(transform, text);
     const metrics = TextLayout.Measure(FontT, text.mText.items, font, params.FontSize, params.WrapWidth);
+    return TextBoxFromMetrics(transform, text, metrics, canvas);
+}
+
+/// TextBox from the text's layout already measured (TextLayout.Metrics), e.g. kept from laying out its letters
+pub fn TextBoxFromMetrics(transform: *const TransformComponent, text: *const TextComponent, metrics: TextLayout.Metrics, canvas: ?CanvasTransform) Box {
+    const params = GetTextParams(transform, text);
 
     //in the text's own space: x from -left to +right around the transform, y over the laid out lines. Then stretched
     //by its scale

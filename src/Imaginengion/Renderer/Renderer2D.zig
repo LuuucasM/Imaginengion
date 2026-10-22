@@ -42,7 +42,7 @@ const StorageBufferBinding = @import("RenderPlatform.zig").StorageBufferBinding;
 const TextLayout = @import("TextLayout.zig");
 const CanvasTransform = @import("../Math/OverlayCanvas.zig").CanvasTransform;
 const ShapeGeometry = @import("ShapeGeometry.zig");
-const ShapeSort = @import("ShapeSort.zig");
+const WorldBVH = @import("../Core/WorldBVH.zig");
 const BVH = @import("../Core/BVH.zig");
 const SDFProgram = @import("SDFProgram.zig");
 const SDFCompiler = @import("SDFCompiler.zig");
@@ -140,20 +140,12 @@ pub const RenderBuffers = struct {
     mInstrBuffer: SSBO = .{},
     mPartBuffer: SSBO = .{},
 
-    /// Each shape's sort key, in the order the shapes were added (ShapeSort). The buffer is uploaded in their sorted
-    /// order, which mSortedShapes holds once SortShapes has run
-    mSortEntries: std.ArrayList(ShapeSort.SortEntry) = .empty,
-    mSortedShapes: std.ArrayList(ShapeData) = .empty,
-    /// How many of the sorted shapes are direct, which all come first. Set by SortShapes
+    /// How many of the shapes, from the front, are found with a ray test straight against them; the rest are marched.
+    /// Every shape is direct for now. Set by FinishTree or FinishView
     mDirectCount: u32 = 0,
 
-    /// Each shape's world space bounding box (SDFFunctions.aabbIMShape), in the order the shapes were added, like
-    /// mShapeBufferBase. CPU only: what the BVH is built from
-    mShapeBounds: std.ArrayList(Aabb) = .empty,
-
-    /// The BVH over the direct shapes, built by SortShapes: its items are the direct shapes in their sorted order, so a
-    /// leaf's items are a run of mSortedShapes
-    mBVHItems: std.ArrayList(BVH.Item) = .empty,
+    /// The BVH over the direct shapes: the world's tree for this layer (FinishTree), whose leaves' items are runs of the
+    /// shapes, since they were added in its order. Empty for a view filled the old way (FinishView)
     mBVHNodes: std.ArrayList(BVH.Node) = .empty,
     /// mBVHNodes on the GPU, uploaded with the shapes. Its node count is the root's Skip, and there is no tree when
     /// there are no direct shapes
@@ -193,10 +185,6 @@ pub const RenderBuffers = struct {
         self.mInstrBuffer.Deinit(engine_context);
         self.mPartBuffer.Deinit(engine_context);
 
-        self.mSortEntries.deinit(engine_context.EngineAllocator());
-        self.mSortedShapes.deinit(engine_context.EngineAllocator());
-        self.mShapeBounds.deinit(engine_context.EngineAllocator());
-        self.mBVHItems.deinit(engine_context.EngineAllocator());
         self.mBVHNodes.deinit(engine_context.EngineAllocator());
         self.mNodeBuffer.Deinit(engine_context);
     }
@@ -208,10 +196,6 @@ pub const RenderBuffers = struct {
                 self.mMaskBufferBase.clearAndFree(engine_allocator);
                 self.mPrograms.Deinit(engine_allocator);
                 self.mPrograms = .{};
-                self.mSortEntries.clearAndFree(engine_allocator);
-                self.mSortedShapes.clearAndFree(engine_allocator);
-                self.mShapeBounds.clearAndFree(engine_allocator);
-                self.mBVHItems.clearAndFree(engine_allocator);
                 self.mBVHNodes.clearAndFree(engine_allocator);
             },
             .ClearRetainingCapacity => {
@@ -219,10 +203,6 @@ pub const RenderBuffers = struct {
                 self.mSurfaceBufferBase.clearRetainingCapacity();
                 self.mMaskBufferBase.clearRetainingCapacity();
                 self.mPrograms.Clear();
-                self.mSortEntries.clearRetainingCapacity();
-                self.mSortedShapes.clearRetainingCapacity();
-                self.mShapeBounds.clearRetainingCapacity();
-                self.mBVHItems.clearRetainingCapacity();
                 self.mBVHNodes.clearRetainingCapacity();
             },
         }
@@ -235,9 +215,8 @@ pub const RenderBuffers = struct {
         const zone = Tracy.ZoneInit("Renderer2D::SetBuffers", @src());
         defer zone.Deinit();
 
-        try self.SortShapes(engine_context.EngineAllocator());
-        const shape_byte_size = self.mSortedShapes.items.len * @sizeOf(ShapeData);
-        _ = self.mShapeBuffer.SetData(engine_context, copy_pass, self.mSortedShapes.items.ptr, shape_byte_size, 0);
+        const shape_byte_size = self.mShapeBufferBase.items.len * @sizeOf(ShapeData);
+        _ = self.mShapeBuffer.SetData(engine_context, copy_pass, self.mShapeBufferBase.items.ptr, shape_byte_size, 0);
 
         const surface_byte_size = self.mSurfaceBufferBase.items.len * @sizeOf(ShapeSurface);
         _ = self.mSurfaceBuffer.SetData(engine_context, copy_pass, self.mSurfaceBufferBase.items.ptr, surface_byte_size, 0);
@@ -250,7 +229,7 @@ pub const RenderBuffers = struct {
         const parts = self.mPrograms.mParts.items;
         _ = self.mPartBuffer.SetData(engine_context, copy_pass, parts.ptr, parts.len * @sizeOf(SDFProgram.Part), 0);
 
-        //the BVH over the direct shapes, built by SortShapes
+        //the BVH over the direct shapes
         const node_byte_size = self.mBVHNodes.items.len * @sizeOf(BVH.Node);
         _ = self.mNodeBuffer.SetData(engine_context, copy_pass, self.mBVHNodes.items.ptr, node_byte_size, 0);
         //added to stats: the overlay and game passes each have their own quads and glyphs
@@ -267,52 +246,67 @@ pub const RenderBuffers = struct {
         self.mPartBuffer.Bind(render_pass);
     }
 
-    /// The shapes in their keys' order, into mSortedShapes, ready to upload, the direct ones in their BVH's order.
-    /// Their surfaces and masks stay where they are, since a shape points at those rather than the other way round
-    fn SortShapes(self: *RenderBuffers, engine_allocator: std.mem.Allocator) !void {
-        const zone = Tracy.ZoneInit("Renderer2D::SortShapes", @src());
-        defer zone.Deinit();
-        zone.Value(self.mSortEntries.items.len);
-
-        ShapeSort.Sort(self.mSortEntries.items);
-        self.mDirectCount = ShapeSort.DirectCount(self.mSortEntries.items);
-        try self.BuildBVH(engine_allocator);
-        try self.mSortedShapes.resize(engine_allocator, self.mShapeBufferBase.items.len);
-        ShapeSort.Gather(ShapeData, self.mShapeBufferBase.items, self.mSortEntries.items, self.mSortedShapes.items);
+    /// The masks every shape added after points into by its MaskIndex (ShapeGeometry.ViewMasks). First, while the
+    /// programs are empty, so the masks' program ranges stay right
+    pub fn SetMasks(self: *RenderBuffers, engine_allocator: std.mem.Allocator, masks: *const ShapeGeometry.ViewMasks) !void {
+        std.debug.assert(self.mPrograms.mInstrs.items.len == 0);
+        try self.mMaskBufferBase.appendSlice(engine_allocator, masks.mMasks.items);
+        try self.mPrograms.mInstrs.appendSlice(engine_allocator, masks.mPrograms.mInstrs.items);
+        try self.mPrograms.mParts.appendSlice(engine_allocator, masks.mPrograms.mParts.items);
+        try self.mPrograms.mPartSurfaces.appendSlice(engine_allocator, masks.mPrograms.mPartSurfaces.items);
     }
 
-    /// The BVH over the direct shapes, which the sort has just put first: each one's box and mask, its Id where it was
-    /// added. The build reorders them, and the direct entries are put in its order, so each leaf's shapes are one run
-    /// of the buffer. Every direct entry has the same key, so only where each points changes
-    fn BuildBVH(self: *RenderBuffers, engine_allocator: std.mem.Allocator) !void {
-        const zone = Tracy.ZoneInit("Renderer2D::BuildBVH", @src());
-        defer zone.Deinit();
-        zone.Value(self.mDirectCount);
-
-        const direct = self.mSortEntries.items[0..self.mDirectCount];
-        try self.mBVHItems.resize(engine_allocator, direct.len);
-        for (direct, self.mBVHItems.items) |entry, *item| {
-            item.* = .{ .Id = entry.Index, .Bounds = self.mShapeBounds.items[entry.Index], .Mask = BVH.Mask.RENDER };
-        }
-        try BVH.Build(engine_allocator, self.mBVHItems.items, &self.mBVHNodes);
-        for (direct, self.mBVHItems.items) |*entry, item| entry.Index = item.Id;
-    }
-
-    /// Adds a shape and its surface, pointing the shape at it, and the key it is sorted by. The shape's SurfaceIndex
-    /// is filled in here
-    fn AddShape(self: *RenderBuffers, engine_allocator: std.mem.Allocator, shape: ShapeData, surface: ShapeSurface, key: ShapeSort.ShapeSortKey) !void {
+    /// Adds a shape and its surface, pointing the shape at it. The shape's SurfaceIndex is filled in here
+    fn AddShape(self: *RenderBuffers, engine_allocator: std.mem.Allocator, shape: ShapeData, surface: ShapeSurface) !void {
         var added = shape;
         added.SurfaceIndex = @intCast(self.mSurfaceBufferBase.items.len);
-        try self.mSortEntries.append(engine_allocator, .{ .Key = key, .Index = @intCast(self.mShapeBufferBase.items.len) });
         try self.mSurfaceBufferBase.append(engine_allocator, surface);
         try self.mShapeBufferBase.append(engine_allocator, added);
-        try self.mShapeBounds.append(engine_allocator, SDFFunctions.aabbIMShape(added));
         switch (shape.Type) {
             .Quad => self.mQuadCount += 1,
             .Glyph => self.mGlyphCount += 1,
             .Merge => self.mMergeCount += 1,
             .Box, .Sphere, .None => {},
         }
+    }
+
+    /// A shape that is never drawn, which a ray test always misses: a tree item with nothing to draw this render (a
+    /// text's click box, a see-through quad, something hidden or in a scene the view doesn't show), so every other
+    /// item stays at its place in the tree's leaves
+    pub fn AddNone(self: *RenderBuffers, engine_allocator: std.mem.Allocator) !void {
+        const zero = [4]f32{ 0, 0, 0, 0 };
+        try self.AddShape(engine_allocator, .{
+            .AxisX = zero,
+            .AxisY = zero,
+            .AxisZ = zero,
+            .Size = .{ 0, 0, 0 },
+            .Params = zero,
+            .Type = .None,
+            .MaskIndex = SDFProgram.NO_MASK,
+            .SurfaceIndex = undefined,
+            .Flags = 0,
+        }, .{ .ShadingHandle = 0, .BorderShadingHandle = 0, .BorderWidth = 0 });
+    }
+
+    /// Done adding one shape for each of `tree`'s items, in its order: the tree's nodes are this layer's BVH, every
+    /// shape is direct, and each shape's SurfaceIndex, which is what a tie at exactly the same depth goes by
+    /// (SDFRayMarcher.HitOrder), becomes its item's Order, so the tie goes the same way whatever shape the tree is in
+    pub fn FinishTree(self: *RenderBuffers, engine_allocator: std.mem.Allocator, frame_allocator: std.mem.Allocator, tree: *const WorldBVH.LayerTree) !void {
+        const items = tree.mItems.items;
+        std.debug.assert(self.mShapeBufferBase.items.len == items.len);
+        const added = try frame_allocator.dupe(ShapeSurface, self.mSurfaceBufferBase.items);
+        for (self.mShapeBufferBase.items, items) |*shape, item| {
+            self.mSurfaceBufferBase.items[item.Order] = added[shape.SurfaceIndex];
+            shape.SurfaceIndex = item.Order;
+        }
+        try self.mBVHNodes.appendSlice(engine_allocator, tree.mNodes.items);
+        self.mDirectCount = @intCast(items.len);
+    }
+
+    /// Done adding a view's shapes the old way, one at a time with no tree (Renderer.FillView): every shape direct, found
+    /// by testing them all
+    pub fn FinishView(self: *RenderBuffers) void {
+        self.mDirectCount = @intCast(self.mShapeBufferBase.items.len);
     }
 };
 
@@ -335,19 +329,6 @@ pub fn Deinit(self: *Renderer2D, engine_context: *EngineContext) void {
 pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
     self.mGameData.Reset(engine_allocator, .ClearRetainingCapacity);
     self.mOverlayData.Reset(engine_allocator, .ClearRetainingCapacity);
-}
-
-/// The view's masks (ShapeGeometry.ViewMasks), which every shape drawn this batch points into by its MaskIndex. Both
-/// passes get all of them: a mask only ever cuts shapes in its own layer, and there are few
-pub fn SetMasks(self: *Renderer2D, engine_allocator: std.mem.Allocator, masks: *const ShapeGeometry.ViewMasks) !void {
-    for ([_]*RenderBuffers{ &self.mGameData, &self.mOverlayData }) |buffers| {
-        //first, while they are empty, so the masks' program ranges stay right
-        std.debug.assert(buffers.mPrograms.mInstrs.items.len == 0);
-        try buffers.mMaskBufferBase.appendSlice(engine_allocator, masks.mMasks.items);
-        try buffers.mPrograms.mInstrs.appendSlice(engine_allocator, masks.mPrograms.mInstrs.items);
-        try buffers.mPrograms.mParts.appendSlice(engine_allocator, masks.mPrograms.mParts.items);
-        try buffers.mPrograms.mPartSurfaces.appendSlice(engine_allocator, masks.mPrograms.mPartSurfaces.items);
-    }
 }
 
 pub fn SetBuffers(self: *Renderer2D, stats: *RenderStats, engine_context: *EngineContext, copy_pass: *anyopaque, pipeline_t: PipelineType) !void {
@@ -408,6 +389,7 @@ pub fn QuadDrawsNothing(surface: SurfaceComponent) bool {
 
 pub fn DrawQuad(
     self: *Renderer2D,
+    buffers: *RenderBuffers, //the pass it is drawn in
     engine_context: *EngineContext,
     transform_component: *EntityTransformComponent,
     quad: ShapeComponent.Quad,
@@ -418,6 +400,7 @@ pub fn DrawQuad(
     masks: *const ShapeGeometry.ViewMasks,
     shading_buff: *ShadingBuffers,
 ) !void {
+    _ = self;
     //invisible: nothing to draw, and every pixel under it would start a whole new walk past it
     if (QuadDrawsNothing(surface.*)) return;
     //the same box picking tests against
@@ -448,8 +431,6 @@ pub fn DrawQuad(
         if (surface.mBorderColor.w < 1.0) shading_flag |= ShapeData.FLAG_TRANSPARENT;
     }
 
-    const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
-
     const axes = ShapeAxes(box.Center, box.Rotation);
     try buffers.AddShape(engine_context.EngineAllocator(), .{
         .AxisX = axes[0],
@@ -465,7 +446,7 @@ pub fn DrawQuad(
         .ShadingHandle = @intCast(shading_handle),
         .BorderShadingHandle = @intCast(border_shading_handle),
         .BorderWidth = box.BorderWidth,
-    }, .{});
+    });
 }
 
 /// Draws a merge (MergeComponent) as one shape: compiled into its pass's programs, a plate over the rectangle its parts
@@ -473,6 +454,7 @@ pub fn DrawQuad(
 /// Its root's surface, if it has one, gives its border, around the whole merged outline
 pub fn DrawMerge(
     self: *Renderer2D,
+    buffers: *RenderBuffers, //the pass it is drawn in
     engine_context: *EngineContext,
     root: Entity,
     canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
@@ -484,7 +466,6 @@ pub fn DrawMerge(
     defer zone.Deinit();
     const engine_allocator = engine_context.EngineAllocator();
 
-    const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
     const compiled = SDFCompiler.Compile(engine_allocator, root, canvas, &buffers.mPrograms) catch |err| switch (err) {
         error.MergeTooDeep => {
             const warned = try self.mWarnedMerges.getOrPut(engine_allocator, root.mID);
@@ -556,7 +537,7 @@ pub fn DrawMerge(
         .ShadingHandle = @intCast(shading_handle),
         .BorderShadingHandle = @intCast(border_shading_handle),
         .BorderWidth = border_width,
-    }, .{});
+    });
 }
 
 /// How colliders look when the editor shows them (Renderer.mShowColliders): a faint see-through fill, and a solid band
@@ -590,6 +571,7 @@ pub fn AddColliderShadings(engine_context: *EngineContext, shading_buff: *Shadin
 /// Draws a collider (ColliderShape), in the overlay pass for an overlay entity
 pub fn DrawCollider(
     self: *Renderer2D,
+    buffers: *RenderBuffers, //the pass it is drawn in
     engine_context: *EngineContext,
     transform_component: *const EntityTransformComponent,
     collider: *const ColliderComponent,
@@ -597,13 +579,13 @@ pub fn DrawCollider(
     camera_view: CameraView,
     shadings: ColliderShadings,
 ) !void {
+    _ = self;
     const drawn = ColliderShape(transform_component, collider, canvas, camera_view);
-    const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
     try buffers.AddShape(engine_context.EngineAllocator(), drawn.Shape, .{
         .ShadingHandle = shadings.Fill,
         .BorderShadingHandle = shadings.Edge,
         .BorderWidth = drawn.EdgeWidth,
-    }, .{});
+    });
 }
 
 /// A collider as it's drawn: its shape, and how wide its edge band is
@@ -658,6 +640,7 @@ fn PlainShading(engine_context: *EngineContext, shading_buff: *ShadingBuffers, p
 
 pub fn DrawText(
     self: *Renderer2D,
+    buffers: *RenderBuffers, //the pass it is drawn in
     engine_context: *EngineContext,
     transform_component: *EntityTransformComponent,
     text_component: *TextComponent,
@@ -670,58 +653,80 @@ pub fn DrawText(
     const zone = Tracy.ZoneInit("Renderer2D::DrawText", @src());
     defer zone.Deinit();
 
-    const text_asset = try text_component.mTextAssetHandle.GetAsset(engine_context, TextAsset);
-    const atlas_asset = &text_asset.mAtlas;
-    const texture_asset = try surface.mTexture.GetAsset(engine_context, Texture2D);
-
-    //what every letter is painted with: the text's color and texture
-    const fill_shading_handle = try shading_buff.AddSurface(
-        engine_context.EngineAllocator(),
-        &surface.mTexOptions,
-        texture_asset,
-    );
-
-    var texture_shading_flags: u32 = 0;
-    if (surface.mTexOptions.mIsTransparent) texture_shading_flags |= ShapeData.FLAG_TRANSPARENT;
-
-    const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
-
+    const fill = try TextFill.Of(engine_context, text_component, surface, shading_buff);
     //laid out in the text's own space, the same as picking measures it, then stretched by its scale on each axis
     const params = ShapeGeometry.GetTextParams(transform_component, text_component);
+    var layout = TextLayout.Iterator(TextAsset).Init(text_component.mText.items, fill.Font, params.FontSize, params.WrapWidth);
+    while (layout.Next()) |glyph| try self.DrawGlyph(buffers, engine_context, transform_component, params, glyph, fill, canvas, mask, masks, shading_buff);
+}
 
-    var layout = TextLayout.Iterator(TextAsset).Init(text_component.mText.items, text_asset, params.FontSize, params.WrapWidth);
-    while (layout.Next()) |glyph| {
-        //placed once here rather than for every pixel and step on the GPU
-        const glyph_box = ShapeGeometry.GlyphBox(transform_component, params, glyph, canvas);
-        //a letter cut off altogether isn't sent
-        if (masks.CutsOff(mask, glyph_box)) continue;
+/// What every letter of one text is painted with: its fill's shading (the text's color and texture), whether that is
+/// see-through, and the font whose atlas its letters are cut from
+pub const TextFill = struct {
+    Shading: u32,
+    Flags: u32,
+    Font: *TextAsset,
 
-        //where the letter is in the font atlas, shared with every other glyph of the same letter this render
-        const atlas_shading_handle = try shading_buff.GlyphSurface(
-            engine_context.EngineAllocator(),
-            .{ .AtlasTexture = @intCast(atlas_asset.GetTextureHandle()), .Glyph = glyph.AtlasIndex },
-            atlas_asset.GetWidth(),
-            atlas_asset.GetHeight(),
-            glyph.UV0,
-            glyph.UV1,
-        );
-
-        const axes = ShapeAxes(glyph_box.Center, glyph_box.Rotation);
-        try buffers.AddShape(engine_context.EngineAllocator(), .{
-            .AxisX = axes[0],
-            .AxisY = axes[1],
-            .AxisZ = axes[2],
-            .Size = glyph_box.HalfExtents.ToArray(),
-            .Params = .{ 0, 0, 0, 0 },
-            .Type = .Glyph,
-            .MaskIndex = mask,
-            .SurfaceIndex = undefined,
-            .Flags = texture_shading_flags,
-        }, .{
-            .ShadingHandle = @intCast(fill_shading_handle),
-            .BorderShadingHandle = @intCast(fill_shading_handle),
-            .BorderWidth = 0,
-            .AtlasHandle = @intCast(atlas_shading_handle),
-        }, .{});
+    /// Adds the text's fill shading
+    pub fn Of(engine_context: *EngineContext, text_component: *TextComponent, surface: *SurfaceComponent, shading_buff: *ShadingBuffers) !TextFill {
+        const font = try text_component.mTextAssetHandle.GetAsset(engine_context, TextAsset);
+        const texture_asset = try surface.mTexture.GetAsset(engine_context, Texture2D);
+        const shading = try shading_buff.AddSurface(engine_context.EngineAllocator(), &surface.mTexOptions, texture_asset);
+        return .{
+            .Shading = @intCast(shading),
+            .Flags = if (surface.mTexOptions.mIsTransparent) ShapeData.FLAG_TRANSPARENT else 0,
+            .Font = font,
+        };
     }
+};
+
+/// Draws one laid out letter of a text (TextLayout.GlyphPlacement), painted with its text's fill. Nothing is drawn for a
+/// letter its mask cuts off altogether
+pub fn DrawGlyph(
+    self: *Renderer2D,
+    buffers: *RenderBuffers, //the pass it is drawn in
+    engine_context: *EngineContext,
+    transform_component: *const EntityTransformComponent,
+    params: ShapeGeometry.TextParams,
+    glyph: TextLayout.GlyphPlacement,
+    fill: TextFill,
+    canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
+    mask: u32, //the mask it is cut by, into `masks`, SDFProgram.NO_MASK for none
+    masks: *const ShapeGeometry.ViewMasks,
+    shading_buff: *ShadingBuffers,
+) !void {
+    _ = self;
+    //placed once here rather than for every pixel and step on the GPU
+    const glyph_box = ShapeGeometry.GlyphBox(transform_component, params, glyph, canvas);
+    //a letter cut off altogether isn't sent
+    if (masks.CutsOff(mask, glyph_box)) return;
+
+    //where the letter is in the font atlas, shared with every other glyph of the same letter this render
+    const atlas_asset = &fill.Font.mAtlas;
+    const atlas_shading_handle = try shading_buff.GlyphSurface(
+        engine_context.EngineAllocator(),
+        .{ .AtlasTexture = @intCast(atlas_asset.GetTextureHandle()), .Glyph = glyph.AtlasIndex },
+        atlas_asset.GetWidth(),
+        atlas_asset.GetHeight(),
+        glyph.UV0,
+        glyph.UV1,
+    );
+
+    const axes = ShapeAxes(glyph_box.Center, glyph_box.Rotation);
+    try buffers.AddShape(engine_context.EngineAllocator(), .{
+        .AxisX = axes[0],
+        .AxisY = axes[1],
+        .AxisZ = axes[2],
+        .Size = glyph_box.HalfExtents.ToArray(),
+        .Params = .{ 0, 0, 0, 0 },
+        .Type = .Glyph,
+        .MaskIndex = mask,
+        .SurfaceIndex = undefined,
+        .Flags = fill.Flags,
+    }, .{
+        .ShadingHandle = @intCast(fill.Shading),
+        .BorderShadingHandle = @intCast(fill.Shading),
+        .BorderWidth = 0,
+        .AtlasHandle = @intCast(atlas_shading_handle),
+    });
 }
