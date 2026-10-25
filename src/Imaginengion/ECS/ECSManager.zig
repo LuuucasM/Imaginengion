@@ -25,6 +25,50 @@ pub const GroupQuery = union(enum) {
     Component: type,
 };
 
+/// A run of a system through the systems layer (Systems.RunSystem), while it goes on: which system, and the run it is
+/// inside of. Each record the run puts on an ECS names it, so the debug checks can tell an ECS the run was given from
+/// one it wasn't
+pub const RunInfo = struct {
+    mName: [:0]const u8,
+    mOuter: ?*const RunInfo,
+};
+
+/// The level the debug checks report a mistake at. An error by default, which also fails a test that runs into one
+/// (Zig's test runner fails any test that logs an error); a test that makes a mistake on purpose lowers it to warn
+pub var access_report_level: std.log.Level = .err;
+
+// what the debug checks have reported, so a mistake in a loop is reported once and not on every pass: a hash of who
+// made it, in which kind of ECS, and what. Once every slot is used everything is reported
+var reported_keys: [64]u64 = undefined;
+var reported_count: usize = 0;
+
+/// How many different mistakes the debug checks have reported so far, for tests
+pub fn ReportedCount() usize {
+    return reported_count;
+}
+
+// reports a debug check's mistake, unless the same one was reported before
+fn _Report(who: []const u8, where: []const u8, what: u64, comptime format: []const u8, args: anytype) void {
+    var hasher = std.hash.Wyhash.init(0);
+    hasher.update(who);
+    hasher.update(where);
+    hasher.update(std.mem.asBytes(&what));
+    const key = hasher.final();
+    for (reported_keys[0..reported_count]) |reported_key| {
+        if (reported_key == key) return;
+    }
+    if (reported_count < reported_keys.len) {
+        reported_keys[reported_count] = key;
+        reported_count += 1;
+    }
+    switch (access_report_level) {
+        .err => std.log.err(format, args),
+        .warn => std.log.warn(format, args),
+        .info => std.log.info(format, args),
+        .debug => std.log.debug(format, args),
+    }
+}
+
 pub fn ECSManager(entity_t: type, comptime components_types: []const type, comptime debug_name: [:0]const u8) type {
     return struct {
         // ECSEventData's events are generic over the id type, so bind them here before handing the pair to EventManager
@@ -57,6 +101,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             .mLockTotal = 0,
             .mRemovalHook = null,
             .mCurrentSystem = null,
+            .mRunMarker = null,
         };
 
         /// Told about each removal and destroy just before it happens, made right away or drained from the queue,
@@ -90,6 +135,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         mRemovalHook: ?RemovalHook,
         /// The innermost system running on this ECS (see SystemRecord), for the debug checks
         mCurrentSystem: ?*const SystemRecord,
+        /// Where the systems layer this ECS is registered with keeps the run going on now (see Systems.Register), for
+        /// the debug check that a run only touches the ECSs it was given. Null outside any layer
+        mRunMarker: ?*const ?*const RunInfo,
 
         pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
             _ValidateCompList(components_types);
@@ -327,6 +375,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             _ValidateGroupQuery(query);
             const zone = Tracy.ZoneInit(debug_name ++ "::GetGroup", @src());
             defer zone.Deinit();
+            self._CheckQuery(query);
 
             return try self.mComponentManager.GetGroup(query, allocator);
         }
@@ -491,6 +540,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             mAllowed: AllowedSet,
             /// for engine code that runs inside a system without being its work (see UncheckedRecord)
             mUnchecked: bool = false,
+            /// the systems layer's run that put it here; null for one put here some other way, which counts as a run of
+            /// its own
+            mRun: ?*const RunInfo = null,
             mOuter: ?*const SystemRecord = null,
         };
 
@@ -521,6 +573,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             self.mCurrentSystem = record.mOuter;
         }
 
+        /// Points this ECS at where a systems layer keeps its current run (null to stop), see mRunMarker
+        pub fn SetRunMarker(self: *Self, marker: ?*const ?*const RunInfo) void {
+            self.mRunMarker = marker;
+        }
+
         /// Whether the system running now may get pointers into `component_type`: one it listed, or anything outside a
         /// system or inside an unchecked record. Tags (nothing to point into) and the hierarchy components (read by
         /// engine helpers everywhere) are always allowed
@@ -538,11 +595,41 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return self.mComponentManager.IsTag(component_ind) or self.mLockCounts[component_ind] == 0;
         }
 
-        // in safe builds, a panic naming the system (or script) and the component it didn't list
+        // in safe builds, reports (once) a running system using this ECS when it wasn't given it, or using a component it
+        // didn't list. Logged rather than stopping: the mistake is in a list, and what it touches is still there
         fn _CheckAccess(self: Self, comptime component_type: type) void {
             if (!std.debug.runtime_safety) return;
+            if (self._RunNotGiven()) |run| {
+                _Report(run.mName, debug_name, std.math.maxInt(u64), "{s} used a " ++ debug_name ++ " it wasn't given: not the ECS it was run from, nor one connected to it through an In", .{run.mName});
+                return;
+            }
             if (self.AllowsAccess(component_type)) return;
-            std.debug.panic("{s} used {s} without listing it in its .Reads or .Writes", .{ self.mCurrentSystem.?.mName, @typeName(component_type) });
+            const name = self.mCurrentSystem.?.mName;
+            _Report(name, debug_name, ComponentInd(component_type), "{s} used {s} without listing it in its Reads or Writes", .{ name, @typeName(component_type) });
+        }
+
+        // GetGroup's query read as access: every component in it, kept and left out alike, since the ids it hands back
+        // are only good while those don't change
+        fn _CheckQuery(self: Self, comptime query: GroupQuery) void {
+            switch (query) {
+                .Component => |component_type| self._CheckAccess(component_type),
+                .And, .Or => |queries| inline for (queries) |sub_query| self._CheckQuery(sub_query),
+                .Not => |not| {
+                    self._CheckQuery(not.mFirst.*);
+                    self._CheckQuery(not.mSecond.*);
+                },
+            }
+        }
+
+        // the systems layer's run going on now, when this ECS isn't part of it: no record here, or only one put here by
+        // a run outside it. A record put here some other way (not by the layer) is a run of its own, and checked by its list
+        fn _RunNotGiven(self: Self) ?*const RunInfo {
+            const marker = self.mRunMarker orelse return null;
+            const run = marker.* orelse return null;
+            const record = self.mCurrentSystem orelse return run;
+            if (record.mUnchecked) return null;
+            const record_run = record.mRun orelse return null;
+            return if (record_run == run) null else run;
         }
 
         // in safe builds, a panic when a change reaches storage that is locked: it would move what a running system holds

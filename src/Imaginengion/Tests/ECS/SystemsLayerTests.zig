@@ -1,5 +1,6 @@
 //! The systems layer (ECS/Systems.zig): a run locks what its system lists in the ECS it starts from and in the connected
-//! ECSs its In entries name, for as long as it runs, and hands back what Run returns. Run with `zig build test-engine`.
+//! ECSs its In entries name, for as long as it runs, and hands back what Run returns. The debug checks report, once, a
+//! run that uses something it didn't list or an ECS it wasn't given. Run with `zig build test-engine`.
 const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ECS = @import("../../ECS/ECSManager.zig");
@@ -364,4 +365,149 @@ test "an unchecked scope lets engine bookkeeping inside a run touch anything" {
     //it locked nothing of its own
     try std.testing.expectEqual(@as(u32, 0), layer.mBodies.mLockTotal);
     try std.testing.expectEqual(@as(u32, 0), layer.mScene.mLockTotal);
+}
+
+//----------------the debug checks----------------
+
+/// For a test that makes a mistake on purpose: the checks report it as a warning, kept off the build runner's output.
+/// Hands back how many mistakes had been reported before, which the test counts from
+fn ExpectReports() usize {
+    ECS.access_report_level = .warn;
+    std.testing.log_level = .err;
+    return ECS.ReportedCount();
+}
+
+fn StopExpectingReports() void {
+    ECS.access_report_level = .err;
+    std.testing.log_level = .warn;
+}
+
+const UsesUnlisted = struct {
+    pub const Name = "UsesUnlisted";
+    pub const Reads = &.{Position};
+    pub const Writes = &.{};
+
+    pub fn Run(_: *EngineContext, bodies: *BodyECS, body: u32) void {
+        //the same mistake on every pass of a loop
+        for (0..10) |_| _ = bodies.GetComponent(Health, body);
+        _ = bodies.GetComponent(Position, body);
+    }
+};
+
+test "a component used without being listed is reported once" {
+    if (!std.debug.runtime_safety) return error.SkipZigTest;
+    const before = ExpectReports();
+    defer StopExpectingReports();
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const body = try layer.NewBody();
+    _ = try layer.mBodies.AddComponent(layer.mEngineContext, body, Health{});
+
+    try layer.mSystems.RunSystem(UsesUnlisted, layer.mEngineContext, &layer.mBodies, .{ &layer.mBodies, body });
+    try std.testing.expectEqual(before + 1, ECS.ReportedCount());
+
+    //and not again on the next run
+    try layer.mSystems.RunSystem(UsesUnlisted, layer.mEngineContext, &layer.mBodies, .{ &layer.mBodies, body });
+    try std.testing.expectEqual(before + 1, ECS.ReportedCount());
+}
+
+const QueriesUnlisted = struct {
+    pub const Name = "QueriesUnlisted";
+    pub const Reads = &.{Position};
+    pub const Writes = &.{};
+
+    pub fn Run(_: *EngineContext, bodies: *BodyECS) !void {
+        const allocator = std.testing.allocator;
+        //listed, and a tag: neither is a mistake
+        var listed = try bodies.GetGroup(allocator, .{ .And = &.{ .{ .Component = Position }, .{ .Component = ECS.EntityTagComponent } } });
+        listed.deinit(allocator);
+        //Health inside the query is
+        var unlisted = try bodies.GetGroup(allocator, .{ .Or = &.{ .{ .Component = Position }, .{ .Component = Health } } });
+        unlisted.deinit(allocator);
+    }
+};
+
+test "a query counts as using every component in it" {
+    if (!std.debug.runtime_safety) return error.SkipZigTest;
+    const before = ExpectReports();
+    defer StopExpectingReports();
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+
+    try layer.mSystems.RunSystem(QueriesUnlisted, layer.mEngineContext, &layer.mBodies, .{&layer.mBodies});
+    try std.testing.expectEqual(before + 1, ECS.ReportedCount());
+}
+
+const TouchesScene = struct {
+    pub const Name = "TouchesScene";
+    pub const Reads = &.{Position};
+    pub const Writes = &.{};
+
+    pub fn Run(_: *EngineContext, layer: *TestLayer, scene: u32) void {
+        _ = layer.mScene.GetComponent(Gravity, scene);
+    }
+};
+
+const GivenScene = struct {
+    pub const Name = "GivenScene";
+    pub const Reads = &.{ Position, In(SceneECS, Gravity) };
+    pub const Writes = &.{};
+
+    pub fn Run(engine_context: *EngineContext, layer: *TestLayer, scene: u32) !void {
+        //given it, so fine
+        _ = layer.mScene.GetComponent(Gravity, scene);
+        //a run inside it that wasn't given the scene ECS can't lean on this one having been
+        try layer.mSystems.RunSystem(TouchesScene, engine_context, &layer.mBodies, .{ layer, scene });
+    }
+};
+
+test "an ECS used by a run that wasn't given it is reported" {
+    if (!std.debug.runtime_safety) return error.SkipZigTest;
+    const before = ExpectReports();
+    defer StopExpectingReports();
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    try layer.Connect(&layer.mBodies, &layer.mScene);
+    const scene = try layer.mScene.CreateEntity(layer.mEngineContext.EngineAllocator());
+    _ = try layer.mScene.AddComponent(layer.mEngineContext, scene, Gravity{});
+
+    //connected, but not listed through an In: not given
+    try layer.mSystems.RunSystem(TouchesScene, layer.mEngineContext, &layer.mBodies, .{ layer, scene });
+    try std.testing.expectEqual(before + 1, ECS.ReportedCount());
+
+    //given, with that same mistake inside it: nothing new
+    try layer.mSystems.RunSystem(GivenScene, layer.mEngineContext, &layer.mBodies, .{ layer, scene });
+    try std.testing.expectEqual(before + 1, ECS.ReportedCount());
+
+    //outside any run, anything goes
+    _ = layer.mScene.GetComponent(Gravity, scene);
+    try std.testing.expectEqual(before + 1, ECS.ReportedCount());
+}
+
+const BookkeepsInScene = struct {
+    pub const Name = "BookkeepsInScene";
+    pub const Reads = &.{Position};
+    pub const Writes = &.{};
+
+    pub fn Run(_: *EngineContext, layer: *TestLayer, scene: u32) void {
+        var unchecked: Systems.UncheckedScope(BodyECS, &.{SceneECS}) = undefined;
+        unchecked.Enter(&layer.mSystems, &layer.mBodies);
+        defer unchecked.Leave();
+        _ = layer.mScene.GetComponent(Weather, scene);
+        _ = layer.mBodies.GetComponent(Health, 0);
+    }
+};
+
+test "engine bookkeeping in an unchecked scope isn't reported" {
+    if (!std.debug.runtime_safety) return error.SkipZigTest;
+    const before = ExpectReports();
+    defer StopExpectingReports();
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    try layer.Connect(&layer.mBodies, &layer.mScene);
+    _ = try layer.NewBody();
+    const scene = try layer.mScene.CreateEntity(layer.mEngineContext.EngineAllocator());
+
+    try layer.mSystems.RunSystem(BookkeepsInScene, layer.mEngineContext, &layer.mBodies, .{ layer, scene });
+    try std.testing.expectEqual(before, ECS.ReportedCount());
 }

@@ -17,13 +17,15 @@ const Systems = @This();
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Tracy = @import("../Core/Tracy.zig");
+pub const RunInfo = @import("ECSManager.zig").RunInfo;
 
 /// The most ECSs of one kind a run can reach through its In entries. Going past it is a wiring mistake, and stops
 pub const MAX_PER_KIND = 8;
 
 mNodes: std.ArrayList(Node) = .empty,
 mEdges: std.ArrayList(Edge) = .empty,
-/// The innermost run going on now, for the debug checks
+/// The innermost run going on now. Every registered ECS points at this field for its debug checks, so the layer must
+/// stay where it is while anything is registered
 mCurrentRun: ?*const RunInfo = null,
 
 pub const empty: Systems = .{};
@@ -38,12 +40,6 @@ const Node = struct {
 const Edge = struct {
     mA: Node,
     mB: Node,
-};
-
-/// A run, while it goes on: which system, and the run it is inside of
-pub const RunInfo = struct {
-    mName: [:0]const u8,
-    mOuter: ?*const RunInfo,
 };
 
 /// An entry for .Reads or .Writes: the component `T` in the ECSs of kind `Kind` (an ECSManager type) connected to the
@@ -69,17 +65,20 @@ pub fn Deinit(self: *Systems, engine_allocator: std.mem.Allocator) void {
 
 //------------------------------the graph------------------------------
 
-/// Makes `ecs` (a pointer to an ECSManager) known to the layer, so it can be connected to others
+/// Makes `ecs` (a pointer to an ECSManager) known to the layer, so it can be connected to others, and checked by the
+/// debug checks for being touched by a run it wasn't given to
 pub fn Register(self: *Systems, engine_allocator: std.mem.Allocator, ecs: anytype) !void {
     const Kind = _ECSType(@TypeOf(ecs));
     std.debug.assert(self._FindNode(ecs) == null);
     try self.mNodes.append(engine_allocator, .{ .mECS = ecs, .mKind = KindId(Kind) });
+    ecs.SetRunMarker(&self.mCurrentRun);
 }
 
 /// Forgets `ecs`, and every connection it has
 pub fn Unregister(self: *Systems, ecs: anytype) void {
     _ = _ECSType(@TypeOf(ecs));
     const node_ind = self._FindNode(ecs) orelse return;
+    ecs.SetRunMarker(null);
     var edge_ind = self.mEdges.items.len;
     while (edge_ind > 0) {
         edge_ind -= 1;
@@ -155,8 +154,8 @@ pub fn RunSystem(self: *Systems, comptime S: type, engine_context: *EngineContex
 
     var run: RunState(S, plan.kinds, plan.types) = undefined;
     try run.Find(self, start);
-    run.Enter();
     var info: RunInfo = .{ .mName = S.Name, .mOuter = self.mCurrentRun };
+    run.Enter(&info);
     self.mCurrentRun = &info;
 
     const result = @call(.auto, S.Run, .{engine_context} ++ args);
@@ -252,13 +251,14 @@ fn RunState(comptime S: type, comptime kinds: []const type, comptime types: []co
             }
         }
 
-        fn Enter(state: *State) void {
+        fn Enter(state: *State, info: *const RunInfo) void {
             inline for (kinds, 0..) |Kind, kind_ind| {
                 const record = comptime Kind.SystemRecordFor(S.Name, types[kind_ind]);
                 const slots = &state.mSlots[kind_ind];
                 for (slots.mECSs[0..slots.mCount], slots.mRecords[0..slots.mCount]) |ecs, *slot_record| {
                     ecs.Lock(types[kind_ind]);
                     slot_record.* = record;
+                    slot_record.mRun = info;
                     ecs.EnterSystem(slot_record);
                 }
             }
