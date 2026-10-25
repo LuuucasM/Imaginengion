@@ -714,6 +714,25 @@ pub fn Quat(comptime number_type: type) type {
             } };
         }
 
+        /// Where the x, y and z unit axes end up turned by this rotation: what QuatRotate gives for each of them, for
+        /// about a third of the work. For a box, its own axes in world space
+        pub fn Axes(self: Self) [3]Vec3T {
+            const xx = self.x * self.x;
+            const yy = self.y * self.y;
+            const zz = self.z * self.z;
+            const xy = self.x * self.y;
+            const xz = self.x * self.z;
+            const xw = self.x * self.w;
+            const yz = self.y * self.z;
+            const yw = self.y * self.w;
+            const zw = self.z * self.w;
+            return .{
+                .{ .x = 1 - 2 * (yy + zz), .y = 2 * (xy + zw), .z = 2 * (xz - yw) },
+                .{ .x = 2 * (xy - zw), .y = 1 - 2 * (xx + zz), .z = 2 * (yz + xw) },
+                .{ .x = 2 * (xz + yw), .y = 2 * (yz - xw), .z = 1 - 2 * (xx + yy) },
+            };
+        }
+
         pub fn ToMat3(self: Self) Mat3(number_type) {
             const v = self.ToVector();
             const q2: ArrayT = v * v;

@@ -36,6 +36,8 @@ pub const ECSManagerT = ECSManager.ECSManager(AssetHandle.Type, &AssetComponents
 pub const EventManagerT = EventManager.EventManager(EventData);
 
 const Tracy = @import("../Core/Tracy.zig");
+const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
+const FileTimeAndSize = PlatformUtils.FileTimeAndSize;
 
 const ECSCore = @import("Manager.zig").Core;
 
@@ -320,7 +322,7 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
     for (group.items) |asset_id| {
         const file_data = self.mECSManager.GetComponent(FileMetaData, asset_id).?;
 
-        //stat first: it costs no handle, and it is what tells us the file still exists
+        //stat first: it costs no handle (see StatTimeAndSize), and it is what tells us the file still exists
         const stat = self.OpenFileStats(engine_context, file_data.mRelPath.items, file_data.mPathType) catch |err| {
             if (err == error.FileNotFound) {
                 try self.MarkForDelete(engine_context, asset_id, .FileNotFound);
@@ -388,13 +390,13 @@ fn GetProject(self: *AManager) *const Project {
     return &engine_context.mProject;
 }
 
-pub fn OpenFileStats(self: *AManager, engine_context: *EngineContext, rel_path: []const u8, path_type: PathType) !std.Io.File.Stat {
+pub fn OpenFileStats(self: *AManager, engine_context: *EngineContext, rel_path: []const u8, path_type: PathType) !FileTimeAndSize {
     const zone = Tracy.ZoneInit("AssetManager::OpenFileStats", @src());
     defer zone.Deinit();
 
     switch (path_type) {
-        .Eng => return try self.mCWD.statFile(engine_context.Io(), rel_path, .{}),
-        .Prj => return try engine_context.mProject.GetDirectory().statFile(engine_context.Io(), rel_path, .{}),
+        .Eng => return try PlatformUtils.StatTimeAndSize(engine_context.Io(), self.mCWD, rel_path),
+        .Prj => return try PlatformUtils.StatTimeAndSize(engine_context.Io(), engine_context.mProject.GetDirectory(), rel_path),
         .Gen => return error.NoFileToOpen,
     }
 }
@@ -543,7 +545,7 @@ fn CreateAssetFile(self: *AManager, engine_context: *EngineContext, file_source:
     defer self.CloseFile(engine_context.Io(), file);
     const fstats = try file.stat(engine_context.Io());
 
-    try new_file_data.UpdateMetaData(engine_context, file, fstats);
+    try new_file_data.UpdateMetaData(engine_context, file, .{ .mtime = fstats.mtime, .size = fstats.size });
 
     return new_asset_id;
 }

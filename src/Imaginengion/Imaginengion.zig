@@ -2,6 +2,7 @@
 test {
     _ = @import("Tests/ECS/ECSTests.zig");
     _ = @import("Tests/ECS/SystemTests.zig");
+    _ = @import("Tests/ECS/SystemsLayerTests.zig");
     _ = @import("Tests/ECSObjects/DeleteTests.zig");
     _ = @import("Tests/Serializer/SerializerTests.zig");
     _ = @import("Tests/ECSComponents/Asset/ObjectAssetTests.zig");

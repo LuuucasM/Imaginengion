@@ -16,6 +16,7 @@ const Aabb = @import("../Math/Aabb.zig");
 const RayIntersect = @import("../Math/RayIntersect.zig");
 const Ray = @import("../Math/CameraRay.zig").Ray;
 const GPUAsserts = @import("GPUAsserts.zig");
+const Tracy = @import("Tracy.zig");
 
 //==================================the tree==================================
 
@@ -147,16 +148,30 @@ const MAX_BUILD_DEPTH = MAX_DEPTH + 1;
 /// first from a list of ranges still to do, splitting each range's items as it gets to it, one pass forward fills in
 /// each node's Skip, and Refit fills in the boxes and masks going back up
 pub fn Build(allocator: std.mem.Allocator, items: []Item, nodes: *std.ArrayList(Node)) !void {
+    const zone = Tracy.ZoneInit("BVH::Build", @src());
+    defer zone.Deinit();
+    zone.Value(items.len);
+
     nodes.clearRetainingCapacity();
     if (items.len == 0) return;
     std.debug.assert(items.len <= MAX_ITEMS);
 
+    try BuildStructure(allocator, items, nodes);
+    FillSkips(nodes.items);
+    Refit(items, nodes.items);
+}
+
+/// Build's nodes, depth first, each range's items split as it gets to it. Every node's box and mask left for Refit
+fn BuildStructure(allocator: std.mem.Allocator, items: []Item, nodes: *std.ArrayList(Node)) !void {
+    const zone = Tracy.ZoneInit("BVH::BuildStructure", @src());
+    defer zone.Deinit();
+
     //the structure, depth first. A range waiting its turn is a right half, whose parent's Info gets its index once it
-    //is made, or the root
-    const Pending = struct { First: u32, End: u32, RightOf: ?u32, Depth: u32 };
+    //is made, or the root. Each carries the box around its items' centers, found by the split that made it
+    const Pending = struct { First: u32, End: u32, RightOf: ?u32, Depth: u32, Centers: CenterBox };
     var pending: [MAX_BUILD_DEPTH]Pending = undefined;
     var pending_count: usize = 1;
-    pending[0] = .{ .First = 0, .End = @intCast(items.len), .RightOf = null, .Depth = 0 };
+    pending[0] = .{ .First = 0, .End = @intCast(items.len), .RightOf = null, .Depth = 0, .Centers = .Of(items) };
 
     while (pending_count > 0) {
         pending_count -= 1;
@@ -172,25 +187,30 @@ pub fn Build(allocator: std.mem.Allocator, items: []Item, nodes: *std.ArrayList(
 
         //an inner node: its right half waits, its left half is made next, so it lands right after it
         try nodes.append(allocator, Node.Init(0, 0));
-        const split = range.First + Split(items[range.First..range.End], range.Depth);
+        const halves = Split(items[range.First..range.End], range.Depth, range.Centers);
+        const split = range.First + halves.LeftCount;
         std.debug.assert(pending_count + 2 <= MAX_BUILD_DEPTH);
-        pending[pending_count] = .{ .First = split, .End = range.End, .RightOf = node_ind, .Depth = range.Depth + 1 };
-        pending[pending_count + 1] = .{ .First = range.First, .End = split, .RightOf = null, .Depth = range.Depth + 1 };
+        pending[pending_count] = .{ .First = split, .End = range.End, .RightOf = node_ind, .Depth = range.Depth + 1, .Centers = halves.Right };
+        pending[pending_count + 1] = .{ .First = range.First, .End = split, .RightOf = null, .Depth = range.Depth + 1, .Centers = halves.Left };
         pending_count += 2;
     }
+    zone.Value(nodes.items.len);
+}
 
-    //where each node's walk goes next. A parent comes before its children, so its own Skip is always set by the time
-    //its children's are worked out from it
-    nodes.items[0].Skip = @intCast(nodes.items.len);
-    for (nodes.items, 0..) |node, node_ind| {
+/// Where each node's walk goes next. A parent comes before its children, so its own Skip is always set by the time
+/// its children's are worked out from it
+fn FillSkips(nodes: []Node) void {
+    const zone = Tracy.ZoneInit("BVH::FillSkips", @src());
+    defer zone.Deinit();
+
+    nodes[0].Skip = @intCast(nodes.len);
+    for (nodes, 0..) |node, node_ind| {
         if (node.IsLeaf()) continue;
         const left = node_ind + 1;
         const right = node.RightChild();
-        nodes.items[left].Skip = right;
-        nodes.items[right].Skip = node.Skip;
+        nodes[left].Skip = right;
+        nodes[right].Skip = node.Skip;
     }
-
-    Refit(items, nodes.items);
 }
 
 //// How many bins a split sorts a node's items into along each axis, by where their centers are, to try a split at
@@ -223,68 +243,87 @@ const SplitChoice = struct {
     Scale: Vec3V,
 };
 
-/// Splits `items`, more than a leaf holds, in two at depth `depth`: reorders them so the left half comes first and
-/// returns how many that is. The split is the cheapest by the surface area heuristic (BestSplit). Items whose centers
-/// are all in one spot, which no plane splits, and a split leaving a half too big to fit in the levels left under
-/// MAX_DEPTH, the way items each much further out than the last would peel off one at a time, go down the middle
-/// instead, which always fits
-fn Split(items: []Item, depth: u32) u32 {
-    const count: u32 = @intCast(items.len);
-    //the box around the items' doubled centers
-    var min: Vec3V = @splat(std.math.inf(f32));
-    var max: Vec3V = @splat(-std.math.inf(f32));
-    for (items) |item| {
-        const center = DoubledCenter(item);
-        min = @min(min, center);
-        max = @max(max, center);
-    }
+/// The box around some items' doubled centers: what a split places them in its bins by
+const CenterBox = struct {
+    Min: Vec3V = @splat(std.math.inf(f32)),
+    Max: Vec3V = @splat(-std.math.inf(f32)),
 
-    if (BestSplit(items, min, max)) |best| {
-        const bigger_half = @max(best.LeftCount, count - best.LeftCount);
-        if (depth + 1 + LevelsBelow(bigger_half) <= MAX_DEPTH) {
-            Partition(items, best);
-            return best.LeftCount;
-        }
+    fn Of(items: []const Item) CenterBox {
+        var box = CenterBox{};
+        for (items) |item| box.Add(DoubledCenter(item));
+        return box;
     }
-    SortAlongWidest(items, max - min);
-    return count / 2;
+    fn Add(self: *CenterBox, center: Vec3V) void {
+        self.Min = @min(self.Min, center);
+        self.Max = @max(self.Max, center);
+    }
+};
+
+/// How a split left a range: how many items went left, and the box around each half's centers, which is what each
+/// half is split by in turn
+const Halves = struct {
+    LeftCount: u32,
+    Left: CenterBox,
+    Right: CenterBox,
+};
+
+/// Splits `items`, more than a leaf holds and whose centers are in `centers`, in two at depth `depth`: reorders them
+/// so the left half comes first. The split is the cheapest by the surface area heuristic (BestSplit). Items whose
+/// centers are all in one spot, which no plane splits, and a split leaving a half too big to fit in the levels left
+/// under MAX_DEPTH, the way items each much further out than the last would peel off one at a time, go down the middle
+/// instead, which always fits
+fn Split(items: []Item, depth: u32, centers: CenterBox) Halves {
+    const count: u32 = @intCast(items.len);
+    if (BestSplit(items, centers)) |best| {
+        const bigger_half = @max(best.LeftCount, count - best.LeftCount);
+        if (depth + 1 + LevelsBelow(bigger_half) <= MAX_DEPTH) return Partition(items, best);
+    }
+    SortAlongWidest(items, centers.Max - centers.Min);
+    const half = count / 2;
+    return .{ .LeftCount = half, .Left = .Of(items[0..half]), .Right = .Of(items[half..]) };
 }
 
-/// The cheapest split of `items`, whose doubled centers are within `min` and `max`, or null if every center is in one
-/// spot. Along each axis the centers spread over, the items go into SAH_BINS bins, each keeping a box around its items
-/// and how many there are, all three axes' bins filled in one pass over the items. Each boundary between two bins is
-/// a split: its cost is each side's box's surface area times how many items it holds, added up. A ray through the
-/// node goes through a box with a chance in proportion to its area, and then has its items to pay for, so the
-/// cheapest split is the one a ray pays least for
-fn BestSplit(items: []const Item, min: Vec3V, max: Vec3V) ?SplitChoice {
-    const Bin = struct {
-        Min: Vec3V = @splat(std.math.inf(f32)),
-        Max: Vec3V = @splat(-std.math.inf(f32)),
-        Count: u32 = 0,
+/// A box as one vector, so one @min is the union of two: its Min in the first three lanes, its Max negated in the
+/// next three, and inf in the two left over. All inf is the empty box
+const BoxV = @Vector(8, f32);
+const EMPTY_BOX_V: BoxV = @splat(std.math.inf(f32));
 
-        fn Add(self: *@This(), other_min: Vec3V, other_max: Vec3V, count: u32) void {
-            self.Min = @min(self.Min, other_min);
-            self.Max = @max(self.Max, other_max);
-            self.Count += count;
-        }
-        fn Cost(self: @This()) f32 {
-            const bounds = Aabb{ .Min = .FromVector(self.Min), .Max = .FromVector(self.Max) };
-            return bounds.HalfArea() * @as(f32, @floatFromInt(self.Count));
-        }
-    };
+fn BoxVOf(bounds: Aabb) BoxV {
+    const inf = std.math.inf(f32);
+    return .{ bounds.Min.x, bounds.Min.y, bounds.Min.z, inf, -bounds.Max.x, -bounds.Max.y, -bounds.Max.z, inf };
+}
 
-    const extent = max - min;
+/// What the surface area heuristic charges for `count` items in `box`: its half area (Aabb.HalfArea) times the count
+fn BoxVCost(box: BoxV, count: u32) f32 {
+    const size_x = -box[4] - box[0];
+    const size_y = -box[5] - box[1];
+    const size_z = -box[6] - box[2];
+    return (size_x * size_y + size_y * size_z + size_z * size_x) * @as(f32, @floatFromInt(count));
+}
+
+/// The cheapest split of `items`, whose doubled centers are in `centers`, or null if every center is in one spot. Along
+/// each axis the centers spread over, the items go into SAH_BINS bins, each keeping a box around its items and how many
+/// there are, all three axes' bins filled in one pass over the items. Each boundary between two bins is a split: its
+/// cost is each side's box's surface area times how many items it holds, added up. A ray through the node goes through
+/// a box with a chance in proportion to its area, and then has its items to pay for, so the cheapest split is the one a
+/// ray pays least for
+fn BestSplit(items: []const Item, centers: CenterBox) ?SplitChoice {
+    const extent = centers.Max - centers.Min;
     const zero: Vec3V = @splat(0);
     if (!@reduce(.Or, extent > zero)) return null;
     //a flat axis gets a scale of 0, and is passed over below
     const scale = @select(f32, extent > zero, @as(Vec3V, @splat(@floatFromInt(SAH_BINS))) / extent, zero);
 
-    var bins: [3][SAH_BINS]Bin = @splat(@splat(.{}));
+    var boxes: [3][SAH_BINS]BoxV = @splat(@splat(EMPTY_BOX_V));
+    var counts: [3][SAH_BINS]u32 = @splat(@splat(0));
     for (items) |item| {
-        const item_bins = BinsOf(DoubledCenter(item), min, scale);
-        const item_min = item.Bounds.Min.ToVector();
-        const item_max = item.Bounds.Max.ToVector();
-        inline for (0..3) |axis| bins[axis][item_bins[axis]].Add(item_min, item_max, 1);
+        const item_bins = BinsOf(DoubledCenter(item), centers.Min, scale);
+        const item_box = BoxVOf(item.Bounds);
+        inline for (0..3) |axis| {
+            const bin = item_bins[axis];
+            boxes[axis][bin] = @min(boxes[axis][bin], item_box);
+            counts[axis][bin] += 1;
+        }
     }
 
     var best: ?SplitChoice = null;
@@ -292,50 +331,70 @@ fn BestSplit(items: []const Item, min: Vec3V, max: Vec3V) ?SplitChoice {
     const extents: [3]f32 = extent;
     for (0..3) |axis| {
         if (!(extents[axis] > 0)) continue;
-        const axis_bins = &bins[axis];
+        const axis_boxes = &boxes[axis];
+        const axis_counts = &counts[axis];
 
-        //every boundary's right side, swept in from the right end: what is in bin b and every bin past it
+        //the bins with items in, in order. A boundary just past an empty bin splits the items exactly as the one before
+        //it did, at the same cost, so only the boundary between each of these and the next is tried
+        var filled: [SAH_BINS]u32 = undefined;
+        var filled_count: usize = 0;
+        const counts_v: @Vector(SAH_BINS, u32) = axis_counts.*;
+        var occupied: u32 = @as(@Int(.unsigned, SAH_BINS), @bitCast(counts_v != @as(@Vector(SAH_BINS, u32), @splat(0))));
+        while (occupied != 0) : (occupied &= occupied - 1) {
+            filled[filled_count] = @ctz(occupied);
+            filled_count += 1;
+        }
+
+        //every boundary's right side, swept in from the right end: what is in the filled bin just past it and every
+        //one after that
         var right_costs: [SAH_BINS]f32 = undefined;
-        var right_counts: [SAH_BINS]u32 = undefined;
-        var right = Bin{};
-        var bin_ind = SAH_BINS;
-        while (bin_ind > 1) {
-            bin_ind -= 1;
-            right.Add(axis_bins[bin_ind].Min, axis_bins[bin_ind].Max, axis_bins[bin_ind].Count);
-            right_counts[bin_ind] = right.Count;
-            right_costs[bin_ind] = if (right.Count > 0) right.Cost() else 0;
+        var right_box = EMPTY_BOX_V;
+        var right_count: u32 = 0;
+        var filled_ind = filled_count;
+        while (filled_ind > 1) {
+            filled_ind -= 1;
+            const bin = filled[filled_ind];
+            right_box = @min(right_box, axis_boxes[bin]);
+            right_count += axis_counts[bin];
+            right_costs[filled_ind] = BoxVCost(right_box, right_count);
         }
 
         //then each boundary's left side, swept in from the left end. The first cheapest wins a tie, so the same items
         //always split the same way
-        var left = Bin{};
-        for (1..SAH_BINS) |boundary| {
-            left.Add(axis_bins[boundary - 1].Min, axis_bins[boundary - 1].Max, axis_bins[boundary - 1].Count);
-            if (left.Count == 0 or right_counts[boundary] == 0) continue;
-            const cost = left.Cost() + right_costs[boundary];
+        var left_box = EMPTY_BOX_V;
+        var left_count: u32 = 0;
+        for (filled[0 .. filled_count -| 1], 0..) |bin, left_ind| {
+            left_box = @min(left_box, axis_boxes[bin]);
+            left_count += axis_counts[bin];
+            const cost = BoxVCost(left_box, left_count) + right_costs[left_ind + 1];
             if (cost < best_cost) {
                 best_cost = cost;
-                best = .{ .Axis = axis, .Bin = @intCast(boundary), .LeftCount = left.Count, .Min = min, .Scale = scale };
+                best = .{ .Axis = axis, .Bin = bin + 1, .LeftCount = left_count, .Min = centers.Min, .Scale = scale };
             }
         }
     }
     return best;
 }
 
-/// Reorders `items` so the ones `split` puts on the left come first
-fn Partition(items: []Item, split: SplitChoice) void {
+/// Reorders `items` so the ones `split` puts on the left come first, finding each half's center box on the way
+fn Partition(items: []Item, split: SplitChoice) Halves {
+    var halves = Halves{ .LeftCount = split.LeftCount, .Left = .{}, .Right = .{} };
     var left: usize = 0;
     var right = items.len;
     while (left < right) {
-        const item_bins: [3]u32 = BinsOf(DoubledCenter(items[left]), split.Min, split.Scale);
+        const center = DoubledCenter(items[left]);
+        const item_bins: [3]u32 = BinsOf(center, split.Min, split.Scale);
         if (item_bins[split.Axis] < split.Bin) {
+            halves.Left.Add(center);
             left += 1;
         } else {
+            halves.Right.Add(center);
             right -= 1;
             std.mem.swap(Item, &items[left], &items[right]);
         }
     }
     std.debug.assert(left == split.LeftCount);
+    return halves;
 }
 
 /// Sorts `items` by their centers along the axis their centers spread widest on (`extent`), so splitting them down the
@@ -360,6 +419,9 @@ fn SortAlongWidest(items: []Item, extent_v: Vec3V) void {
 /// after it. What a build finishes with, and all a tree needs after its items move, as long as it still holds the
 /// same items in the same order. Boxes moving far from where they were built make a looser tree, which a rebuild fixes
 pub fn Refit(items: []const Item, nodes: []Node) void {
+    const zone = Tracy.ZoneInit("BVH::Refit", @src());
+    defer zone.Deinit();
+
     var node_ind = nodes.len;
     while (node_ind > 0) {
         node_ind -= 1;

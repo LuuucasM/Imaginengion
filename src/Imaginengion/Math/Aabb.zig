@@ -30,11 +30,11 @@ pub fn Grow(self: Aabb, amount: f32) Aabb {
     return .{ .Min = self.Min.SubVec(reach), .Max = self.Max.AddVec(reach) };
 }
 
-/// Whether the two share any point, edges touching included
+/// Whether the two share any point, edges touching included. Where they share is from the later of the two mins to the
+/// earlier of the two maxes along each axis, so they overlap if that is not empty along any of them: one compare for
+/// all three axes, with no branch per axis
 pub fn Overlaps(a: Aabb, b: Aabb) bool {
-    return a.Min.x <= b.Max.x and b.Min.x <= a.Max.x and
-        a.Min.y <= b.Max.y and b.Min.y <= a.Max.y and
-        a.Min.z <= b.Max.z and b.Min.z <= a.Max.z;
+    return @reduce(.And, @max(a.Min.ToVector(), b.Min.ToVector()) <= @min(a.Max.ToVector(), b.Max.ToVector()));
 }
 
 pub fn Center(self: Aabb) Vec3(f32) {
@@ -51,6 +51,6 @@ pub fn HalfArea(self: Aabb) f32 {
 
 /// Whether `point` is inside or on the box
 pub fn Contains(self: Aabb, point: Vec3(f32)) bool {
-    return point.x >= self.Min.x and point.y >= self.Min.y and point.z >= self.Min.z and
-        point.x <= self.Max.x and point.y <= self.Max.y and point.z <= self.Max.z;
+    const p = point.ToVector();
+    return @reduce(.And, p >= self.Min.ToVector()) and @reduce(.And, p <= self.Max.ToVector());
 }

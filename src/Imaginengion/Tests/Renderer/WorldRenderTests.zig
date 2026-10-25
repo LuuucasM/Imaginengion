@@ -379,6 +379,25 @@ test "a shape hidden or deleted after the tree was built isn't drawn, and the re
     try std.testing.expect(covered.Game > 40);
 }
 
+test "a mask taken off after the tree was built stops cutting what is under it, though its items still name it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    var prng = std.Random.DefaultPrng.init(0x3A5C);
+    const random = prng.random();
+
+    const scenes = try BuildScenes(engine_context, random);
+    try engine_context.mEditorWorld.BuildBVH(engine_context);
+
+    const masks = try engine_context.mEditorWorld.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = MaskComponent });
+    try std.testing.expect(masks.items.len > 0);
+    for (masks.items) |entity_id| try engine_context.mEditorWorld.GetEntity(entity_id).RemoveComponent(engine_context, MaskComponent);
+
+    const covered = try ExpectSamePictures(engine_context, random, .{ .Overlays = &.{ scenes.Huds[0].mID, scenes.Huds[1].mID } }, false, 500);
+    try std.testing.expect(covered.Overlay > 100);
+    try std.testing.expect(covered.Game > 50);
+}
+
 test "a tree item's surface is put at its place before the build, so a tie at the same depth goes the same way however the tree is built" {
     const world = try TestWorld.Init();
     defer world.Deinit();

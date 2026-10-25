@@ -1,6 +1,56 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const nfd = @import("../Core/CImports.zig").nfd;
+const windows = std.os.windows;
 const PlatformUtils = @This();
+
+/// The part of a stat the asset manager compares to tell whether a file changed
+pub const FileTimeAndSize = struct {
+    mtime: std.Io.Timestamp,
+    size: u64,
+};
+
+/// mtime and size of the file at `sub_path` in `dir`. On Windows a full stat opens a handle, queries
+/// it, and closes it, and the open is most of the cost, so this asks by path in one call instead.
+/// Elsewhere a stat by path is already one call with no handle, so it is just a stat
+pub fn StatTimeAndSize(io: std.Io, dir: std.Io.Dir, sub_path: []const u8) !FileTimeAndSize {
+    if (builtin.os.tag == .windows) return StatTimeAndSizeWindows(dir, sub_path);
+    const stat = try dir.statFile(io, sub_path, .{});
+    return .{ .mtime = stat.mtime, .size = stat.size };
+}
+
+fn StatTimeAndSizeWindows(dir: std.Io.Dir, sub_path: []const u8) !FileTimeAndSize {
+    //the same path conversion std's own Windows open uses: WTF-16, '/' to '\', '.' and '..' resolved
+    const sub_path_w = try std.Io.Threaded.sliceToPrefixedFileW(dir.handle, sub_path, .{});
+    const attr: windows.OBJECT.ATTRIBUTES = .{
+        .RootDirectory = if (std.fs.path.isAbsoluteWindowsWtf16(sub_path_w.span())) null else dir.handle,
+        .ObjectName = @constCast(&sub_path_w.string()),
+    };
+    var info: FILE_NETWORK_OPEN_INFORMATION = undefined;
+    return switch (NtQueryFullAttributesFile(&attr, &info)) {
+        .SUCCESS => .{ .mtime = windows.fromSysTime(info.LastWriteTime), .size = @bitCast(info.EndOfFile) },
+        .OBJECT_NAME_NOT_FOUND, .OBJECT_PATH_NOT_FOUND => error.FileNotFound,
+        .ACCESS_DENIED => error.AccessDenied,
+        .OBJECT_NAME_INVALID, .OBJECT_PATH_SYNTAX_BAD => error.BadPathName,
+        else => |status| windows.unexpectedStatus(status),
+    };
+}
+
+//not bound by std, which only has NtQueryAttributesFile (times and attributes, no size)
+const FILE_NETWORK_OPEN_INFORMATION = extern struct {
+    CreationTime: windows.LARGE_INTEGER,
+    LastAccessTime: windows.LARGE_INTEGER,
+    LastWriteTime: windows.LARGE_INTEGER,
+    ChangeTime: windows.LARGE_INTEGER,
+    AllocationSize: windows.LARGE_INTEGER,
+    EndOfFile: windows.LARGE_INTEGER,
+    FileAttributes: windows.ULONG,
+};
+
+extern "ntdll" fn NtQueryFullAttributesFile(
+    ObjectAttributes: *const windows.OBJECT.ATTRIBUTES,
+    FileInformation: *FILE_NETWORK_OPEN_INFORMATION,
+) callconv(.winapi) windows.NTSTATUS;
 
 pub fn OpenFolder(allocator: std.mem.Allocator) ![]const u8 {
     var outPath: [*c]nfd.nfdchar_t = undefined;

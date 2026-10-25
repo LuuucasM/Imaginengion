@@ -206,11 +206,7 @@ const OrientedBox = struct {
 
     /// The box's own x, y and z axes in world space, which its faces are square to
     fn Axes(self: OrientedBox) [3]Vec3(f32) {
-        return .{
-            (Vec3(f32){ .x = 1, .y = 0, .z = 0 }).QuatRotate(self.mRotation),
-            (Vec3(f32){ .x = 0, .y = 1, .z = 0 }).QuatRotate(self.mRotation),
-            (Vec3(f32){ .x = 0, .y = 0, .z = 1 }).QuatRotate(self.mRotation),
-        };
+        return self.mRotation.Axes();
     }
 
     /// The half extents of the box the corner radius is swept around, see SDF.sdRoundedBox

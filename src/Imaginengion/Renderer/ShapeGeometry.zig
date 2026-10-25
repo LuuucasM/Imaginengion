@@ -246,7 +246,9 @@ pub const MaskFinder = struct {
         return try self.RegionMask(region, canvas);
     }
 
-    fn RegionMask(self: *MaskFinder, region: Entity, canvas: ?CanvasTransform) anyerror!u32 {
+    /// The mask `region`, an entity with a MaskComponent, cuts with, inside whatever mask cuts it in turn: what MaskOf
+    /// gives for anything whose MaskRegionAbove is `region`
+    pub fn RegionMask(self: *MaskFinder, region: Entity, canvas: ?CanvasTransform) anyerror!u32 {
         if (self.mRegions.get(region.mID)) |known| return known;
 
         //the mask around it is added first, so following parents always ends
@@ -271,7 +273,7 @@ pub const MaskFinder = struct {
 };
 
 /// The nearest entity above `entity` (its parent, or further up) with a MaskComponent
-fn MaskRegionAbove(entity: Entity) ?Entity {
+pub fn MaskRegionAbove(entity: Entity) ?Entity {
     var current = entity;
     while (current.GetComponent(EntityChildComponent)) |child_component| {
         current = Entity{ .mID = child_component.mParent, .mManager = entity.mManager };
@@ -285,10 +287,8 @@ fn MaskRegionAbove(entity: Entity) ?Entity {
 /// for a box that isn't
 pub fn OutsideMaskBox(box: Box, mask_box: Box) bool {
     const center = box.Center.SubVec(mask_box.Center).InvQuatRotate(mask_box.Rotation);
-    //the box's own axes, as seen in the mask quad's space
-    const axis_x = (Vec3(f32){ .x = 1, .y = 0, .z = 0 }).QuatRotate(box.Rotation).InvQuatRotate(mask_box.Rotation);
-    const axis_y = (Vec3(f32){ .x = 0, .y = 1, .z = 0 }).QuatRotate(box.Rotation).InvQuatRotate(mask_box.Rotation);
-    const axis_z = (Vec3(f32){ .x = 0, .y = 0, .z = 1 }).QuatRotate(box.Rotation).InvQuatRotate(mask_box.Rotation);
+    //the box's own axes, as seen in the mask quad's space: turned by the box's rotation, then back by the mask's
+    const axis_x, const axis_y, const axis_z = mask_box.Rotation.Conjugate().MulQuat(box.Rotation).Axes();
     const half = box.HalfExtents;
     const reach_x = @abs(axis_x.x) * half.x + @abs(axis_y.x) * half.y + @abs(axis_z.x) * half.z;
     const reach_y = @abs(axis_x.y) * half.x + @abs(axis_y.y) * half.y + @abs(axis_z.y) * half.z;

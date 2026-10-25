@@ -30,6 +30,7 @@ const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
 const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
+const MaskComponent = EntityComponents.MaskComponent;
 const WorldBVH = @import("../Core/WorldBVH.zig");
 const SDFProgram = @import("SDFProgram.zig");
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
@@ -483,8 +484,7 @@ fn FillLayer(self: *Renderer, engine_context: *EngineContext, world: *WorldManag
     const item_masks = try frame_allocator.alloc(u32, items.len);
     for (items, drawn, item_masks) |item, *draws, *mask| {
         draws.* = Draws(world, item, scenes, colliders != null);
-        //colliders aren't cut by masks, the same as raycasts against them
-        mask.* = if (draws.* and item.Kind != .Collider) try mask_finder.MaskOf(world.GetEntity(item.Entity), null) else SDFProgram.NO_MASK;
+        mask.* = if (draws.*) try ItemMask(world, &mask_finder, item) else SDFProgram.NO_MASK;
     }
     try buffers.SetMasks(engine_allocator, &masks);
 
@@ -501,6 +501,16 @@ fn FillLayer(self: *Renderer, engine_context: *EngineContext, world: *WorldManag
         std.debug.assert(buffers.mShapeBufferBase.items.len == before + 1);
     }
     try buffers.FinishTree(engine_allocator, frame_allocator, tree);
+}
+
+/// The mask a tree item is cut by: its mask region's, found at the build (WorldItem.MaskRegion), so its letters don't
+/// each look up their parents again. Found again from where it is now if that region has gone or stopped being one
+/// since. Colliders have none, the same as raycasts against them
+fn ItemMask(world: *WorldManager, mask_finder: *ShapeGeometry.MaskFinder, item: WorldBVH.WorldItem) !u32 {
+    if (item.MaskRegion == Entity.NullObject) return SDFProgram.NO_MASK;
+    const region = world.GetEntity(item.MaskRegion);
+    if (!region.IsActive() or !region.HasComponent(MaskComponent)) return mask_finder.MaskOf(world.GetEntity(item.Entity), null);
+    return mask_finder.RegionMask(region, null);
 }
 
 /// Whether a tree item can be drawn this render: in a scene the view shows, still there and not folded away, and a

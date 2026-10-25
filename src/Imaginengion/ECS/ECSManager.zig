@@ -41,6 +41,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         pub const ComponentInd = ComponentManagerT.ComponentInd;
         /// The components this ECS was made with, builtins not included.
         pub const ComponentTypes = components_types;
+        /// The name this ECS type was made with, which the systems layer tells kinds of ECS apart by (Systems.KindId)
+        pub const DebugName = debug_name;
         pub const ECSCallbackList = ECSEventManager.CallbackList;
         pub const ECSEventCallback = ECSEventManager.EventCallback;
         const Self = @This();

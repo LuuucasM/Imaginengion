@@ -3,6 +3,7 @@ const AssetsList = @import("../AComponents.zig").AssetsList;
 const FileMetaData = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
 const PathType = @import("../../ECSManagers/AManager.zig").PathType;
+const FileTimeAndSize = @import("../../PlatformUtils/PlatformUtils.zig").FileTimeAndSize;
 
 pub const Name: []const u8 = "FileMetaData";
 
@@ -22,7 +23,7 @@ pub fn Clone(self: *const FileMetaData, engine_context: *EngineContext) !FileMet
     return new_component;
 }
 
-pub fn Eql(self: *FileMetaData, engine_context: *EngineContext, file: std.Io.File, stat: std.Io.File.Stat) !bool {
+pub fn Eql(self: *FileMetaData, engine_context: *EngineContext, file: std.Io.File, stat: FileTimeAndSize) !bool {
     if (self.mLastModified.nanoseconds != stat.mtime.nanoseconds) {
         return false;
     }
@@ -42,7 +43,7 @@ pub fn Eql(self: *FileMetaData, engine_context: *EngineContext, file: std.Io.Fil
     return true;
 }
 
-pub fn UpdateMetaData(self: *FileMetaData, engine_context: *EngineContext, file: std.Io.File, stat: std.Io.File.Stat) !void {
+pub fn UpdateMetaData(self: *FileMetaData, engine_context: *EngineContext, file: std.Io.File, stat: FileTimeAndSize) !void {
     self.mLastModified = stat.mtime;
     self.mSize = stat.size;
 

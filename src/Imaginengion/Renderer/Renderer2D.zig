@@ -94,10 +94,8 @@ pub const ShapeData = extern struct {
 /// The AxisX, AxisY and AxisZ of a shape centered at `center` and turned by `rotation`: its own axes in world space,
 /// each with -dot(axis, center) in w (see ShapeData)
 pub fn ShapeAxes(center: Vec3(f32), rotation: Quat(f32)) [3]Vec4(f32).ArrayT {
-    const unit_axes = [3]Vec3(f32){ .{ .x = 1, .y = 0, .z = 0 }, .{ .x = 0, .y = 1, .z = 0 }, .{ .x = 0, .y = 0, .z = 1 } };
     var axes: [3]Vec4(f32).ArrayT = undefined;
-    for (unit_axes, &axes) |unit_axis, *axis| {
-        const world_axis = unit_axis.QuatRotate(rotation);
+    for (rotation.Axes(), &axes) |world_axis, *axis| {
         axis.* = .{ world_axis.x, world_axis.y, world_axis.z, -world_axis.Dot(center) };
     }
     return axes;
