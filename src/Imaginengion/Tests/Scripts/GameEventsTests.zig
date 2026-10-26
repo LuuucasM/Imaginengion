@@ -110,7 +110,7 @@ const TestWorld = struct {
             .async_limit = .nothing,
         });
         try engine_context.mAssetManager.Init(engine_context);
-        try engine_context.mGameWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mGameWorld.Init(engine_context);
         self.mScene = try engine_context.mGameWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
         gHandled = .empty;
         return self;

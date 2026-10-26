@@ -29,9 +29,9 @@ const TestWorld = struct {
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
-        try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mEditorWorld.Init(engine_context);
         //play mode's copy of the world
-        try engine_context.mSimulateWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mSimulateWorld.Init(engine_context);
         return self;
     }
 

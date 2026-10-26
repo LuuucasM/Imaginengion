@@ -91,11 +91,15 @@ pub const DEFAULT_THEME_PATH = "src/Imaginengion/EngineAssets/themes/Default.imt
 /// the theme's alone
 pub const PLAIN_TEXTURE_PATH = "src/Imaginengion/EngineAssets/textures/White.png";
 
-pub fn Init(self: *UIManager, engine_allocator: std.mem.Allocator) !void {
-    try self.mECSManager.Init(engine_allocator);
+/// Sets up UI land, and makes its ECS known to the systems layer. It is connected to the worlds whose UI is in use by
+/// the programs (EngineContext.StartUsingWorld)
+pub fn Init(self: *UIManager, engine_context: *EngineContext) !void {
+    try self.mECSManager.Init(engine_context.EngineAllocator());
+    try engine_context.mSystems.Register(engine_context.EngineAllocator(), &self.mECSManager);
 }
 
 pub fn Deinit(self: *UIManager, engine_context: *EngineContext) void {
+    engine_context.mSystems.Unregister(engine_context.EngineAllocator(), &self.mECSManager);
     self.mFocusSystem.Deinit(engine_context.EngineAllocator());
     self.mPopupSystem.Deinit(engine_context.EngineAllocator());
     self.mStyleSystem.Deinit(engine_context.EngineAllocator());

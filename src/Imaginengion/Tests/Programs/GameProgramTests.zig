@@ -29,7 +29,6 @@ const TestEngine = struct {
         };
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
-        const engine_allocator = engine_context.EngineAllocator();
         //UUIDs and file reads/writes go through the context's Io, which forwards to this
         engine_context._Internal.ThreadedIO = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
             .concurrent_limit = .nothing,
@@ -37,14 +36,14 @@ const TestEngine = struct {
         });
         //no Setup: its default assets need the GPU
         try engine_context.mAssetManager.Init(engine_context);
-        try engine_context.mAssetWorld.Init(engine_allocator);
+        try engine_context.mAssetWorld.Init(engine_context);
         engine_context.mAssetEntityScene = try engine_context.mAssetWorld.NewScene(engine_context, .GameLayer, Scene.BlankConfig);
-        try engine_context.mUIManager.Init(engine_allocator);
+        try engine_context.mUIManager.Init(engine_context);
         //the audio settings are one of the project's settings owners
         try engine_context.mAudioManager.InitMixer(engine_context);
         //the entries are made in here and saved, the game starts in the game world
-        try engine_context.mSimulateWorld.Init(engine_allocator);
-        try engine_context.mGameWorld.Init(engine_allocator);
+        try engine_context.mSimulateWorld.Init(engine_context);
+        try engine_context.mGameWorld.Init(engine_context);
         return self;
     }
 

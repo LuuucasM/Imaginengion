@@ -36,8 +36,8 @@ const TestEngine = struct {
         });
         //the audio settings are one of the project's settings owners
         try engine_context.mAudioManager.InitMixer(engine_context);
-        try engine_context.mUIManager.Init(engine_context.EngineAllocator());
-        try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mUIManager.Init(engine_context);
+        try engine_context.mEditorWorld.Init(engine_context);
         self.mScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         self.mPanel = try ProjectSettingsPanel.Build(engine_context, self.mScene, .{ .StockScripts = false });
 

@@ -31,8 +31,8 @@ const TestEngine = struct {
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
-        try engine_context.mUIManager.Init(engine_context.EngineAllocator());
-        try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mUIManager.Init(engine_context);
+        try engine_context.mEditorWorld.Init(engine_context);
         try engine_context.mAudioManager.InitMixer(engine_context);
         const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         self.mPanel = try AudioBusesPanel.Build(engine_context, scene, .{ .StockScripts = false });

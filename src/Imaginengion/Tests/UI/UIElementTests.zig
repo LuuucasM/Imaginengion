@@ -34,9 +34,9 @@ const TestWorld = struct {
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
-        try engine_context.mUIManager.Init(engine_context.EngineAllocator());
-        try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
-        try engine_context.mSimulateWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mUIManager.Init(engine_context);
+        try engine_context.mEditorWorld.Init(engine_context);
+        try engine_context.mSimulateWorld.Init(engine_context);
         return self;
     }
 

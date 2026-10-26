@@ -47,8 +47,8 @@ const TestWorld = struct {
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
-        try engine_context.mUIManager.Init(engine_context.EngineAllocator());
-        try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mUIManager.Init(engine_context);
+        try engine_context.mEditorWorld.Init(engine_context);
         //as the editor has it (EditorProgram), so a theme's sizes are the overlay's own units (StyleSystem.ThemeUnit)
         engine_context.mEditorWorld.mOverlayScaleMode = .ConstantPixelSize;
         self.mScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
@@ -407,8 +407,8 @@ test "a style names a theme file of its own, and is taken out of it instead of t
     });
     //no Setup: its default assets need the GPU
     try engine_context.mAssetManager.Init(engine_context);
-    try engine_context.mUIManager.Init(engine_allocator);
-    try engine_context.mEditorWorld.Init(engine_allocator);
+    try engine_context.mUIManager.Init(engine_context);
+    try engine_context.mEditorWorld.Init(engine_context);
     var editor_theme = ThemeAsset{};
     try editor_theme.FromJson(engine_context, THEME);
     defer {

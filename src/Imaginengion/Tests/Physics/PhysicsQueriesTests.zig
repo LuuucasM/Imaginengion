@@ -25,7 +25,7 @@ const TestWorld = struct {
         const self = try std.heap.page_allocator.create(TestWorld);
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext), .mScene = undefined };
         self.mEngineContext.* = .{};
-        try self.mEngineContext.mEditorWorld.Init(self.mEngineContext.EngineAllocator());
+        try self.mEngineContext.mEditorWorld.Init(self.mEngineContext);
         self.mScene = try self.mEngineContext.mEditorWorld.NewScene(self.mEngineContext, .GameLayer, Scene.DefaultConfig);
         return self;
     }

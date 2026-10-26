@@ -28,8 +28,8 @@ const TestWorlds = struct {
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
-        try engine_context.mGameWorld.Init(engine_context.EngineAllocator());
-        try engine_context.mSimulateWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mGameWorld.Init(engine_context);
+        try engine_context.mSimulateWorld.Init(engine_context);
         return self;
     }
 

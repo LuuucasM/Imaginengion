@@ -22,9 +22,9 @@ const TestWorld = struct {
         const self = try std.heap.page_allocator.create(TestWorld);
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         self.mEngineContext.* = .{};
-        try self.mEngineContext.mEditorWorld.Init(self.mEngineContext.EngineAllocator());
+        try self.mEngineContext.mEditorWorld.Init(self.mEngineContext);
         //play mode's copy of the world
-        try self.mEngineContext.mSimulateWorld.Init(self.mEngineContext.EngineAllocator());
+        try self.mEngineContext.mSimulateWorld.Init(self.mEngineContext);
         return self;
     }
 

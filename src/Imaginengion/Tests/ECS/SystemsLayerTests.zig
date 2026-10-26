@@ -218,7 +218,7 @@ test "Disconnect and Unregister take the connection away" {
     try std.testing.expectError(error.NoConnectedECS, layer.mSystems.RunSystem(BodiesInScenes, layer.mEngineContext, &layer.mBodies, .{ layer, &seen }));
 
     try layer.Connect(&layer.mBodies, &layer.mScene);
-    layer.mSystems.Unregister(&layer.mScene);
+    layer.mSystems.Unregister(layer.mEngineContext.EngineAllocator(), &layer.mScene);
     try std.testing.expectEqual(@as(usize, 0), layer.mSystems.mEdges.items.len);
     try std.testing.expectError(error.NoConnectedECS, layer.mSystems.RunSystem(BodiesInScenes, layer.mEngineContext, &layer.mBodies, .{ layer, &seen }));
     //and it can't be connected until it is registered again
@@ -238,7 +238,7 @@ const OnlyPlain = struct {
 test "a system with only plain types runs on an ECS the layer doesn't know" {
     const layer = try TestLayer.Init();
     defer layer.Deinit() catch unreachable;
-    layer.mSystems.Unregister(&layer.mBodies);
+    layer.mSystems.Unregister(layer.mEngineContext.EngineAllocator(), &layer.mBodies);
 
     try std.testing.expect(try layer.mSystems.RunSystem(OnlyPlain, layer.mEngineContext, &layer.mBodies, .{&layer.mBodies}));
 }

@@ -61,6 +61,8 @@ pub fn KindId(comptime Kind: type) u64 {
 pub fn Deinit(self: *Systems, engine_allocator: std.mem.Allocator) void {
     self.mNodes.deinit(engine_allocator);
     self.mEdges.deinit(engine_allocator);
+    self.mNodes = .empty;
+    self.mEdges = .empty;
 }
 
 //------------------------------the graph------------------------------
@@ -74,8 +76,9 @@ pub fn Register(self: *Systems, engine_allocator: std.mem.Allocator, ecs: anytyp
     ecs.SetRunMarker(&self.mCurrentRun);
 }
 
-/// Forgets `ecs`, and every connection it has
-pub fn Unregister(self: *Systems, ecs: anytype) void {
+/// Forgets `ecs`, and every connection it has. Once the last one is gone the layer lets go of its memory too, so what
+/// registers in its Init and unregisters in its Deinit leaves nothing behind
+pub fn Unregister(self: *Systems, engine_allocator: std.mem.Allocator, ecs: anytype) void {
     _ = _ECSType(@TypeOf(ecs));
     const node_ind = self._FindNode(ecs) orelse return;
     ecs.SetRunMarker(null);
@@ -86,6 +89,17 @@ pub fn Unregister(self: *Systems, ecs: anytype) void {
         if (edge.mA.mECS == @as(*anyopaque, ecs) or edge.mB.mECS == @as(*anyopaque, ecs)) _ = self.mEdges.swapRemove(edge_ind);
     }
     _ = self.mNodes.swapRemove(node_ind);
+    if (self.mNodes.items.len == 0) self.Deinit(engine_allocator);
+}
+
+/// Whether `a` and `b` are connected
+pub fn IsConnected(self: *const Systems, a: anytype, b: anytype) bool {
+    return self._FindEdge(a, b) != null;
+}
+
+/// Whether `ecs` is registered
+pub fn IsRegistered(self: *const Systems, ecs: anytype) bool {
+    return self._FindNode(ecs) != null;
 }
 
 /// Lets two registered ECSs know each other, so a run starting from either reaches the other through In. Connecting

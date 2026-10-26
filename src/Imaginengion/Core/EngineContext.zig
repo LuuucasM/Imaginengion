@@ -14,6 +14,7 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const EngineContext = @This();
 const EngineStats = @import("EngineStats.zig");
 const Serializer = @import("../Serializer/Serializer.zig");
+const Systems = @import("../ECS/Systems.zig");
 
 const WindowEventData = @import("../Events/WindowEventData.zig");
 const WindowEventManager = @import("../Events/EventManager.zig").EventManager(WindowEventData);
@@ -67,6 +68,11 @@ pub const WorldType = enum {
 };
 
 mDT: f32 = 1.0 / 60.0,
+
+/// The systems layer: every ECS in the engine that systems run across, and which of them know each other (see
+/// ECS/Systems.zig). Each world registers and connects its own four in its Init, the UI and audio theirs; the programs
+/// connect the UI and audio to the worlds in use (StartUsingWorld). Registered ECSs point into it, so it stays here
+mSystems: Systems = .empty,
 
 mAppWindow: Window = .{},
 
@@ -130,21 +136,35 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     self.mAppWindow.Init(self);
 
     //before anything is loaded: an entity with UI gets its element as it is read
-    try self.mUIManager.Init(self.EngineAllocator());
+    try self.mUIManager.Init(self);
     try self.mAssetManager.Init(self);
     try self.mRenderer.Init(self);
     try self.mAssetManager.Setup(self);
     try self.mAudioManager.Init(self);
     try self.mInputManager.Init(self.EngineAllocator());
 
-    try self.mGameWorld.Init(self.EngineAllocator());
-    try self.mEditorWorld.Init(self.EngineAllocator());
-    try self.mSimulateWorld.Init(self.EngineAllocator());
+    try self.mGameWorld.Init(self);
+    try self.mEditorWorld.Init(self);
+    try self.mSimulateWorld.Init(self);
 
-    try self.mAssetWorld.Init(self.EngineAllocator());
+    try self.mAssetWorld.Init(self);
     self.mAssetEntityScene = try self.mAssetWorld.NewScene(self, .GameLayer, .{ .bAddSceneUUID = false, .bAddSceneName = false });
 
-    try self.mTmplEditWorld.Init(self.EngineAllocator());
+    try self.mTmplEditWorld.Init(self);
+}
+
+/// Connects the UI's and audio's ECSs to `world`'s four, for a world whose UI and sounds are in use: the one being
+/// played, the editor's own. A system that runs from the UI or audio reaches the world's components through In only
+/// while it is connected. Connecting one already connected does nothing
+pub fn StartUsingWorld(self: *EngineContext, world: *WorldManager) !void {
+    try world.ConnectTo(self, &self.mUIManager.mECSManager);
+    try world.ConnectTo(self, &self.mAudioManager.mECSManager);
+}
+
+/// Undoes StartUsingWorld, for a world that stops being played
+pub fn StopUsingWorld(self: *EngineContext, world: *WorldManager) void {
+    world.DisconnectFrom(self, &self.mUIManager.mECSManager);
+    world.DisconnectFrom(self, &self.mAudioManager.mECSManager);
 }
 
 /// Points every event manager in the engine at Program.OnEvent, the single synchronous entry
@@ -195,6 +215,9 @@ pub fn DeInit(self: *EngineContext) void {
     self.mRenderer.Deinit(self);
 
     self.mAppWindow.Deinit();
+
+    //empty already once every ECS has unregistered in its Deinit, this is for any left registered
+    self.mSystems.Deinit(self.EngineAllocator());
 
     //anything still live in the Engine pool here is a real leak and is left for Tracy to show as one
     _ = self._Internal.EngineGPA.deinit();

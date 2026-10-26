@@ -23,8 +23,8 @@ const TestWorld = struct {
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
-        try engine_context.mUIManager.Init(engine_context.EngineAllocator());
-        try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mUIManager.Init(engine_context);
+        try engine_context.mEditorWorld.Init(engine_context);
         const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         const root = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
         self.mBar = try Widgets.MenuBar(engine_context, .{ .Entity = root });

@@ -24,9 +24,9 @@ const TestWorld = struct {
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
-        try engine_context.mUIManager.Init(engine_context.EngineAllocator());
-        try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
-        try engine_context.mTmplEditWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mUIManager.Init(engine_context);
+        try engine_context.mEditorWorld.Init(engine_context);
+        try engine_context.mTmplEditWorld.Init(engine_context);
         self.mUIScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         self.mPage = try self.mUIScene.CreateEntity(engine_context, Entity.DefaultConfig);
         _ = try self.mPage.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });

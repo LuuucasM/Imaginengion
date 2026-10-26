@@ -19,7 +19,6 @@ const TestEngine = struct {
         };
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
-        const engine_allocator = engine_context.EngineAllocator();
         //UUIDs and file reads/writes go through the context's Io, which forwards to this
         engine_context._Internal.ThreadedIO = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
             .concurrent_limit = .nothing,
@@ -27,14 +26,14 @@ const TestEngine = struct {
         });
         //no Setup: its default assets need the GPU
         try engine_context.mAssetManager.Init(engine_context);
-        try engine_context.mAssetWorld.Init(engine_allocator);
+        try engine_context.mAssetWorld.Init(engine_context);
         engine_context.mAssetEntityScene = try engine_context.mAssetWorld.NewScene(engine_context, .GameLayer, Scene.BlankConfig);
         //the UI and audio settings are among the project's settings owners, which mProject.New fills
-        try engine_context.mUIManager.Init(engine_allocator);
+        try engine_context.mUIManager.Init(engine_context);
         try engine_context.mAudioManager.InitMixer(engine_context);
         //the files are made in the simulate world and loaded into the game world, which starts without them
-        try engine_context.mSimulateWorld.Init(engine_allocator);
-        try engine_context.mGameWorld.Init(engine_allocator);
+        try engine_context.mSimulateWorld.Init(engine_context);
+        try engine_context.mGameWorld.Init(engine_context);
 
         const project_folder = try self.mTmpDir.dir.realPathFileAlloc(engine_context.Io(), ".", engine_context.FrameAllocator());
         try engine_context.mProject.New(engine_context, project_folder);

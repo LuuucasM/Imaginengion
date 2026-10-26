@@ -18,7 +18,7 @@ fn InitEngine() !*EngineContext {
         .concurrent_limit = .nothing,
         .async_limit = .nothing,
     });
-    try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
+    try engine_context.mEditorWorld.Init(engine_context);
     try engine_context.mAudioManager.InitMixer(engine_context);
     return engine_context;
 }

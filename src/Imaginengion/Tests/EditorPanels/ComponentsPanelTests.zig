@@ -41,9 +41,9 @@ const TestPanel = struct {
             .async_limit = .nothing,
         });
         try engine_context.mAssetManager.Init(engine_context);
-        try engine_context.mUIManager.Init(engine_context.EngineAllocator());
-        try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
-        try engine_context.mGameWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mUIManager.Init(engine_context);
+        try engine_context.mEditorWorld.Init(engine_context);
+        try engine_context.mGameWorld.Init(engine_context);
         //an audio component's bus list
         try engine_context.mAudioManager.InitMixer(engine_context);
         self.mScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);

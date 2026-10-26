@@ -95,12 +95,39 @@ pub fn GetScene(self: *WorldManager, scene_id: Scene.Type) Scene {
     return Scene{ .mID = scene_id, .mManager = self };
 }
 
-pub fn Init(self: *WorldManager, engine_allocator: std.mem.Allocator) !void {
+/// Sets up the world, and makes its four ECSs (an entity's, a game context's, a player's, a scene's) known to the
+/// systems layer, each connected to the other three: a system run from one reaches the rest through In
+pub fn Init(self: *WorldManager, engine_context: *EngineContext) !void {
+    const engine_allocator = engine_context.EngineAllocator();
     try self.mEManager.Init(engine_allocator);
     try self.mGCManager.Init(engine_allocator);
     try self.mPManager.Init(engine_allocator);
     try self.mSManager.Init(engine_allocator);
     try self.mPhysicsManager.Init(engine_allocator);
+
+    const systems = &engine_context.mSystems;
+    const ecss = self._ECSs();
+    inline for (ecss) |ecs| try systems.Register(engine_allocator, ecs);
+    inline for (ecss, 0..) |ecs, ecs_ind| {
+        inline for (ecss, 0..) |other, other_ind| {
+            if (other_ind > ecs_ind) try systems.Connect(engine_allocator, ecs, other);
+        }
+    }
+}
+
+/// Connects `ecs` (another ECS registered with the systems layer, like the UI's) to each of this world's four
+pub fn ConnectTo(self: *WorldManager, engine_context: *EngineContext, ecs: anytype) !void {
+    inline for (self._ECSs()) |own| try engine_context.mSystems.Connect(engine_context.EngineAllocator(), own, ecs);
+}
+
+/// Undoes ConnectTo
+pub fn DisconnectFrom(self: *WorldManager, engine_context: *EngineContext, ecs: anytype) void {
+    inline for (self._ECSs()) |own| engine_context.mSystems.Disconnect(own, ecs);
+}
+
+// the world's four ECSs
+fn _ECSs(self: *WorldManager) struct { *EManager.ECSManagerT, *GCManager.ECSManagerT, *PManager.ECSManagerT, *SManager.ECSManagerT } {
+    return .{ &self.mEManager.mECSManager, &self.mGCManager.mECSManager, &self.mPManager.mECSManager, &self.mSManager.mECSManager };
 }
 
 /// Steps this world's physics by the frame's time
@@ -124,6 +151,7 @@ pub fn QuitGame(self: *WorldManager, engine_context: *EngineContext) !void {
 }
 
 pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
+    inline for (self._ECSs()) |ecs| engine_context.mSystems.Unregister(engine_context.EngineAllocator(), ecs);
     self.mEManager.Deinit(engine_context);
     self.mGCManager.Deinit(engine_context);
     self.mPManager.Deinit(engine_context);

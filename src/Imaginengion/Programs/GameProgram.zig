@@ -131,6 +131,9 @@ pub fn StartGame(engine_context: *EngineContext) !void {
     }
     if (missing) return error.NoProjectEntry;
 
+    //the game world's UI and sounds are the ones in use, from before anything in it starts
+    try engine_context.StartUsingWorld(&engine_context.mGameWorld);
+
     //all three are the files themselves, UUIDs and all, as in the editor's Play, so scripts can find them by UUID
     _ = try engine_context.mGameWorld.Load(Scene, engine_context, project.GetEntry(.Scene), .Prj);
     _ = try engine_context.mGameWorld.Load(Player, engine_context, project.GetEntry(.Player), .Prj);

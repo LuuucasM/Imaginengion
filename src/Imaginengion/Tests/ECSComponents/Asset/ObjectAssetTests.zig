@@ -37,9 +37,9 @@ const TestWorld = struct {
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
-        try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mEditorWorld.Init(engine_context);
         //the same asset world setup as EngineContext.Init
-        try engine_context.mAssetWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mAssetWorld.Init(engine_context);
         engine_context.mAssetEntityScene = try engine_context.mAssetWorld.NewScene(engine_context, .GameLayer, Scene.BlankConfig);
         return self;
     }

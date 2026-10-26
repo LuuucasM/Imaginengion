@@ -47,7 +47,7 @@ const TestWorld = struct {
         });
         //drawing a quad looks up its texture, which with none set is the default one
         try engine_context.mAssetManager.Init(engine_context);
-        try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mEditorWorld.Init(engine_context);
         return self;
     }
 

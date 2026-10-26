@@ -49,11 +49,11 @@ const TestWorld = struct {
         });
         //the rows' stripes' white texture
         try engine_context.mAssetManager.Init(engine_context);
-        try engine_context.mUIManager.Init(engine_context.EngineAllocator());
-        try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mUIManager.Init(engine_context);
+        try engine_context.mEditorWorld.Init(engine_context);
         //as the editor has it (EditorProgram)
         engine_context.mEditorWorld.mOverlayScaleMode = .ConstantPixelSize;
-        try engine_context.mGameWorld.Init(engine_context.EngineAllocator());
+        try engine_context.mGameWorld.Init(engine_context);
         const ui_scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         //the shell's tab page
         self.mPage = try ui_scene.CreateEntity(engine_context, Entity.DefaultConfig);

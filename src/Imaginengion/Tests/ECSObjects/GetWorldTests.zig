@@ -20,7 +20,7 @@ test "every object type hands back the world it lives in" {
     defer _ = engine_context._Internal.EngineGPA.deinit();
 
     const world = &engine_context.mEditorWorld;
-    try world.Init(engine_context.EngineAllocator());
+    try world.Init(engine_context);
     defer world.Deinit(engine_context);
 
     const scene = try world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);

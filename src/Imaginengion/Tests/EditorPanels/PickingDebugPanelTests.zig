@@ -30,8 +30,8 @@ test "sections start folded and are only filled in while open, and the pointer s
     const engine_context = try std.heap.page_allocator.create(EngineContext);
     defer std.heap.page_allocator.destroy(engine_context);
     engine_context.* = .{};
-    try engine_context.mUIManager.Init(engine_context.EngineAllocator());
-    try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
+    try engine_context.mUIManager.Init(engine_context);
+    try engine_context.mEditorWorld.Init(engine_context);
     defer {
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);

@@ -111,12 +111,15 @@ pub fn Deinit(self: *AudioManager, engine_context: *EngineContext) void {
 /// with voices and buses without a sound card. Pair it with DeinitMixer
 pub fn InitMixer(self: *AudioManager, engine_context: *EngineContext) !void {
     try self.mECSManager.Init(engine_context.EngineAllocator());
+    //known to the systems layer; connected to the worlds it plays from by the programs (EngineContext.StartUsingWorld)
+    try engine_context.mSystems.Register(engine_context.EngineAllocator(), &self.mECSManager);
     //a destroyed bus's UUID comes out of the map (Core.OnObjectDestroyed)
     Core.HookRemovals(self);
     self.mMasterBus = try self.NewBus(engine_context, null, Bus.DefaultConfig, "Master");
 }
 
 pub fn DeinitMixer(self: *AudioManager, engine_context: *EngineContext) void {
+    engine_context.mSystems.Unregister(engine_context.EngineAllocator(), &self.mECSManager);
     self.mECSManager.Deinit(engine_context);
     self.mEventManager.Deinit(engine_context.EngineAllocator());
     self.mUUIDToWorldID.deinit(engine_context.EngineAllocator());

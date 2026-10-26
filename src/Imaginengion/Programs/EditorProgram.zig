@@ -235,6 +235,8 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process
     //EDITOR UI STUFF================================================
     //the theme and its fonts now, rather than in the middle of the first frame
     engine_context.mUIManager.LoadTheme(engine_context);
+    //the editor's own UI is always in use; the simulate world's joins it while the game is played
+    try engine_context.StartUsingWorld(&engine_context.mEditorWorld);
 
     //editor UI keeps its pixel size when the window grows instead of scaling up: the editor world's
     //overlays all measure the screen in pixels
@@ -1133,12 +1135,14 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
         engine_context.mPointerSystem.Reset();
         engine_context.mUIManager.Reset(engine_context);
         self.mPointerCamera = null;
+        engine_context.StopUsingWorld(&engine_context.mSimulateWorld);
         engine_context.mSimulateWorld.clearAndFree(engine_context, .All);
     } else {
         //only start when the run player can actually be drawn, otherwise play shows nothing
         if (self.mRunPlayer) |run_player| {
             if (run_player.GetRenderView() != null) {
                 try engine_context.mGameWorld.Copy(engine_context, &engine_context.mSimulateWorld);
+                try engine_context.StartUsingWorld(&engine_context.mSimulateWorld);
                 self.mActiveWorld = &engine_context.mSimulateWorld;
                 self.mActiveWorldType = .Simulate;
                 self.mEditorState = .Play;
