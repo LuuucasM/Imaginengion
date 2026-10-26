@@ -49,7 +49,7 @@ const TestWorld = struct {
         try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
 
         const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
-        scene.GetComponent(SceneComponent).?.mLayoutArea = .{ .x = 1920, .y = 1080 };
+        scene.GetComponentMut(SceneComponent).?.mLayoutArea = .{ .x = 1920, .y = 1080 };
 
         self.mStrip = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
         try Region(engine_context, self.mStrip, 80, 60, .Row, .{ .mScroll = .Horizontal });
@@ -109,7 +109,7 @@ const TestWorld = struct {
 
 /// How far a region is scrolled, and its scrollbars: its UI element's scroll state
 fn Clip(entity: Entity) *ScrollStateComponent {
-    return UIManager.GetUIComponent(entity, ScrollStateComponent).?;
+    return UIManager.GetUIComponentMut(entity, ScrollStateComponent).?;
 }
 
 fn ExpectThumb(thumb: Entity, width: f32, height: f32, x: f32, y: f32) !void {
@@ -210,7 +210,7 @@ test "a region that no longer overflows loses its thumb" {
     try world.Frame();
     const thumb = Clip(world.mList).mThumbY.?;
 
-    world.mList.GetComponent(LayoutItemComponent).?.mHeight = .{ .Fixed = 100 };
+    world.mList.GetComponentMut(LayoutItemComponent).?.mHeight = .{ .Fixed = 100 };
     try world.mList.MarkLayoutDirty(engine_context);
     try world.Frame();
     try std.testing.expect(Clip(world.mList).mThumbY == null);

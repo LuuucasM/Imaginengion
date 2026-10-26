@@ -210,7 +210,7 @@ test "a field shows its value from the start, and again whenever code sets it, b
     const field = try world.Field(.{ .float32 = 0.26 }, .{ .mDecimals = 1 });
     try std.testing.expectEqualStrings("0.3", TestWorld.TextOf(field));
 
-    field.GetComponent(AttribComponent).?.mData = .{ .float32 = 7 };
+    field.GetComponentMut(AttribComponent).?.mData = .{ .float32 = 7 };
     try engine_context.mUIManager.mNumberFieldSystem.Update(engine_context);
     try std.testing.expectEqualStrings("7.0", TestWorld.TextOf(field));
 

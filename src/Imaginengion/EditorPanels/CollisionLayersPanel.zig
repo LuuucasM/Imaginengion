@@ -42,10 +42,10 @@ pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Opti
     const layers = &engine_context.mCollisionLayers;
     for (&self.mFields, 0..) |*field, layer| {
         const row = try Widgets.Row(engine_context, .{ .Entity = window.Content });
-        row.GetComponent(LayoutItemComponent).?.mWidth = .{ .Fill = 1 };
+        row.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fill = 1 };
         var number: [16]u8 = undefined;
         const shown_number = try Widgets.Label(engine_context, .{ .Entity = row }, try std.fmt.bufPrint(&number, "Layer {d}", .{layer + 1}));
-        shown_number.GetComponent(LayoutItemComponent).?.mWidth = .{ .Fixed = NUMBER_WIDTH };
+        shown_number.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fixed = NUMBER_WIDTH };
         const text_field = try Widgets.TextField(engine_context, .{ .Entity = row }, layers.GetName(layer));
         field.* = UIManager.LabelOf(text_field).?;
     }

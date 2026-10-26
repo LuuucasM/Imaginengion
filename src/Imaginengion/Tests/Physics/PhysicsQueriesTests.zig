@@ -94,10 +94,10 @@ test "a ray passes through triggers, other categories and the main object it ign
     defer world.Deinit();
 
     const trigger = try world.Collider(.Box, .{ .x = -2, .y = 0, .z = 0 });
-    trigger.GetComponent(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
+    trigger.GetComponentMut(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
     const other_category = try world.Collider(.Box, .{ .x = 0, .y = 0, .z = 0 });
-    other_category.GetComponent(ColliderComponent).?.mCollisionFilter.CategoryMask = .empty;
-    other_category.GetComponent(ColliderComponent).?.mCollisionFilter.CategoryMask.set(3);
+    other_category.GetComponentMut(ColliderComponent).?.mCollisionFilter.CategoryMask = .empty;
+    other_category.GetComponentMut(ColliderComponent).?.mCollisionFilter.CategoryMask.set(3);
     const ignored = try world.Collider(.Box, .{ .x = 2, .y = 0, .z = 0 });
     const last = try world.Collider(.Box, .{ .x = 4, .y = 0, .z = 0 });
 
@@ -135,7 +135,7 @@ test "a ray sees a box's corner radius" {
     const edge_ray: PhysicsQueries.Ray = .{ .Origin = .{ .x = -5, .y = 0.45, .z = 0.45 }, .Dir = .{ .x = 1, .y = 0, .z = 0 } };
     try std.testing.expect(try world.RayCast(edge_ray, .{}) != null);
 
-    box.GetComponent(ColliderComponent).?.mCornerRadius = 0.3;
+    box.GetComponentMut(ColliderComponent).?.mCornerRadius = 0.3;
     try std.testing.expect(try world.RayCast(edge_ray, .{}) == null);
 }
 
@@ -222,7 +222,7 @@ test "a query on the world's tree hits the same collider as testing every one" {
     for (0..150) |i| {
         const position = Vec3(f32){ .x = random.float(f32) * 30 - 15, .y = random.float(f32) * 30 - 15, .z = random.float(f32) * 30 - 15 };
         const entity = try world.Collider(if (i % 2 == 0) .Box else .Sphere, position);
-        const collider = entity.GetComponent(ColliderComponent).?;
+        const collider = entity.GetComponentMut(ColliderComponent).?;
         if (i % 3 == 0) try entity.SetRotation(engine_context, (Vec3(f32){ .x = random.float(f32) * 3, .y = random.float(f32) * 3, .z = random.float(f32) * 3 }).RadiansToQuat());
         if (i % 4 == 0) try entity.SetScale(engine_context, .{ .x = 1 + random.float(f32) * 2, .y = 1 + random.float(f32), .z = 1 });
         if (i % 5 == 0) collider.mCornerRadius = 0.2;

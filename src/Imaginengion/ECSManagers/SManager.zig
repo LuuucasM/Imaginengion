@@ -108,6 +108,7 @@ pub fn clearAndFree(self: *SManager, engine_context: *EngineContext) void {
 }
 
 pub const GetComponent = Core.GetComponent;
+pub const GetComponentMut = Core.GetComponentMut;
 
 pub const RemoveComponent = Core.RemoveComponent;
 pub const RemoveComponentSync = Core.RemoveComponentSync;
@@ -253,7 +254,7 @@ pub fn InsertScene(self: *SManager, engine_context: *EngineContext, scene_layer:
         //and shifts itself past the slot it was just given
         const stack_pos_group = try self.mECSManager.GetGroup(engine_context.FrameAllocator(), .{ .Component = SceneStackPos });
         for (stack_pos_group.items) |scene_id| {
-            const stack_pos = self.mECSManager.GetComponent(SceneStackPos, scene_id).?;
+            const stack_pos = self.mECSManager.GetComponentMut(SceneStackPos, scene_id).?;
             if (stack_pos.mPosition >= self.mGameLayerInsertIndex) {
                 stack_pos.mPosition += 1;
             }
@@ -274,7 +275,7 @@ fn RemoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_layer:
     defer stack_pos_group.deinit(frame_allocator);
 
     for (stack_pos_group.items) |pos_scene_id| {
-        const stack_pos = self.mECSManager.GetComponent(SceneStackPos, pos_scene_id).?;
+        const stack_pos = self.mECSManager.GetComponentMut(SceneStackPos, pos_scene_id).?;
         if (stack_pos.mPosition > destroy_stack_pos.mPosition) {
             stack_pos.mPosition -= 1;
         }

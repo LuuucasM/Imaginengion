@@ -77,7 +77,7 @@ fn MakeBall(engine_context: *EngineContext, scene: Scene, position: Vec3(f32), v
     //a new rigid body is dynamic with a mass of 1
     _ = try ball.AddComponent(engine_context, RigidBodyComponent{});
     try ball.SetTranslation(engine_context, position);
-    ball.GetComponent(RigidBodyComponent).?.SetVelocity(velocity);
+    ball.GetComponentMut(RigidBodyComponent).?.SetVelocity(velocity);
     return ball;
 }
 
@@ -163,13 +163,13 @@ test "a static rigid body blocks the same way" {
 
 /// Gives a body a Custom surface with the given bounce
 fn SetRestitution(entity: Entity, restitution: f32) void {
-    const rigid_body = entity.GetComponent(RigidBodyComponent).?;
+    const rigid_body = entity.GetComponentMut(RigidBodyComponent).?;
     rigid_body.mMaterialData.Surface.Scale.Restitution = restitution;
 }
 
 /// Both of the body's friction coefficients. 0 for a test that is about something else sliding along a surface
 fn SetFriction(entity: Entity, static: f32, kinetic: f32) void {
-    const rigid_body = entity.GetComponent(RigidBodyComponent).?;
+    const rigid_body = entity.GetComponentMut(RigidBodyComponent).?;
     rigid_body.mMaterialData.Surface.Scale.StaticFriction = static;
     rigid_body.mMaterialData.Surface.Scale.KineticFriction = kinetic;
 }
@@ -376,7 +376,7 @@ test "a trigger pair begins once too, and is not pushed apart" {
     defer collision_manager.Deinit(engine_context.EngineAllocator());
 
     const pair = try WallAndBall(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 });
-    pair.wall.GetComponent(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
+    pair.wall.GetComponentMut(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
 
     try RunSubstep(&collision_manager, engine_context);
     try RunSubstep(&collision_manager, engine_context);
@@ -428,7 +428,7 @@ test "a trigger pair ends once the ball leaves it" {
     defer collision_manager.Deinit(engine_context.EngineAllocator());
 
     const pair = try WallAndBall(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 });
-    pair.wall.GetComponent(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
+    pair.wall.GetComponentMut(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
 
     try RunSubstep(&collision_manager, engine_context);
     try pair.ball.SetTranslation(engine_context, .{ .x = -3, .y = 0, .z = 0 });
@@ -451,13 +451,13 @@ test "a pair whose filter stops it colliding ends, though the two still overlap"
 
     //a trigger, so nothing pushes the ball out and it stays overlapping throughout
     const pair = try WallAndBall(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 });
-    pair.wall.GetComponent(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
+    pair.wall.GetComponentMut(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
 
     try RunSubstep(&collision_manager, engine_context);
     try std.testing.expectEqual(@as(usize, 0), QueuedCount(engine_context, .CollisionEnd));
 
     //e.g. a Frogger turtle diving: it no longer responds to the frog sitting on it
-    pair.wall.GetComponent(ColliderComponent).?.mCollisionFilter.RespondMask.unset(0);
+    pair.wall.GetComponentMut(ColliderComponent).?.mCollisionFilter.RespondMask.unset(0);
     try RunSubstep(&collision_manager, engine_context);
     try std.testing.expectEqual(@as(usize, 1), QueuedCount(engine_context, .CollisionEnd));
 }
@@ -510,7 +510,7 @@ fn SpeedAfterSlidingOverTiles(corner_radius: f32) !f32 {
     }
 
     const box = try MakeBall(engine_context, scene, .{ .x = 0, .y = 1, .z = 0 }, .{ .x = 3, .y = 0, .z = 0 });
-    const collider = box.GetComponent(ColliderComponent).?;
+    const collider = box.GetComponentMut(ColliderComponent).?;
     collider.mShape = .Box;
     collider.mBoxSize = .{ .x = 0.8, .y = 1, .z = 0.8 };
     collider.mCornerRadius = corner_radius;
@@ -543,7 +543,7 @@ test "a turned box dropped on a floor comes to rest on its corner" {
 
     //a unit box turned 45 degrees reaches sqrt(2) / 2 down to its corner. Bodies do not spin yet, so it stays on it
     const box = try MakeBall(engine_context, scene, .{ .x = 0, .y = 3, .z = 0 }, .{ .x = 0, .y = 0, .z = 0 });
-    box.GetComponent(ColliderComponent).?.mShape = .Box;
+    box.GetComponentMut(ColliderComponent).?.mShape = .Box;
     try box.SetRotation(engine_context, Quat(f32).FromAxisAngle(.{ .x = 0, .y = 0, .z = 1 }, std.math.pi / 4.0));
 
     for (0..120) |_| try PhysicsFrame(engine_context);
@@ -573,7 +573,7 @@ fn DistanceSlidOnSlope(degrees: f32) !f32 {
     //slopes up to atan(0.6), about 31 degrees
     const start = (Vec3(f32){ .x = 0, .y = 1, .z = 0 }).QuatRotate(slope);
     const box = try MakeBall(engine_context, scene, start, .{ .x = 0, .y = 0, .z = 0 });
-    box.GetComponent(ColliderComponent).?.mShape = .Box;
+    box.GetComponentMut(ColliderComponent).?.mShape = .Box;
     try box.SetRotation(engine_context, slope);
 
     for (0..60) |_| try PhysicsFrame(engine_context);
@@ -595,7 +595,7 @@ fn BoxOnFloor(engine_context: *EngineContext, scene: Scene, velocity: Vec3(f32))
     _ = try floor.AddComponent(engine_context, floor_collider);
 
     const box = try MakeBall(engine_context, scene, .{ .x = 0, .y = 1, .z = 0 }, velocity);
-    box.GetComponent(ColliderComponent).?.mShape = .Box;
+    box.GetComponentMut(ColliderComponent).?.mShape = .Box;
     return box;
 }
 
@@ -654,7 +654,7 @@ test "friction carries a box along on a moving platform" {
     _ = try platform.AddComponent(engine_context, platform_collider);
 
     const box = try MakeBall(engine_context, scene, .{ .x = 0, .y = 1, .z = 0 }, .{ .x = 0, .y = 0, .z = 0 });
-    box.GetComponent(ColliderComponent).?.mShape = .Box;
+    box.GetComponentMut(ColliderComponent).?.mShape = .Box;
 
     //0.6 * 9.81 gets it up to the platform's speed in about a third of a second, then static friction holds it there
     for (0..60) |_| try PhysicsFrame(engine_context);
@@ -758,7 +758,7 @@ fn MakeMovingBody(engine_context: *EngineContext, scene: Scene, comptime body_ty
     _ = try body.AddComponent(engine_context, RigidBodyComponent{});
     //a new body is already dynamic, which SetBodyType leaves alone
     try body.SetBodyType(engine_context, body_type_tag);
-    body.GetComponent(RigidBodyComponent).?.SetVelocity(velocity);
+    body.GetComponentMut(RigidBodyComponent).?.SetVelocity(velocity);
     return body;
 }
 
@@ -775,8 +775,8 @@ test "a kinematic body moves by its velocity alone, and a static body not at all
     const static = try MakeMovingBody(engine_context, scene, StaticBodyTag, .{ .x = 3, .y = 0, .z = 0 });
 
     //and nothing pushes the kinematic one: an impulse or a force is lost on it
-    kinematic.GetComponent(RigidBodyComponent).?.ApplyImpulse(.{ .x = 100, .y = 0, .z = 0 });
-    kinematic.GetComponent(RigidBodyComponent).?.ApplyForce(.{ .x = 100, .y = 0, .z = 0 });
+    kinematic.GetComponentMut(RigidBodyComponent).?.ApplyImpulse(.{ .x = 100, .y = 0, .z = 0 });
+    kinematic.GetComponentMut(RigidBodyComponent).?.ApplyForce(.{ .x = 100, .y = 0, .z = 0 });
 
     //one fixed step is 1/60 s
     try PhysicsFrame(engine_context);
@@ -803,7 +803,7 @@ test "a kinematic body pushes a dynamic one and is not pushed back" {
     _ = try paddle.AddComponent(engine_context, CollidingShape(.Box));
     _ = try paddle.AddComponent(engine_context, RigidBodyComponent{});
     _ = try paddle.AddComponent(engine_context, KinematicBodyTag{});
-    paddle.GetComponent(RigidBodyComponent).?.SetVelocity(.{ .x = 2, .y = 0, .z = 0 });
+    paddle.GetComponentMut(RigidBodyComponent).?.SetVelocity(.{ .x = 2, .y = 0, .z = 0 });
 
     const ball = try MakeBall(engine_context, scene, .{ .x = 0.9, .y = 0, .z = 0 }, .{ .x = 0, .y = 0, .z = 0 });
 
@@ -828,7 +828,7 @@ fn ThinWallAndFastBall(engine_context: *EngineContext, scene: Scene, speed: f32,
     _ = try wall.AddComponent(engine_context, wall_collider);
 
     const ball = try MakeBall(engine_context, scene, .{ .x = -1, .y = 0, .z = 0 }, .{ .x = speed, .y = 0, .z = 0 });
-    ball.GetComponent(ColliderComponent).?.mRadius = 0.1;
+    ball.GetComponentMut(ColliderComponent).?.mRadius = 0.1;
     SetRestitution(ball, restitution);
     return ball;
 }
@@ -930,7 +930,7 @@ fn MakeTrigger(engine_context: *EngineContext, scene: Scene, position: Vec3(f32)
 /// A ball of radius 0.1 at `position` moving at `velocity`
 fn MakeSmallBall(engine_context: *EngineContext, scene: Scene, position: Vec3(f32), velocity: Vec3(f32)) !Entity {
     const ball = try MakeBall(engine_context, scene, position, velocity);
-    ball.GetComponent(ColliderComponent).?.mRadius = 0.1;
+    ball.GetComponentMut(ColliderComponent).?.mRadius = 0.1;
     return ball;
 }
 
@@ -1028,7 +1028,7 @@ test "a fast box that skips a thin trigger is seen crossing it" {
     _ = try box.AddComponent(engine_context, box_collider);
     _ = try box.AddComponent(engine_context, RigidBodyComponent{});
     try box.SetTranslation(engine_context, .{ .x = -1.5, .y = 0, .z = 0 });
-    box.GetComponent(RigidBodyComponent).?.SetVelocity(.{ .x = 120, .y = 0, .z = 0 });
+    box.GetComponentMut(RigidBodyComponent).?.SetVelocity(.{ .x = 120, .y = 0, .z = 0 });
 
     try PhysicsFrame(engine_context);
 
@@ -1160,7 +1160,7 @@ const StepListener = struct {
         switch (event.*) {
             .StepBegin => {
                 self.mSteps += 1;
-                if (self.mBody) |body| body.GetComponent(RigidBodyComponent).?.ApplyForce(self.mForce);
+                if (self.mBody) |body| body.GetComponentMut(RigidBodyComponent).?.ApplyForce(self.mForce);
             },
             else => {},
         }
@@ -1212,7 +1212,7 @@ test "a contact switched off before the solver passes through, and does not touc
     engine_context.mEditorWorld.mPhysicsManager.SetSyncCallback(&listener, PreSolveListener.OnEvent);
 
     const pair = try WallAndBall(engine_context, scene, .{ .x = 5, .y = 0, .z = 0 });
-    pair.wall.GetComponent(ColliderComponent).?.mPreSolveEvents = true;
+    pair.wall.GetComponentMut(ColliderComponent).?.mPreSolveEvents = true;
 
     try RunCollisionPasses(&collision_manager, engine_context);
     try std.testing.expectEqual(@as(usize, 1), listener.mHanded);
@@ -1246,8 +1246,8 @@ test "only contacts whose collider asks for it are handed to pre-solve, and kept
     const pair = try WallAndBall(engine_context, scene, .{ .x = 0, .y = 50, .z = 0 });
     try pair.wall.SetTranslation(engine_context, .{ .x = 0, .y = 50, .z = 0 });
     try pair.ball.SetTranslation(engine_context, .{ .x = -0.9, .y = 50, .z = 0 });
-    pair.ball.GetComponent(RigidBodyComponent).?.SetVelocity(.{ .x = 5, .y = 0, .z = 0 });
-    pair.ball.GetComponent(ColliderComponent).?.mPreSolveEvents = true;
+    pair.ball.GetComponentMut(RigidBodyComponent).?.SetVelocity(.{ .x = 5, .y = 0, .z = 0 });
+    pair.ball.GetComponentMut(ColliderComponent).?.mPreSolveEvents = true;
 
     try RunCollisionPasses(&collision_manager, engine_context);
     try std.testing.expectEqual(@as(usize, 1), listener.mHanded);
@@ -1366,7 +1366,7 @@ test "a force lasts only for the step it was applied in" {
     try body.SetMass(engine_context, 2);
 
     //applied once, the way a once a frame script would: it reaches the next step, and no step after that
-    body.GetComponent(RigidBodyComponent).?.ApplyForce(.{ .x = 12, .y = 0, .z = 0 });
+    body.GetComponentMut(RigidBodyComponent).?.ApplyForce(.{ .x = 12, .y = 0, .z = 0 });
 
     try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 0.1), VelocityOf(body).x, eps);
@@ -1394,7 +1394,7 @@ test "a constant force pushes a dynamic body every step until it is changed" {
     try std.testing.expectApproxEqAbs(@as(f32, 0.2), VelocityOf(body).x, eps);
 
     //switched off, the way a jetpack's input script would on release: the body keeps its speed, and stops gaining
-    body.GetComponent(ConstantForceComponent).?.mForce = .{ .x = 0, .y = 0, .z = 0 };
+    body.GetComponentMut(ConstantForceComponent).?.mForce = .{ .x = 0, .y = 0, .z = 0 };
     try PhysicsFrame(engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 0.2), VelocityOf(body).x, eps);
 }

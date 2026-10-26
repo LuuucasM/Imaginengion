@@ -44,7 +44,14 @@ pub fn MakeQuad(quad: Quad) ShapeComponent {
 }
 
 /// The quad, if the shape is one
-pub fn GetQuad(self: *ShapeComponent) ?*Quad {
+pub fn GetQuad(self: *const ShapeComponent) ?*const Quad {
+    return switch (self.mKind) {
+        .Quad => |*quad| quad,
+    };
+}
+
+/// GetQuad for changing it
+pub fn GetQuadMut(self: *ShapeComponent) ?*Quad {
     return switch (self.mKind) {
         .Quad => |*quad| quad,
     };

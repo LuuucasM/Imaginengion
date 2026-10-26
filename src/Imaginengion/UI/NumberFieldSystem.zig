@@ -138,7 +138,7 @@ fn StepOf(settings: NumberFieldComponent, value: AttribComponent.ValueTypes) f64
 
 /// Sets a field's value to `number` within its limits, and sends ValueChanged if that changed it
 pub fn SetValue(engine_context: *EngineContext, field: Entity, number: f64) !void {
-    const attrib = field.GetComponent(AttribComponent) orelse return;
+    const attrib = field.GetComponentMut(AttribComponent) orelse return;
     const settings = UIManager.GetUIComponent(field, NumberFieldComponent) orelse return;
     const before = attrib.mData;
     attrib.mData.SetFromFloat(settings.Clamp(number));
@@ -169,7 +169,7 @@ fn ShowValue(engine_context: *EngineContext, field: Entity, label: Entity) !void
     const settings = UIManager.GetUIComponent(field, NumberFieldComponent) orelse return;
     var buffer: [64]u8 = undefined;
     const shown = Format(&buffer, attrib.mData, settings.mDecimals);
-    const text = label.GetComponent(TextComponent).?;
+    const text = label.GetComponentMut(TextComponent).?;
     if (std.mem.eql(u8, text.mText.items, shown)) return;
     try text.SetText(engine_context, shown);
     //layout sizes text to fit

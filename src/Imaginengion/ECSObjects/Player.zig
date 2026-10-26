@@ -82,6 +82,7 @@ pub const RemoveComponent = Core.RemoveComponent;
 pub const RemoveComponentSync = Core.RemoveComponentSync;
 
 pub const GetComponent = Core.GetComponent;
+pub const GetComponentMut = Core.GetComponentMut;
 
 pub const HasComponent = Core.HasComponent;
 
@@ -112,7 +113,7 @@ pub const RenderView = struct {
     mPlayer: Player,
     mRenderTarget: *RenderTargetComponent,
     mViewpoint: *ViewpointComponent,
-    mTransform: *TransformComponent,
+    mTransform: *const TransformComponent,
 };
 
 /// Possession and rendering are separate on purpose: a player can possess something without
@@ -122,7 +123,7 @@ pub const RenderView = struct {
 /// after possession. Null means the player cannot currently be drawn.
 pub fn GetRenderView(self: Player) ?RenderView {
     if (!self.IsActive()) return null;
-    const render_target = self.GetComponent(RenderTargetComponent) orelse return null;
+    const render_target = self.GetComponentMut(RenderTargetComponent) orelse return null;
     const possess_component = self.GetComponent(PossessComponent) orelse return null;
     const possessed_entity = possess_component.mPossessedEntity;
     if (!possessed_entity.IsActive()) return null;
@@ -134,14 +135,14 @@ pub fn GetRenderView(self: Player) ?RenderView {
     return .{
         .mPlayer = self,
         .mRenderTarget = render_target,
-        .mViewpoint = viewpoint_entity.GetComponent(ViewpointComponent).?,
+        .mViewpoint = viewpoint_entity.GetComponentMut(ViewpointComponent).?,
         .mTransform = viewpoint_entity.GetComponent(TransformComponent) orelse return null,
     };
 }
 
 pub fn Possess(self: Player, entity: Entity) void {
-    if (entity.GetComponent(PlayerSlotComponent)) |ps_component| {
-        self.GetComponent(PossessComponent).?.mPossessedEntity = entity;
+    if (entity.GetComponentMut(PlayerSlotComponent)) |ps_component| {
+        self.GetComponentMut(PossessComponent).?.mPossessedEntity = entity;
         ps_component.mPlayerEntity = self;
     } else {
         std.log.warn("Player {d} could not possess entity {d}", .{ self.mID, entity.mID });

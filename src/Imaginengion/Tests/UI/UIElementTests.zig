@@ -215,7 +215,7 @@ test "an element's UI components are saved and copied with its entity, how far i
     _ = try element.AddComponent(engine_context, UIComponents.PopupComponent{ .mPlacement = .{ .Anchor = .{ .x = 1, .y = 1 }, .Pivot = .{ .x = -1, .y = 1 }, .Offset = .{ .x = 3, .y = -4 } } });
     _ = try element.AddComponent(engine_context, UIComponents.ScrollComponent{ .mScroll = .Both, .mWheelStep = 12 });
     //scrolling gets somewhere to keep how far it is scrolled
-    const state = element.GetComponent(UIComponents.ScrollStateComponent).?;
+    const state = element.GetComponentMut(UIComponents.ScrollStateComponent).?;
     state.mOffset = .{ .x = 5, .y = 6 };
 
     const path = try world.FilePath("panel.imen");

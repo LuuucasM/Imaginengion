@@ -144,7 +144,7 @@ test "a new object builds the tree again with open nodes still open, and rows ca
     try entities.Update(engine_context, game_world, null);
 
     //Hero's node opened, then another entity made
-    entities.mRows.items[0].Content.?.GetComponent(LayoutItemComponent).?.mCollapsed = false;
+    entities.mRows.items[0].Content.?.GetComponentMut(LayoutItemComponent).?.mCollapsed = false;
     const tree = entities.mTree.?;
     _ = try level.CreateEntity(engine_context, Entity.DefaultConfig);
     try entities.Update(engine_context, game_world, null);

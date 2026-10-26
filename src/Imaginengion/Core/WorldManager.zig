@@ -216,7 +216,7 @@ fn RetargetECSHandles(self: *WorldManager, ecs_manager: anytype) void {
         //most components hold no handles, and those are skipped at compile time
         if (comptime HoldsObjectHandle(component_type)) {
             const type_info = @typeInfo(component_type);
-            for (ecs_manager.GetComponentSlice(component_type)) |*component| {
+            for (ecs_manager.GetComponentSliceMut(component_type)) |*component| {
                 inline for (type_info.@"struct".field_types, type_info.@"struct".field_names) |field_type, field_name| {
                     if (comptime IsObjectHandle(field_type)) {
                         @field(component, field_name).mManager = self;
@@ -457,10 +457,10 @@ pub fn SystemScope(comptime name: [:0]const u8, comptime accessed: []const type)
         const p_types = _TypesIn(PManager.ECSManagerT, accessed);
         const s_types = _TypesIn(SManager.ECSManagerT, accessed);
 
-        mE: EManager.ECSManagerT.SystemRecord = EManager.ECSManagerT.SystemRecordFor(name, e_types),
-        mGC: GCManager.ECSManagerT.SystemRecord = GCManager.ECSManagerT.SystemRecordFor(name, gc_types),
-        mP: PManager.ECSManagerT.SystemRecord = PManager.ECSManagerT.SystemRecordFor(name, p_types),
-        mS: SManager.ECSManagerT.SystemRecord = SManager.ECSManagerT.SystemRecordFor(name, s_types),
+        mE: EManager.ECSManagerT.SystemRecord = EManager.ECSManagerT.SystemRecordFor(name, &.{}, e_types),
+        mGC: GCManager.ECSManagerT.SystemRecord = GCManager.ECSManagerT.SystemRecordFor(name, &.{}, gc_types),
+        mP: PManager.ECSManagerT.SystemRecord = PManager.ECSManagerT.SystemRecordFor(name, &.{}, p_types),
+        mS: SManager.ECSManagerT.SystemRecord = SManager.ECSManagerT.SystemRecordFor(name, &.{}, s_types),
 
         pub fn Enter(scope: *Scope, world: *WorldManager) void {
             world.mEManager.mECSManager.Lock(e_types);

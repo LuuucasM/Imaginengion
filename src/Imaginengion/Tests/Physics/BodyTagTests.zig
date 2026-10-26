@@ -102,7 +102,7 @@ test "adding a type tag replaces the body's type, and only a dynamic body can be
     try std.testing.expectEqual(@as(f32, 0), entity.GetComponent(RigidBodyComponent).?._InvMass);
 
     //a static body keeps no velocity: it never moves
-    entity.GetComponent(RigidBodyComponent).?.SetVelocity(.{ .x = 3, .y = 0, .z = 0 });
+    entity.GetComponentMut(RigidBodyComponent).?.SetVelocity(.{ .x = 3, .y = 0, .z = 0 });
     _ = try entity.AddComponent(engine_context, StaticBodyTag{});
     try ExpectOnlyType(entity, StaticBodyTag);
     try std.testing.expectEqual(@as(f32, 0), entity.GetComponent(RigidBodyComponent).?._InvMass);
@@ -136,7 +136,7 @@ test "a mass never goes below the minimum" {
     try std.testing.expectApproxEqAbs(@as(f32, 0.25), entity.GetComponent(RigidBodyComponent).?._InvMass, eps);
 
     //a write straight into the field is caught the next time the body is synced, as the editor's input is
-    entity.GetComponent(RigidBodyComponent).?._Mass = -5;
+    entity.GetComponentMut(RigidBodyComponent).?._Mass = -5;
     try entity.SyncRigidBody(engine_context);
     try std.testing.expectEqual(RigidBodyComponent.MIN_MASS, entity.GetComponent(RigidBodyComponent).?.GetMass());
 }
@@ -239,7 +239,7 @@ test "a kinematic body pairs with a dynamic one always, and with static and kine
 
     //the static one becomes a zone: both kinematic bodies pair with it, as overlaps
     collision_manager.Reset(engine_context.EngineAllocator());
-    static_body.GetComponent(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
+    static_body.GetComponentMut(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
 
     try RunBroadPass(&collision_manager, engine_context);
     try std.testing.expectEqual(@as(usize, 0), collision_manager._BlockingContacts.items.len);
@@ -247,7 +247,7 @@ test "a kinematic body pairs with a dynamic one always, and with static and kine
 
     //one kinematic body a trigger too: it now also pairs with the other kinematic one
     collision_manager.Reset(engine_context.EngineAllocator());
-    other_kinematic.GetComponent(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
+    other_kinematic.GetComponentMut(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
 
     try RunBroadPass(&collision_manager, engine_context);
     try std.testing.expectEqual(@as(usize, 3), collision_manager._OverlapContacts.items.len);

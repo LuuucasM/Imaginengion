@@ -84,6 +84,7 @@ pub const RemoveComponent = Core.RemoveComponent;
 pub const RemoveComponentSync = Core.RemoveComponentSync;
 
 pub const GetComponent = Core.GetComponent;
+pub const GetComponentMut = Core.GetComponentMut;
 
 pub const HasComponent = Core.HasComponent;
 
@@ -171,20 +172,20 @@ pub fn AddScript(self: Entity, engine_context: *EngineContext, new_script_handle
 /// next UpdateWorldTransforms pass picks it up; that is why TransformComponent's local fields are
 /// private. An entity with no TransformComponent is a no-op, matching GetComponent returning null.
 pub fn SetTranslation(self: Entity, engine_context: *EngineContext, translation: Vec3(f32)) !void {
-    const transform = self.GetComponent(TransformComponent) orelse return;
+    const transform = self.GetComponentMut(TransformComponent) orelse return;
     transform._SetLocalUntagged(translation, transform.GetRotation(), transform.GetScale());
     try self.MarkTransformDirty(engine_context);
     try self._SnapBackIfPlacedByLayout(engine_context);
 }
 
 pub fn SetRotation(self: Entity, engine_context: *EngineContext, rotation: Quat(f32)) !void {
-    const transform = self.GetComponent(TransformComponent) orelse return;
+    const transform = self.GetComponentMut(TransformComponent) orelse return;
     transform._SetLocalUntagged(transform.GetTranslation(), rotation, transform.GetScale());
     try self.MarkTransformDirty(engine_context);
 }
 
 pub fn SetScale(self: Entity, engine_context: *EngineContext, scale: Vec3(f32)) !void {
-    const transform = self.GetComponent(TransformComponent) orelse return;
+    const transform = self.GetComponentMut(TransformComponent) orelse return;
     transform._SetLocalUntagged(transform.GetTranslation(), transform.GetRotation(), scale);
     try self.MarkTransformDirty(engine_context);
 }
@@ -192,7 +193,7 @@ pub fn SetScale(self: Entity, engine_context: *EngineContext, scale: Vec3(f32)) 
 /// Writes all three at once, tagging only once. Prefer this over three separate setters when a
 /// caller changes more than one part of the transform.
 pub fn SetTransform(self: Entity, engine_context: *EngineContext, translation: Vec3(f32), rotation: Quat(f32), scale: Vec3(f32)) !void {
-    const transform = self.GetComponent(TransformComponent) orelse return;
+    const transform = self.GetComponentMut(TransformComponent) orelse return;
     transform._SetLocalUntagged(translation, rotation, scale);
     try self.MarkTransformDirty(engine_context);
     try self._SnapBackIfPlacedByLayout(engine_context);
@@ -248,7 +249,7 @@ pub const BodyTypeTags = [_]type{ StaticBodyTag, KinematicBodyTag, DynamicBodyTa
 /// An entity with a type tag and no rigid body is left alone, it is a tag loaded ahead of its rigid body.
 //anyerror: it adds a type tag, whose add hook calls back in here, so the error set can not be inferred
 pub fn SyncRigidBody(self: Entity, engine_context: *EngineContext) anyerror!void {
-    const rigid_body = self.GetComponent(RigidBodyComponent) orelse return;
+    const rigid_body = self.GetComponentMut(RigidBodyComponent) orelse return;
 
     if (!self.HasBodyTypeTag()) {
         //adding the tag comes back through here (OnBodyTypeTagAdded), which does the rest
@@ -286,7 +287,7 @@ pub fn SetBodyType(self: Entity, engine_context: *EngineContext, comptime body_t
 /// Sets a rigid body's mass, kept at RigidBodyComponent.MIN_MASS or above, and the inverse mass with it.
 /// The way to change a mass from code. Does nothing on an entity with no rigid body
 pub fn SetMass(self: Entity, engine_context: *EngineContext, mass: f32) !void {
-    const rigid_body = self.GetComponent(RigidBodyComponent) orelse return;
+    const rigid_body = self.GetComponentMut(RigidBodyComponent) orelse return;
     rigid_body._Mass = @max(mass, RigidBodyComponent.MIN_MASS);
     try self.SyncRigidBody(engine_context);
 }
@@ -307,7 +308,7 @@ pub fn ClearBodyTags(self: Entity, engine_context: *EngineContext) !void {
 }
 
 pub fn _CalculateWorldTransform(self: Entity) void {
-    if (self.GetComponent(TransformComponent)) |transform| {
+    if (self.GetComponentMut(TransformComponent)) |transform| {
         var translation_out = transform.GetTranslation();
         var rotation_out = transform.GetRotation();
         var scale_out = transform.GetScale();

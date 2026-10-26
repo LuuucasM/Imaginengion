@@ -108,6 +108,7 @@ pub fn Deinit(self: *UIManager, engine_context: *EngineContext) void {
 
 pub const SetSyncCallback = Core.SetSyncCallback;
 pub const GetComponent = Core.GetComponent;
+pub const GetComponentMut = Core.GetComponentMut;
 pub const HasComponent = Core.HasComponent;
 pub const IsActiveObj = Core.IsActiveObj;
 pub const GetGroup = Core.GetGroup;
@@ -345,15 +346,15 @@ pub fn DeleteElement(self: *UIManager, engine_context: *EngineContext, element: 
 /// Makes `owner` the entity its UIElementComponent's element belongs to, first giving it a new element if it has
 /// none. Every way an entity gets the component ends here
 pub fn Adopt(self: *UIManager, engine_context: *EngineContext, owner: Entity) !void {
-    const component = owner.GetComponent(UIElementComponent) orelse return;
+    const component = owner.GetComponentMut(UIElementComponent) orelse return;
     //a new element goes in this manager's ECS, so the entity's component stays where it is
     if (!component.mElement.IsActive()) component.mElement = try self.NewElement(engine_context);
     const element = component.mElement;
-    element.GetComponent(ElementOwnerComponent).?.mOwner = owner;
+    element.GetComponentMut(ElementOwnerComponent).?.mOwner = owner;
     //styled for the entity it now belongs to: one read from a file or copied hasn't been yet
     try self.MarkElementStyleDirty(engine_context, element);
     //what its components point at is in its entity's world: a copied world's ids carry over, so only the world changes
-    if (element.GetComponent(UIComponents.PopupRefComponent)) |popup_ref| {
+    if (element.GetComponentMut(UIComponents.PopupRefComponent)) |popup_ref| {
         if (popup_ref.mPopup.IsIDValid()) popup_ref.mPopup.mManager = owner.mManager;
     }
 }
@@ -375,9 +376,15 @@ pub fn ElementOf(entity: Entity) ?UIElement {
 
 /// One of an entity's UI components (UIComponents.zig), from its element. Null if it has no element, or its element
 /// hasn't that component
-pub fn GetUIComponent(entity: Entity, comptime component_type: type) ?*component_type {
+pub fn GetUIComponent(entity: Entity, comptime component_type: type) ?*const component_type {
     const element = ElementOf(entity) orelse return null;
     return element.GetComponent(component_type);
+}
+
+/// GetUIComponent for changing it
+pub fn GetUIComponentMut(entity: Entity, comptime component_type: type) ?*component_type {
+    const element = ElementOf(entity) orelse return null;
+    return element.GetComponentMut(component_type);
 }
 
 pub fn HasUIComponent(entity: Entity, comptime component_type: type) bool {
@@ -418,7 +425,7 @@ pub fn Style(engine_context: *EngineContext, entity: Entity, style_name: []const
     const element = ElementOf(entity).?;
     var style = try UIComponents.StyleComponent.Init(engine_context, style_name);
     errdefer style.Deinit(engine_context);
-    if (element.GetComponent(UIComponents.StyleComponent)) |existing| {
+    if (element.GetComponentMut(UIComponents.StyleComponent)) |existing| {
         existing.Deinit(engine_context);
         existing.* = style;
         try engine_context.mUIManager.MarkElementStyleDirty(engine_context, element);
@@ -431,7 +438,7 @@ pub fn Style(engine_context: *EngineContext, entity: Entity, style_name: []const
 /// its colors, corners and font are its own from then on, kept as they are set and saved. For UI made in a game,
 /// which has no theme: only the editor's own UI follows one
 pub fn StyleOnce(root: Entity) void {
-    if (GetUIComponent(root, StyleComponent)) |style| style.mOnce = true;
+    if (GetUIComponentMut(root, StyleComponent)) |style| style.mOnce = true;
     var children = root.GetIterator(.Child);
     while (children.next()) |child| StyleOnce(child);
 }

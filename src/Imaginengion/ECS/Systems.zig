@@ -152,7 +152,7 @@ pub fn RunSystem(self: *Systems, comptime S: type, engine_context: *EngineContex
     const zone = Tracy.ZoneInit(S.Name, @src());
     defer zone.Deinit();
 
-    var run: RunState(S, plan.kinds, plan.types) = undefined;
+    var run: RunState(S, plan.kinds, plan.types, plan.writes) = undefined;
     try run.Find(self, start);
     var info: RunInfo = .{ .mName = S.Name, .mOuter = self.mCurrentRun };
     run.Enter(&info);
@@ -231,8 +231,8 @@ pub fn UncheckedScope(comptime Start: type, comptime kinds: []const type) type {
 }
 
 // one run's ECSs, records and the work of entering and leaving them: kind 0 is the ECS the run starts from, the rest
-// its In kinds, each with the types locked there
-fn RunState(comptime S: type, comptime kinds: []const type, comptime types: []const []const type) type {
+// its In kinds, each with the types locked there and which of them it writes
+fn RunState(comptime S: type, comptime kinds: []const type, comptime types: []const []const type, comptime writes: []const []const type) type {
     return struct {
         const State = @This();
         mSlots: Slots(kinds),
@@ -253,7 +253,7 @@ fn RunState(comptime S: type, comptime kinds: []const type, comptime types: []co
 
         fn Enter(state: *State, info: *const RunInfo) void {
             inline for (kinds, 0..) |Kind, kind_ind| {
-                const record = comptime Kind.SystemRecordFor(S.Name, types[kind_ind]);
+                const record = comptime Kind.SystemRecordFor(S.Name, types[kind_ind], writes[kind_ind]);
                 const slots = &state.mSlots[kind_ind];
                 for (slots.mECSs[0..slots.mCount], slots.mRecords[0..slots.mCount]) |ecs, *slot_record| {
                     ecs.Lock(types[kind_ind]);
@@ -352,11 +352,12 @@ fn _CheckArgs(comptime S: type, comptime Args: type) void {
     }
 }
 
-// which kinds of ECS a run of `S` from a `Start` reaches (Start first), and the types locked in each: Reads and Writes
-// together, each type once
-fn _Plan(comptime S: type, comptime Start: type) struct { kinds: []const type, types: []const []const type } {
+// which kinds of ECS a run of `S` from a `Start` reaches (Start first), the types locked in each (Reads and Writes
+// together, each type once), and of those the ones it writes
+fn _Plan(comptime S: type, comptime Start: type) struct { kinds: []const type, types: []const []const type, writes: []const []const type } {
     @setEvalBranchQuota(100_000);
-    const entries = _Entries(S, "Reads", S.Reads) ++ _Entries(S, "Writes", S.Writes);
+    const write_entries = _Entries(S, "Writes", S.Writes);
+    const entries = _Entries(S, "Reads", S.Reads) ++ write_entries;
 
     var kinds: []const type = &.{Start};
     for (entries) |entry| {
@@ -376,16 +377,23 @@ fn _Plan(comptime S: type, comptime Start: type) struct { kinds: []const type, t
     }
 
     var types: []const []const type = &.{};
+    var writes: []const []const type = &.{};
     for (kinds) |Kind| {
-        var kind_types: []const type = &.{};
-        for (entries) |entry| {
-            const listed, const listed_kind = if (_IsIn(entry)) .{ entry.Component, entry.ECSKind } else .{ entry, Start };
-            if (listed_kind != Kind or _Contains(kind_types, listed)) continue;
-            kind_types = kind_types ++ [_]type{listed};
-        }
-        types = types ++ [_][]const type{kind_types};
+        types = types ++ [_][]const type{_TypesInKind(entries, Start, Kind)};
+        writes = writes ++ [_][]const type{_TypesInKind(write_entries, Start, Kind)};
     }
-    return .{ .kinds = kinds, .types = types };
+    return .{ .kinds = kinds, .types = types, .writes = writes };
+}
+
+// the components `entries` name in the ECSs of kind `Kind`, each once: plain ones are the Start's
+fn _TypesInKind(comptime entries: []const type, comptime Start: type, comptime Kind: type) []const type {
+    var kind_types: []const type = &.{};
+    for (entries) |entry| {
+        const listed, const listed_kind = if (_IsIn(entry)) .{ entry.Component, entry.ECSKind } else .{ entry, Start };
+        if (listed_kind != Kind or _Contains(kind_types, listed)) continue;
+        kind_types = kind_types ++ [_]type{listed};
+    }
+    return kind_types;
 }
 
 // the entries of one of the system's lists, as a slice: written as &.{ A, B }, .{ A, B } or a []const type. A type

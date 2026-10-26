@@ -181,26 +181,35 @@ pub fn Core(comptime Self: type) type {
             }
         }
 
-        pub fn GetComponent(self: Self, comptime component_type: type) ?*component_type {
+        pub fn GetComponent(self: Self, comptime component_type: type) ?*const component_type {
+            return _GetComponent(self, component_type, false);
+        }
+
+        /// GetComponent for changing it: a running system has to list `component_type` in its Writes
+        pub fn GetComponentMut(self: Self, comptime component_type: type) ?*component_type {
+            return _GetComponent(self, component_type, true);
+        }
+
+        fn _GetComponent(self: Self, comptime component_type: type, comptime write: bool) if (write) ?*component_type else ?*const component_type {
             _ValidateComponent(Self, component_type);
             if (!IsActive(self)) {
                 std.log.err("GetComponent called for invalid entity", .{});
                 return null;
             }
 
-            if (Self == Entity) {
-                return self.mManager.mEManager.GetComponent(component_type, self.mID);
-            } else if (Self == GameContext) {
-                return self.mManager.mGCManager.GetComponent(component_type, self.mID);
-            } else if (Self == Player) {
-                return self.mManager.mPManager.GetComponent(component_type, self.mID);
-            } else if (Self == Scene) {
-                return self.mManager.mSManager.GetComponent(component_type, self.mID);
-            } else if (Self == Voice or Self == Bus or Self == UIElement) {
-                return self.mManager.GetComponent(component_type, self.mID);
-            } else {
+            const manager = if (Self == Entity)
+                &self.mManager.mEManager
+            else if (Self == GameContext)
+                &self.mManager.mGCManager
+            else if (Self == Player)
+                &self.mManager.mPManager
+            else if (Self == Scene)
+                &self.mManager.mSManager
+            else if (Self == Voice or Self == Bus or Self == UIElement)
+                self.mManager
+            else
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
-            }
+            return if (write) manager.GetComponentMut(component_type, self.mID) else manager.GetComponent(component_type, self.mID);
         }
 
         pub fn HasComponent(self: Self, comptime component_type: type) bool {
@@ -236,7 +245,7 @@ pub fn Core(comptime Self: type) type {
 
         /// Renames the object. Nothing happens for one with no NameComponent
         pub fn SetName(self: Self, engine_context: *EngineContext, name: []const u8) !void {
-            const name_component = GetComponent(self, NameComponent) orelse return;
+            const name_component = GetComponentMut(self, NameComponent) orelse return;
             name_component.mName.clearRetainingCapacity();
             try name_component.mName.appendSlice(engine_context.EngineAllocator(), name);
         }
@@ -250,7 +259,7 @@ pub fn Core(comptime Self: type) type {
         /// Stops every attached voice the object's AudioComponent is playing. Detached one-shots play on, stop one of
         /// those with the Voice that PlayAudio returned
         pub fn StopAudio(self: Self) void {
-            if (GetComponent(self, AudioComponent)) |audio_component| audio_component.StopVoices();
+            if (GetComponentMut(self, AudioComponent)) |audio_component| audio_component.StopVoices();
         }
         pub fn CreateChild(self: Self, engine_context: *EngineContext, child_type: ChildType, config: Self.CreateConfig) !Self {
             if (Self == Entity) {
@@ -568,7 +577,7 @@ pub fn Core(comptime Self: type) type {
         fn _RemapRefs(target: Self, engine_context: *EngineContext, ref_map: *const RefMap, skip: ComponentSet) anyerror!void {
             inline for (comptime _SerializeList(), 0..) |component_type, i| {
                 if (@hasDecl(component_type, "RemapRefs") and !skip.isSet(i)) {
-                    if (GetComponent(target, component_type)) |component| component.RemapRefs(ref_map);
+                    if (GetComponentMut(target, component_type)) |component| component.RemapRefs(ref_map);
                 }
             }
 

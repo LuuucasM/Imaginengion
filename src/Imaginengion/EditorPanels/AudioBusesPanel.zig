@@ -134,7 +134,7 @@ fn Rebuild(self: *AudioBusesPanel, engine_context: *EngineContext) !void {
     defer zone.Deinit();
     if (self.mTree) |old| {
         //deleting only happens at the end of the frame, so it is hidden until then
-        old.GetComponent(LayoutItemComponent).?.mCollapsed = true;
+        old.GetComponentMut(LayoutItemComponent).?.mCollapsed = true;
         try old.Delete(engine_context);
     }
     self.mBuilt.clearRetainingCapacity();

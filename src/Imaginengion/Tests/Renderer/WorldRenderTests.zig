@@ -240,7 +240,7 @@ fn RandomQuad(engine_context: *EngineContext, random: std.Random, entity: Entity
     try entity.SetTranslation(engine_context, position);
     try entity.SetRotation(engine_context, (Vec3(f32){ .x = 0, .y = 0, .z = RandomIn(random, -0.6, 0.6) }).RadiansToQuat());
     var quad = ShapeComponent.MakeQuad(.{ .Size = .{ .x = size * RandomIn(random, 0.5, 2), .y = size * RandomIn(random, 0.5, 2) } });
-    if (random.boolean()) quad.GetQuad().?.CornerRadii = .{ .x = size * 0.3, .y = size * 0.2, .z = 0, .w = size * 0.3 };
+    if (random.boolean()) quad.GetQuadMut().?.CornerRadii = .{ .x = size * 0.3, .y = size * 0.2, .z = 0, .w = size * 0.3 };
     _ = try entity.AddComponent(engine_context, quad);
     var surface = SurfaceComponent{};
     surface.mTexOptions.mColor = .{ .x = random.float(f32), .y = random.float(f32), .z = random.float(f32), .w = 1 };
@@ -370,7 +370,7 @@ test "a shape hidden or deleted after the tree was built isn't drawn, and the re
         if (entity.HasComponent(MaskComponent) or entity.GetComponent(@import("../../ECS/Components.zig").ChildComponent(Entity.Type)) != null) continue;
         switch (i % 7) {
             0 => _ = try entity.AddComponent(engine_context, LayoutHiddenTag{}),
-            1 => entity.GetComponent(SurfaceComponent).?.mShouldRender = false,
+            1 => entity.GetComponentMut(SurfaceComponent).?.mShouldRender = false,
             2 => try entity.Delete(engine_context),
             else => {},
         }

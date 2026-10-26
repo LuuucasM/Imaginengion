@@ -215,13 +215,13 @@ test "a limit is ticked on with the number usable, its decimals a byte, and its 
     try std.testing.expectEqual(@as(usize, 4), test_panel.Rows(0, &rows));
     const min = Part(rows[1], 2);
     try std.testing.expect(!min.HasComponent(DisabledTag));
-    min.GetComponent(AttribComponent).?.mData.SetFromFloat(-5);
+    min.GetComponentMut(AttribComponent).?.mData.SetFromFloat(-5);
     try engine_context.mUIManager.SendToChain(engine_context, min, .ValueChanged);
     try test_panel.ProcessUIEvents();
     try std.testing.expectEqual(@as(?f32, -5), element.GetComponent(UIComponents.NumberFieldComponent).?.mMin);
 
     const decimals = Part(rows[3], 1);
-    decimals.GetComponent(AttribComponent).?.mData.SetFromFloat(300);
+    decimals.GetComponentMut(AttribComponent).?.mData.SetFromFloat(300);
     try engine_context.mUIManager.SendToChain(engine_context, decimals, .ValueChanged);
     try test_panel.ProcessUIEvents();
     try std.testing.expectEqual(@as(u8, 255), element.GetComponent(UIComponents.NumberFieldComponent).?.mDecimals);
@@ -241,7 +241,7 @@ test "the popup's placement shows as a preset, Custom when none, and picking one
     try std.testing.expectEqualStrings("Below", UIManager.LabelOf(dropdown).?.GetComponent(TextComponent).?.mText.items);
 
     //moved off every preset by code: shown as Custom
-    element.GetComponent(UIComponents.PopupComponent).?.mPlacement.Anchor.x = 0.5;
+    element.GetComponentMut(UIComponents.PopupComponent).?.mPlacement.Anchor.x = 0.5;
     try engine_context.mUIManager.mBindingSystem.Update(engine_context);
     try std.testing.expectEqualStrings("Custom", UIManager.LabelOf(dropdown).?.GetComponent(TextComponent).?.mText.items);
 
@@ -271,14 +271,14 @@ test "a popup ref shows its popup's name, and a scroll edit lays the entity out 
     _ = test_panel.Rows(1, &rows);
     const name = Part(rows[0], 1);
     try std.testing.expectEqualStrings("Menu", UIManager.LabelOf(name).?.GetComponent(TextComponent).?.mText.items);
-    element.GetComponent(UIComponents.PopupRefComponent).?.mPopup = .uninit;
+    element.GetComponentMut(UIComponents.PopupRefComponent).?.mPopup = .uninit;
     try engine_context.mUIManager.mBindingSystem.Update(engine_context);
     try std.testing.expectEqualStrings("None", UIManager.LabelOf(name).?.GetComponent(TextComponent).?.mText.items);
 
     try entity.ClearLayoutDirty(engine_context);
     _ = test_panel.Rows(0, &rows);
     const wheel_step = Part(rows[1], 1);
-    wheel_step.GetComponent(AttribComponent).?.mData.SetFromFloat(20);
+    wheel_step.GetComponentMut(AttribComponent).?.mData.SetFromFloat(20);
     try engine_context.mUIManager.SendToChain(engine_context, wheel_step, .ValueChanged);
     try test_panel.ProcessUIEvents();
     try std.testing.expectEqual(@as(f32, 20), element.GetComponent(UIComponents.ScrollComponent).?.mWheelStep);

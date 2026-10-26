@@ -296,9 +296,15 @@ pub fn OutsideMaskBox(box: Box, mask_box: Box) bool {
 }
 
 /// An entity's shape, if it is a quad
-pub fn QuadOf(entity: Entity) ?*ShapeComponent.Quad {
+pub fn QuadOf(entity: Entity) ?*const ShapeComponent.Quad {
     const shape = entity.GetComponent(ShapeComponent) orelse return null;
     return shape.GetQuad();
+}
+
+/// QuadOf for changing it
+pub fn QuadOfMut(entity: Entity) ?*ShapeComponent.Quad {
+    const shape = entity.GetComponentMut(ShapeComponent) orelse return null;
+    return shape.GetQuadMut();
 }
 
 /// The quad's own size grown by its scale (and everything above it in the hierarchy), placed by the

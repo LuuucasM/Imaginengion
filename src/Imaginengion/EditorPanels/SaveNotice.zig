@@ -68,7 +68,7 @@ pub fn Update(self: *SaveNotice, engine_context: *EngineContext) !void {
 }
 
 fn SetShown(self: SaveNotice, engine_context: *EngineContext, shown: bool) !void {
-    const item = self.mBox.GetComponent(LayoutItemComponent).?;
+    const item = self.mBox.GetComponentMut(LayoutItemComponent).?;
     if (item.mCollapsed != shown) return;
     item.mCollapsed = !shown;
     try self.mBox.MarkLayoutDirty(engine_context);
@@ -76,7 +76,7 @@ fn SetShown(self: SaveNotice, engine_context: *EngineContext, shown: bool) !void
 
 /// How see-through its colors are, keeping what color they are
 fn SetAlpha(entity: Entity, alpha: f32) void {
-    const surface = entity.GetComponent(SurfaceComponent).?;
+    const surface = entity.GetComponentMut(SurfaceComponent).?;
     surface.mTexOptions.mColor.w = alpha;
     surface.mTexOptions.mIsTransparent = alpha < 1;
     surface.mBorderColor.w = alpha;

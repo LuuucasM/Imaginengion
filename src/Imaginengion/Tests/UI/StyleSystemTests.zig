@@ -170,8 +170,8 @@ test "a style writes the border, corners and text it has, and leaves the rest as
     const button_text = try world.Styled("Button", .Text);
     const plain = try world.Styled("Plain", .Shape);
     const plain_text = try world.Styled("Plain", .Text);
-    plain.GetComponent(SurfaceComponent).?.mBorderWidth = 7;
-    plain_text.GetComponent(SurfaceComponent).?.mTexOptions.mColor = .{ .x = 0.25, .y = 0.25, .z = 0.25, .w = 1 };
+    plain.GetComponentMut(SurfaceComponent).?.mBorderWidth = 7;
+    plain_text.GetComponentMut(SurfaceComponent).?.mTexOptions.mColor = .{ .x = 0.25, .y = 0.25, .z = 0.25, .w = 1 };
     try world.Update();
 
     //a shape's surface takes the background and border, its shape the corners
@@ -215,7 +215,7 @@ test "an element whose style the theme hasn't is left alone" {
     defer world.Deinit();
 
     const entity = try world.Styled("Missing", .Shape);
-    entity.GetComponent(SurfaceComponent).?.mTexOptions.mColor = .{ .x = 0.3, .y = 0.3, .z = 0.3, .w = 1 };
+    entity.GetComponentMut(SurfaceComponent).?.mTexOptions.mColor = .{ .x = 0.3, .y = 0.3, .z = 0.3, .w = 1 };
     try world.Update();
     try world.Update();
     try ExpectColor(.{ 0.3, 0.3, 0.3, 1 }, entity.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
@@ -242,7 +242,7 @@ test "a styled entity is only styled again when something its style reads change
     const engine_context = world.mEngineContext;
 
     const entity = try world.Styled("Button", .Shape);
-    const surface = entity.GetComponent(SurfaceComponent).?;
+    const surface = entity.GetComponentMut(SurfaceComponent).?;
     try std.testing.expect(IsStyleDirty(entity));
     try world.Update();
     try std.testing.expect(!IsStyleDirty(entity));
@@ -272,7 +272,7 @@ test "a style taken once is taken off after, and what is set on the entity then 
     const entity = try world.Styled("Button", .Shape);
     UIManager.StyleOnce(entity);
     try world.Update();
-    const surface = entity.GetComponent(SurfaceComponent).?;
+    const surface = entity.GetComponentMut(SurfaceComponent).?;
     try ExpectColor(.{ 0.1, 0.2, 0.3, 1 }, surface.mTexOptions.mColor);
     try std.testing.expect(UIManager.GetUIComponent(entity, StyleComponent) == null);
 
@@ -329,7 +329,7 @@ test "a new style, or a new theme, styles again" {
     const engine_context = world.mEngineContext;
 
     const entity = try world.Styled("Button", .Shape);
-    const surface = entity.GetComponent(SurfaceComponent).?;
+    const surface = entity.GetComponentMut(SurfaceComponent).?;
     try world.Update();
 
     try UIManager.Style(engine_context, entity, "Plain");
@@ -433,7 +433,7 @@ test "a style names a theme file of its own, and is taken out of it instead of t
     _ = try entity.AddComponent(engine_context, ShapeComponent{});
     _ = try entity.AddComponent(engine_context, SurfaceComponent{});
     try UIManager.Style(engine_context, entity, "Button");
-    UIManager.GetUIComponent(entity, StyleComponent).?.mTheme = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Eng } });
+    UIManager.GetUIComponentMut(entity, StyleComponent).?.mTheme = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Eng } });
 
     try engine_context.mUIManager.mStyleSystem.Update(engine_context, &editor_theme, .uninit, false);
     try ExpectColor(.{ 1, 0, 0, 1 }, entity.GetComponent(SurfaceComponent).?.mTexOptions.mColor);

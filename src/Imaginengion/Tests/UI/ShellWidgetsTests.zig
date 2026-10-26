@@ -48,7 +48,7 @@ const TestWorld = struct {
 };
 
 fn Item(entity: Entity) *LayoutItemComponent {
-    return entity.GetComponent(LayoutItemComponent).?;
+    return entity.GetComponentMut(LayoutItemComponent).?;
 }
 
 fn Depth(entity: Entity) f32 {

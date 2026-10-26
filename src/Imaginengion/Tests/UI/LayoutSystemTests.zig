@@ -54,7 +54,7 @@ const TestWorld = struct {
     fn DrawnOverlay(self: *TestWorld) !Scene {
         const engine_context = self.mEngineContext;
         const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
-        scene.GetComponent(SceneComponent).?.mLayoutArea = .{ .x = 1920, .y = 1080 };
+        scene.GetComponentMut(SceneComponent).?.mLayoutArea = .{ .x = 1920, .y = 1080 };
         return scene;
     }
 
@@ -216,7 +216,7 @@ test "an overlay tree waits until its scene has been drawn" {
     try ExpectXY(0, 0, corner);
     try std.testing.expect(corner.HasComponent(LayoutDirtyTag));
 
-    scene.GetComponent(SceneComponent).?.mLayoutArea = .{ .x = 1000, .y = 600 };
+    scene.GetComponentMut(SceneComponent).?.mLayoutArea = .{ .x = 1000, .y = 600 };
     try world.Update();
     try ExpectXY(450, 275, corner);
     try std.testing.expect(!corner.HasComponent(LayoutDirtyTag));
@@ -268,8 +268,8 @@ test "a container without an item fits its children, and one under a hand-placed
     try ExpectXY(7.5, 0, b);
 
     //a change in the row's tree lays out only the row's tree: the column's background, scribbled on, stays scribbled
-    column.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 1, .y = 1 };
-    row.GetComponent(LayoutComponent).?.mGap = 15;
+    column.GetComponentMut(ShapeComponent).?.GetQuadMut().?.Size = .{ .x = 1, .y = 1 };
+    row.GetComponentMut(LayoutComponent).?.mGap = 15;
     try b.MarkLayoutDirty(engine_context);
     try world.Update();
     try ExpectQuad(35, 10, row);
@@ -525,7 +525,7 @@ test "a collapsed element and everything under it are hidden, and shown again wh
     }
 
     //expanding the outer one shows it, but the inner one is still collapsed itself
-    node.GetComponent(LayoutItemComponent).?.mCollapsed = false;
+    node.GetComponentMut(LayoutItemComponent).?.mCollapsed = false;
     try node.MarkLayoutDirty(engine_context);
     try world.Update();
     try std.testing.expect(!node.HasComponent(LayoutHiddenTag));
@@ -629,7 +629,7 @@ test "a grid of entities: the content browser's icons wrapping in a panel" {
     try ExpectXY(-70, -40, icons[3]);
 
     //a set count of two
-    panel.GetComponent(LayoutComponent).?.mColumns = .{ .Count = 2 };
+    panel.GetComponentMut(LayoutComponent).?.mColumns = .{ .Count = 2 };
     try panel.MarkLayoutDirty(engine_context);
     try world.Update();
     try ExpectXY(-70, -40, icons[2]);

@@ -103,7 +103,7 @@ pub fn Update(_: *ScrollSystem, engine_context: *EngineContext, world: *WorldMan
         //an element no entity has taken yet has nothing to compare
         if (!region.IsIDValid() or region.mManager != world or !region.IsActive()) continue;
         const scroll = element.GetComponent(ScrollComponent).?.*;
-        const state = element.GetComponent(ScrollStateComponent) orelse continue;
+        const state = element.GetComponentMut(ScrollStateComponent) orelse continue;
         const size = RegionSize(region) orelse Vec2(f32){ .x = 0, .y = 0 };
         try UpdateThumb(engine_context, region, scroll, state, &state.mThumbY, .Y, size);
         try UpdateThumb(engine_context, region, scroll, state, &state.mThumbX, .X, size);
@@ -112,7 +112,7 @@ pub fn Update(_: *ScrollSystem, engine_context: *EngineContext, world: *WorldMan
 
 /// Moves a region's scroll offset by `delta` and asks for it to be laid out again, which keeps it in range
 pub fn ScrollBy(engine_context: *EngineContext, region: Entity, delta: Vec2(f32)) !void {
-    const state = UIManager.GetUIComponent(region, ScrollStateComponent) orelse return;
+    const state = UIManager.GetUIComponentMut(region, ScrollStateComponent) orelse return;
     state.mOffset = state.mOffset.AddVec(delta);
     try region.MarkLayoutDirty(engine_context);
 }
@@ -138,8 +138,8 @@ fn UpdateThumb(engine_context: *EngineContext, region: Entity, scroll: ScrollCom
     //how far along its travel, from the start (the top, or the left)
     const along = (track - length) * std.math.clamp(scrolled / (content - track), 0, 1);
 
-    thumb.GetComponent(SurfaceComponent).?.mShouldRender = true;
-    const quad = ShapeGeometry.QuadOf(thumb).?;
+    thumb.GetComponentMut(SurfaceComponent).?.mShouldRender = true;
+    const quad = ShapeGeometry.QuadOfMut(thumb).?;
     const radius = THUMB_THICKNESS / 2;
     quad.CornerRadii = .{ .x = radius, .y = radius, .z = radius, .w = radius };
     const translation: Vec3(f32) = switch (axis) {
@@ -167,7 +167,7 @@ fn ThumbEntity(engine_context: *EngineContext, region: Entity, thumb_slot: *?Ent
         if (thumb.IsActive()) return thumb;
     }
     const thumb = try region.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
-    if (thumb.GetComponent(NameComponent)) |name| {
+    if (thumb.GetComponentMut(NameComponent)) |name| {
         name.mName.clearRetainingCapacity();
         try name.mName.appendSlice(engine_context.EngineAllocator(), "Scrollbar");
     }

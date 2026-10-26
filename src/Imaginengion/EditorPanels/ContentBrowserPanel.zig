@@ -203,7 +203,7 @@ pub fn IsOpen(self: ContentBrowserPanel) bool {
 }
 
 pub fn Toggle(self: ContentBrowserPanel, engine_context: *EngineContext) !void {
-    const item = self.mArea.GetComponent(LayoutItemComponent).?;
+    const item = self.mArea.GetComponentMut(LayoutItemComponent).?;
     item.mCollapsed = !item.mCollapsed;
     try self.mArea.MarkLayoutDirty(engine_context);
 }
@@ -460,7 +460,7 @@ fn Same(a: Entity, b: Entity) bool {
 /// Puts `text` on a line, folded away while it says nothing
 fn ShowLine(engine_context: *EngineContext, line: Entity, text: []const u8) !void {
     try WidgetActions.SetText(engine_context, line, text);
-    const item = line.GetComponent(LayoutItemComponent).?;
+    const item = line.GetComponentMut(LayoutItemComponent).?;
     const hidden = text.len == 0;
     if (item.mCollapsed == hidden) return;
     item.mCollapsed = hidden;

@@ -551,8 +551,8 @@ pub fn SolveVelocities(self: *CollisionManager, dt: f32) void {
     for (0..SOLVER_ITERS) |_| {
         for (self._BlockingContacts.items) |*contact| {
             //either side can be a bare collider with no rigid body, which the solver treats as static
-            const q_rb_origin = contact.mOriginBody.GetComponent(RigidBodyComponent);
-            const q_rb_target = contact.mTargetBody.GetComponent(RigidBodyComponent);
+            const q_rb_origin = contact.mOriginBody.GetComponentMut(RigidBodyComponent);
+            const q_rb_target = contact.mTargetBody.GetComponentMut(RigidBodyComponent);
 
             if (InvMassOf(q_rb_origin) == 0 and InvMassOf(q_rb_target) == 0) continue;
 
@@ -562,8 +562,8 @@ pub fn SolveVelocities(self: *CollisionManager, dt: f32) void {
     }
 
     for (self._BlockingContacts.items) |*contact| {
-        const q_rb_origin = contact.mOriginBody.GetComponent(RigidBodyComponent);
-        const q_rb_target = contact.mTargetBody.GetComponent(RigidBodyComponent);
+        const q_rb_origin = contact.mOriginBody.GetComponentMut(RigidBodyComponent);
+        const q_rb_target = contact.mTargetBody.GetComponentMut(RigidBodyComponent);
 
         if (InvMassOf(q_rb_origin) == 0 and InvMassOf(q_rb_target) == 0) continue;
 
@@ -610,8 +610,8 @@ pub fn CorrectPositions(self: *CollisionManager, world_manager: *WorldManager, e
     defer zone.Deinit();
 
     for (self._BlockingContacts.items) |contact| {
-        const q_rb_origin = contact.mOriginBody.GetComponent(RigidBodyComponent);
-        const q_rb_target = contact.mTargetBody.GetComponent(RigidBodyComponent);
+        const q_rb_origin = contact.mOriginBody.GetComponentMut(RigidBodyComponent);
+        const q_rb_target = contact.mTargetBody.GetComponentMut(RigidBodyComponent);
 
         if (InvMassOf(q_rb_origin) == 0 and InvMassOf(q_rb_target) == 0) continue;
 
@@ -644,7 +644,7 @@ pub fn EndPass(self: *CollisionManager, engine_context: *EngineContext) void {
     self._OverlapContacts.clearRetainingCapacity();
 }
 
-fn GetCollisionType(collider_origin: *ColliderComponent, collider_target: *ColliderComponent) CollisionType {
+fn GetCollisionType(collider_origin: *const ColliderComponent, collider_target: *const ColliderComponent) CollisionType {
     const origin_filter = collider_origin.mCollisionFilter;
     const target_filter = collider_target.mCollisionFilter;
     //each has to be on a layer the other collides with
@@ -662,7 +662,7 @@ fn GetCollisionType(collider_origin: *ColliderComponent, collider_target: *Colli
 }
 
 /// A collider without a rigid body cannot be moved by the solver, which is exactly a static body
-fn InvMassOf(q_rb: ?*RigidBodyComponent) f32 {
+fn InvMassOf(q_rb: ?*const RigidBodyComponent) f32 {
     return if (q_rb) |rb| rb._InvMass else 0.0;
 }
 
@@ -676,14 +676,14 @@ pub fn SubstepReach(collider: Entity) f32 {
 }
 
 /// A static body never moves, so whatever velocity it was given is not what it hits with
-fn VelocityOf(entity: Entity, q_rb: ?*RigidBodyComponent) Vec3(f32) {
+fn VelocityOf(entity: Entity, q_rb: ?*const RigidBodyComponent) Vec3(f32) {
     const rb = q_rb orelse return std.mem.zeroes(Vec3(f32));
     if (entity.HasComponent(StaticBodyTag)) return std.mem.zeroes(Vec3(f32));
     return rb._Velocity;
 }
 
 /// A collider without a rigid body has no material, so it adds no bounce of its own
-fn RestitutionOf(q_rb: ?*RigidBodyComponent) f32 {
+fn RestitutionOf(q_rb: ?*const RigidBodyComponent) f32 {
     return if (q_rb) |rb| rb.mMaterialData.GetRestitution() else 0.0;
 }
 
@@ -711,13 +711,13 @@ fn CombinedRestitution(q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBo
 }
 
 /// The target's velocity relative to the origin's along the normal: negative while they close
-fn RelativeNormalVelocity(contact: Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent) f32 {
+fn RelativeNormalVelocity(contact: Contact, q_rb_origin: ?*const RigidBodyComponent, q_rb_target: ?*const RigidBodyComponent) f32 {
     const relative_velocity = VelocityOf(contact.mTargetBody, q_rb_target).SubVec(VelocityOf(contact.mOriginBody, q_rb_origin));
     return relative_velocity.Dot(contact.mNormal);
 }
 
 /// The target's velocity relative to the origin's along the surface between them: how fast they slide along each other
-fn RelativeTangentVelocity(contact: Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent) Vec3(f32) {
+fn RelativeTangentVelocity(contact: Contact, q_rb_origin: ?*const RigidBodyComponent, q_rb_target: ?*const RigidBodyComponent) Vec3(f32) {
     const relative_velocity = VelocityOf(contact.mTargetBody, q_rb_target).SubVec(VelocityOf(contact.mOriginBody, q_rb_origin));
     return relative_velocity.SubVec(contact.mNormal.MulScalar(relative_velocity.Dot(contact.mNormal)));
 }

@@ -158,10 +158,10 @@ pub fn Apply(engine_context: *EngineContext, entity: Entity, style: ThemeAsset.S
     const state = StateOf(entity);
     //the style's sizes are in overlay units
     const unit = ThemeUnit(entity);
-    const surface = entity.GetComponent(SurfaceComponent);
+    const surface = entity.GetComponentMut(SurfaceComponent);
     if (surface) |surf| FillPlain(&surf.mTexture, &surf.mTexOptions, plain_texture);
 
-    if (entity.GetComponent(ShapeComponent)) |shape| {
+    if (entity.GetComponentMut(ShapeComponent)) |shape| {
         if (surface) |surf| {
             if (ColorFor(style.Background, state)) |color| SetColor(surf, color);
             if (ColorFor(style.Border, state)) |color| surf.mBorderColor = color;
@@ -169,11 +169,11 @@ pub fn Apply(engine_context: *EngineContext, entity: Entity, style: ThemeAsset.S
         }
         if (style.CornerRadius) |size| {
             const radius = size * unit;
-            if (shape.GetQuad()) |quad| quad.CornerRadii = .{ .x = radius, .y = radius, .z = radius, .w = radius };
+            if (shape.GetQuadMut()) |quad| quad.CornerRadii = .{ .x = radius, .y = radius, .z = radius, .w = radius };
         }
     }
 
-    if (entity.GetComponent(TextComponent)) |text| {
+    if (entity.GetComponentMut(TextComponent)) |text| {
         if (surface) |surf| {
             if (ColorFor(style.Text, state)) |color| SetColor(surf, color);
         }

@@ -75,7 +75,7 @@ fn NewPlayer(engine_context: *EngineContext) !Player {
 
 fn NewScene(engine_context: *EngineContext, layer: Scene.LayerType, name: []const u8) !Scene {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, layer, Scene.DefaultConfig);
-    const name_list = &scene.GetComponent(NameComponent).?.mName;
+    const name_list = &scene.GetComponentMut(NameComponent).?.mName;
     name_list.clearRetainingCapacity();
     try name_list.appendSlice(engine_context.EngineAllocator(), name);
     return scene;

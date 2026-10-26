@@ -60,7 +60,7 @@ const VoiceState = union(enum) {
     /// Plays on regardless of its source, from its own copies
     Detached,
     /// Plays from this AudioComponent, its source's
-    Attached: *AudioComponent,
+    Attached: *const AudioComponent,
     /// Was attached, but its source object or AudioComponent is gone, or the component's token has moved on. Fades
     /// out what it played last (VoiceComponent's mAssetID, mLastVolume, mLastPitch)
     Orphaned,
@@ -124,6 +124,7 @@ pub fn DeinitMixer(self: *AudioManager, engine_context: *EngineContext) void {
 
 pub const SetSyncCallback = Core.SetSyncCallback;
 pub const GetComponent = Core.GetComponent;
+pub const GetComponentMut = Core.GetComponentMut;
 pub const HasComponent = Core.HasComponent;
 pub const IsActiveObj = Core.IsActiveObj;
 pub const GetGroup = Core.GetGroup;
@@ -150,7 +151,7 @@ pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: an
         std.log.warn("PlayVoice called with an object that no longer exists", .{});
         return null;
     }
-    const audio_component = source.GetComponent(AudioComponent) orelse {
+    const audio_component = source.GetComponentMut(AudioComponent) orelse {
         std.log.warn("PlayVoice called on an object with no AudioComponent", .{});
         return null;
     };
@@ -398,7 +399,7 @@ pub fn OnUpdate(self: *AudioManager, engine_context: *EngineContext) !void {
     //volume stage: a changed volume slides over from the last one across this buffer instead of jumping
     for (voices.items, 0..) |voice_id, i| {
         if (voice_frames[i] == 0) continue;
-        const voice_component = self.GetComponent(VoiceComponent, voice_id).?;
+        const voice_component = self.GetComponentMut(VoiceComponent, voice_id).?;
         const volume = switch (self.GetVoiceState(voice_id)) {
             .Attached => |source_component| source_component.mVolume,
             .Detached => self.GetComponent(VolumeComponent, voice_id).?.mVolume,
@@ -411,7 +412,7 @@ pub fn OnUpdate(self: *AudioManager, engine_context: *EngineContext) !void {
 
     //fade stage
     for (voices.items, 0..) |voice_id, i| {
-        const fade_component = self.GetComponent(VoiceFadeComponent, voice_id) orelse continue;
+        const fade_component = self.GetComponentMut(VoiceFadeComponent, voice_id) orelse continue;
         const voice_samples = voice_buffers[i * samples_to_produce ..][0 .. voice_frames[i] * AUDIO_CHANNELS];
         //anything after the end of the fade is silent, so it is left out of the mix
         voice_frames[i] = AudioMath.ApplyFade(AUDIO_CHANNELS, voice_samples, &fade_component.mFramesLeft, FADE_FRAMES);
@@ -474,7 +475,7 @@ fn MixBus(self: *AudioManager, bus_id: Bus.Type, bus_buffers: []f32, samples_per
         }
     }
 
-    const bus_component = self.GetComponent(BusComponent, bus_id).?;
+    const bus_component = self.GetComponentMut(BusComponent, bus_id).?;
     const volume = if (self.GetComponent(VolumeComponent, bus_id)) |volume_component| volume_component.mVolume else 1.0;
     const target_gain = if (bus_component.mPaused) 0.0 else volume;
     AudioMath.ApplyGainTowards(AUDIO_CHANNELS, bus_buffer, &bus_component.mGain, target_gain, 1.0 / @as(f32, FADE_FRAMES));
@@ -493,7 +494,7 @@ fn ReadVoice(self: *AudioManager, engine_context: *EngineContext, voice_id: Voic
     }
 
     //fetched after StartFade, which adds to this manager's storage and so can move it
-    const voice_component = self.GetComponent(VoiceComponent, voice_id).?;
+    const voice_component = self.GetComponentMut(VoiceComponent, voice_id).?;
 
     const asset_id, const pitch, const loop = switch (voice_state) {
         .Attached => |source_component| .{ source_component.mAudioAsset.mID, source_component.mPitch, source_component.mLoop },

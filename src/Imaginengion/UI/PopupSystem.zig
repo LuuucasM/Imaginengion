@@ -337,7 +337,7 @@ fn IndexOf(self: *const PopupSystem, popup: Entity) ?usize {
 
 /// Opens or closes the popup's tree through its layout item, which it is given if it has none
 fn SetCollapsed(engine_context: *EngineContext, popup: Entity, collapsed: bool) !void {
-    const item = popup.GetComponent(LayoutItemComponent) orelse try popup.AddComponent(engine_context, LayoutItemComponent{});
+    const item = popup.GetComponentMut(LayoutItemComponent) orelse try popup.AddComponent(engine_context, LayoutItemComponent{});
     if (item.mCollapsed == collapsed) return;
     item.mCollapsed = collapsed;
     try popup.MarkLayoutDirty(engine_context);

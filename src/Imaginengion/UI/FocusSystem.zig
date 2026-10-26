@@ -207,7 +207,7 @@ pub fn EndEdit(self: *FocusSystem, engine_context: *EngineContext, how: EndHow) 
     if (!focused.IsActive()) return;
     switch (how) {
         .Submit => try Send(engine_context, focused, .TextSubmitted),
-        .Revert => if (focused.GetComponent(TextComponent)) |text| {
+        .Revert => if (focused.GetComponentMut(TextComponent)) |text| {
             if (!std.mem.eql(u8, text.mText.items, self.mOriginal.items)) {
                 try text.SetText(engine_context, self.mOriginal.items);
                 try self.Changed(engine_context, focused);
@@ -223,7 +223,7 @@ pub fn OnKeyPressed(self: *FocusSystem, engine_context: *EngineContext, e: Keybo
     const zone = Tracy.ZoneInit("FocusSystem::OnKeyPressed", @src());
     defer zone.Deinit();
     const focused = self.Focused() orelse return;
-    const text = focused.GetComponent(TextComponent) orelse return;
+    const text = focused.GetComponentMut(TextComponent) orelse return;
     //code may have changed the text since
     self.mCaret = @min(self.mCaret, text.mText.items.len);
     self.mBlinkTime = 0;
@@ -258,7 +258,7 @@ pub fn OnTextTyped(self: *FocusSystem, engine_context: *EngineContext, typed: []
 /// Puts `bytes` in at the caret, without their line breaks: a text input is one line, and Enter ends the edit
 fn Type(self: *FocusSystem, engine_context: *EngineContext, bytes: []u8) !void {
     const focused = self.Focused() orelse return;
-    const text = focused.GetComponent(TextComponent) orelse return;
+    const text = focused.GetComponentMut(TextComponent) orelse return;
     const line = TextEdit.SingleLine(bytes, bytes);
     if (line.len == 0) return;
 
@@ -295,9 +295,9 @@ fn UpdateCaret(self: *FocusSystem, engine_context: *EngineContext, focused: Enti
     const place = try CaretPlace(engine_context, text, self.mCaret);
 
     const caret = try self.CaretEntity(engine_context, focused);
-    const surface = caret.GetComponent(SurfaceComponent).?;
+    const surface = caret.GetComponentMut(SurfaceComponent).?;
     surface.mShouldRender = @mod(self.mBlinkTime, 2 * BLINK_SECONDS) < BLINK_SECONDS;
-    caret.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = text.mFontSize * CARET_WIDTH, .y = place.Height };
+    caret.GetComponentMut(ShapeComponent).?.GetQuadMut().?.Size = .{ .x = text.mFontSize * CARET_WIDTH, .y = place.Height };
     if (focused.GetComponent(SurfaceComponent)) |text_surface| surface.mMaterial = text_surface.mMaterial;
 
     const translation = Vec3(f32){ .x = place.Center.x, .y = place.Center.y, .z = CARET_DEPTH };
@@ -314,7 +314,7 @@ fn CaretEntity(self: *FocusSystem, engine_context: *EngineContext, focused: Enti
         if (caret.IsActive()) return caret;
     }
     const caret = try focused.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
-    if (caret.GetComponent(NameComponent)) |name| {
+    if (caret.GetComponentMut(NameComponent)) |name| {
         name.mName.clearRetainingCapacity();
         try name.mName.appendSlice(engine_context.EngineAllocator(), "Caret");
     }

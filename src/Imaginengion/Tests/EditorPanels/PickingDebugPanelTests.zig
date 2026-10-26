@@ -23,7 +23,7 @@ fn LinesOf(section: PickingDebugPanel.Section, out: [][]const u8) usize {
 }
 
 fn Unfold(section: PickingDebugPanel.Section) void {
-    section.Content.GetComponent(LayoutItemComponent).?.mCollapsed = false;
+    section.Content.GetComponentMut(LayoutItemComponent).?.mCollapsed = false;
 }
 
 test "sections start folded and are only filled in while open, and the pointer section shows the last event" {

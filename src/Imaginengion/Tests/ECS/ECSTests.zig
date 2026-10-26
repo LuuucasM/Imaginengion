@@ -674,8 +674,8 @@ test "ECS a staged component reads as on its entity, but queries wait for Proces
     //Get and Has find the staged copies, and writes through GetComponent go into them too
     try std.testing.expect(ecs.HasComponent(Position, entity_id));
     try std.testing.expect(ecs.HasComponentInd(Label.Ind, entity_id));
-    try std.testing.expectEqual(staged_position, ecs.GetComponent(Position, entity_id).?);
-    try ecs.GetComponent(Label, entity_id).?.mText.appendSlice(allocator, " and written");
+    try std.testing.expectEqual(staged_position, ecs.GetComponentMut(Position, entity_id).?);
+    try ecs.GetComponentMut(Label, entity_id).?.mText.appendSlice(allocator, " and written");
 
     //queries only see what is in the arrays: not the staged data, but the tag, which went on right away
     var with_position = try ecs.GetGroup(allocator, .{ .Component = Position });
@@ -1031,8 +1031,8 @@ test "ECS DuplicateEntity stages a copy of the original as it is now" {
     try std.testing.expectEqual(@as(usize, 1), ecs.NumWithComponent(Position));
 
     //changes to the original after the duplicate don't reach the copy
-    ecs.GetComponent(Position, root).?.x = 100;
-    try ecs.GetComponent(Label, root).?.mText.appendSlice(allocator, " changed");
+    ecs.GetComponentMut(Position, root).?.x = 100;
+    try ecs.GetComponentMut(Label, root).?.mText.appendSlice(allocator, " changed");
 
     try test_ecs.mECSManager.Unlock(test_ecs.mEngineContext, StagedTypes);
     try test_ecs.ProcessEvents();

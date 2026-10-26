@@ -68,10 +68,10 @@ test "an entity tree round trips, children included" {
 
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const goblin = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
-    try goblin.GetComponent(EntityComponents.NameComponent).?.mName.replaceRange(engine_context.EngineAllocator(), 0, goblin.GetName().len, "Goblin");
+    try goblin.GetComponentMut(EntityComponents.NameComponent).?.mName.replaceRange(engine_context.EngineAllocator(), 0, goblin.GetName().len, "Goblin");
     try goblin.SetTranslation(engine_context, .{ .x = 4.0, .y = 5.0, .z = 6.0 });
     const sword = try goblin.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
-    try sword.GetComponent(EntityComponents.NameComponent).?.mName.replaceRange(engine_context.EngineAllocator(), 0, sword.GetName().len, "Sword");
+    try sword.GetComponentMut(EntityComponents.NameComponent).?.mName.replaceRange(engine_context.EngineAllocator(), 0, sword.GetName().len, "Sword");
     _ = try sword.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
 
     const path = try world.FilePath("goblin.imen");

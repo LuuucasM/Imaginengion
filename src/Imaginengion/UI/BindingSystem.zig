@@ -193,7 +193,7 @@ fn ValueOf(binding: FieldBindingComponent, widget: Entity) ?Inspector.Value {
 fn Show(engine_context: *EngineContext, widget: Entity, value: Inspector.Value) !void {
     switch (value) {
         .Number => |number| {
-            const attrib = widget.GetComponent(AttribComponent) orelse return;
+            const attrib = widget.GetComponentMut(AttribComponent) orelse return;
             if (attrib.mData.AsFloat() != number) attrib.mData.SetFromFloat(number);
         },
         .Bool => |checked| {
@@ -215,7 +215,7 @@ fn Show(engine_context: *EngineContext, widget: Entity, value: Inspector.Value) 
             var numbers = widget.GetIterator(.Child);
             var axis: usize = 0;
             while (numbers.next()) |number| {
-                const attrib = number.GetComponent(AttribComponent) orelse continue;
+                const attrib = number.GetComponentMut(AttribComponent) orelse continue;
                 const angle: f32 = switch (axis) {
                     0 => degrees.x,
                     1 => degrees.y,
@@ -228,7 +228,7 @@ fn Show(engine_context: *EngineContext, widget: Entity, value: Inspector.Value) 
         .Asset => |asset| {
             //a name on a label, or the asset itself on a thumbnail
             if (UIManager.LabelOf(widget)) |label| return try ShowText(engine_context, label, AssetName(asset));
-            const surface = widget.GetComponent(SurfaceComponent) orelse return;
+            const surface = widget.GetComponentMut(SurfaceComponent) orelse return;
             if (surface.mTexture.mID == asset.mID) return;
             surface.mTexture.ReleaseAsset();
             surface.mTexture = asset;
@@ -242,7 +242,7 @@ fn Show(engine_context: *EngineContext, widget: Entity, value: Inspector.Value) 
 /// Text on a label, or on the label inside a box (a reference field's)
 fn ShowText(engine_context: *EngineContext, widget: Entity, text: []const u8) !void {
     const label = if (widget.HasComponent(TextComponent)) widget else UIManager.LabelOf(widget) orelse return;
-    const text_component = label.GetComponent(TextComponent).?;
+    const text_component = label.GetComponentMut(TextComponent).?;
     if (std.mem.eql(u8, text_component.mText.items, text)) return;
     try text_component.SetText(engine_context, text);
     try label.MarkLayoutDirty(engine_context);

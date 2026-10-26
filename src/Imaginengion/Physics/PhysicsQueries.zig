@@ -160,7 +160,7 @@ const Filter = struct {
         return .{ .mOptions = options, .mIgnoreBody = if (options.Ignore) |ignore| ignore.GetMainObject().mID else null };
     }
 
-    const Target = struct { Transform: *TransformComponent, Collider: *ColliderComponent };
+    const Target = struct { Transform: *const TransformComponent, Collider: *const ColliderComponent };
 
     /// `entity`'s collider and transform if the query can hit it: in its layer, a trigger only when asked for, on one
     /// of its layers, and not part of the body it ignores
@@ -198,7 +198,7 @@ fn HitFrom(ray: Ray, nearest: RayIntersect.NearestHit(Entity)) ?PhysicsHit {
 }
 
 /// `shape` swept along `ray` against one collider. The switch is exhaustive the same way TestShapes' is
-fn CastAgainst(shape: CastShape, ray: Ray, max_distance: f32, transform: *TransformComponent, collider: *ColliderComponent) HitInfo {
+fn CastAgainst(shape: CastShape, ray: Ray, max_distance: f32, transform: *const TransformComponent, collider: *const ColliderComponent) HitInfo {
     const scale = transform.GetWorldScale();
     return switch (shape) {
         .Sphere => |radius| switch (collider.mShape) {
@@ -217,7 +217,7 @@ fn CastAgainst(shape: CastShape, ray: Ray, max_distance: f32, transform: *Transf
 }
 
 /// A box swept along `ray` against one collider by sphere tracing, see Collisions.SweepAlong
-fn SweepBox(box: @FieldType(CastShape, "Box"), ray: Ray, max_distance: f32, transform: *TransformComponent, collider: *ColliderComponent) HitInfo {
+fn SweepBox(box: @FieldType(CastShape, "Box"), ray: Ray, max_distance: f32, transform: *const TransformComponent, collider: *const ColliderComponent) HitInfo {
     var cast_transform: TransformComponent = .{};
     cast_transform.SetWorldPosition(ray.Origin);
     cast_transform.SetWorldRotation(box.Rotation);

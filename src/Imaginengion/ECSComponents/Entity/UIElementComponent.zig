@@ -36,7 +36,7 @@ pub fn RemapRefs(self: *UIElementComponent, ref_map: *const RefMap) void {
     if (!self.mElement.IsActive()) return;
     inline for (UIComponents.SerializeList) |component_type| {
         if (@hasDecl(component_type, "RemapRefs")) {
-            if (self.mElement.GetComponent(component_type)) |component| component.RemapRefs(ref_map);
+            if (self.mElement.GetComponentMut(component_type)) |component| component.RemapRefs(ref_map);
         }
     }
 }

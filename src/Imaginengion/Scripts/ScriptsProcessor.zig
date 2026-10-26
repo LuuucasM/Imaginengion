@@ -514,7 +514,7 @@ pub fn SetUpScript(comptime ObjectType: type, script: ObjectType, engine_context
     if (script_asset) |asset| {
         if (script.GetComponent(ScriptComponent).?.mInstance == null) {
             const id = try asset.NewInstance(engine_context, null);
-            script.GetComponent(ScriptComponent).?.mInstance = id;
+            script.GetComponentMut(ScriptComponent).?.mInstance = id;
         }
     }
 

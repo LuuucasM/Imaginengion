@@ -152,12 +152,12 @@ test "a volume edit is written into the bus, and a renamed bus's node follows it
     var rows: [8]Entity = undefined;
     _ = Children(ContentOf(panel.mTitles.items[0]), &rows);
     const volume = WidgetOf(rows[0]);
-    volume.GetComponent(AttribComponent).?.mData.SetFromFloat(0.25);
+    volume.GetComponentMut(AttribComponent).?.mData.SetFromFloat(0.25);
     try engine_context.mUIManager.SendToChain(engine_context, volume, .ValueChanged);
     try engine_context.mUIManager.ProcessUIEvents(engine_context, .{});
     try std.testing.expectEqual(@as(f32, 0.25), test_engine.Master().GetComponent(VolumeComponent).?.mVolume);
 
-    const name = child.GetComponent(NameComponent).?;
+    const name = child.GetComponentMut(NameComponent).?;
     name.mName.clearRetainingCapacity();
     try name.mName.appendSlice(engine_context.EngineAllocator(), "Music");
     try panel.Update(engine_context);

@@ -364,9 +364,16 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
 
         /// Every `component_type` in this ECS, for a pass over all of them that has no use for the
         /// ids. Only good until a component of that type is added or removed.
-        pub fn GetComponentSlice(self: Self, comptime component_type: type) []component_type {
+        pub fn GetComponentSlice(self: Self, comptime component_type: type) []const component_type {
             _ValidateType(component_type);
-            self._CheckAccess(component_type);
+            self._CheckAccess(component_type, false);
+            return self.mComponentManager.GetComponentSlice(component_type);
+        }
+
+        /// GetComponentSlice for changing them: a running system has to list `component_type` in its Writes
+        pub fn GetComponentSliceMut(self: Self, comptime component_type: type) []component_type {
+            _ValidateType(component_type);
+            self._CheckAccess(component_type, true);
             return self.mComponentManager.GetComponentSlice(component_type);
         }
 
@@ -421,7 +428,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
 
             const child_type: ChildType = if (self.HasComponent(ScriptTagComponent, new_entity_id)) .Script else .Entity;
 
-            if (self.GetComponent(ParentComponent, entity_id)) |parent_component| {
+            if (self.GetComponentMut(ParentComponent, entity_id)) |parent_component| {
                 const first_child_entity_id = switch (child_type) {
                     .Entity => parent_component.mFirstEntity,
                     .Script => parent_component.mFirstScript,
@@ -442,8 +449,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                     _ = try self.AddComponentSync(engine_context, new_entity_id, new_child_component);
 
                     // both are the same component when the parent only had one child, which is still correct
-                    const first_child_component = self.GetComponent(ChildComponent, first_child_entity_id).?;
-                    const last_child_component = self.GetComponent(ChildComponent, last_child_entity_id).?;
+                    const first_child_component = self.GetComponentMut(ChildComponent, first_child_entity_id).?;
+                    const last_child_component = self.GetComponentMut(ChildComponent, last_child_entity_id).?;
 
                     last_child_component.mNext = new_entity_id;
 
@@ -497,7 +504,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             defer zone.Deinit();
 
             self.Lock(S.Accessed);
-            var record = comptime SystemRecordFor(S.Name, S.Accessed);
+            //all writable: the Reads/Writes split is checked for systems run through the systems layer (Systems.zig)
+            var record = comptime SystemRecordFor(S.Name, &.{}, S.Accessed);
             self.EnterSystem(&record);
             System.Call(S, SystemParams(@TypeOf(provider)){ .mECS = self, .mProvider = provider }) catch |err| {
                 self.LeaveSystem(&record);
@@ -537,7 +545,10 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         /// one listed
         pub const SystemRecord = struct {
             mName: [:0]const u8,
+            /// what it listed at all, in its Reads or its Writes
             mAllowed: AllowedSet,
+            /// what it listed in its Writes, which it may get mutable pointers into (GetComponentMut)
+            mWritable: AllowedSet,
             /// for engine code that runs inside a system without being its work (see UncheckedRecord)
             mUnchecked: bool = false,
             /// the systems layer's run that put it here; null for one put here some other way, which counts as a run of
@@ -549,17 +560,23 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         /// A record for engine code that runs inside a system without being the system's own work: the bookkeeping
         /// adding, removing, creating and deleting set off, and code run on others' behalf (scripts). Nothing it touches
         /// is charged to the system around it
-        pub const UncheckedRecord: SystemRecord = .{ .mName = "(unchecked)", .mAllowed = .empty, .mUnchecked = true };
+        pub const UncheckedRecord: SystemRecord = .{ .mName = "(unchecked)", .mAllowed = .empty, .mWritable = .empty, .mUnchecked = true };
 
-        pub fn SystemRecordFor(comptime name: [:0]const u8, comptime types: []const type) SystemRecord {
-            const allowed = comptime blk: {
+        /// The record for a system that reads `reads` and writes `writes`. A type may be in both
+        pub fn SystemRecordFor(comptime name: [:0]const u8, comptime reads: []const type, comptime writes: []const type) SystemRecord {
+            const sets = comptime blk: {
                 //each type looked up in the whole component list
                 @setEvalBranchQuota(100_000);
-                var set: AllowedSet = .empty;
-                for (types) |listed_type| set.set(ComponentInd(listed_type));
-                break :blk set;
+                var allowed: AllowedSet = .empty;
+                var writable: AllowedSet = .empty;
+                for (reads) |listed_type| allowed.set(ComponentInd(listed_type));
+                for (writes) |listed_type| {
+                    allowed.set(ComponentInd(listed_type));
+                    writable.set(ComponentInd(listed_type));
+                }
+                break :blk .{ allowed, writable };
             };
-            return .{ .mName = name, .mAllowed = allowed };
+            return .{ .mName = name, .mAllowed = sets[0], .mWritable = sets[1] };
         }
 
         /// Makes `record` the innermost one until LeaveSystem. It lives on the caller's stack
@@ -589,30 +606,47 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return record.mAllowed.isSet(ComponentInd(component_type));
         }
 
+        /// Whether the system running now may get mutable pointers into `component_type` (GetComponentMut): one it
+        /// listed in its Writes, and the same exceptions as AllowsAccess
+        pub fn AllowsWrite(self: Self, comptime component_type: type) bool {
+            if (comptime @sizeOf(component_type) == 0) return true;
+            if (comptime component_type == ParentComponent or component_type == ChildComponent or component_type == SkipFieldComponent) return true;
+            const record = self.mCurrentSystem orelse return true;
+            if (record.mUnchecked) return true;
+            return record.mWritable.isSet(ComponentInd(component_type));
+        }
+
         /// Whether an add or removal can go straight to this component's storage: a tag has none to move, and anything
         /// else only when it isn't locked
         pub fn CanChangeStorage(self: Self, component_ind: usize) bool {
             return self.mComponentManager.IsTag(component_ind) or self.mLockCounts[component_ind] == 0;
         }
 
-        // in safe builds, reports (once) a running system using this ECS when it wasn't given it, or using a component it
-        // didn't list. Logged rather than stopping: the mistake is in a list, and what it touches is still there
-        fn _CheckAccess(self: Self, comptime component_type: type) void {
+        // in safe builds, reports (once) a running system using this ECS when it wasn't given it, using a component it
+        // didn't list, or asking to change (`write`) one it only listed in its Reads. Logged rather than stopping: the
+        // mistake is in a list, and what it touches is still there
+        fn _CheckAccess(self: Self, comptime component_type: type, comptime write: bool) void {
             if (!std.debug.runtime_safety) return;
             if (self._RunNotGiven()) |run| {
                 _Report(run.mName, debug_name, std.math.maxInt(u64), "{s} used a " ++ debug_name ++ " it wasn't given: not the ECS it was run from, nor one connected to it through an In", .{run.mName});
                 return;
             }
-            if (self.AllowsAccess(component_type)) return;
-            const name = self.mCurrentSystem.?.mName;
-            _Report(name, debug_name, ComponentInd(component_type), "{s} used {s} without listing it in its Reads or Writes", .{ name, @typeName(component_type) });
+            if (!self.AllowsAccess(component_type)) {
+                const name = self.mCurrentSystem.?.mName;
+                _Report(name, debug_name, ComponentInd(component_type), "{s} used {s} without listing it in its Reads or Writes", .{ name, @typeName(component_type) });
+                return;
+            }
+            if (write and !self.AllowsWrite(component_type)) {
+                const name = self.mCurrentSystem.?.mName;
+                _Report(name, debug_name, (1 << 32) | ComponentInd(component_type), "{s} asked to change {s} (GetComponentMut) but only lists it in its Reads", .{ name, @typeName(component_type) });
+            }
         }
 
         // GetGroup's query read as access: every component in it, kept and left out alike, since the ids it hands back
         // are only good while those don't change
         fn _CheckQuery(self: Self, comptime query: GroupQuery) void {
             switch (query) {
-                .Component => |component_type| self._CheckAccess(component_type),
+                .Component => |component_type| self._CheckAccess(component_type, false),
                 .And, .Or => |queries| inline for (queries) |sub_query| self._CheckQuery(sub_query),
                 .Not => |not| {
                     self._CheckQuery(not.mFirst.*);
@@ -870,11 +904,23 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         }
 
         /// The staged copy for a component that is still staged (see AddComponent)
-        pub fn GetComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
+        pub fn GetComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*const component_type {
             _ValidateType(component_type);
             std.debug.assert(self.IsActiveEntity(entity_id));
-            self._CheckAccess(component_type);
+            self._CheckAccess(component_type, false);
+            return self._FindComponent(component_type, entity_id);
+        }
 
+        /// GetComponent for changing it: a running system has to list `component_type` in its Writes
+        pub fn GetComponentMut(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
+            _ValidateType(component_type);
+            std.debug.assert(self.IsActiveEntity(entity_id));
+            self._CheckAccess(component_type, true);
+            return self._FindComponent(component_type, entity_id);
+        }
+
+        // the component on the entity, or its staged copy
+        fn _FindComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
             if (self.mComponentManager.GetComponent(component_type, entity_id)) |component| return component;
             const staged = self._GetStaged(entity_id, ComponentInd(component_type)) orelse return null;
             return @ptrCast(@alignCast(staged));
@@ -1018,7 +1064,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             // the parent goes first when a whole subtree is destroyed, so there may be no list left to leave
             if (!self.IsActiveEntity(parent_entity)) return;
 
-            const parent_component = self.GetComponent(ParentComponent, parent_entity) orelse return;
+            const parent_component = self.GetComponentMut(ParentComponent, parent_entity) orelse return;
 
             const next_id = child_component.mNext;
             const prev_id = child_component.mPrev;
@@ -1036,8 +1082,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                 }
             } else {
                 // relink the siblings around this child
-                const next_comp = self.GetComponent(ChildComponent, next_id).?;
-                const prev_comp = self.GetComponent(ChildComponent, prev_id).?;
+                const next_comp = self.GetComponentMut(ChildComponent, next_id).?;
+                const prev_comp = self.GetComponentMut(ChildComponent, prev_id).?;
                 next_comp.mPrev = prev_id;
                 prev_comp.mNext = next_id;
 
@@ -1065,7 +1111,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         fn _InternalSetListFirst(self: *Self, first_id: entity_t) void {
             var curr_id = first_id;
             while (true) {
-                const curr_component = self.GetComponent(ChildComponent, curr_id).?;
+                const curr_component = self.GetComponentMut(ChildComponent, curr_id).?;
                 curr_component.mFirst = first_id;
 
                 curr_id = curr_component.mNext;

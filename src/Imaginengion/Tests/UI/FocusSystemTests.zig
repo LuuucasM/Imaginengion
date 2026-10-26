@@ -248,7 +248,7 @@ test "a text input that focuses on a double click ignores a single press, and ta
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
-    UIManager.GetUIComponent(world.mName, TextInputComponent).?.mFocusOn = .DoubleClick;
+    UIManager.GetUIComponentMut(world.mName, TextInputComponent).?.mFocusOn = .DoubleClick;
 
     try world.Press(world.mName, .BUTTON_LEFT);
     try ExpectFocused(world, null);

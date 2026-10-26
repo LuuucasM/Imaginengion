@@ -90,7 +90,7 @@ pub const PreSolveInfo = struct {
 ///   - box against box turned differently: a separating axis test (BoxBoxSAT)
 /// The switch is exhaustive on purpose, so a new shape will not compile until every pairing with it has a test.
 /// A pairing with no test of its own is what a general convex test (GJK/EPA) would be for, once a shape needs one.
-pub fn TestShapes(contact: *Contact, origin_transform_comp: *TransformComponent, origin_collider: *ColliderComponent, target_transform_comp: *TransformComponent, target_collider: *ColliderComponent) bool {
+pub fn TestShapes(contact: *Contact, origin_transform_comp: *const TransformComponent, origin_collider: *const ColliderComponent, target_transform_comp: *const TransformComponent, target_collider: *const ColliderComponent) bool {
     switch (origin_collider.mShape) {
         .Sphere => SphereShape(contact, origin_transform_comp, origin_collider, target_transform_comp, target_collider),
         .Box => switch (target_collider.mShape) {
@@ -108,7 +108,7 @@ pub fn TestShapes(contact: *Contact, origin_transform_comp: *TransformComponent,
 /// or once the whole motion is covered. Rotation is honoured wherever TestShapes honours it.
 /// On a hit the contact's normal is the one at the hit point. A path that grazes a surface nears it in ever
 /// smaller steps, so running out of SWEEP_MAX_STEPS without a hit counts as a miss.
-pub fn SweepShapes(contact: *Contact, origin_transform_comp: *TransformComponent, origin_collider: *ColliderComponent, target_transform_comp: *TransformComponent, target_collider: *ColliderComponent, motion: Vec3(f32)) bool {
+pub fn SweepShapes(contact: *Contact, origin_transform_comp: *const TransformComponent, origin_collider: *const ColliderComponent, target_transform_comp: *const TransformComponent, target_collider: *const ColliderComponent, motion: Vec3(f32)) bool {
     const length = motion.Len();
     if (length <= 0.0) return false;
     return SweepAlong(contact, origin_transform_comp, origin_collider, target_transform_comp, target_collider, motion.DivScalar(length), length) != null;
@@ -116,7 +116,7 @@ pub fn SweepShapes(contact: *Contact, origin_transform_comp: *TransformComponent
 
 /// SweepShapes given the path as a unit direction and a length, which can be +inf, and answering how far along it
 /// the target got before it hit: 0 when it started touching or inside, null on a miss
-pub fn SweepAlong(contact: *Contact, origin_transform_comp: *TransformComponent, origin_collider: *ColliderComponent, target_transform_comp: *TransformComponent, target_collider: *ColliderComponent, direction: Vec3(f32), length: f32) ?f32 {
+pub fn SweepAlong(contact: *Contact, origin_transform_comp: *const TransformComponent, origin_collider: *const ColliderComponent, target_transform_comp: *const TransformComponent, target_collider: *const ColliderComponent, direction: Vec3(f32), length: f32) ?f32 {
     //a copy that is moved along the path, the real transform stays where it is
     var moved_target = target_transform_comp.*;
     const start = target_transform_comp.GetWorldPosition();
@@ -142,7 +142,7 @@ pub fn SweepAlong(contact: *Contact, origin_transform_comp: *TransformComponent,
 /// collider's SDF gives the distance to its surface and the SDF's gradient the direction out of it. The sphere's
 /// radius off the distance is the gap. The collider's rotation is honoured here, since it is undone on the point.
 /// The normal points from the collider to the sphere, like every other test's origin to target.
-fn ShapeSphere(contact: *Contact, shape_transform_comp: *TransformComponent, shape_collider: *ColliderComponent, sphere_transform_comp: *TransformComponent, sphere_collider: *ColliderComponent) void {
+fn ShapeSphere(contact: *Contact, shape_transform_comp: *const TransformComponent, shape_collider: *const ColliderComponent, sphere_transform_comp: *const TransformComponent, sphere_collider: *const ColliderComponent) void {
     const shape_rotation = shape_transform_comp.GetWorldRotation();
     const shape_scale = shape_transform_comp.GetWorldScale();
     const local_center = SDF.GetLocalPoint(sphere_transform_comp.GetWorldPosition(), shape_transform_comp.GetWorldPosition(), shape_rotation);
@@ -155,7 +155,7 @@ fn ShapeSphere(contact: *Contact, shape_transform_comp: *TransformComponent, sha
 }
 
 /// ShapeSphere with the roles swapped: the normal points from the sphere to the other collider.
-fn SphereShape(contact: *Contact, sphere_transform_comp: *TransformComponent, sphere_collider: *ColliderComponent, shape_transform_comp: *TransformComponent, shape_collider: *ColliderComponent) void {
+fn SphereShape(contact: *Contact, sphere_transform_comp: *const TransformComponent, sphere_collider: *const ColliderComponent, shape_transform_comp: *const TransformComponent, shape_collider: *const ColliderComponent) void {
     ShapeSphere(contact, shape_transform_comp, shape_collider, sphere_transform_comp, sphere_collider);
     contact.mNormal = contact.mNormal.Neg();
 }
@@ -167,7 +167,7 @@ fn SphereShape(contact: *Contact, sphere_transform_comp: *TransformComponent, sp
 /// box swept by a sphere of its corner radius, so both together are the two smaller boxes added up, swept by both
 /// radii added up, which is a rounded box of the half extents added up and the radii added up.
 /// Boxes turned differently add up to no box at all, so those go to BoxBoxSAT instead.
-fn BoxBox(contact: *Contact, origin_transform_comp: *TransformComponent, origin_collider: *ColliderComponent, target_transform_comp: *TransformComponent, target_collider: *ColliderComponent) void {
+fn BoxBox(contact: *Contact, origin_transform_comp: *const TransformComponent, origin_collider: *const ColliderComponent, target_transform_comp: *const TransformComponent, target_collider: *const ColliderComponent) void {
     const origin_scale = origin_transform_comp.GetWorldScale();
     const target_scale = target_transform_comp.GetWorldScale();
     const origin_box: OrientedBox = .{

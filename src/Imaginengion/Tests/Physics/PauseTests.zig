@@ -43,7 +43,7 @@ fn MakeMovingBody(engine_context: *EngineContext, scene: Scene, velocity_x: f32)
     const body = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
     //a new rigid body is dynamic with a mass of 1
     _ = try body.AddComponent(engine_context, RigidBodyComponent{});
-    body.GetComponent(RigidBodyComponent).?.SetVelocity(.{ .x = velocity_x, .y = 0, .z = 0 });
+    body.GetComponentMut(RigidBodyComponent).?.SetVelocity(.{ .x = velocity_x, .y = 0, .z = 0 });
     return body;
 }
 

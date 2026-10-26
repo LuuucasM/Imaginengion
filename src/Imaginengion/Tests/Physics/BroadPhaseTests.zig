@@ -54,7 +54,7 @@ fn MakeCollider(engine_context: *EngineContext, scene: Scene, shape: ColliderCom
         .Static => try entity.SetBodyType(engine_context, StaticBodyTag),
         .NoBody => unreachable,
     }
-    entity.GetComponent(RigidBodyComponent).?.SetVelocity(velocity);
+    entity.GetComponentMut(RigidBodyComponent).?.SetVelocity(velocity);
     return entity;
 }
 
@@ -125,7 +125,7 @@ test "the tree's broad pass leaves the narrow pass the same pairs as trying ever
         };
         const shape: ColliderComponent.Shapes = if (i % 2 == 0) .Sphere else .Box;
         const entity = try MakeCollider(engine_context, level, shape, body_type, position, velocity);
-        if (i % 7 == 0) entity.GetComponent(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
+        if (i % 7 == 0) entity.GetComponentMut(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
     }
 
     var by_tree = try KeptPairs(engine_context, false);
@@ -184,6 +184,6 @@ test "two bodies closing fast are paired while still apart, by how far each can 
     try std.testing.expectEqual(@as(usize, 1), try BroadPairCount(engine_context));
 
     //standing still, the same gap is too far to pair
-    for ([_]Entity{ left, right }) |body| body.GetComponent(RigidBodyComponent).?.SetVelocity(.{ .x = 0, .y = 0, .z = 0 });
+    for ([_]Entity{ left, right }) |body| body.GetComponentMut(RigidBodyComponent).?.SetVelocity(.{ .x = 0, .y = 0, .z = 0 });
     try std.testing.expectEqual(@as(usize, 0), try BroadPairCount(engine_context));
 }

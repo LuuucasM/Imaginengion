@@ -90,9 +90,9 @@ pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Opti
 /// A row as wide as `parent` starting with a setting's name
 fn NamedRow(engine_context: *EngineContext, parent: Entity, name: []const u8) !Entity {
     const row = try Widgets.Row(engine_context, .{ .Entity = parent });
-    row.GetComponent(LayoutItemComponent).?.mWidth = .{ .Fill = 1 };
+    row.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fill = 1 };
     const label = try Widgets.Label(engine_context, .{ .Entity = row }, name);
-    label.GetComponent(LayoutItemComponent).?.mWidth = .{ .Fixed = NAME_WIDTH };
+    label.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fixed = NAME_WIDTH };
     return row;
 }
 

@@ -32,7 +32,7 @@ pub fn ShownTarget(engine_context: *EngineContext, viewport: ViewportComponent) 
     const zone = Tracy.ZoneInit("Viewports::ShownTarget", @src());
     defer zone.Deinit();
     if (!viewport.mPlayer.IsActive()) return null;
-    const target = viewport.mPlayer.GetComponent(RenderTargetComponent) orelse return null;
+    const target = viewport.mPlayer.GetComponentMut(RenderTargetComponent) orelse return null;
     return try target.ShownSlot(engine_context);
 }
 

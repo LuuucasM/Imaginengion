@@ -197,7 +197,7 @@ fn StepBodies(self: *PhysicsManager, engine_context: *EngineContext, world_manag
         //the local one turned the way the body faces, into world space with the other
         const rotation = entity.GetComponent(EntityTransformComponent).?.GetWorldRotation();
         const force = constant_force.mForce.AddVec(constant_force.mLocalForce.QuatRotate(rotation));
-        entity.GetComponent(RigidBodyComponent).?.ApplyForce(force);
+        entity.GetComponentMut(RigidBodyComponent).?.ApplyForce(force);
     }
 
     //contacts are found before anything moves, from where the bodies are and how fast they are going, so
@@ -213,7 +213,7 @@ fn StepBodies(self: *PhysicsManager, engine_context: *EngineContext, world_manag
             //gravity and no force
             for (dynamic_bodies.items) |entity_id| {
                 const entity = world_manager.GetEntity(entity_id);
-                const entity_rb = entity.GetComponent(RigidBodyComponent).?;
+                const entity_rb = entity.GetComponentMut(RigidBodyComponent).?;
                 IntegrateVelocities(entity_rb, GravityOf(entity, entity_rb), SUB_STEP_DT);
             }
         }
@@ -237,11 +237,11 @@ fn StepBodies(self: *PhysicsManager, engine_context: *EngineContext, world_manag
 
             for (dynamic_bodies.items) |entity_id| {
                 const entity = world_manager.GetEntity(entity_id);
-                try IntegratePositions(engine_context, entity, entity.GetComponent(RigidBodyComponent).?, SUB_STEP_DT);
+                try IntegratePositions(engine_context, entity, entity.GetComponentMut(RigidBodyComponent).?, SUB_STEP_DT);
             }
             for (kinematic_bodies.items) |entity_id| {
                 const entity = world_manager.GetEntity(entity_id);
-                try IntegratePositions(engine_context, entity, entity.GetComponent(RigidBodyComponent).?, SUB_STEP_DT);
+                try IntegratePositions(engine_context, entity, entity.GetComponentMut(RigidBodyComponent).?, SUB_STEP_DT);
             }
         }
 
@@ -254,10 +254,10 @@ fn StepBodies(self: *PhysicsManager, engine_context: *EngineContext, world_manag
     //a force pushes for one step. Whatever applied it applies it again next step for as long as it should keep
     //pushing. A kinematic body's are let go of too: it is never pushed by them, but they shouldn't pile up
     for (dynamic_bodies.items) |entity_id| {
-        world_manager.GetEntity(entity_id).GetComponent(RigidBodyComponent).?._Force = std.mem.zeroes(Vec3(f32));
+        world_manager.GetEntity(entity_id).GetComponentMut(RigidBodyComponent).?._Force = std.mem.zeroes(Vec3(f32));
     }
     for (kinematic_bodies.items) |entity_id| {
-        world_manager.GetEntity(entity_id).GetComponent(RigidBodyComponent).?._Force = std.mem.zeroes(Vec3(f32));
+        world_manager.GetEntity(entity_id).GetComponentMut(RigidBodyComponent).?._Force = std.mem.zeroes(Vec3(f32));
     }
 }
 
@@ -350,7 +350,7 @@ fn CalculateEntityTransform(entity: Entity, position_acc: Vec3(f32), rotation_ac
     var rotation_out = rotation_acc;
     var scale_out = scale_acc;
 
-    if (entity.GetComponent(EntityTransformComponent)) |transform| {
+    if (entity.GetComponentMut(EntityTransformComponent)) |transform| {
         //the local position is an offset in the parent's space: it stretches with the parent's scale
         //and turns with its rotation before it is added on, so a child orbits a turning parent and
         //moves out with a growing one instead of staying put

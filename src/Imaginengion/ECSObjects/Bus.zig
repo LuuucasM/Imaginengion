@@ -60,7 +60,7 @@ pub fn Delete(self: Bus, engine_context: *EngineContext) !void {
 }
 
 pub fn SetVolume(self: Bus, volume: f32) void {
-    if (self.GetComponent(VolumeComponent)) |volume_component| volume_component.mVolume = volume;
+    if (self.GetComponentMut(VolumeComponent)) |volume_component| volume_component.mVolume = volume;
 }
 
 /// Pausing fades everything under the bus out, then holds it where it is. Unpausing fades it back in from there
@@ -70,6 +70,7 @@ pub fn SetPaused(self: Bus, paused: bool) void {
 
 pub const AddComponent = Core.AddComponent;
 pub const GetComponent = Core.GetComponent;
+pub const GetComponentMut = Core.GetComponentMut;
 pub const HasComponent = Core.HasComponent;
 pub const GetUUID = Core.GetUUID;
 pub const GetName = Core.GetName;

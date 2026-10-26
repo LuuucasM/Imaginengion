@@ -194,7 +194,7 @@ test "a hidden quad can't be hit" {
 
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const hidden = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -10 }, .{ .x = 4, .y = 4 });
-    hidden.GetComponent(SurfaceComponent).?.mShouldRender = false;
+    hidden.GetComponentMut(SurfaceComponent).?.mShouldRender = false;
     const behind = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -20 }, .{ .x = 4, .y = 4 });
     try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
 
@@ -356,7 +356,7 @@ test "a click in a rounded quad's cut off corner goes through it" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     //4 x 4 with corners rounded by 1, right in front of the camera, and a plain quad behind it
     const rounded = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -10 }, .{ .x = 4, .y = 4 });
-    rounded.GetComponent(ShapeComponent).?.GetQuad().?.CornerRadii = .{ .x = 1, .y = 1, .z = 1, .w = 1 };
+    rounded.GetComponentMut(ShapeComponent).?.GetQuadMut().?.CornerRadii = .{ .x = 1, .y = 1, .z = 1, .w = 1 };
     const behind = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -20 }, .{ .x = 40, .y = 40 });
     try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
 
@@ -399,7 +399,7 @@ test "a click in the hole a subtract mask cuts, or past a rounded mask's corner,
     const down = Vec3(f32){ .x = 0, .y = 0, .z = -1 };
     //a 4 x 4 mask rounded by 1 at each corner, a 10 x 10 quad under it in front, and a big quad behind both
     const rounded = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -10 }, .{ .x = 4, .y = 4 });
-    rounded.GetComponent(ShapeComponent).?.GetQuad().?.CornerRadii = .{ .x = 1, .y = 1, .z = 1, .w = 1 };
+    rounded.GetComponentMut(ShapeComponent).?.GetQuadMut().?.CornerRadii = .{ .x = 1, .y = 1, .z = 1, .w = 1 };
     _ = try rounded.AddComponent(engine_context, EntityComponents.MaskComponent{});
     const cut = try rounded.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     try cut.SetTranslation(engine_context, .{ .x = 0, .y = 0, .z = 1 });
@@ -408,7 +408,7 @@ test "a click in the hole a subtract mask cuts, or past a rounded mask's corner,
     //a 2 x 2 hole cut out of everything under it, the mask's own shape not drawn
     const hole = try AddQuad(engine_context, scene, .{ .x = 20, .y = 0, .z = -10 }, .{ .x = 2, .y = 2 });
     _ = try hole.AddComponent(engine_context, EntityComponents.MaskComponent{ .mOp = .Subtract });
-    hole.GetComponent(SurfaceComponent).?.mShouldRender = false;
+    hole.GetComponentMut(SurfaceComponent).?.mShouldRender = false;
     const holed = try hole.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     try holed.SetTranslation(engine_context, .{ .x = 0, .y = 0, .z = 1 });
     _ = try holed.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 10, .y = 10 } }));
@@ -492,7 +492,7 @@ fn RandomQuad(engine_context: *EngineContext, random: std.Random, entity: Entity
     try entity.SetTranslation(engine_context, position);
     try entity.SetRotation(engine_context, (Vec3(f32){ .x = 0, .y = 0, .z = RandomIn(random, -0.6, 0.6) }).RadiansToQuat());
     var quad = ShapeComponent.MakeQuad(.{ .Size = .{ .x = size * RandomIn(random, 0.5, 2), .y = size * RandomIn(random, 0.5, 2) } });
-    if (random.boolean()) quad.GetQuad().?.CornerRadii = .{ .x = size * 0.3, .y = size * 0.3, .z = 0, .w = size * 0.3 };
+    if (random.boolean()) quad.GetQuadMut().?.CornerRadii = .{ .x = size * 0.3, .y = size * 0.3, .z = 0, .w = size * 0.3 };
     _ = try entity.AddComponent(engine_context, quad);
     var surface = SurfaceComponent{};
     if (random.uintLessThan(u8, 4) == 0) {
@@ -599,7 +599,7 @@ test "a shape hidden or deleted after the tree was built can't be hit" {
     //folded away, switched off and deleted mid frame, while the tree still has all three
     _ = try front.AddComponent(engine_context, LayoutHiddenTag{});
     try ExpectEntity(middle, try CastBoth(engine_context, view, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{}));
-    middle.GetComponent(SurfaceComponent).?.mShouldRender = false;
+    middle.GetComponentMut(SurfaceComponent).?.mShouldRender = false;
     try ExpectEntity(back, try CastBoth(engine_context, view, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{}));
     try back.Delete(engine_context);
     try ExpectEntity(behind_all, try CastBoth(engine_context, view, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{}));

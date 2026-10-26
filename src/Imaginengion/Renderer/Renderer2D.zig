@@ -389,9 +389,9 @@ pub fn DrawQuad(
     self: *Renderer2D,
     buffers: *RenderBuffers, //the pass it is drawn in
     engine_context: *EngineContext,
-    transform_component: *EntityTransformComponent,
+    transform_component: *const EntityTransformComponent,
     quad: ShapeComponent.Quad,
-    surface: *SurfaceComponent, //what it is painted with
+    surface: *const SurfaceComponent, //what it is painted with
     shown: ?RenderTargetComponent.Shown, //a render target it shows in place of its texture (ViewportComponent)
     canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
     mask: u32, //the mask it is cut by, into `masks`, SDFProgram.NO_MASK for none
@@ -640,9 +640,9 @@ pub fn DrawText(
     self: *Renderer2D,
     buffers: *RenderBuffers, //the pass it is drawn in
     engine_context: *EngineContext,
-    transform_component: *EntityTransformComponent,
-    text_component: *TextComponent,
-    surface: *SurfaceComponent, //what it is painted with
+    transform_component: *const EntityTransformComponent,
+    text_component: *const TextComponent,
+    surface: *const SurfaceComponent, //what it is painted with
     canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
     mask: u32, //the mask it is cut by, into `masks`, SDFProgram.NO_MASK for none
     masks: *const ShapeGeometry.ViewMasks,
@@ -666,7 +666,7 @@ pub const TextFill = struct {
     Font: *TextAsset,
 
     /// Adds the text's fill shading
-    pub fn Of(engine_context: *EngineContext, text_component: *TextComponent, surface: *SurfaceComponent, shading_buff: *ShadingBuffers) !TextFill {
+    pub fn Of(engine_context: *EngineContext, text_component: *const TextComponent, surface: *const SurfaceComponent, shading_buff: *ShadingBuffers) !TextFill {
         const font = try text_component.mTextAssetHandle.GetAsset(engine_context, TextAsset);
         const texture_asset = try surface.mTexture.GetAsset(engine_context, Texture2D);
         const shading = try shading_buff.AddSurface(engine_context.EngineAllocator(), &surface.mTexOptions, texture_asset);

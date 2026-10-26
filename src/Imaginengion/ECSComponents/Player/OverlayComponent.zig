@@ -73,7 +73,7 @@ fn ResolveSceneRef(requester: Serializer.Requester, scene_uuid: u64, _: u32) boo
     const player = requester.Player;
     const scene = player.mManager.GetObjectByUUID(Scene, scene_uuid) orelse return false;
     //the component may have been removed since the request was made, nothing left to resolve
-    const overlay = player.GetComponent(OverlayComponent) orelse return true;
+    const overlay = player.GetComponentMut(OverlayComponent) orelse return true;
     overlay.mScene = scene;
     return true;
 }

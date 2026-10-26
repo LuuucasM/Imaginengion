@@ -234,7 +234,7 @@ test "headers start folded, and one opened stays open while the same object is b
         }
         unreachable;
     };
-    panel.mEntityList.mSections[transform_index].?.GetComponent(LayoutItemComponent).?.mCollapsed = false;
+    panel.mEntityList.mSections[transform_index].?.GetComponentMut(LayoutItemComponent).?.mCollapsed = false;
     try std.testing.expect(IsOpen(panel, EntityComponents.TransformComponent).?);
     _ = try entity.AddComponent(engine_context, EntityComponents.ColliderComponent{});
     const root = test_panel.Root();

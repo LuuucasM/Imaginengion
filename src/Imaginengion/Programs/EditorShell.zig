@@ -100,7 +100,7 @@ fn SingleTab(engine_context: *EngineContext, pane: Entity, title: []const u8, op
 /// Shows or hides the play preview under the viewport, and the divider above it
 pub fn ShowPlayPreview(self: EditorShell, engine_context: *EngineContext, shown: bool) !void {
     for ([_]Entity{ self.mCenter.Divider, self.mCenter.Second }) |entity| {
-        const item = entity.GetComponent(LayoutItemComponent).?;
+        const item = entity.GetComponentMut(LayoutItemComponent).?;
         if (item.mCollapsed == !shown) continue;
         item.mCollapsed = !shown;
         try entity.MarkLayoutDirty(engine_context);

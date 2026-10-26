@@ -206,7 +206,7 @@ pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, asset_sou
 
     if (asset_id) |id| {
         std.debug.assert(self.mECSManager.HasComponent(AssetMetaData, id));
-        self.mECSManager.GetComponent(AssetMetaData, id).?.mRefs += 1;
+        self.mECSManager.GetComponentMut(AssetMetaData, id).?.mRefs += 1;
         return AssetHandle{ .mID = id, .mManager = self };
     } else {
         const new_asset_id = switch (asset_source) {
@@ -215,7 +215,7 @@ pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, asset_sou
             .Default => unreachable,
         };
 
-        self.mECSManager.GetComponent(AssetMetaData, new_asset_id).?.mRefs += 1;
+        self.mECSManager.GetComponentMut(AssetMetaData, new_asset_id).?.mRefs += 1;
 
         try self.AddUUID(engine_allocator, asset_hash, new_asset_id);
 
@@ -225,11 +225,11 @@ pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, asset_sou
 
 /// Takes another reference to an asset that is already loaded, for code that copies a handle it owns.
 pub fn RetainAssetHandle(self: *AManager, asset_id: AssetHandle.Type) void {
-    self.mECSManager.GetComponent(AssetMetaData, asset_id).?.mRefs += 1;
+    self.mECSManager.GetComponentMut(AssetMetaData, asset_id).?.mRefs += 1;
 }
 
 pub fn ReleaseAssetHandle(self: *AManager, asset_handle: *AssetHandle) void {
-    const asset_meta_data = self.mECSManager.GetComponent(AssetMetaData, asset_handle.mID).?;
+    const asset_meta_data = self.mECSManager.GetComponentMut(AssetMetaData, asset_handle.mID).?;
     asset_meta_data.mRefs -= 1;
     asset_handle.mID = AssetHandle.NullObject;
 }
@@ -255,14 +255,14 @@ pub fn FileChanged(self: *AManager, asset_id: AssetHandle.Type) bool {
 pub fn GetLoadedAsset(self: *AManager, comptime asset_type: type, asset_id: AssetHandle.Type) ?*asset_type {
     _ValidateAssetType(asset_type);
     if (!self.mECSManager.IsActiveEntity(asset_id)) return null;
-    return self.mECSManager.GetComponent(asset_type, asset_id);
+    return self.mECSManager.GetComponentMut(asset_type, asset_id);
 }
 
 pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_type: type, asset_id: AssetHandle.Type) !*asset_type {
     _ValidateAssetType(asset_type);
 
     if (self.mECSManager.IsActiveEntity(asset_id)) {
-        if (self.mECSManager.GetComponent(asset_type, asset_id)) |asset| {
+        if (self.mECSManager.GetComponentMut(asset_type, asset_id)) |asset| {
             return asset;
         } else if (self.mECSManager.HasComponent(LoadFailedTag, asset_id)) {
             //it failed last time and the file has not changed since, so it would only fail again
@@ -299,7 +299,7 @@ pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_
 
 pub fn GetFileMetaData(self: *AManager, id: AssetHandle.Type) *FileMetaData {
     if (self.mECSManager.IsActiveEntity(id)) {
-        return self.mECSManager.GetComponent(FileMetaData, id).?;
+        return self.mECSManager.GetComponentMut(FileMetaData, id).?;
     } else {
         return &self._internal.DefaultFileMetaData;
     }
@@ -320,7 +320,7 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
     Tracy.Plot("Assets/Tracked Files", .{ .color = 0x607D8B }, group.items.len);
     Tracy.Plot("Assets/Pending Delete", .{ .color = 0x9E9E9E }, self.mECSManager.NumWithComponent(PendingDelete));
     for (group.items) |asset_id| {
-        const file_data = self.mECSManager.GetComponent(FileMetaData, asset_id).?;
+        const file_data = self.mECSManager.GetComponentMut(FileMetaData, asset_id).?;
 
         //stat first: it costs no handle (see StatTimeAndSize), and it is what tells us the file still exists
         const stat = self.OpenFileStats(engine_context, file_data.mRelPath.items, file_data.mPathType) catch |err| {
@@ -593,7 +593,7 @@ fn MarkForDelete(self: *AManager, engine_context: *EngineContext, asset_id: Asse
 
     //already marked: add the reason and leave mTime alone, so the grace period runs from the first
     //thing that went wrong rather than restarting on every later one
-    if (self.mECSManager.GetComponent(PendingDelete, asset_id)) |pending_delete| {
+    if (self.mECSManager.GetComponentMut(PendingDelete, asset_id)) |pending_delete| {
         pending_delete.mReason |= error_flags;
         return;
     }

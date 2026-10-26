@@ -98,7 +98,7 @@ pub fn RecordViewArea(world: *WorldManager, overlay_scenes: []const Scene.Type, 
         const scene = world.GetScene(scene_id);
         if (!scene.IsActive() or scene.GetLayer() != .OverlayLayer) continue;
 
-        const scene_component = scene.GetComponent(SceneComponent).?;
+        const scene_component = scene.GetComponentMut(SceneComponent).?;
 
         if (scene_component.mLayoutArea) |old_area| {
             if (old_area.x == area.x and old_area.y == area.y) continue;
@@ -282,27 +282,27 @@ fn MeasureText(entity: Entity, engine_context: *EngineContext) !?TextLayout.Metr
 }
 
 fn WriteBack(entity: Entity, text_center: ?Vec2(f32), result: Layout.Result, engine_context: *EngineContext) !void {
-    if (entity.GetComponent(LayoutItemComponent)) |item| item.mComputedSize = result.Size;
+    if (entity.GetComponentMut(LayoutItemComponent)) |item| item.mComputedSize = result.Size;
     //how far it scrolled, kept in range, and how far it can
-    if (UIManager.GetUIComponent(entity, ScrollStateComponent)) |state| {
+    if (UIManager.GetUIComponentMut(entity, ScrollStateComponent)) |state| {
         state.mOffset = result.ScrollOffset;
         state.mContentSize = result.ContentSize;
     }
 
     //the element's background
-    if (ShapeGeometry.QuadOf(entity)) |quad| quad.Size = result.Size;
+    if (ShapeGeometry.QuadOfMut(entity)) |quad| quad.Size = result.Size;
 
     //text runs from its bounds' left edge, so even bounds put its room across the element. Its room is then moved
     //to the element's middle, rather than its first line's baseline
     var text_offset: Vec2(f32) = .{ .x = 0, .y = 0 };
     if (text_center) |center| {
-        const text = entity.GetComponent(TextComponent).?;
+        const text = entity.GetComponentMut(TextComponent).?;
         text.mBounds = .{ .x = result.Size.x / 2, .y = result.Size.x / 2 };
         text_offset.y = center.y;
     }
 
     if (!result.Placed) return;
-    const transform = entity.GetComponent(TransformComponent) orelse return;
+    const transform = entity.GetComponentMut(TransformComponent) orelse return;
     const translation = transform.GetTranslation();
     const x = result.Center.x - text_offset.x;
     const y = result.Center.y - text_offset.y;

@@ -228,7 +228,7 @@ pub fn Core(comptime Self: type) type {
             _ = try self.mECSManager.AddComponent(engine_context, obj_id, new_component);
             try OnComponentAdded(self, engine_context, obj_id, Self.ECSManagerT.ComponentInd(component_t));
             //fetched again: what OnComponentAdded adds can move a component that went on right away
-            return self.mECSManager.GetComponent(component_t, obj_id).?;
+            return self.mECSManager.GetComponentMut(component_t, obj_id).?;
         }
 
         /// Adds the component now, see ECSManager.AddComponentSync for when that is safe, and runs OnComponentAdded
@@ -336,8 +336,13 @@ pub fn Core(comptime Self: type) type {
             }
         }
 
-        pub fn GetComponent(self: *Self, component_type: type, obj_id: UnderlyingObjType(Self)) ?*component_type {
+        pub fn GetComponent(self: *Self, component_type: type, obj_id: UnderlyingObjType(Self)) ?*const component_type {
             return self.mECSManager.GetComponent(component_type, obj_id);
+        }
+
+        /// GetComponent for changing it: a running system has to list `component_type` in its Writes
+        pub fn GetComponentMut(self: *Self, component_type: type, obj_id: UnderlyingObjType(Self)) ?*component_type {
+            return self.mECSManager.GetComponentMut(component_type, obj_id);
         }
 
         pub fn HasComponent(self: *Self, component_type: type, obj_id: UnderlyingObjType(Self)) bool {

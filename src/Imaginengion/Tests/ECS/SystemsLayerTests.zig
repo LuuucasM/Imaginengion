@@ -511,3 +511,36 @@ test "engine bookkeeping in an unchecked scope isn't reported" {
     try layer.mSystems.RunSystem(BookkeepsInScene, layer.mEngineContext, &layer.mBodies, .{ layer, scene });
     try std.testing.expectEqual(before, ECS.ReportedCount());
 }
+
+const ChangesWhatItReads = struct {
+    pub const Name = "ChangesWhatItReads";
+    pub const Reads = &.{ Position, In(SceneECS, Gravity) };
+    pub const Writes = &.{ Velocity, In(SceneECS, Weather) };
+
+    pub fn Run(_: *EngineContext, layer: *TestLayer, body: u32, scene: u32) void {
+        //listed in Writes, or only read: fine
+        _ = layer.mBodies.GetComponentMut(Velocity, body);
+        _ = layer.mBodies.GetComponent(Position, body);
+        _ = layer.mScene.GetComponentMut(Weather, scene);
+        _ = layer.mScene.GetComponent(Gravity, scene);
+        //only in Reads, so a mistake, here and through In
+        _ = layer.mBodies.GetComponentMut(Position, body);
+        _ = layer.mBodies.GetComponentSliceMut(Position);
+        _ = layer.mScene.GetComponentMut(Gravity, scene);
+    }
+};
+
+test "changing a component only listed in Reads is reported" {
+    if (!std.debug.runtime_safety) return error.SkipZigTest;
+    const before = ExpectReports();
+    defer StopExpectingReports();
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    try layer.Connect(&layer.mBodies, &layer.mScene);
+    const body = try layer.NewBody();
+    const scene = try layer.mScene.CreateEntity(layer.mEngineContext.EngineAllocator());
+
+    try layer.mSystems.RunSystem(ChangesWhatItReads, layer.mEngineContext, &layer.mBodies, .{ layer, body, scene });
+    //Position once (one entity or all of them, it's the same mistake) and Gravity once
+    try std.testing.expectEqual(before + 2, ECS.ReportedCount());
+}

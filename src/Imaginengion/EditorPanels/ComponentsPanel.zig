@@ -115,7 +115,7 @@ pub fn IsOpen(self: ComponentsPanel) bool {
 }
 
 pub fn Toggle(self: ComponentsPanel, engine_context: *EngineContext) !void {
-    const item = self.mArea.GetComponent(LayoutItemComponent).?;
+    const item = self.mArea.GetComponentMut(LayoutItemComponent).?;
     item.mCollapsed = !item.mCollapsed;
     try self.mArea.MarkLayoutDirty(engine_context);
 }
@@ -192,11 +192,11 @@ pub fn Run(self: *const ComponentsPanel, engine_context: *EngineContext, action:
         },
         .EditUIElement => {},
         .Unpossess => if (built == .player) {
-            const possess = built.player.GetComponent(PossessComponent) orelse return;
+            const possess = built.player.GetComponentMut(PossessComponent) orelse return;
             //both sides: the entity's slot stops naming the player, if it still does
             const possessed = possess.mPossessedEntity;
             if (possessed.mID != Entity.NullObject and possessed.IsActive()) {
-                if (possessed.GetComponent(PlayerSlotComponent)) |slot| {
+                if (possessed.GetComponentMut(PlayerSlotComponent)) |slot| {
                     if (slot.mPlayerEntity.mID == built.player.mID) slot.mPlayerEntity = .uninit;
                 }
             }
@@ -250,7 +250,7 @@ pub fn After(self: *ComponentsPanel, comptime component_type: type, ui: *Inspect
         }
         const row = try Widgets.Row(ui.mEngineContext, .{ .Entity = ui.mParent });
         const label = try Widgets.Label(ui.mEngineContext, .{ .Entity = row }, "Body Type");
-        label.GetComponent(LayoutItemComponent).?.mWidth = .{ .Fixed = Inspector.LABEL_WIDTH };
+        label.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fixed = Inspector.LABEL_WIDTH };
         self.mBodyType = try Widgets.Dropdown(ui.mEngineContext, .{ .Entity = row }, &names, chosen, self.mOptions);
     }
     if (comptime component_type == PossessComponent and Object == Player) {
@@ -404,7 +404,7 @@ fn Same(a: Entity, b: Entity) bool {
 /// Puts `text` on a line, folded away while it says nothing
 fn ShowLine(engine_context: *EngineContext, line: Entity, text: []const u8) !void {
     try WidgetActions.SetText(engine_context, line, text);
-    const item = line.GetComponent(LayoutItemComponent).?;
+    const item = line.GetComponentMut(LayoutItemComponent).?;
     const hidden = text.len == 0;
     if (item.mCollapsed == hidden) return;
     item.mCollapsed = hidden;

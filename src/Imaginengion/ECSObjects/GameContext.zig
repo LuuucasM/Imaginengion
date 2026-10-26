@@ -55,6 +55,7 @@ pub const RemoveComponent = Core.RemoveComponent;
 pub const RemoveComponentSync = Core.RemoveComponentSync;
 
 pub const GetComponent = Core.GetComponent;
+pub const GetComponentMut = Core.GetComponentMut;
 
 pub const HasComponent = Core.HasComponent;
 

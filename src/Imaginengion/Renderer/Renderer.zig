@@ -193,7 +193,7 @@ pub const ShadingBuffers = struct {
     pub fn AddSurface(
         self: *ShadingBuffers,
         engine_allocator: std.mem.Allocator,
-        tex_options: *Texture2D.TexOptions,
+        tex_options: *const Texture2D.TexOptions,
         texture_asset: *Texture2D,
     ) !usize {
         try self.mSurfShadingBuffBase.append(engine_allocator, .{
@@ -214,7 +214,7 @@ pub const ShadingBuffers = struct {
     pub fn AddSurfaceSlot(
         self: *ShadingBuffers,
         engine_allocator: std.mem.Allocator,
-        tex_options: *Texture2D.TexOptions,
+        tex_options: *const Texture2D.TexOptions,
         texture_handle: u32,
         width: usize,
         height: usize,
@@ -390,7 +390,7 @@ pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
 /// The per view uniforms every render hands the renderer, from the camera's transform and viewpoint. The viewpoint's
 /// size has to be set for this frame before calling, since the ray params are derived from it. The shape counts and
 /// flags are filled in by the renderer once it knows them.
-pub fn BuildPushConstants(transform_component: *TransformComponent, viewpoint_component: *ViewpointComponent) PushConstants {
+pub fn BuildPushConstants(transform_component: *const TransformComponent, viewpoint_component: *const ViewpointComponent) PushConstants {
     const ray_params = viewpoint_component.GetRayParams();
     return .{
         .mPosition = transform_component.GetWorldPosition().ToArray(),
@@ -655,7 +655,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, shape: ShapeGeomet
 }
 
 /// An entity's quad: the render target it shows in place of its texture when it is a viewport (ViewportComponent)
-fn DrawEntityQuad(self: *Renderer, buffers: *Renderer2D.RenderBuffers, engine_context: *EngineContext, entity: Entity, transform: *TransformComponent, quad: ShapeComponent.Quad, surface: *SurfaceComponent, canvas: ?OverlayCanvas.CanvasTransform, mask: u32, masks: *const ShapeGeometry.ViewMasks) !void {
+fn DrawEntityQuad(self: *Renderer, buffers: *Renderer2D.RenderBuffers, engine_context: *EngineContext, entity: Entity, transform: *const TransformComponent, quad: ShapeComponent.Quad, surface: *const SurfaceComponent, canvas: ?OverlayCanvas.CanvasTransform, mask: u32, masks: *const ShapeGeometry.ViewMasks) !void {
     //a quad showing a player's view samples its render target instead of its texture
     const shown = if (entity.GetComponent(ViewportComponent)) |viewport| try Viewports.ShownTarget(engine_context, viewport.*) else null;
     if (shown) |target| try self.mShownCopies.append(engine_context.EngineAllocator(), target);

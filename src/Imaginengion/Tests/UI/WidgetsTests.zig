@@ -340,7 +340,7 @@ test "a color field's four channels make its color, which its swatch shows" {
     try std.testing.expectEqual(@as(usize, 9), (try world.TakeValueChanged()).len);
 
     //a channel set straight on its field: the swatch catches up when the stock script calls UpdateSwatch
-    fields[1].GetComponent(AttribComponent).?.mData = .{ .float32 = 0 };
+    fields[1].GetComponentMut(AttribComponent).?.mData = .{ .float32 = 0 };
     WidgetActions.UpdateSwatch(color_field);
     try std.testing.expectEqual(@as(f32, 0), swatch.GetComponent(SurfaceComponent).?.mTexOptions.mColor.y);
 }

@@ -56,7 +56,7 @@ const TestWorld = struct {
         try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
 
         const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
-        scene.GetComponent(SceneComponent).?.mLayoutArea = .{ .x = 1920, .y = 1080 };
+        scene.GetComponentMut(SceneComponent).?.mLayoutArea = .{ .x = 1920, .y = 1080 };
 
         self.mPanel = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
         self.mButton = try self.mPanel.CreateChild(engine_context, .Entity, Entity.DefaultConfig);

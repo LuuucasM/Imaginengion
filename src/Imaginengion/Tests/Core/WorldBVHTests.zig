@@ -183,7 +183,7 @@ test "quads, letters, merges and colliders each get items in their own layer, wi
     //two letters and a space, and a see-through quad that draws nothing but still takes clicks
     const label = try AddText(engine_context, hud, "A A", .{ .x = 0, .y = 0, .z = 0 });
     const row_button = try AddQuad(engine_context, hud, .{ .x = 0, .y = -50, .z = 0 });
-    const row_surface = row_button.GetComponent(SurfaceComponent).?;
+    const row_surface = row_button.GetComponentMut(SurfaceComponent).?;
     row_surface.mTexOptions.mIsTransparent = true;
     row_surface.mTexOptions.mColor.w = 0;
     row_surface.mBorderWidth = 0;
@@ -308,7 +308,7 @@ test "what isn't drawn is left out, but a collider is in whether its entity is s
     const folded = try AddQuad(engine_context, level, .{ .x = 1, .y = 0, .z = 0 });
     _ = try folded.AddComponent(engine_context, LayoutHiddenTag{});
     const switched_off = try AddQuad(engine_context, level, .{ .x = 2, .y = 0, .z = 0 });
-    switched_off.GetComponent(SurfaceComponent).?.mShouldRender = false;
+    switched_off.GetComponentMut(SurfaceComponent).?.mShouldRender = false;
     //physics collides with it either way
     _ = try folded.AddComponent(engine_context, ColliderComponent{});
 
@@ -412,7 +412,7 @@ test "a physics step keeps a moving body's collider in the tree where its last s
     const ball = try level.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try ball.AddComponent(engine_context, ColliderComponent{});
     _ = try ball.AddComponent(engine_context, RigidBodyComponent{});
-    ball.GetComponent(RigidBodyComponent).?.SetVelocity(.{ .x = 0, .y = -6, .z = 0 });
+    ball.GetComponentMut(RigidBodyComponent).?.SetVelocity(.{ .x = 0, .y = -6, .z = 0 });
     _ = try AddQuad(engine_context, level, .{ .x = 0, .y = 0, .z = 0 });
 
     const bvh = try world.Build();

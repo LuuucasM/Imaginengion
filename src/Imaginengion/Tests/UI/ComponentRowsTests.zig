@@ -151,14 +151,14 @@ test "a collider's shape decides its sizes, and a viewpoint's FOV is in degrees 
     var labels: [8][]const u8 = undefined;
     _ = Labels(try world.Render(entity, ColliderComponent), &labels);
     try std.testing.expectEqualStrings("Box Size", labels[1]);
-    entity.GetComponent(ColliderComponent).?.mShape = .Sphere;
+    entity.GetComponentMut(ColliderComponent).?.mShape = .Sphere;
     _ = Labels(try world.Render(entity, ColliderComponent), &labels);
     try std.testing.expectEqualStrings("Radius", labels[1]);
 
     _ = try entity.AddComponent(engine_context, ViewpointComponent{});
     const panel = try world.Render(entity, ViewpointComponent);
     const fov = Part(panel, 1, 1);
-    fov.GetComponent(AttribComponent).?.mData.SetFromFloat(90);
+    fov.GetComponentMut(AttribComponent).?.mData.SetFromFloat(90);
     const projection_before = entity.GetComponent(ViewpointComponent).?.mProjection;
     try engine_context.mUIManager.SendToChain(engine_context, fov, .ValueChanged);
     try world.ProcessUIEvents();
@@ -180,7 +180,7 @@ test "a layout item's size kinds start at their defaults, and a pin sets the anc
     try std.testing.expectEqual(@as(f32, 100), entity.GetComponent(LayoutItemComponent).?.mWidth.Fixed);
 
     //anchored, then pinned to the top right
-    entity.GetComponent(LayoutItemComponent).?.mPlacement = .{ .Anchored = .{} };
+    entity.GetComponentMut(LayoutItemComponent).?.mPlacement = .{ .Anchored = .{} };
     panel = try world.Render(entity, LayoutItemComponent);
     var labels: [16][]const u8 = undefined;
     const count = Labels(panel, &labels);

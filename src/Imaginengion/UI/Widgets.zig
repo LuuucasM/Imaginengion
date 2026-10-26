@@ -481,10 +481,10 @@ pub fn Dropdown(engine_context: *EngineContext, parent: Parent, choices: []const
     _ = try button.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
     try UIManager.Style(engine_context, button, "Field");
     const shown = try Label(engine_context, .{ .Entity = button }, if (chosen) |i| choices[i] else "");
-    shown.GetComponent(LayoutItemComponent).?.mWidth = .{ .Fill = 1 };
+    shown.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fill = 1 };
     //a letter for now: the font has no arrow glyph
     const arrow = try ButtonFrame(engine_context, .{ .Entity = button });
-    arrow.GetComponent(LayoutComponent).?.mPadding = .{ .Left = PADDING / 2, .Right = PADDING / 2, .Top = 0, .Bottom = 0 };
+    arrow.GetComponentMut(LayoutComponent).?.mPadding = .{ .Left = PADDING / 2, .Right = PADDING / 2, .Top = 0, .Bottom = 0 };
     _ = try Label(engine_context, .{ .Entity = arrow }, "v");
 
     _ = try UIManager.ElementOf(button).?.AddComponent(engine_context, PopupRefComponent{ .mPopup = list });
@@ -631,8 +631,8 @@ pub fn ContextMenu(engine_context: *EngineContext, target: Entity, options: Opti
 /// background. For a list too long to show whole
 pub fn ScrollingMenu(engine_context: *EngineContext, menu: Entity, rows: usize) !void {
     const half = PADDING / 2;
-    menu.GetComponent(LayoutItemComponent).?.mHeight = .{ .Fixed = @as(f32, @floatFromInt(rows)) * MENU_ROW_HEIGHT + 2 * half };
-    menu.GetComponent(LayoutComponent).?.mPadding.Right = half + ScrollSystem.THUMB_THICKNESS;
+    menu.GetComponentMut(LayoutItemComponent).?.mHeight = .{ .Fixed = @as(f32, @floatFromInt(rows)) * MENU_ROW_HEIGHT + 2 * half };
+    menu.GetComponentMut(LayoutComponent).?.mPadding.Right = half + ScrollSystem.THUMB_THICKNESS;
     if (!menu.HasComponent(EntityComponents.MaskComponent)) _ = try menu.AddComponent(engine_context, EntityComponents.MaskComponent{});
     _ = try UIManager.ElementOf(menu).?.AddComponent(engine_context, UIComponents.ScrollComponent{ .mScroll = .Vertical });
     try menu.MarkLayoutDirty(engine_context);
@@ -678,7 +678,7 @@ pub fn NewContextMenu(engine_context: *EngineContext, near: Entity) !Entity {
 pub fn ShareContextMenu(engine_context: *EngineContext, target: Entity, menu: Entity, options: Options) !void {
     if (!target.HasComponent(UIElementComponent)) _ = try target.AddComponent(engine_context, UIElementComponent{});
     const element = UIManager.ElementOf(target).?;
-    if (element.GetComponent(PopupRefComponent)) |popup_ref| {
+    if (element.GetComponentMut(PopupRefComponent)) |popup_ref| {
         popup_ref.mPopup = menu;
     } else {
         _ = try element.AddComponent(engine_context, PopupRefComponent{ .mPopup = menu });
@@ -783,9 +783,9 @@ pub fn FloatingWindow(engine_context: *EngineContext, scene: Scene, title: []con
     try UIManager.Style(engine_context, title_bar, "Title");
     if (options.StockScripts) try AddStockScriptWith(engine_context, title_bar, .WindowTitle, .{ .mWindow = window });
     const shown_title = try Label(engine_context, .{ .Entity = title_bar }, title);
-    shown_title.GetComponent(LayoutItemComponent).?.mWidth = .{ .Fill = 1 };
+    shown_title.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fill = 1 };
     const close = try ButtonFrame(engine_context, .{ .Entity = title_bar });
-    close.GetComponent(LayoutComponent).?.mPadding = .{ .Left = PADDING / 2, .Right = PADDING / 2, .Top = 0, .Bottom = 0 };
+    close.GetComponentMut(LayoutComponent).?.mPadding = .{ .Left = PADDING / 2, .Right = PADDING / 2, .Top = 0, .Bottom = 0 };
     _ = try Label(engine_context, .{ .Entity = close }, "x");
     if (options.StockScripts) try AddStockScriptWith(engine_context, close, .CloseWindow, .{ .mWindow = window });
 
@@ -821,7 +821,7 @@ pub fn ScaleSizes(engine_context: *EngineContext, root: Entity, factor: f32) !vo
     if (root.GetComponent(EntityComponents.TransformComponent)) |transform| {
         try root.SetTranslation(engine_context, transform.GetTranslation().MulScalar(factor));
     }
-    if (root.GetComponent(LayoutComponent)) |layout| {
+    if (root.GetComponentMut(LayoutComponent)) |layout| {
         layout.mGap *= factor;
         layout.mPadding = .{
             .Left = layout.mPadding.Left * factor,
@@ -830,20 +830,20 @@ pub fn ScaleSizes(engine_context: *EngineContext, root: Entity, factor: f32) !vo
             .Bottom = layout.mPadding.Bottom * factor,
         };
     }
-    if (root.GetComponent(LayoutItemComponent)) |item| {
+    if (root.GetComponentMut(LayoutItemComponent)) |item| {
         for ([_]*Layout.Sizing{ &item.mWidth, &item.mHeight }) |sizing| {
             if (sizing.* == .Fixed) sizing.* = .{ .Fixed = sizing.Fixed * factor };
         }
         if (item.mPlacement == .Anchored) item.mPlacement.Anchored.Offset = item.mPlacement.Anchored.Offset.MulScalar(factor);
     }
-    if (root.GetComponent(ShapeComponent)) |shape| {
-        if (shape.GetQuad()) |quad| {
+    if (root.GetComponentMut(ShapeComponent)) |shape| {
+        if (shape.GetQuadMut()) |quad| {
             quad.Size = quad.Size.MulScalar(factor);
             quad.CornerRadii = quad.CornerRadii.MulScalar(factor);
         }
     }
-    if (root.GetComponent(SurfaceComponent)) |surface| surface.mBorderWidth *= factor;
-    if (root.GetComponent(TextComponent)) |text| {
+    if (root.GetComponentMut(SurfaceComponent)) |surface| surface.mBorderWidth *= factor;
+    if (root.GetComponentMut(TextComponent)) |text| {
         text.mFontSize *= factor;
         text.mBounds = text.mBounds.MulScalar(factor);
     }
@@ -905,7 +905,7 @@ fn MenuRow(engine_context: *EngineContext, menu: Entity, text: []const u8) !Enti
     try UIManager.Style(engine_context, row, "Header");
     const label = try Label(engine_context, .{ .Entity = row }, text);
     //pushes what comes after it to the right
-    label.GetComponent(LayoutItemComponent).?.mWidth = .{ .Fill = 1 };
+    label.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fill = 1 };
     return row;
 }
 

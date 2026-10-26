@@ -83,7 +83,7 @@ const TestEngine = struct {
 };
 
 fn SetName(engine_context: *EngineContext, object: anytype, comptime name_t: type, name: []const u8) !void {
-    const name_list = &object.GetComponent(name_t).?.mName;
+    const name_list = &object.GetComponentMut(name_t).?.mName;
     name_list.clearRetainingCapacity();
     try name_list.appendSlice(engine_context.EngineAllocator(), name);
 }

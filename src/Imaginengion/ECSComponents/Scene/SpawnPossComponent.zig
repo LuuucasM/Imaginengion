@@ -58,7 +58,7 @@ fn ResolveEntityRef(requester: Serializer.Requester, entity_uuid: u64, _: u32) b
     const scene = requester.Scene;
     const entity = scene.mManager.GetObjectByUUID(Entity, entity_uuid) orelse return false;
     //the component may have been removed since the request was made, nothing left to resolve
-    const spawn_poss = scene.GetComponent(SpawnPossComponent) orelse return true;
+    const spawn_poss = scene.GetComponentMut(SpawnPossComponent) orelse return true;
     spawn_poss.mEntityRef = entity;
     return true;
 }

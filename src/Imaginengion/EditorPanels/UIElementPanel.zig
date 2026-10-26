@@ -131,7 +131,7 @@ fn TargetOf(selected: ?SelectedObject) Target {
 /// Puts `message` on the line, folded away while it says nothing
 fn ShowMessage(self: UIElementPanel, engine_context: *EngineContext, message: []const u8) !void {
     try WidgetActions.SetText(engine_context, self.mMessage, message);
-    const item = self.mMessage.GetComponent(LayoutItemComponent).?;
+    const item = self.mMessage.GetComponentMut(LayoutItemComponent).?;
     const hidden = message.len == 0;
     if (item.mCollapsed == hidden) return;
     item.mCollapsed = hidden;

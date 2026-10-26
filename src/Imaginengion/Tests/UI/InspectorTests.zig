@@ -96,7 +96,7 @@ fn FirstChild(entity: Entity) Entity {
 
 /// An edit to a number field: its value, and the ValueChanged it sends
 fn EditNumber(world: *TestWorld, field: Entity, value: f64) !void {
-    field.GetComponent(AttribComponent).?.mData.SetFromFloat(value);
+    field.GetComponentMut(AttribComponent).?.mData.SetFromFloat(value);
     try world.mEngineContext.mUIManager.SendToChain(world.mEngineContext, field, .ValueChanged);
     try world.ProcessUIEvents();
 }
@@ -123,7 +123,7 @@ test "numbers, vectors, bools and colors show their fields and write edits back,
     var ui = world.Builder(SurfaceComponent);
     try ui.Float(&surface.mBorderWidth, "Border Width", .{ .Convert = .{ .ToShown = Double, .FromShown = Half }, .OnChange = CountChange });
     var shape_ui = world.Builder(ShapeComponent);
-    try shape_ui.Vec2Field(&shape.GetQuad().?.Size, "Size", .{});
+    try shape_ui.Vec2Field(&shape.GetQuadMut().?.Size, "Size", .{});
     try ui.Bool(&surface.mShouldRender, "Should Render?", .{});
     try ui.Color(&surface.mBorderColor, "Border Color", .{});
 
@@ -137,7 +137,7 @@ test "numbers, vectors, bools and colors show their fields and write edits back,
     try std.testing.expectEqual(@as(usize, 1), gChanges);
 
     //a field changed by code: its widget catches up
-    world.mObject.GetComponent(ShapeComponent).?.GetQuad().?.Size.y = 9;
+    world.mObject.GetComponentMut(ShapeComponent).?.GetQuadMut().?.Size.y = 9;
     try world.ShowFields();
     var size_numbers = world.Widget(1).GetIterator(.Child);
     _ = size_numbers.next(); //the X box
@@ -160,7 +160,7 @@ test "numbers, vectors, bools and colors show their fields and write edits back,
     try WidgetActions.SetColor(engine_context, color, .{ .x = 0.5, .y = 0.25, .z = 1, .w = 1 });
     try world.ProcessUIEvents();
     try std.testing.expectEqual(@as(f32, 0.25), world.mObject.GetComponent(SurfaceComponent).?.mBorderColor.y);
-    world.mObject.GetComponent(SurfaceComponent).?.mBorderColor = .{ .x = 0, .y = 0, .z = 0, .w = 1 };
+    world.mObject.GetComponentMut(SurfaceComponent).?.mBorderColor = .{ .x = 0, .y = 0, .z = 0, .w = 1 };
     try world.ShowFields();
     try std.testing.expectEqual(@as(f32, 0), WidgetActions.ColorOf(color).x);
 }
@@ -191,7 +191,7 @@ test "an enum is a dropdown, text a text field, and a struct with no UIRender sh
     try std.testing.expect(!engine_context.mUIManager.mBindingSystem.TakeRebuild(world.mPanel));
 
     //set by code: shown without anyone hearing about it
-    world.mObject.GetComponent(ColliderComponent).?.mShape = .Sphere;
+    world.mObject.GetComponentMut(ColliderComponent).?.mShape = .Sphere;
     try world.ShowFields();
     try std.testing.expectEqualStrings("Sphere", UIManager.LabelOf(dropdown).?.GetComponent(TextComponent).?.mText.items);
     try std.testing.expect(!engine_context.mUIManager.mBindingSystem.TakeRebuild(world.mPanel));
@@ -215,7 +215,7 @@ test "a binding finds its field after the component has moved, and an edit sets 
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
-    const transform = world.mObject.GetComponent(TransformComponent).?;
+    const transform = world.mObject.GetComponentMut(TransformComponent).?;
     var ui = world.Builder(TransformComponent);
     try ui.Vec3Field(&transform._Translation, "Translation", .{});
 
@@ -241,7 +241,7 @@ test "typing a size into a quad layout sizes keeps it: that side of its layout i
     //a button's box: layout fitted it to 40 x 20
     _ = try world.mObject.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 40, .y = 20 } }));
     _ = try world.mObject.AddComponent(engine_context, LayoutItemComponent{ .mComputedSize = .{ .x = 40, .y = 20 } });
-    const quad = world.mObject.GetComponent(ShapeComponent).?.GetQuad().?;
+    const quad = world.mObject.GetComponentMut(ShapeComponent).?.GetQuadMut().?;
     var ui = world.Builder(ShapeComponent);
     try ui.Vec2Field(&quad.Size, "Size", .{});
     try world.ShowFields();

@@ -100,7 +100,7 @@ fn BuildWindow(self: *TmplEditPanel, engine_context: *EngineContext, camera_scen
 
     //the window's content scrolls, so the panes get a height of their own rather than filling it
     const split = try Widgets.Split(engine_context, .{ .Entity = window.Content }, .Row, .First, TREE_WIDTH, options);
-    split.Root.GetComponent(LayoutItemComponent).?.mHeight = .{ .Fixed = SIZE.y - ABOVE_PANES };
+    split.Root.GetComponentMut(LayoutItemComponent).?.mHeight = .{ .Fixed = SIZE.y - ABOVE_PANES };
     const tree_pane = split.First;
 
     const components_pane = if (self.PreviewScene() != null) blk: {

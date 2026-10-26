@@ -120,7 +120,7 @@ test "the name typed in and kept renames the game, not the project file" {
     const engine_context = engine.mEngineContext;
     const panel = &engine.mPanel;
 
-    try panel.mName.GetComponent(TextComponent).?.SetText(engine_context, "Space Pong");
+    try panel.mName.GetComponentMut(TextComponent).?.SetText(engine_context, "Space Pong");
     try panel.OnUIEvent(engine_context, .{ .mEntity = panel.mName, .mEvent = .{ .TextSubmitted = .{ .mTarget = panel.mName } } });
     try std.testing.expectEqualStrings("Space Pong", engine_context.mProject.GetName());
     try std.testing.expect(!std.mem.eql(u8, "Space Pong", std.fs.path.stem(engine_context.mProject.mFileName.items)));

@@ -45,7 +45,7 @@ pub fn Toggle(engine_context: *EngineContext, entity: Entity, mark: Entity) !voi
         try entity.RemoveComponentSync(engine_context, SelectedTag);
     }
     if (mark.IsActive()) {
-        if (mark.GetComponent(LayoutItemComponent)) |item| {
+        if (mark.GetComponentMut(LayoutItemComponent)) |item| {
             item.mCollapsed = !checked;
             try mark.MarkLayoutDirty(engine_context);
         }
@@ -123,7 +123,7 @@ pub fn ShowColor(color_field: Entity, color: Vec4(f32)) void {
     var children = color_field.GetIterator(.Child);
     while (children.next()) |child| {
         if (index == channels.len) break;
-        const attrib = child.GetComponent(AttribComponent) orelse continue;
+        const attrib = child.GetComponentMut(AttribComponent) orelse continue;
         attrib.mData.SetFromFloat(channels[index]);
         index += 1;
     }
@@ -134,7 +134,7 @@ pub fn ShowColor(color_field: Entity, color: Vec4(f32)) void {
 pub fn ShowChoice(engine_context: *EngineContext, dropdown: Entity, row: Entity) !void {
     const from = UIManager.LabelOf(row) orelse return;
     const to = UIManager.LabelOf(dropdown) orelse return;
-    try to.GetComponent(TextComponent).?.SetText(engine_context, from.GetComponent(TextComponent).?.mText.items);
+    try to.GetComponentMut(TextComponent).?.SetText(engine_context, from.GetComponent(TextComponent).?.mText.items);
     try to.MarkLayoutDirty(engine_context);
 }
 
@@ -173,7 +173,7 @@ pub const ARROW_FOLDED = ">";
 /// collapsing header's. uninit for no arrow. Nothing happens without content
 pub fn Fold(engine_context: *EngineContext, content: Entity, arrow: Entity) !void {
     if (!content.IsActive()) return;
-    const item = content.GetComponent(LayoutItemComponent) orelse try content.AddComponent(engine_context, LayoutItemComponent{});
+    const item = content.GetComponentMut(LayoutItemComponent) orelse try content.AddComponent(engine_context, LayoutItemComponent{});
     item.mCollapsed = !item.mCollapsed;
     const folded = item.mCollapsed;
     try content.MarkLayoutDirty(engine_context);
@@ -221,7 +221,7 @@ pub fn HoverMenuBarButton(engine_context: *EngineContext, button: Entity) !void 
 /// to be laid out again, so a label that already says it is left alone
 pub fn SetText(engine_context: *EngineContext, entity: Entity, text: []const u8) !void {
     const label = UIManager.LabelOf(entity) orelse return;
-    const text_component = label.GetComponent(TextComponent).?;
+    const text_component = label.GetComponentMut(TextComponent).?;
     if (std.mem.eql(u8, text_component.mText.items, text)) return;
     try text_component.SetText(engine_context, text);
     try label.MarkLayoutDirty(engine_context);
@@ -299,7 +299,7 @@ pub fn UpdateSwatch(color_field: Entity) void {
     while (children.next()) |child| {
         if (child.HasComponent(AttribComponent)) continue;
         if (!child.HasComponent(ShapeComponent)) continue;
-        const surface = child.GetComponent(SurfaceComponent) orelse continue;
+        const surface = child.GetComponentMut(SurfaceComponent) orelse continue;
         surface.mTexOptions.mColor = color;
         surface.mTexOptions.mIsTransparent = color.w < 1;
         return;
@@ -340,8 +340,8 @@ pub fn DragDivider(engine_context: *EngineContext, divider: Entity, delta: Vec3(
         .Grid => return,
     };
     if (moved == 0) return;
-    const first_item = first.GetComponent(LayoutItemComponent) orelse return;
-    const second_item = second.GetComponent(LayoutItemComponent) orelse return;
+    const first_item = first.GetComponentMut(LayoutItemComponent) orelse return;
+    const second_item = second.GetComponentMut(LayoutItemComponent) orelse return;
     const along_first = AlongAxis(first_item, direction);
     const along_second = AlongAxis(second_item, direction);
     const total = SizeAlong(first_item.mComputedSize, direction) + SizeAlong(second_item.mComputedSize, direction);
@@ -363,7 +363,7 @@ pub fn SelectTab(engine_context: *EngineContext, tab: Entity, page: Entity) !voi
         if (Parent(page)) |pages| {
             var children = pages.GetIterator(.Child);
             while (children.next()) |other| {
-                const item = other.GetComponent(LayoutItemComponent) orelse continue;
+                const item = other.GetComponentMut(LayoutItemComponent) orelse continue;
                 item.mCollapsed = other.mID != page.mID;
             }
             try pages.MarkLayoutDirty(engine_context);
@@ -407,7 +407,7 @@ pub fn RaiseWindow(engine_context: *EngineContext, window: Entity) !void {
 /// Moves a floating window by `delta` (how far its title bar was dragged): its anchored offset
 pub fn MoveWindow(engine_context: *EngineContext, window: Entity, delta: Vec3(f32)) !void {
     if (!window.IsActive()) return;
-    const item = window.GetComponent(LayoutItemComponent) orelse return;
+    const item = window.GetComponentMut(LayoutItemComponent) orelse return;
     switch (item.mPlacement) {
         .Anchored => |*anchoring| anchoring.Offset = .{ .x = anchoring.Offset.x + delta.x, .y = anchoring.Offset.y + delta.y },
         .Flow => return,
@@ -418,7 +418,7 @@ pub fn MoveWindow(engine_context: *EngineContext, window: Entity, delta: Vec3(f3
 /// Hides a floating window, through its layout item
 pub fn CloseWindow(engine_context: *EngineContext, window: Entity) !void {
     if (!window.IsActive()) return;
-    const item = window.GetComponent(LayoutItemComponent) orelse return;
+    const item = window.GetComponentMut(LayoutItemComponent) orelse return;
     if (item.mCollapsed) return;
     item.mCollapsed = true;
     try window.MarkLayoutDirty(engine_context);
@@ -426,7 +426,7 @@ pub fn CloseWindow(engine_context: *EngineContext, window: Entity) !void {
 
 /// Shows a floating window again, in front of the others
 pub fn OpenWindow(engine_context: *EngineContext, window: Entity) !void {
-    const item = window.GetComponent(LayoutItemComponent) orelse return;
+    const item = window.GetComponentMut(LayoutItemComponent) orelse return;
     if (item.mCollapsed) {
         item.mCollapsed = false;
         try window.MarkLayoutDirty(engine_context);

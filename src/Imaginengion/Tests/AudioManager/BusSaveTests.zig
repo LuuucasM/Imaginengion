@@ -84,7 +84,7 @@ fn LoadAudioSettings(engine: *TestEngine, contents: []const u8) !void {
 fn NewBus(engine: *TestEngine, parent: Bus, name: []const u8, volume: f32) !Bus {
     const engine_context = engine.mEngineContext;
     const bus = try parent.CreateChild(engine_context, .Entity, Bus.DefaultConfig);
-    const name_component = bus.GetComponent(VComponents.NameComponent).?;
+    const name_component = bus.GetComponentMut(VComponents.NameComponent).?;
     name_component.mName.clearRetainingCapacity();
     try name_component.mName.appendSlice(engine_context.EngineAllocator(), name);
     bus.SetVolume(volume);

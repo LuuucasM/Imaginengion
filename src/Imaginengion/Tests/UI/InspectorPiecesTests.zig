@@ -119,7 +119,7 @@ fn SetDegrees(world: *TestWorld, row: Entity, degrees: [3]f32) !void {
     var axis: usize = 0;
     var children = row.GetIterator(.Child);
     while (children.next()) |child| {
-        const attrib = child.GetComponent(AttribComponent) orelse continue;
+        const attrib = child.GetComponentMut(AttribComponent) orelse continue;
         attrib.mData.SetFromFloat(degrees[axis]);
         axis += 1;
     }
@@ -135,7 +135,7 @@ fn SameRotation(a: Quat(f32), b: Quat(f32)) bool {
 test "a rotation is shown in degrees, an edit is written from all three, and the numbers keep their own angles" {
     const world = try TestWorld.Init();
     defer world.Deinit();
-    const transform = world.mObject.GetComponent(TransformComponent).?;
+    const transform = world.mObject.GetComponentMut(TransformComponent).?;
     transform._Rotation = Quat(f32).FromDegrees(.{ .x = 0, .y = 45, .z = 0 });
     var ui = world.Builder(TransformComponent);
     try ui.Rotation(&transform._Rotation, "Rotation", .{});
@@ -152,7 +152,7 @@ test "a rotation is shown in degrees, an edit is written from all three, and the
     try std.testing.expectApproxEqAbs(@as(f32, 180), Degrees(row)[0], 0.01);
 
     //changed by something else: shown again
-    world.mObject.GetComponent(TransformComponent).?._Rotation = Quat(f32).FromDegrees(.{ .x = 0, .y = 0, .z = 90 });
+    world.mObject.GetComponentMut(TransformComponent).?._Rotation = Quat(f32).FromDegrees(.{ .x = 0, .y = 0, .z = 90 });
     try world.ShowFields();
     try std.testing.expectApproxEqAbs(@as(f32, 90), Degrees(row)[2], 0.01);
 }
@@ -196,7 +196,7 @@ test "a readout shows its field as it changes, a bit set is a checkbox a bit, an
     try uuid_ui.Readout(&uuid.ID, "UUID", ShowId);
     const shown = world.Part(0, 1);
     try std.testing.expectEqual(uuid.ID, try std.fmt.parseInt(u64, shown.GetComponent(TextComponent).?.mText.items, 10));
-    world.mObject.GetComponent(UUIDComponent).?.ID = 7;
+    world.mObject.GetComponentMut(UUIDComponent).?.ID = 7;
     try world.ShowFields();
     try std.testing.expectEqualStrings("7", shown.GetComponent(TextComponent).?.mText.items);
 

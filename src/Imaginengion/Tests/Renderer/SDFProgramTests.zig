@@ -134,7 +134,7 @@ test "a card with a round hole cut in it is solid around the hole, and nothing i
     const card = try world.Quad(null, ORIGIN, SQUARE_4, RED);
     try world.Merge(card);
     const hole = try world.Part(card, ORIGIN, .{ .x = 1, .y = 1 }, .{ .mOp = .Subtract });
-    hole.GetComponent(ShapeComponent).?.GetQuad().?.CornerRadii = .{ .x = 0.5, .y = 0.5, .z = 0.5, .w = 0.5 };
+    hole.GetComponentMut(ShapeComponent).?.GetQuadMut().?.CornerRadii = .{ .x = 0.5, .y = 0.5, .z = 0.5, .w = 0.5 };
 
     const compiled = try world.Compile(card);
     try std.testing.expectApproxEqAbs(@as(f32, 0.5), world.Eval(compiled, 0, 0).D, eps);
@@ -158,7 +158,7 @@ test "a merge's parts are its whole subtree, through entities with no shape, but
     _ = try held.AddComponent(engine_context, MainObjectComponent{});
     //hidden, so left out
     const hidden = try world.Quad(root, .{ .x = 0, .y = 10, .z = 0 }, .{ .x = 1, .y = 1 }, RED);
-    hidden.GetComponent(SurfaceComponent).?.mShouldRender = false;
+    hidden.GetComponentMut(SurfaceComponent).?.mShouldRender = false;
     //a part under a part
     const arm = try world.Quad(root, .{ .x = 0, .y = -5, .z = 0 }, .{ .x = 1, .y = 1 }, RED);
     _ = try world.Quad(arm, .{ .x = 0, .y = -5, .z = 0 }, .{ .x = 1, .y = 1 }, RED);

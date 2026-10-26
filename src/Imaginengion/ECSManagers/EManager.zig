@@ -50,6 +50,7 @@ pub const CreateChild = Core.CreateChild;
 pub const AddComponent = Core.AddComponent;
 
 pub const GetComponent = Core.GetComponent;
+pub const GetComponentMut = Core.GetComponentMut;
 
 pub const RemoveComponent = Core.RemoveComponent;
 pub const RemoveComponentSync = Core.RemoveComponentSync;

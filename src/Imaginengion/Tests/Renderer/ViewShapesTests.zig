@@ -277,7 +277,7 @@ test "everything under a mask is cut by it, through any depth, the mask itself i
     //a 4 x 2 mask at (10, 0), a child in it and a grandchild under that, and a quad outside it
     const region = try AddQuad(engine_context, level);
     try region.SetTranslation(engine_context, .{ .x = 10, .y = 0, .z = 0 });
-    region.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 4, .y = 2 };
+    region.GetComponentMut(ShapeComponent).?.GetQuadMut().?.Size = .{ .x = 4, .y = 2 };
     _ = try region.AddComponent(engine_context, MaskComponent{});
     const child = try QuadAt(engine_context, region, .{ .x = 0, .y = 0, .z = 1 }, .{ .x = 10, .y = 10 });
     const grandchild = try QuadAt(engine_context, child, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 1, .y = 1 });
@@ -308,7 +308,7 @@ test "a mask inside another is cut by both, and an overlay's is placed by its ca
     //x from 8 to 12, and inside it one from 9 to 13 and taller: what is kept is 9 to 12, the outer's height
     const outer = try AddQuad(engine_context, level);
     try outer.SetTranslation(engine_context, .{ .x = 10, .y = 0, .z = 0 });
-    outer.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 4, .y = 2 };
+    outer.GetComponentMut(ShapeComponent).?.GetQuadMut().?.Size = .{ .x = 4, .y = 2 };
     _ = try outer.AddComponent(engine_context, MaskComponent{});
     const inner = try QuadAt(engine_context, outer, .{ .x = 1, .y = 0, .z = 0 }, .{ .x = 4, .y = 4 });
     _ = try inner.AddComponent(engine_context, MaskComponent{});
@@ -317,7 +317,7 @@ test "a mask inside another is cut by both, and an overlay's is placed by its ca
     const hud = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const panel = try AddQuad(engine_context, hud);
     try panel.SetTranslation(engine_context, .{ .x = 100, .y = 50, .z = 0 });
-    panel.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 200, .y = 100 };
+    panel.GetComponentMut(ShapeComponent).?.GetQuadMut().?.Size = .{ .x = 200, .y = 100 };
     _ = try panel.AddComponent(engine_context, MaskComponent{});
     const row = try QuadAt(engine_context, panel, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 10, .y = 10 });
     try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
@@ -346,7 +346,7 @@ test "a subtract mask keeps what is outside it, and a mask with no shape leaves 
 
     //a 2 x 2 hole, and under it a mask with no shape
     const hole = try AddQuad(engine_context, level);
-    hole.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 2, .y = 2 };
+    hole.GetComponentMut(ShapeComponent).?.GetQuadMut().?.Size = .{ .x = 2, .y = 2 };
     _ = try hole.AddComponent(engine_context, MaskComponent{ .mOp = .Subtract });
     const shapeless = try hole.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     _ = try shapeless.AddComponent(engine_context, MaskComponent{});
@@ -422,7 +422,7 @@ test "a viewport quad covers its size times the pixels a canvas unit covers, and
 
     const overlay = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const viewport = try AddQuad(engine_context, overlay);
-    viewport.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 400, .y = 225 };
+    viewport.GetComponentMut(ShapeComponent).?.GetQuadMut().?.Size = .{ .x = 400, .y = 225 };
 
     //a constant pixel size world's overlay: a canvas unit is a pixel at the display's scale
     engine_context.mEditorWorld.mOverlayScaleMode = .ConstantPixelSize;
@@ -457,7 +457,7 @@ test "a ray through a viewport quad lands on the pixel of the picture under it, 
     //400 x 200 canvas units, centered at (100, 50), showing an 800 x 400 picture
     const overlay = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const quad = try AddQuad(engine_context, overlay);
-    quad.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 400, .y = 200 };
+    quad.GetComponentMut(ShapeComponent).?.GetQuadMut().?.Size = .{ .x = 400, .y = 200 };
     try quad.SetTranslation(engine_context, .{ .x = 100, .y = 50, .z = 0 });
     try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
     const picture = Vec2(f32){ .x = 800, .y = 400 };

@@ -287,7 +287,7 @@ pub const Builder = struct {
         const menu = try Widgets.ContextMenu(self.mEngineContext, shown, self.mOptions);
         const item = try Widgets.MenuItem(self.mEngineContext, menu, "Copy", .{ .StockScripts = self.mOptions.StockScripts });
         try self.Bind(item, field, access, null, null, false);
-        UIManager.GetUIComponent(item, FieldBindingComponent).?.mCopies = true;
+        UIManager.GetUIComponentMut(item, FieldBindingComponent).?.mCopies = true;
     }
 
     /// A set of bits (a std.StaticBitSet): a checkbox for each, as many to a row as fit, each named by Names or else
@@ -324,7 +324,7 @@ pub const Builder = struct {
         }
         const shown = if (accepts.len > 0) try Widgets.DropBox(self.mEngineContext, .{ .Entity = row }, "", &.{FileRefComponent}) else try Widgets.Label(self.mEngineContext, .{ .Entity = row }, "");
         try self.Bind(shown, field, AccessFor(AssetHandle), options.OnChange, null, options.Rebuilds);
-        UIManager.GetUIComponent(shown, FieldBindingComponent).?.mAccepts = accepts;
+        UIManager.GetUIComponentMut(shown, FieldBindingComponent).?.mAccepts = accepts;
         if (accepts.len > 0) try self.ClearMenu(shown, field, AccessFor(AssetHandle), .{ .Asset = .uninit }, options.OnChange);
     }
 
@@ -359,7 +359,7 @@ pub const Builder = struct {
         const box = try Widgets.DropBox(self.mEngineContext, .{ .Entity = row }, shown_name, &.{ObjectRefComponent});
         try self.Bind(box, field, access, null, null, false);
         if (options.Writes) {
-            UIManager.GetUIComponent(box, FieldBindingComponent).?.mTakes = kind;
+            UIManager.GetUIComponentMut(box, FieldBindingComponent).?.mTakes = kind;
             try self.ClearMenu(box, field, access, .{ .Ref = null }, null);
         }
         return box;
@@ -370,7 +370,7 @@ pub const Builder = struct {
         const menu = try Widgets.ContextMenu(self.mEngineContext, widget, self.mOptions);
         const item = try Widgets.MenuItem(self.mEngineContext, menu, "Clear", .{ .StockScripts = self.mOptions.StockScripts });
         try self.Bind(item, field, access, on_change, null, false);
-        UIManager.GetUIComponent(item, FieldBindingComponent).?.mClear = cleared;
+        UIManager.GetUIComponentMut(item, FieldBindingComponent).?.mClear = cleared;
     }
 
     /// Buttons side by side, one for each of `texts`, in their own row with no label. They do nothing when clicked:
@@ -505,7 +505,7 @@ pub const Builder = struct {
         _ = try row.AddComponent(engine_context, LayoutComponent{ .mDirection = .Row, .mGap = Widgets.PADDING, .mCrossAlign = .Center });
         _ = try row.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
         const shown_label = try Widgets.Label(engine_context, .{ .Entity = row }, label);
-        shown_label.GetComponent(LayoutItemComponent).?.mWidth = .{ .Fixed = LABEL_WIDTH };
+        shown_label.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fixed = LABEL_WIDTH };
         return row;
     }
 
@@ -588,7 +588,7 @@ fn ResolveFor(comptime object_type: type, comptime component_type: type) *const 
         fn Resolve(object: ObjectRef) ?*anyopaque {
             const typed = @field(object, ObjectTag(object_type));
             if (!typed.IsActive()) return null;
-            return @ptrCast(typed.GetComponent(component_type) orelse return null);
+            return @ptrCast(typed.GetComponentMut(component_type) orelse return null);
         }
     }.Resolve;
 }
@@ -635,7 +635,7 @@ fn AfterEditFor(comptime object_type: type, comptime component_type: type) *cons
 /// text changes, or its scene is opened). The side typed is the one that is no longer the size layout last gave it.
 /// True when that made a side Fixed, which changes the fields the LayoutItemComponent shows
 fn KeepQuadSize(engine_context: *EngineContext, entity: Entity) !bool {
-    const item = entity.GetComponent(LayoutItemComponent) orelse return false;
+    const item = entity.GetComponentMut(LayoutItemComponent) orelse return false;
     const quad = (entity.GetComponent(ShapeComponent) orelse return false).GetQuad() orelse return false;
     var made_fixed = false;
     if (quad.Size.x != item.mComputedSize.x) {

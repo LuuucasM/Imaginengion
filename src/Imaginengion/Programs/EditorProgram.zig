@@ -249,7 +249,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process
         .bAddMicComponent = false,
     });
     try self.mEditorUIEntity.SetTranslation(engine_context, Vec3(f32){ .x = 0.0, .y = 0.0, .z = 15.0 });
-    try self.mEditorUIPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context, engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
+    try self.mEditorUIPlayer.GetComponentMut(PlayerRenderComponent).?.SetViewportSize(engine_context, engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
     _ = try self.mEditorUIEntity.AddComponent(engine_context, PlayerSlotComponent{});
     _ = try self.mEditorUIEntity.AddComponent(engine_context, ViewpointComponent{});
     self.mEditorUIPlayer.Possess(self.mEditorUIEntity);
@@ -301,7 +301,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process
     });
     try self.mEditorViewportEntity.SetTranslation(engine_context, Vec3(f32){ .x = 0.0, .y = 0.0, .z = 15.0 });
     try self.mEditorViewportEntity.AddComponentScript(engine_context, "src/Imaginengion/EngineAssets/scripts/EditorCameraInput.zig", .Eng);
-    try self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context, engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
+    try self.mEditorViewportPlayer.GetComponentMut(PlayerRenderComponent).?.SetViewportSize(engine_context, engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
     _ = try self.mEditorViewportEntity.AddComponent(engine_context, PlayerSlotComponent{});
     _ = try self.mEditorViewportEntity.AddComponent(engine_context, ViewpointComponent{});
     self.mEditorViewportPlayer.Possess(self.mEditorViewportEntity);
@@ -1367,7 +1367,7 @@ pub const PlacedView = struct {
 /// `area` shown or hidden, and a viewport quad in it for each of `views` (made or deleted to match), each the share of
 /// the area it was last laid out at that its area rect asks for: split screen views side by side
 pub fn SyncViewQuads(engine_context: *EngineContext, area: Entity, quads: *std.ArrayList(Entity), views: []const PlacedView, shown: bool, name: []const u8) !void {
-    const area_item = area.GetComponent(LayoutItemComponent).?;
+    const area_item = area.GetComponentMut(LayoutItemComponent).?;
     if (area_item.mCollapsed == shown) {
         area_item.mCollapsed = !shown;
         try area.MarkLayoutDirty(engine_context);
@@ -1388,7 +1388,7 @@ pub fn SyncViewQuads(engine_context: *EngineContext, area: Entity, quads: *std.A
     }
 
     for (views, quads.items) |view, quad| {
-        quad.GetComponent(ViewportComponent).?.mPlayer = view.Player;
+        quad.GetComponentMut(ViewportComponent).?.mPlayer = view.Player;
         try SetLayoutItem(engine_context, quad, .{
             .mWidth = .{ .Fixed = view.Area.z * area_width },
             .mHeight = .{ .Fixed = view.Area.w * area_height },
@@ -1404,7 +1404,7 @@ fn TopLeftAt(right: f32, down: f32) Layout.Anchoring {
 
 /// Sets an entity's size, placement and whether it is collapsed, and asks for layout only if that changed it
 fn SetLayoutItem(engine_context: *EngineContext, entity: Entity, wanted: struct { mWidth: Layout.Sizing, mHeight: Layout.Sizing, mPlacement: Layout.Placement, mCollapsed: bool = false }) !void {
-    const item = entity.GetComponent(LayoutItemComponent).?;
+    const item = entity.GetComponentMut(LayoutItemComponent).?;
     var updated = item.*;
     updated.mWidth = wanted.mWidth;
     updated.mHeight = wanted.mHeight;
@@ -1419,9 +1419,9 @@ fn SetLayoutItem(engine_context: *EngineContext, entity: Entity, wanted: struct 
 fn RenderEditorUI(self: *EditorProgram, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("EditorProgram::RenderEditorUI", @src());
     defer zone.Deinit();
-    const render_component = self.mEditorUIPlayer.GetComponent(PlayerRenderComponent).?;
+    const render_component = self.mEditorUIPlayer.GetComponentMut(PlayerRenderComponent).?;
     const transform_component = self.mEditorUIEntity.GetComponent(TransformComponent).?;
-    const viewpoint_component = self.mEditorUIEntity.GetComponent(ViewpointComponent).?;
+    const viewpoint_component = self.mEditorUIEntity.GetComponentMut(ViewpointComponent).?;
 
     const width = engine_context.mAppWindow.GetWidth();
     const height = engine_context.mAppWindow.GetHeight();
@@ -1449,7 +1449,7 @@ fn RenderEditorUI(self: *EditorProgram, engine_context: *EngineContext) !void {
 fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("EditorProgram::RenderEditorTarget", @src());
     defer zone.Deinit();
-    const render_component = self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?;
+    const render_component = self.mEditorViewportPlayer.GetComponentMut(PlayerRenderComponent).?;
     const transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
     const viewpoint_component = self.mEditorViewportEntity.GetComponent(ViewpointComponent).?;
 

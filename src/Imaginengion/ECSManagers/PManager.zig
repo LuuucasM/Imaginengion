@@ -48,6 +48,7 @@ pub const clearAndFree = Core.clearAndFree;
 pub const Deinit = Core.Deinit;
 
 pub const GetComponent = Core.GetComponent;
+pub const GetComponentMut = Core.GetComponentMut;
 
 pub const RemoveComponent = Core.RemoveComponent;
 pub const RemoveComponentSync = Core.RemoveComponentSync;

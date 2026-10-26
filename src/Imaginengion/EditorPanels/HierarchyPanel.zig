@@ -403,7 +403,7 @@ pub fn HierarchyPanel(comptime T: type) type {
                 .Entity => |parent_entity| !parent_entity.HasComponent(LayoutComponent),
             };
             if (starts_tree) {
-                const item = entity.GetComponent(LayoutItemComponent).?;
+                const item = entity.GetComponentMut(LayoutItemComponent).?;
                 if (item.mWidth == .Fill) item.mWidth = .{ .Fixed = UI_TOP_WIDTH };
             }
             const unit = StyleSystem.ThemeUnit(entity);

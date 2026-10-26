@@ -29,6 +29,7 @@ pub fn Stop(self: Voice, engine_context: *EngineContext) !void {
 }
 
 pub const GetComponent = Core.GetComponent;
+pub const GetComponentMut = Core.GetComponentMut;
 pub const HasComponent = Core.HasComponent;
 pub const IsActive = Core.IsActive;
 pub const IsIDValid = Core.IsIDValid;
