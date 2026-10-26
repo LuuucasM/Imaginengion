@@ -9,6 +9,7 @@ const Scene = @import("../../ECSObjects/Scene.zig");
 const LayoutSystem = @import("../../UI/LayoutSystem.zig");
 const Layout = @import("../../UI/Layout.zig");
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
+const TransformSystem = @import("../../Physics/TransformSystem.zig");
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const LayoutComponent = EntityComponents.LayoutComponent;
@@ -189,7 +190,7 @@ test "laying out a tree that hasn't changed doesn't dirty any transforms" {
     const ui = try PongMenu.Build(engine_context, try world.DrawnOverlay());
     try ui.mMenu.MarkLayoutDirty(engine_context);
     try world.Update();
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
     try std.testing.expectEqual(@as(usize, 0), engine_context.mEditorWorld.NumEntitiesWith(TransformDirtyTag));
 
     try ui.mQuit.MarkLayoutDirty(engine_context);
@@ -599,7 +600,7 @@ test "a child laid out in a panel in the world is gathered for drawing where lay
     _ = try child.AddComponent(engine_context, SurfaceComponent{});
 
     try world.Update();
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     //the panel has no quad, so the child is all there is to draw: filling the panel, at its middle
     const shapes = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), &engine_context.mEditorWorld, ViewOf(1600, 900, 1), .{ .Overlays = &.{} }, ShapeGeometry.VISUALS_QUERY);

@@ -11,6 +11,7 @@ const Scene = @import("../../ECSObjects/Scene.zig");
 const ShapeGeometry = @import("../../Renderer/ShapeGeometry.zig");
 const CameraView = @import("../../Renderer/Renderer.zig").CameraView;
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
+const TransformSystem = @import("../../Physics/TransformSystem.zig");
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec2 = MathTypes.Vec2;
 const Vec3 = MathTypes.Vec3;
@@ -48,7 +49,7 @@ const TestWorld = struct {
     fn Build(self: *TestWorld) !*WorldBVH {
         const engine_context = self.mEngineContext;
         const world = &engine_context.mEditorWorld;
-        try PhysicsManager.UpdateWorldTransforms(world, engine_context);
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world.mEManager.mECSManager, .{world});
         try world.mBVH.BuildWith(engine_context, world, TestFonts{});
         return &world.mBVH;
     }
@@ -274,7 +275,7 @@ test "a letter's box in canvas units, placed by a view's canvas, is the box that
     const hud = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const text = try AddText(engine_context, hud, "AA", .{ .x = 120, .y = -40, .z = 0 });
     try text.SetScale(engine_context, .{ .x = 3, .y = 2, .z = 1 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     const view = CameraView{
         .Pose = .{ .Position = .{ .x = 4, .y = 1, .z = 7 }, .Rotation = .{ .w = 0.9238795, .x = 0, .y = 0.3826834, .z = 0 } },
@@ -343,7 +344,7 @@ test "a refit follows what has moved, and every box above it still holds it" {
     try moved.SetTranslation(engine_context, .{ .x = 100, .y = -30, .z = 5 });
     try ball.SetTranslation(engine_context, .{ .x = -40, .y = 0, .z = 0 });
     try sign.SetTranslation(engine_context, .{ .x = 0, .y = 60, .z = 0 });
-    try PhysicsManager.UpdateWorldTransforms(editor_world, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &editor_world.mEManager.mECSManager, .{editor_world});
     bvh.Refit(engine_context, editor_world, WorldBVH.ALL_ITEMS);
 
     //the same tree, its boxes moved
@@ -382,7 +383,7 @@ test "a physics refit places only colliders again, and the tree still holds ever
 
     //everything moves, only the collider is placed again
     for ([_]Entity{ rock, sign, ball }) |entity| try entity.SetTranslation(engine_context, .{ .x = 50, .y = 50, .z = 0 });
-    try PhysicsManager.UpdateWorldTransforms(editor_world, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &editor_world.mEManager.mECSManager, .{editor_world});
     bvh.Refit(engine_context, editor_world, BVH.Mask.PHYSICS);
 
     try ExpectNear(.{ .x = 50, .y = 50, .z = 0 }, tree.mBVHItems.items[IndexOf(tree, ball)].Bounds.Center());
@@ -419,7 +420,7 @@ test "a physics step keeps a moving body's collider in the tree where its last s
     const tree = &bvh.mGame;
     try editor_world.OnPhysicsUpdate(engine_context);
     //the last substep's move, which the tree hasn't seen
-    try PhysicsManager.UpdateWorldTransforms(editor_world, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &editor_world.mEManager.mECSManager, .{editor_world});
 
     //refit at the start of every substep, before the bodies move: one substep behind where the ball ended up
     const ball_y = ball.GetComponent(TransformComponent).?.GetWorldPosition().y;
@@ -491,7 +492,7 @@ test "a text's click box is the whole text area, the same box picking tests, and
     try std.testing.expectEqual(expected, tree.mBVHItems.items[text_ind.?].Bounds);
 
     try sign.SetTranslation(engine_context, .{ .x = -20, .y = 1, .z = 0 });
-    try PhysicsManager.UpdateWorldTransforms(editor_world, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &editor_world.mEManager.mECSManager, .{editor_world});
     bvh.Refit(engine_context, editor_world, BVH.Mask.PICK);
     const moved = WorldBVH.BoxBounds(ShapeGeometry.TextBox(TestFont, transform, text, &TEST_FONT, null));
     try std.testing.expectEqual(moved, tree.mBVHItems.items[text_ind.?].Bounds);

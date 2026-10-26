@@ -5,6 +5,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
+const TransformSystem = @import("../../Physics/TransformSystem.zig");
 const RayCast = @import("../../Physics/RayCast.zig");
 const ShapeGeometry = @import("../../Renderer/ShapeGeometry.zig");
 const CameraView = @import("../../Renderer/Renderer.zig").CameraView;
@@ -127,7 +128,7 @@ test "the nearest game quad is hit" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const near = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -10 }, .{ .x = 4, .y = 4 });
     _ = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -20 }, .{ .x = 4, .y = 4 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     const hit = try Cast(engine_context, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{});
     try ExpectEntity(near, hit);
@@ -147,7 +148,7 @@ test "an overlay quad wins over a nearer game quad" {
     _ = try AddQuad(engine_context, game_scene, .{ .x = 0, .y = 0, .z = -5 }, .{ .x = 4, .y = 4 });
     const overlay_scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const overlay_quad = try AddQuad(engine_context, overlay_scene, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 100, .y = 100 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     const hit = try Cast(engine_context, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{});
     try ExpectEntity(overlay_quad, hit);
@@ -164,7 +165,7 @@ test "an overlay the view doesn't show can't be hit" {
     //e.g. another player's HUD, right over the middle of the screen
     const overlay_scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const overlay_quad = try AddQuad(engine_context, overlay_scene, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 100, .y = 100 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     const ray = CenterRay(ORIGIN_POSE);
     try ExpectEntity(game_quad, try CastIn(engine_context, .{ .Overlays = &.{} }, ORIGIN_POSE, ray, .{}));
@@ -180,7 +181,7 @@ test "of two overlays over the same spot, only the one the view shows is hit" {
     const quad_a = try AddQuad(engine_context, hud_a, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 100, .y = 100 });
     const hud_b = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const quad_b = try AddQuad(engine_context, hud_b, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 100, .y = 100 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     const ray = CenterRay(ORIGIN_POSE);
     try ExpectEntity(quad_a, try CastIn(engine_context, .{ .Overlays = &.{hud_a.mID} }, ORIGIN_POSE, ray, .{}));
@@ -196,7 +197,7 @@ test "a hidden quad can't be hit" {
     const hidden = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -10 }, .{ .x = 4, .y = 4 });
     hidden.GetComponentMut(SurfaceComponent).?.mShouldRender = false;
     const behind = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -20 }, .{ .x = 4, .y = 4 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     try ExpectEntity(behind, try Cast(engine_context, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{}));
 }
@@ -208,7 +209,7 @@ test "a quad past the far distance can't be hit" {
 
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     _ = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -2000 }, .{ .x = 400, .y = 400 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     try std.testing.expect(try Cast(engine_context, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{}) == null);
 }
@@ -220,7 +221,7 @@ test "an overlay quad stays under the same pixel when the camera moves" {
 
     const overlay_scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const quad = try AddQuad(engine_context, overlay_scene, .{ .x = 300, .y = 200, .z = 0 }, .{ .x = 40, .y = 40 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     //scale with screen at 900 tall: 900 / 1080 pixels per canvas unit
     const k = OverlayCanvas.PixelsPerUnit(.ScaleWithScreen, HEIGHT, 1);
@@ -243,7 +244,7 @@ test "colliders are only hit when asked for" {
 
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const sphere = try AddCollider(engine_context, scene, .{ .x = 0, .y = 0, .z = -10 }, .{ .mShape = .Sphere, .mRadius = 0.5 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     //nothing is drawn there, so a visuals cast goes straight through
     try std.testing.expect(try Cast(engine_context, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{}) == null);
@@ -264,7 +265,7 @@ test "box colliders are hit as the rotated box" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const box = try AddCollider(engine_context, scene, .{ .x = 0, .y = 0, .z = -10 }, .{ .mShape = .Box, .mBoxSize = .{ .x = 2, .y = 1, .z = 2 } });
     try box.SetRotation(engine_context, Quat(f32).FromAxisAngle(.{ .x = 0, .y = 1, .z = 0 }, std.math.degreesToRadians(@as(f32, 45.0))));
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     const hit = try Cast(engine_context, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{ .Targets = .Colliders });
     try ExpectEntity(box, hit);
@@ -278,7 +279,7 @@ test "a ray starting inside a collider only hits it when asked to" {
 
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const around = try AddCollider(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, .{ .mShape = .Box, .mBoxSize = .{ .x = 4, .y = 4, .z = 4 } });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     try std.testing.expect(try Cast(engine_context, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{ .Targets = .Colliders }) == null);
 
@@ -295,7 +296,7 @@ test "nothing under the ray is no hit" {
 
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     _ = try AddQuad(engine_context, scene, .{ .x = 50, .y = 0, .z = -10 }, .{ .x = 4, .y = 4 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     try std.testing.expect(try Cast(engine_context, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{}) == null);
 }
@@ -358,7 +359,7 @@ test "a click in a rounded quad's cut off corner goes through it" {
     const rounded = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -10 }, .{ .x = 4, .y = 4 });
     rounded.GetComponentMut(ShapeComponent).?.GetQuadMut().?.CornerRadii = .{ .x = 1, .y = 1, .z = 1, .w = 1 };
     const behind = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -20 }, .{ .x = 40, .y = 40 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     //straight down at points in front of the camera, so each ray only moves in z
     const down = Vec3(f32){ .x = 0, .y = 0, .z = -1 };
@@ -382,7 +383,7 @@ test "a click on the part of a shape its mask cuts off goes through to what is b
     _ = try content.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 10, .y = 10 } }));
     _ = try content.AddComponent(engine_context, SurfaceComponent{});
     const behind = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -20 }, .{ .x = 40, .y = 40 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     const down = Vec3(f32){ .x = 0, .y = 0, .z = -1 };
     try ExpectEntity(content, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = 1, .y = 1, .z = 0 }, .Dir = down }, .{}));
@@ -414,7 +415,7 @@ test "a click in the hole a subtract mask cuts, or past a rounded mask's corner,
     _ = try holed.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 10, .y = 10 } }));
     _ = try holed.AddComponent(engine_context, SurfaceComponent{});
     const behind = try AddQuad(engine_context, scene, .{ .x = 10, .y = 0, .z = -20 }, .{ .x = 100, .y = 100 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     //inside the rounded mask's corner curve, and just past it
     try ExpectEntity(cut, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = 1.5, .y = 1.5, .z = 0 }, .Dir = down }, .{}));
@@ -451,7 +452,7 @@ test "a merge is clicked as its root where its program says, its holes and what 
     _ = try hole.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 0.4, .y = 0.4 } }));
     _ = try hole.AddComponent(engine_context, EntityComponents.CombineOpComponent{ .mOp = .Subtract });
     const behind = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -20 }, .{ .x = 100, .y = 100 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
 
     const down = Vec3(f32){ .x = 0, .y = 0, .z = -1 };
     //a part, and the filled in gap between the two: the root either way

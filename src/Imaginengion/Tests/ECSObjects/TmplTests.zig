@@ -43,6 +43,7 @@ const ECSEventData = @import("../../Events/ECSEventData.zig");
 const EntityAsset = @import("../../ECSComponents/AComponents.zig").EntityAsset;
 const TmplEditPanel = @import("../../EditorPanels/TmplEditPanel.zig");
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
+const TransformSystem = @import("../../Physics/TransformSystem.zig");
 const GroupQuery = @import("../../ECS/ECSManager.zig").GroupQuery;
 const ViewpointComponent = EntityComponents.ViewpointComponent;
 const UIElementComponent = EntityComponents.UIElementComponent;
@@ -1068,7 +1069,7 @@ test "moving something in an open template updates where the transform pass puts
 
     const sword = FirstChild(panel.mRoot.entity);
     try sword.SetTranslation(engine_context, .{ .x = 3.0, .y = 0.0, .z = 0.0 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mTmplEditWorld, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mTmplEditWorld.mEManager.mECSManager, .{&engine_context.mTmplEditWorld});
     try std.testing.expectEqual(@as(f32, 3.0), sword.GetComponent(TransformComponent).?.GetWorldPosition().x);
 
     try panel.Close(engine_context);

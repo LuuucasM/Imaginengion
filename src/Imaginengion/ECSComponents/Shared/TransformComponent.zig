@@ -30,7 +30,7 @@ pub const empty: TransformComponent = .{
 
 //the local transform is private so that every write goes through Entity's setters, which are
 //what add the TransformDirtyComponent tag. A direct write here would leave the entity untagged
-//and UpdateWorldTransforms would never recompute its world transform. Reads are free: use the
+//and TransformSystem would never recompute its world transform. Reads are free: use the
 //Get* accessors, or GetWorld* for the value the last transform pass produced.
 _Translation: Vec3(f32) = .{ .x = 0.0, .y = 0.0, .z = 0.0 },
 _Rotation: Quat(f32) = .{ .w = 1.0, .x = 0.0, .y = 0.0, .z = 0.0 },
@@ -52,7 +52,7 @@ pub fn GetScale(self: TransformComponent) Vec3(f32) {
 
 /// Writes the local transform without tagging the entity. Entity's SetTranslation/SetRotation/
 /// SetScale call this and then add the tag; nothing else should, because an untagged write is
-/// invisible to UpdateWorldTransforms.
+/// invisible to TransformSystem.
 pub fn _SetLocalUntagged(self: *TransformComponent, translation: Vec3(f32), rotation: Quat(f32), scale: Vec3(f32)) void {
     self._Translation = translation;
     self._Rotation = rotation;

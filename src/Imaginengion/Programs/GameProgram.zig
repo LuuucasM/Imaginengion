@@ -16,6 +16,7 @@ const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 const RayCast = @import("../Physics/RayCast.zig");
 const PhysicsManager = @import("../Physics/PhysicsManager.zig");
+const TransformSystem = @import("../Physics/TransformSystem.zig");
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
 const UIManager = @import("../UI/UIManager.zig");
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
@@ -255,7 +256,7 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
     {
         const world_transform_zone = Tracy.ZoneInit("World Transform Update Section", @src());
         defer world_transform_zone.Deinit();
-        try game_world.RunSystem(engine_context, PhysicsManager.TransformSystem);
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &game_world.mEManager.mECSManager, .{game_world});
     }
     //---------------End World Transform Update ------------
 

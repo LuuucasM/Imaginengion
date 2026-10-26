@@ -15,7 +15,7 @@ const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const Entity = @import("../ECSObjects/Entity.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const SkipField = @import("../Core/SkipField.zig").StaticSkipField;
-const UpdateWorldTransforms = @import("PhysicsManager.zig").UpdateWorldTransforms;
+const TransformSystem = @import("TransformSystem.zig");
 const PhysicsEventManager = @import("PhysicsManager.zig").EventManagerT;
 const SUB_STEP_DT = @import("PhysicsManager.zig").SUB_STEP_DT;
 const WorldBVH = @import("../Core/WorldBVH.zig");
@@ -623,7 +623,7 @@ pub fn CorrectPositions(self: *CollisionManager, world_manager: *WorldManager, e
 
         try MoveAlongNormal(engine_context, contact, q_rb_origin, q_rb_target, distance);
     }
-    try UpdateWorldTransforms(world_manager, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world_manager.mEManager.mECSManager, .{world_manager});
 }
 
 pub fn PostsolverPass(self: *CollisionManager, engine_context: *EngineContext) !void {

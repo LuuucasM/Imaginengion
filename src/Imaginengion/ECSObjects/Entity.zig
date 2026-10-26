@@ -169,7 +169,7 @@ pub fn AddScript(self: Entity, engine_context: *EngineContext, new_script_handle
 }
 
 /// The only supported way to write an entity's local transform. Each one tags the entity so the
-/// next UpdateWorldTransforms pass picks it up; that is why TransformComponent's local fields are
+/// next TransformSystem pass picks it up; that is why TransformComponent's local fields are
 /// private. An entity with no TransformComponent is a no-op, matching GetComponent returning null.
 pub fn SetTranslation(self: Entity, engine_context: *EngineContext, translation: Vec3(f32)) !void {
     const transform = self.GetComponentMut(TransformComponent) orelse return;

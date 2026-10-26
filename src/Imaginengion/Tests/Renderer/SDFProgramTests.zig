@@ -8,6 +8,7 @@ const Scene = @import("../../ECSObjects/Scene.zig");
 const SDFProgram = @import("../../Renderer/SDFProgram.zig");
 const SDFCompiler = @import("../../Renderer/SDFCompiler.zig");
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
+const TransformSystem = @import("../../Physics/TransformSystem.zig");
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec2 = MathTypes.Vec2;
 const Vec3 = MathTypes.Vec3;
@@ -82,7 +83,7 @@ const TestWorld = struct {
 
     fn Compile(self: *TestWorld, root: Entity) !SDFCompiler.Compiled {
         const engine_context = self.mEngineContext;
-        try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
         return SDFCompiler.Compile(engine_context.EngineAllocator(), root, null, &self.mPrograms);
     }
 

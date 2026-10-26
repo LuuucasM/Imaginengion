@@ -22,7 +22,7 @@ const GameLayerTag = EntityComponents.GameLayerTag;
 
 const Collisions = @import("Collisions.zig");
 const CollisionMask = @import("CollisionMask.zig");
-const UpdateWorldTransforms = @import("PhysicsManager.zig").UpdateWorldTransforms;
+const TransformSystem = @import("TransformSystem.zig");
 
 const RayIntersect = @import("../Math/RayIntersect.zig");
 const HitInfo = RayIntersect.HitInfo;
@@ -98,7 +98,7 @@ pub fn ShapeCast(engine_context: *EngineContext, world: *WorldManager, shape: Ca
 
     //anything moved since the tree was last refit, whatever moved it: a script teleporting a body, the last substep
     if (world.NumEntitiesWith(TransformDirtyTag) > 0) {
-        try UpdateWorldTransforms(world, engine_context);
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world.mEManager.mECSManager, .{world});
         world.mBVH.Refit(engine_context, world, BVH.Mask.PHYSICS);
     }
 
@@ -139,7 +139,7 @@ pub fn ShapeCast(engine_context: *EngineContext, world: *WorldManager, shape: Ca
 /// ShapeCast by testing every collider of the layer, with no tree: what ShapeCast's hits are checked against in the
 /// tests. Never called by the engine, so it isn't compiled into it
 pub fn ShapeCastLinear(engine_context: *EngineContext, world: *WorldManager, shape: CastShape, ray: Ray, options: QueryOptions) !?PhysicsHit {
-    try UpdateWorldTransforms(world, engine_context);
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world.mEManager.mECSManager, .{world});
     const filter = Filter.Init(options);
     const colliders = try world.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
     var nearest: RayIntersect.NearestHit(Entity) = .{};

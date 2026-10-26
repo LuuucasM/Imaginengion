@@ -16,6 +16,7 @@ const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
 
 const PhysicsManager = @import("../Physics/PhysicsManager.zig");
+const TransformSystem = @import("../Physics/TransformSystem.zig");
 const RayCast = @import("../Physics/RayCast.zig");
 
 const Assets = @import("../ECSComponents/AComponents.zig");
@@ -504,12 +505,12 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const world_transform_zone = Tracy.ZoneInit("World Transform Update Section", @src());
         defer world_transform_zone.Deinit();
-        try engine_context.mGameWorld.RunSystem(engine_context, PhysicsManager.TransformSystem);
-        try engine_context.mEditorWorld.RunSystem(engine_context, PhysicsManager.TransformSystem);
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mGameWorld.mEManager.mECSManager, .{&engine_context.mGameWorld});
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
         //templates open for editing, so their previews show where things have been moved to
-        try engine_context.mTmplEditWorld.RunSystem(engine_context, PhysicsManager.TransformSystem);
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mTmplEditWorld.mEManager.mECSManager, .{&engine_context.mTmplEditWorld});
         if (self.mEditorState == .Play) {
-            try engine_context.mSimulateWorld.RunSystem(engine_context, PhysicsManager.TransformSystem);
+            try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mSimulateWorld.mEManager.mECSManager, .{&engine_context.mSimulateWorld});
         }
     }
     //---------------End World Transform Update ------------

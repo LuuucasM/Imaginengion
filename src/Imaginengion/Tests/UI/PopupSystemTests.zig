@@ -11,6 +11,7 @@ const UIEvent = @import("../../Events/UIEventData.zig").UIEvent;
 const Vec2 = @import("../../Math/MathTypes.zig").Vec2;
 const LayoutSystem = @import("../../UI/LayoutSystem.zig");
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
+const TransformSystem = @import("../../Physics/TransformSystem.zig");
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const UIComponents = @import("../../ECSComponents/UIComponents.zig");
@@ -105,7 +106,7 @@ const TestWorld = struct {
         try LayoutSystem.UpdateLayouts(world, engine_context);
         try engine_context.mUIManager.mPopupSystem.Update(engine_context, world);
         try engine_context.mUIManager.mFocusSystem.Update(engine_context);
-        try PhysicsManager.UpdateWorldTransforms(world, engine_context);
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world.mEManager.mECSManager, .{world});
     }
 
     /// A left press over `target`, handed out like the editor does: pointer, then popups, then focus

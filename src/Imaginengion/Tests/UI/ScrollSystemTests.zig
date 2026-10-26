@@ -10,6 +10,7 @@ const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const LayoutSystem = @import("../../UI/LayoutSystem.zig");
 const ScrollSystem = @import("../../UI/ScrollSystem.zig");
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
+const TransformSystem = @import("../../Physics/TransformSystem.zig");
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const MaskComponent = EntityComponents.MaskComponent;
@@ -88,7 +89,7 @@ const TestWorld = struct {
         const world = &engine_context.mEditorWorld;
         try LayoutSystem.UpdateLayouts(world, engine_context);
         try engine_context.mUIManager.mScrollSystem.Update(engine_context, world);
-        try PhysicsManager.UpdateWorldTransforms(world, engine_context);
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world.mEManager.mECSManager, .{world});
     }
 
     fn Wheel(self: *TestWorld, over: Entity, notches_x: f32, notches_y: f32) !void {
