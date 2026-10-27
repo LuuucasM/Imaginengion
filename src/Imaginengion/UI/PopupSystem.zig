@@ -33,6 +33,11 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const UIManager = @import("UIManager.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
 const PopupComponent = @import("../ECSComponents/UIComponents.zig").PopupComponent;
+const ElementOwnerComponent = @import("../ECSComponents/UIComponents.zig").ElementOwnerComponent;
+const UIElementComponent = EntityComponents.UIElementComponent;
+const Systems = @import("../ECS/Systems.zig");
+const EECS = @import("../ECSManagers/EManager.zig").ECSManagerT;
+const SManager = @import("../ECSManagers/SManager.zig");
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
@@ -193,29 +198,57 @@ pub fn OnPressed(self: *PopupSystem, engine_context: *EngineContext, pointer: *c
 }
 
 /// Once a frame, after layout and before world transforms: places each open popup against what opened it, and lets
-/// go of popups that have been deleted. In `world`, every popup that isn't open is kept closed, so they all start
-/// closed however they were saved
-pub fn Update(self: *PopupSystem, engine_context: *EngineContext, world: *WorldManager) !void {
-    const zone = Tracy.ZoneInit("PopupSystem::Update", @src());
-    defer zone.Deinit();
-    //one deleted, and the ones opened from it go with it
-    for (self.mOpen.items, 0..) |open, index| {
-        if (!open.mPopup.IsActive()) {
-            try self.CloseAbove(engine_context, index);
-            break;
+/// go of popups that have been deleted. In `worlds`, the ones whose UI is in use, every popup that isn't open is kept
+/// closed, so they all start closed however they were saved. A system run once over all of them, from the UI's ECS:
+///
+///     try engine_context.mSystems.RunSystem(PopupSystem.Update, engine_context, &ui.mECSManager, .{ &ui.mPopupSystem, worlds });
+pub const Update = struct {
+    pub const Name = "PopupUpdate";
+    pub const Reads = &.{
+        PopupComponent,
+        ElementOwnerComponent,
+        //where an opener is and how big
+        Systems.In(EECS, UIElementComponent),
+        Systems.In(EECS, EntityComponents.ShapeComponent),
+        //an overlay popup is kept on its scene's screen
+        Systems.In(EECS, EntitySceneComponent),
+        Systems.In(SManager.ECSManagerT, SceneComponent),
+        //whether layout places it (Entity.SetTranslation)
+        Systems.In(EECS, EntityComponents.LayoutComponent),
+    };
+    pub const Writes = &.{
+        //a popup is opened and closed through its item's mCollapsed
+        Systems.In(EECS, LayoutItemComponent),
+        Systems.In(EECS, TransformComponent),
+    };
+
+    pub fn Run(engine_context: *EngineContext, self: *PopupSystem, worlds: []const *WorldManager) !void {
+        //one deleted, and the ones opened from it go with it
+        for (self.mOpen.items, 0..) |open, index| {
+            if (!open.mPopup.IsActive()) {
+                try self.CloseAbove(engine_context, index);
+                break;
+            }
         }
-    }
 
-    const ui_manager = &engine_context.mUIManager;
-    const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = PopupComponent });
-    for (element_ids.items) |element_id| {
-        const popup = (UIElement{ .mID = element_id, .mManager = ui_manager }).GetOwner();
-        //an element no entity has taken yet has nothing to compare
-        if (!popup.IsIDValid() or popup.mManager != world or !popup.IsActive()) continue;
-        if (!self.IsOpen(popup)) try SetCollapsed(engine_context, popup, true);
-    }
+        const ui_manager = &engine_context.mUIManager;
+        const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = PopupComponent });
+        for (element_ids.items) |element_id| {
+            const popup = (UIElement{ .mID = element_id, .mManager = ui_manager }).GetOwner();
+            //an element no entity has taken yet has nothing to compare
+            if (!popup.IsIDValid() or !InWorlds(worlds, popup) or !popup.IsActive()) continue;
+            if (!self.IsOpen(popup)) try SetCollapsed(engine_context, popup, true);
+        }
 
-    for (self.mOpen.items) |open| try Place(engine_context, open);
+        for (self.mOpen.items) |open| try Place(engine_context, open);
+    }
+};
+
+fn InWorlds(worlds: []const *WorldManager, entity: Entity) bool {
+    for (worlds) |world| {
+        if (entity.mManager == world) return true;
+    }
+    return false;
 }
 
 /// Moves the popup's root to where its PopupComponent pins it against what opened it. Uses the size layout gave it

@@ -12,9 +12,13 @@
 //!   - its own TextComponent's bounds, for a leaf, whose text is what it fits to
 //!   - LayoutItemComponent.mComputedSize
 //!
-//! Runs before the transform pass each frame, which picks up the translations it set.
+//! Runs before the transform pass each frame, which picks up the translations it set. A system run from the world's
+//! entity ECS:
+//!
+//!     try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &world.mEManager.mECSManager, .{world});
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
+const Systems = @import("../ECS/Systems.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -42,13 +46,31 @@ const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Ent
 const SceneComponent = @import("../ECSComponents/SComponents.zig").SceneComponent;
 const TextAsset = @import("../ECSComponents/AComponents.zig").TextAsset;
 const EManager = @import("../ECSManagers/EManager.zig");
+const SManager = @import("../ECSManagers/SManager.zig");
+const UIElementComponent = EntityComponents.UIElementComponent;
 const EventResult = @import("../Events/EventManager.zig").EventResult;
 
-/// Lays out every tree in `world` that has a dirty entity in it, each once however many of its entities are dirty
-pub fn UpdateLayouts(world: *WorldManager, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("LayoutSystem::UpdateLayouts", @src());
-    defer zone.Deinit();
+pub const Name = "Layout";
+pub const Reads = &.{
+    LayoutComponent,
+    //an overlay root's scene, and the screen area it records (SceneComponent.mLayoutArea)
+    EntitySceneComponent,
+    Systems.In(SManager.ECSManagerT, SceneComponent),
+    //a container's scrolling, from its UI element
+    UIElementComponent,
+    Systems.In(UIManager.ECSManagerT, ScrollComponent),
+};
+pub const Writes = &.{
+    LayoutItemComponent,
+    TransformComponent,
+    //a quad's size, as the element's background
+    EntityComponents.ShapeComponent,
+    TextComponent,
+    Systems.In(UIManager.ECSManagerT, ScrollStateComponent),
+};
 
+/// Lays out every tree in `world` that has a dirty entity in it, each once however many of its entities are dirty
+pub fn Run(engine_context: *EngineContext, world: *WorldManager) !void {
     const frame_allocator = engine_context.FrameAllocator();
     const dirty_ids = try world.GetEntityGroup(frame_allocator, .{ .Component = LayoutDirtyTag });
 
@@ -175,7 +197,7 @@ pub fn OnEntityDestroyed(engine_context: *EngineContext, entity: Entity) !void {
 
 /// Lays out the tree under `root` and clears the dirty tag from all of it. An overlay tree whose scene hasn't been
 /// drawn yet has no screen to fit into, so it keeps its tags and waits for the frame after its first draw
-pub fn LayoutTree(root: Entity, engine_context: *EngineContext) !void {
+fn LayoutTree(root: Entity, engine_context: *EngineContext) !void {
     const frame_allocator = engine_context.FrameAllocator();
 
     const root_area: ?Vec2(f32) = switch (root.GetLayer()) {

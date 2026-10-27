@@ -39,13 +39,17 @@ const TestWorld = struct {
         const self = try std.heap.page_allocator.create(TestWorld);
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         self.mEngineContext.* = .{};
+        try self.mEngineContext.mUIManager.Init(self.mEngineContext);
         try self.mEngineContext.mEditorWorld.Init(self.mEngineContext);
+        //the editor's own UI is in use, which layout reads scrolling from
+        try self.mEngineContext.mEditorWorld.ConnectTo(self.mEngineContext, &self.mEngineContext.mUIManager.mECSManager);
         return self;
     }
 
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
         engine_context.mEditorWorld.Deinit(engine_context);
+        engine_context.mUIManager.Deinit(engine_context);
         _ = engine_context._Internal.EngineGPA.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -60,7 +64,7 @@ const TestWorld = struct {
     }
 
     fn Update(self: *TestWorld) !void {
-        try LayoutSystem.UpdateLayouts(&self.mEngineContext.mEditorWorld, self.mEngineContext);
+        try self.mEngineContext.mSystems.RunSystem(LayoutSystem, self.mEngineContext, &self.mEngineContext.mEditorWorld.mEManager.mECSManager, .{&self.mEngineContext.mEditorWorld});
     }
 
     /// EditorProgram.OnUpdate's end of frame for the editor world, where queued removals and deletes happen

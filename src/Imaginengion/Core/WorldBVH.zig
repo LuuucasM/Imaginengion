@@ -8,19 +8,16 @@
 //! passes over what isn't its own: a view over scenes it doesn't show, physics over what is only drawn.
 const std = @import("std");
 const Tracy = @import("Tracy.zig");
-const EngineContext = @import("EngineContext.zig");
 const WorldManager = @import("WorldManager.zig");
 const BVH = @import("BVH.zig");
 const Aabb = @import("../Math/Aabb.zig");
 const SDFFunctions = @import("../Math/SDFFunctions.zig");
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
-const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 
 const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
 const TextLayout = @import("../Renderer/TextLayout.zig");
 const SDFCompiler = @import("../Renderer/SDFCompiler.zig");
-const QuadDrawsNothing = @import("../Renderer/Renderer2D.zig").QuadDrawsNothing;
 const CollisionManager = @import("../Physics/CollisionManager.zig");
 
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -28,15 +25,7 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType;
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
-const ShapeComponent = EntityComponents.ShapeComponent;
-const SurfaceComponent = EntityComponents.SurfaceComponent;
-const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
-const EntitySceneComponent = EntityComponents.EntitySceneComponent;
-const GameLayerTag = EntityComponents.GameLayerTag;
-const OverlayLayerTag = EntityComponents.OverlayLayerTag;
-const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
-const TextAsset = @import("../ECSComponents/AComponents.zig").TextAsset;
 
 const WorldBVH = @This();
 
@@ -93,13 +82,13 @@ pub const LayerTree = struct {
         self.mNodes.clearRetainingCapacity();
     }
 
-    fn Add(self: *LayerTree, engine_allocator: std.mem.Allocator, item: WorldItem, bounds: Aabb, mask: u4) !void {
+    pub fn Add(self: *LayerTree, engine_allocator: std.mem.Allocator, item: WorldItem, bounds: Aabb, mask: u4) !void {
         try self.mBVHItems.append(engine_allocator, .{ .Id = @intCast(self.mItems.items.len), .Bounds = bounds, .Mask = mask });
         try self.mItems.append(engine_allocator, item);
     }
 
     /// The tree over what was added, and the items put in its order
-    fn Build(self: *LayerTree, engine_allocator: std.mem.Allocator, frame_allocator: std.mem.Allocator) !void {
+    pub fn Build(self: *LayerTree, engine_allocator: std.mem.Allocator, frame_allocator: std.mem.Allocator) !void {
         const zone = Tracy.ZoneInit("WorldBVH::LayerTree::Build", @src());
         defer zone.Deinit();
         zone.Value(self.mItems.items.len);
@@ -163,248 +152,8 @@ pub fn SceneBits(self: WorldBVH, scenes: []const Scene.Type) u64 {
     return bits;
 }
 
-/// The fonts the engine's texts are laid out in: their TextAsset
-const AssetFonts = struct {
-    mEngineContext: *EngineContext,
-
-    pub fn Get(self: AssetFonts, text: *const TextComponent) !*const TextAsset {
-        return text.mTextAssetHandle.GetAsset(self.mEngineContext, TextAsset);
-    }
-};
-
-/// Both trees over everything `world` has now. World transforms must be up to date
-pub fn Build(self: *WorldBVH, engine_context: *EngineContext, world: *WorldManager) !void {
-    try self.BuildWith(engine_context, world, AssetFonts{ .mEngineContext = engine_context });
-}
-
-/// Build with texts laid out in the fonts `fonts.Get(text)` gives, so a test can lay out in a stand in font
-pub fn BuildWith(self: *WorldBVH, engine_context: *EngineContext, world: *WorldManager, fonts: anytype) !void {
-    const zone = Tracy.ZoneInit("WorldBVH::Build", @src());
-    defer zone.Deinit();
-
-    const engine_allocator = engine_context.EngineAllocator();
-    const frame_allocator = engine_context.FrameAllocator();
-    self.Clear();
-
-    var builder = Builder{ .mBVH = self, .mEngineAllocator = engine_allocator, .mFrameAllocator = frame_allocator };
-
-    try builder.AddVisuals(world, fonts);
-    try builder.AddColliders(world);
-
-    try self.mGame.Build(engine_allocator, frame_allocator);
-    try self.mOverlay.Build(engine_allocator, frame_allocator);
-    zone.Value(self.mGame.mItems.items.len + self.mOverlay.mItems.items.len);
-}
-
 /// Every refit mask at once: what is drawn, clicked and collided
 pub const ALL_ITEMS: u4 = BVH.Mask.RENDER | BVH.Mask.PICK | BVH.Mask.PHYSICS;
-
-/// The boxes of the items with any of `mask` from where they are now, and both trees' boxes from every item's: for after
-/// things have moved. Items left out keep the box they had, which every node still holds, so the tree stays right for a
-/// walk of `mask`: a physics substep only places colliders again (BVH.Mask.PHYSICS), and the refit before rendering
-/// places everything (ALL_ITEMS). The items and tree stay as built, so a refit is right for as long as the same things
-/// are in the world, which is until the next commit. An item whose entity has lost what places it keeps its box
-pub fn Refit(self: *WorldBVH, engine_context: *EngineContext, world: *WorldManager, mask: u4) void {
-    const zone = Tracy.ZoneInit("WorldBVH::Refit", @src());
-    defer zone.Deinit();
-
-    var placed: usize = 0;
-    for ([_]*LayerTree{ &self.mGame, &self.mOverlay }) |tree| {
-        for (tree.mItems.items, tree.mBVHItems.items) |item, *bvh_item| {
-            if (bvh_item.Mask & mask == 0) continue;
-            placed += 1;
-            if (self.ItemBounds(engine_context, world, item)) |bounds| bvh_item.Bounds = bounds;
-        }
-        BVH.Refit(tree.mBVHItems.items, tree.mNodes.items);
-    }
-    zone.Value(placed);
-}
-
-/// Where `item` is now, or null if its entity has lost what places it
-fn ItemBounds(self: *const WorldBVH, engine_context: *EngineContext, world: *WorldManager, item: WorldItem) ?Aabb {
-    const entity = world.GetEntity(item.Entity);
-    //destroyed since the build: deletes happen straight away, so the tree can name an entity that is gone until the
-    //next build. Its box stays, and whatever walks the tree checks the same before reading it
-    if (!entity.IsActive()) return null;
-    switch (item.Kind) {
-        .Quad => {
-            const transform = entity.GetComponent(TransformComponent) orelse return null;
-            const quad = ShapeGeometry.QuadOf(entity) orelse return null;
-            const surface = entity.GetComponent(SurfaceComponent) orelse return null;
-            return BoxBounds(ShapeGeometry.QuadBox(transform, quad.*, surface.mBorderWidth, null));
-        },
-        .Glyph => {
-            const transform = entity.GetComponent(TransformComponent) orelse return null;
-            const text = entity.GetComponent(TextComponent) orelse return null;
-            const params = ShapeGeometry.GetTextParams(transform, text);
-            return BoxBounds(ShapeGeometry.GlyphBox(transform, params, self.mGlyphs.items[item.Index], null));
-        },
-        .Text => {
-            const transform = entity.GetComponent(TransformComponent) orelse return null;
-            const text = entity.GetComponent(TextComponent) orelse return null;
-            return BoxBounds(ShapeGeometry.TextBoxFromMetrics(transform, text, self.mTexts.items[item.Index], null));
-        },
-        .Merge => return MergeBounds(engine_context.FrameAllocator(), entity) catch null,
-        .Collider => return ColliderBounds(entity),
-    }
-}
-
-/// Fills a WorldBVH's two layers during a build
-const Builder = struct {
-    mBVH: *WorldBVH,
-    mEngineAllocator: std.mem.Allocator,
-    mFrameAllocator: std.mem.Allocator,
-    /// each scene's SceneSlot so far
-    mSlots: std.AutoHashMapUnmanaged(Scene.Type, u8) = .empty,
-    /// the merges already added, so each is one item however many of its parts there are
-    mMerges: std.AutoHashMapUnmanaged(Entity.Type, void) = .empty,
-
-    /// What is drawn and clicked: the same as a view's gather (ShapeGeometry.GatherViewShapes), only over every scene.
-    /// Folded away by a collapsed layout item is neither, and that only changes at the commit
-    fn AddVisuals(self: *Builder, world: *WorldManager, fonts: anytype) !void {
-        const zone = Tracy.ZoneInit("WorldBVH::AddVisuals", @src());
-        defer zone.Deinit();
-
-        const hidden = GroupQuery{ .Component = LayoutHiddenTag };
-        const surfaces = GroupQuery{ .Component = SurfaceComponent };
-        const visuals_query = GroupQuery{ .Not = .{ .mFirst = &surfaces, .mSecond = &hidden } };
-        const visuals = try world.GetEntityGroup(self.mFrameAllocator, visuals_query);
-        zone.Value(visuals.items.len);
-        for (visuals.items) |entity_id| {
-            const entity = world.GetEntity(entity_id);
-            //a part of a merge is its root's one item
-            if (ShapeGeometry.MergeRootOf(entity)) |root| {
-                const seen = try self.mMerges.getOrPut(self.mFrameAllocator, root.mID);
-                if (!seen.found_existing) try self.AddMerge(root);
-                continue;
-            }
-            //hidden by its surface: left out, so a surface shown mid frame is in the next frame's tree
-            const surface = entity.GetComponent(SurfaceComponent).?;
-            if (!surface.mShouldRender) continue;
-            const transform = entity.GetComponent(TransformComponent) orelse continue;
-            const quad = ShapeGeometry.QuadOf(entity);
-            const text = entity.GetComponent(TextComponent);
-            if (quad == null and text == null) continue;
-            //where all its items go, its quad's and every letter's, found once
-            const placement = try self.PlacementOf(entity, ShapeGeometry.MaskRegionAbove(entity)) orelse continue;
-
-            if (quad) |q| {
-                //invisible quads aren't drawn, but they still take clicks (row buttons)
-                const mask = if (QuadDrawsNothing(surface.*)) BVH.Mask.PICK else BVH.Mask.RENDER | BVH.Mask.PICK;
-                try self.AddTo(placement, entity, .Quad, 0, BoxBounds(ShapeGeometry.QuadBox(transform, q.*, surface.mBorderWidth, null)), mask);
-            }
-            if (text) |t| try self.AddText(placement, entity, transform, t, try fonts.Get(t));
-        }
-    }
-
-    /// What physics collides: every collider, the same as its own query (CollisionManager.QueryColliderGroups)
-    fn AddColliders(self: *Builder, world: *WorldManager) !void {
-        const zone = Tracy.ZoneInit("WorldBVH::AddColliders", @src());
-        defer zone.Deinit();
-
-        const colliders = try world.GetEntityGroup(self.mFrameAllocator, .{ .Component = ColliderComponent });
-        zone.Value(colliders.items.len);
-        for (colliders.items) |entity_id| {
-            const entity = world.GetEntity(entity_id);
-            const bounds = ColliderBounds(entity) orelse continue;
-            try self.Add(entity, .Collider, 0, bounds, BVH.Mask.PHYSICS);
-        }
-    }
-
-    /// Where an entity's items go: its layer's tree, its scene's slot, and what its mask is cut by
-    const Placement = struct {
-        Tree: *LayerTree,
-        SceneSlot: u8,
-        MaskRegion: Entity.Type,
-    };
-
-    /// `entity`'s placement, cut by `mask_region` when drawn. Null if it is in no layer or no scene, which leaves its
-    /// items out the way a view leaves out an entity with no layer tag
-    fn PlacementOf(self: *Builder, entity: Entity, mask_region: ?Entity) !?Placement {
-        const tree = if (entity.HasComponent(OverlayLayerTag))
-            &self.mBVH.mOverlay
-        else if (entity.HasComponent(GameLayerTag))
-            &self.mBVH.mGame
-        else
-            return null;
-        const scene = entity.GetComponent(EntitySceneComponent) orelse return null;
-        return .{
-            .Tree = tree,
-            .SceneSlot = try self.SceneSlot(scene.mScene.mID),
-            .MaskRegion = if (mask_region) |region| region.mID else Entity.NullObject,
-        };
-    }
-
-    fn AddTo(self: *Builder, placement: Placement, entity: Entity, kind: ItemKind, index: u32, bounds: Aabb, mask: u4) !void {
-        try placement.Tree.Add(self.mEngineAllocator, .{
-            .Entity = entity.mID,
-            .Kind = kind,
-            .SceneSlot = placement.SceneSlot,
-            .Index = index,
-            .MaskRegion = placement.MaskRegion,
-        }, bounds, mask);
-    }
-
-    /// Adds an item no mask cuts to `entity`'s layer, in its scene, if it has a placement
-    fn Add(self: *Builder, entity: Entity, kind: ItemKind, index: u32, bounds: Aabb, mask: u4) !void {
-        const placement = try self.PlacementOf(entity, null) orelse return;
-        try self.AddTo(placement, entity, kind, index, bounds, mask);
-    }
-
-    fn SceneSlot(self: *Builder, scene_id: Scene.Type) !u8 {
-        const entry = try self.mSlots.getOrPut(self.mFrameAllocator, scene_id);
-        if (!entry.found_existing) {
-            const scenes = &self.mBVH.mScenes;
-            if (scenes.items.len >= MAX_SCENES) {
-                _ = self.mSlots.remove(scene_id);
-                return error.TooManyScenes;
-            }
-            entry.value_ptr.* = @intCast(scenes.items.len);
-            try scenes.append(self.mEngineAllocator, scene_id);
-        }
-        return entry.value_ptr.*;
-    }
-
-    /// A merge's one item, over the rectangle its parts lie within. One the renderer wouldn't draw is left out too
-    fn AddMerge(self: *Builder, root: Entity) !void {
-        const zone = Tracy.ZoneInit("WorldBVH::AddMerge", @src());
-        defer zone.Deinit();
-
-        const found = MergeBounds(self.mFrameAllocator, root) catch |err| switch (err) {
-            error.MergeTooDeep => return,
-            else => return err,
-        };
-        const bounds = found orelse return;
-        const placement = try self.PlacementOf(root, ShapeGeometry.MaskRegionAbove(root)) orelse return;
-        try self.AddTo(placement, root, .Merge, 0, bounds, BVH.Mask.RENDER | BVH.Mask.PICK);
-    }
-
-    /// One item per letter `text` draws, laid out once here and kept for refits and the renderer, and one for the whole
-    /// text that clicks land on, from the size the same layout measured. All of them go where `placement` says
-    fn AddText(self: *Builder, placement: Placement, entity: Entity, transform: *const TransformComponent, text: *const TextComponent, font: anytype) !void {
-        const zone = Tracy.ZoneInit("WorldBVH::AddText", @src());
-        defer zone.Deinit();
-
-        const params = ShapeGeometry.GetTextParams(transform, text);
-        const glyphs = &self.mBVH.mGlyphs;
-        const first_glyph = glyphs.items.len;
-        var layout = TextLayout.Iterator(@TypeOf(font.*)).Init(text.mText.items, font, params.FontSize, params.WrapWidth);
-        while (layout.Next()) |glyph| {
-            const glyph_ind: u32 = @intCast(glyphs.items.len);
-            try glyphs.append(self.mEngineAllocator, glyph);
-            const bounds = BoxBounds(ShapeGeometry.GlyphBox(transform, params, glyph, null));
-            try self.AddTo(placement, entity, .Glyph, glyph_ind, bounds, BVH.Mask.RENDER);
-        }
-
-        zone.Value(glyphs.items.len - first_glyph);
-
-        const texts = &self.mBVH.mTexts;
-        const text_ind: u32 = @intCast(texts.items.len);
-        const metrics = layout.GetMetrics();
-        try texts.append(self.mEngineAllocator, metrics);
-        try self.AddTo(placement, entity, .Text, text_ind, BoxBounds(ShapeGeometry.TextBoxFromMetrics(transform, text, metrics, null)), BVH.Mask.PICK);
-    }
-};
 
 /// The axis lined up box around an oriented one
 pub fn BoxBounds(box: ShapeGeometry.Box) Aabb {
@@ -430,7 +179,7 @@ pub fn ColliderBounds(entity: Entity) ?Aabb {
 }
 
 /// A merge's box, compiled the way the renderer and picking compile it, or null when it has no parts
-fn MergeBounds(frame_allocator: std.mem.Allocator, root: Entity) !?Aabb {
+pub fn MergeBounds(frame_allocator: std.mem.Allocator, root: Entity) !?Aabb {
     var programs: SDFCompiler.Programs = .{};
     const compiled = try SDFCompiler.Compile(frame_allocator, root, null, &programs);
     if (compiled.Parts.Count == 0) return null;

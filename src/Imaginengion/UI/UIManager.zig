@@ -250,11 +250,9 @@ pub fn UpdateBeforeLayout(self: *UIManager, engine_context: *EngineContext) !voi
 pub fn UpdateAfterLayout(self: *UIManager, engine_context: *EngineContext, worlds: []const *WorldManager) !void {
     const zone = Tracy.ZoneInit("UIManager::UpdateAfterLayout", @src());
     defer zone.Deinit();
-    for (worlds) |world| {
-        try self.mPopupSystem.Update(engine_context, world);
-        try self.mScrollSystem.Update(engine_context, world);
-    }
-    try self.mFocusSystem.Update(engine_context);
+    try engine_context.mSystems.RunSystem(PopupSystem.Update, engine_context, &self.mECSManager, .{ &self.mPopupSystem, worlds });
+    try engine_context.mSystems.RunSystem(ScrollSystem.Update, engine_context, &self.mECSManager, .{ &self.mScrollSystem, worlds });
+    try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, &self.mECSManager, .{&self.mFocusSystem});
 }
 
 /// Forgets what the keyboard was typing into and the open popups without touching an entity, for when the world they
@@ -323,7 +321,9 @@ pub fn GetManager(self: *UIManager, comptime obj_t: type) *UIManager {
 pub fn NewElement(self: *UIManager, engine_context: *EngineContext) !UIElement {
     const engine_allocator = engine_context.EngineAllocator();
     const element_id = try self.mECSManager.CreateEntity(engine_allocator);
-    _ = try self.mECSManager.AddComponentSync(engine_context, element_id, ElementOwnerComponent{});
+    //not AddComponentSync: an element made inside a system that reads owners (a scrollbar's, during the scroll pass)
+    //would move what that system holds. Waiting is still readable, so Adopt can set the owner straight away
+    _ = try self.mECSManager.AddComponent(engine_context, element_id, ElementOwnerComponent{});
     return .{ .mID = element_id, .mManager = self };
 }
 

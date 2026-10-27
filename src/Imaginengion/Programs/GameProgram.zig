@@ -6,6 +6,7 @@
 //! mode are spawned, then the scenes' OnSceneStart scripts run, which set the game up (which entity the player
 //! possesses, ...). The first player that possesses something with a viewpoint is drawn to the whole window.
 const std = @import("std");
+const BVHRefitSystem = @import("../Core/BVHRefitSystem.zig");
 
 const EngineContext = @import("../Core/EngineContext.zig");
 const Project = @import("../Core/Project.zig");
@@ -246,7 +247,7 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
         const layout_zone = Tracy.ZoneInit("Layout Update Section", @src());
         defer layout_zone.Deinit();
         try engine_context.mUIManager.UpdateBeforeLayout(engine_context);
-        try LayoutSystem.UpdateLayouts(game_world, engine_context);
+        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &game_world.mEManager.mECSManager, .{game_world});
         const ui_worlds = [_]*WorldManager{game_world};
         try engine_context.mUIManager.UpdateAfterLayout(engine_context, &ui_worlds);
     }
@@ -265,7 +266,7 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
     {
         const refit_bvh_zone = Tracy.ZoneInit("Refit BVH", @src());
         defer refit_bvh_zone.Deinit();
-        game_world.mBVH.Refit(engine_context, game_world, WorldBVH.ALL_ITEMS);
+        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &game_world.mEManager.mECSManager, .{ game_world, WorldBVH.ALL_ITEMS });
     }
     //------------------END Refit BVH
 

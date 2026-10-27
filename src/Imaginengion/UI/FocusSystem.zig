@@ -33,6 +33,7 @@ const Vec3 = MathTypes.Vec3;
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const UIManager = @import("UIManager.zig");
 const TextInputComponent = @import("../ECSComponents/UIComponents.zig").TextInputComponent;
+const StyleComponent = @import("../ECSComponents/UIComponents.zig").StyleComponent;
 const FocusedTag = EntityComponents.FocusedTag;
 const TextComponent = EntityComponents.TextComponent;
 const ShapeComponent = EntityComponents.ShapeComponent;
@@ -42,6 +43,8 @@ const NameComponent = EntityComponents.NameComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const StackPosComponent = @import("../ECSComponents/SComponents.zig").StackPosComponent;
+const Systems = @import("../ECS/Systems.zig");
+const EECS = @import("../ECSManagers/EManager.zig").ECSManagerT;
 
 const FocusSystem = @This();
 
@@ -269,25 +272,49 @@ fn Type(self: *FocusSystem, engine_context: *EngineContext, bytes: []u8) !void {
 }
 
 /// Once a frame, after layout and before world transforms: keeps the caret on the text and blinking, and lets go if
-/// the focused text input has gone
-pub fn Update(self: *FocusSystem, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("FocusSystem::Update", @src());
-    defer zone.Deinit();
-    defer self.SyncTextInput(engine_context);
-    const focused = self.mFocused orelse return;
-    if (!focused.IsActive()) {
-        //deleted while being typed into, and its caret with it: there is no one left to tell
-        self.Reset(engine_context);
-        return;
-    }
-    if (!UIManager.HasUIComponent(focused, TextInputComponent) or !focused.HasComponent(TextComponent)) {
-        try self.EndEdit(engine_context, .Submit);
-        return;
-    }
+/// the focused text input has gone. A system from the UI's ECS, reaching the text input's world through In:
+///
+///     try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, &ui.mECSManager, .{&ui.mFocusSystem});
+pub const Update = struct {
+    pub const Name = "FocusUpdate";
+    pub const Reads = &.{
+        TextInputComponent,
+        //the text the caret follows
+        Systems.In(EECS, TextComponent),
+        Systems.In(EECS, EntityComponents.UIElementComponent),
+        //whether layout places the caret (Entity.SetTranslation)
+        Systems.In(EECS, EntityComponents.LayoutItemComponent),
+        Systems.In(EECS, EntityComponents.LayoutComponent),
+        //the scene the caret is made in
+        Systems.In(EECS, EntitySceneComponent),
+    };
+    pub const Writes = &.{
+        //a new caret is styled (UIManager.Style)
+        StyleComponent,
+        //the caret: its quad, where it is, and its name when it is made
+        Systems.In(EECS, ShapeComponent),
+        Systems.In(EECS, SurfaceComponent),
+        Systems.In(EECS, TransformComponent),
+        Systems.In(EECS, NameComponent),
+    };
 
-    self.mBlinkTime += engine_context.mDT;
-    try self.UpdateCaret(engine_context, focused);
-}
+    pub fn Run(engine_context: *EngineContext, self: *FocusSystem) !void {
+        defer self.SyncTextInput(engine_context);
+        const focused = self.mFocused orelse return;
+        if (!focused.IsActive()) {
+            //deleted while being typed into, and its caret with it: there is no one left to tell
+            self.Reset(engine_context);
+            return;
+        }
+        if (!UIManager.HasUIComponent(focused, TextInputComponent) or !focused.HasComponent(TextComponent)) {
+            try self.EndEdit(engine_context, .Submit);
+            return;
+        }
+
+        self.mBlinkTime += engine_context.mDT;
+        try self.UpdateCaret(engine_context, focused);
+    }
+};
 
 fn UpdateCaret(self: *FocusSystem, engine_context: *EngineContext, focused: Entity) !void {
     const text = focused.GetComponent(TextComponent).?;

@@ -12,6 +12,9 @@ const Vec2 = @import("../../Math/MathTypes.zig").Vec2;
 const LayoutSystem = @import("../../UI/LayoutSystem.zig");
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
 const TransformSystem = @import("../../Physics/TransformSystem.zig");
+const PopupSystem = @import("../../UI/PopupSystem.zig");
+const FocusSystem = @import("../../UI/FocusSystem.zig");
+const WorldManager = @import("../../Core/WorldManager.zig");
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const UIComponents = @import("../../ECSComponents/UIComponents.zig");
@@ -55,6 +58,8 @@ const TestWorld = struct {
         engine_context.* = .{};
         try engine_context.mUIManager.Init(engine_context);
         try engine_context.mEditorWorld.Init(engine_context);
+        //the editor's own UI is in use, which layout reads scrolling from
+        try engine_context.mEditorWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
 
         const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         scene.GetComponentMut(SceneComponent).?.mLayoutArea = .{ .x = 1920, .y = 1080 };
@@ -103,9 +108,9 @@ const TestWorld = struct {
     fn Frame(self: *TestWorld) !void {
         const engine_context = self.mEngineContext;
         const world = &engine_context.mEditorWorld;
-        try LayoutSystem.UpdateLayouts(world, engine_context);
-        try engine_context.mUIManager.mPopupSystem.Update(engine_context, world);
-        try engine_context.mUIManager.mFocusSystem.Update(engine_context);
+        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &world.mEManager.mECSManager, .{world});
+        try engine_context.mSystems.RunSystem(PopupSystem.Update, engine_context, &engine_context.mUIManager.mECSManager, .{ &engine_context.mUIManager.mPopupSystem, &[_]*WorldManager{world} });
+        try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, &engine_context.mUIManager.mECSManager, .{&engine_context.mUIManager.mFocusSystem});
         try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world.mEManager.mECSManager, .{world});
     }
 

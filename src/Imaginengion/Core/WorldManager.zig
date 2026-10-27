@@ -26,6 +26,7 @@ const PManager = @import("../ECSManagers/PManager.zig");
 const SManager = @import("../ECSManagers/SManager.zig");
 const PhysicsManager = @import("../Physics/PhysicsManager.zig");
 const TransformSystem = @import("../Physics/TransformSystem.zig");
+const BVHBuildSystem = @import("BVHBuildSystem.zig");
 
 const EEventData = @import("../Events/EManagerData.zig");
 const GCEventData = @import("../Events/GCManagerData.zig");
@@ -71,7 +72,7 @@ mBVH: WorldBVH = .{},
 /// The world's trees over what it has now. Places what was made at the last commit first, since nothing has yet
 pub fn BuildBVH(self: *WorldManager, engine_context: *EngineContext) !void {
     try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &self.mEManager.mECSManager, .{self});
-    try self.mBVH.Build(engine_context, self);
+    try engine_context.mSystems.RunSystem(BVHBuildSystem, engine_context, &self.mEManager.mECSManager, .{ self, BVHBuildSystem.AssetFonts{ .mEngineContext = engine_context } });
 }
 
 /// How many screen pixels one unit of this world's screen space covers, on a target this tall

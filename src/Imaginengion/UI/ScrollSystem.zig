@@ -30,6 +30,9 @@ const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Ent
 const UIComponents = @import("../ECSComponents/UIComponents.zig");
 const ScrollComponent = UIComponents.ScrollComponent;
 const ScrollStateComponent = UIComponents.ScrollStateComponent;
+const ElementOwnerComponent = UIComponents.ElementOwnerComponent;
+const Systems = @import("../ECS/Systems.zig");
+const EECS = @import("../ECSManagers/EManager.zig").ECSManagerT;
 
 const ScrollSystem = @This();
 
@@ -90,24 +93,58 @@ pub fn OnPointerEvent(_: *ScrollSystem, engine_context: *EngineContext, event: E
     }
 }
 
-/// Once a frame, after layout and before world transforms: every scrolling region in `world` whose children run
-/// past it gets a thumb along that edge, placed for how far it is scrolled, and one that no longer needs one loses it
-pub fn Update(_: *ScrollSystem, engine_context: *EngineContext, world: *WorldManager) !void {
-    const zone = Tracy.ZoneInit("ScrollSystem::Update", @src());
-    defer zone.Deinit();
-    const ui_manager = &engine_context.mUIManager;
-    const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = ScrollComponent });
-    for (element_ids.items) |element_id| {
-        const element = UIElement{ .mID = element_id, .mManager = ui_manager };
-        const region = element.GetOwner();
-        //an element no entity has taken yet has nothing to compare
-        if (!region.IsIDValid() or region.mManager != world or !region.IsActive()) continue;
-        const scroll = element.GetComponent(ScrollComponent).?.*;
-        const state = element.GetComponentMut(ScrollStateComponent) orelse continue;
-        const size = RegionSize(region) orelse Vec2(f32){ .x = 0, .y = 0 };
-        try UpdateThumb(engine_context, region, scroll, state, &state.mThumbY, .Y, size);
-        try UpdateThumb(engine_context, region, scroll, state, &state.mThumbX, .X, size);
+/// Once a frame, after layout and before world transforms: every scrolling region in `worlds` (the ones whose UI is in
+/// use) whose children run past it gets a thumb along that edge, placed for how far it is scrolled, and one that no
+/// longer needs one loses it. A system run once over all of them, from the UI's ECS:
+///
+///     try engine_context.mSystems.RunSystem(ScrollSystem.Update, engine_context, &ui.mECSManager, .{ &ui.mScrollSystem, worlds });
+pub const Update = struct {
+    pub const Name = "ScrollUpdate";
+    pub const Reads = &.{
+        ScrollComponent,
+        ElementOwnerComponent,
+        //a region's size
+        Systems.In(EECS, LayoutItemComponent),
+        //whether layout places the thumb (Entity.SetTranslation)
+        Systems.In(EECS, EntityComponents.LayoutComponent),
+        Systems.In(EECS, EntityComponents.UIElementComponent),
+        //the scene a thumb is made in
+        Systems.In(EECS, EntityComponents.EntitySceneComponent),
+    };
+    pub const Writes = &.{
+        //where its thumbs are
+        ScrollStateComponent,
+        //a new thumb is styled (UIManager.Style)
+        UIComponents.StyleComponent,
+        //the thumb's quad, where it is, and its name when it is made
+        Systems.In(EECS, EntityComponents.ShapeComponent),
+        Systems.In(EECS, SurfaceComponent),
+        Systems.In(EECS, TransformComponent),
+        Systems.In(EECS, NameComponent),
+    };
+
+    pub fn Run(engine_context: *EngineContext, _: *ScrollSystem, worlds: []const *WorldManager) !void {
+        const ui_manager = &engine_context.mUIManager;
+        const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = ScrollComponent });
+        for (element_ids.items) |element_id| {
+            const element = UIElement{ .mID = element_id, .mManager = ui_manager };
+            const region = element.GetOwner();
+            //an element no entity has taken yet has nothing to compare
+            if (!region.IsIDValid() or !InWorlds(worlds, region) or !region.IsActive()) continue;
+            const scroll = element.GetComponent(ScrollComponent).?.*;
+            const state = element.GetComponentMut(ScrollStateComponent) orelse continue;
+            const size = RegionSize(region) orelse Vec2(f32){ .x = 0, .y = 0 };
+            try UpdateThumb(engine_context, region, scroll, state, &state.mThumbY, .Y, size);
+            try UpdateThumb(engine_context, region, scroll, state, &state.mThumbX, .X, size);
+        }
     }
+};
+
+fn InWorlds(worlds: []const *WorldManager, entity: Entity) bool {
+    for (worlds) |world| {
+        if (entity.mManager == world) return true;
+    }
+    return false;
 }
 
 /// Moves a region's scroll offset by `delta` and asks for it to be laid out again, which keeps it in range

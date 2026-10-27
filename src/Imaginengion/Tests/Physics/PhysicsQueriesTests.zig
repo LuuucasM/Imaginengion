@@ -6,6 +6,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
 const PhysicsQueries = @import("../../Physics/PhysicsQueries.zig");
+const ShapeCastSystem = @import("../../Physics/ShapeCastSystem.zig");
 const CollisionMask = @import("../../Physics/CollisionMask.zig");
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
@@ -52,12 +53,12 @@ const TestWorld = struct {
     /// A query in a new frame: the world's tree built over what is in it now, the way the top of a frame builds it
     fn RayCast(self: *TestWorld, ray: PhysicsQueries.Ray, options: PhysicsQueries.QueryOptions) !?PhysicsQueries.PhysicsHit {
         try self.mEngineContext.mEditorWorld.BuildBVH(self.mEngineContext);
-        return PhysicsQueries.RayCast(self.mEngineContext, &self.mEngineContext.mEditorWorld, ray, options);
+        return self.mEngineContext.mSystems.RunSystem(ShapeCastSystem, self.mEngineContext, &self.mEngineContext.mEditorWorld.mEManager.mECSManager, .{ &self.mEngineContext.mEditorWorld, PhysicsQueries.RAY, ray, options });
     }
 
     fn ShapeCast(self: *TestWorld, shape: PhysicsQueries.CastShape, ray: PhysicsQueries.Ray, options: PhysicsQueries.QueryOptions) !?PhysicsQueries.PhysicsHit {
         try self.mEngineContext.mEditorWorld.BuildBVH(self.mEngineContext);
-        return PhysicsQueries.ShapeCast(self.mEngineContext, &self.mEngineContext.mEditorWorld, shape, ray, options);
+        return self.mEngineContext.mSystems.RunSystem(ShapeCastSystem, self.mEngineContext, &self.mEngineContext.mEditorWorld.mEManager.mECSManager, .{ &self.mEngineContext.mEditorWorld, shape, ray, options });
     }
 };
 
@@ -197,8 +198,8 @@ test "a box cast against a turned box stops at its corner" {
 /// The same query by walking the tree and by testing every collider: the same collider, distance and normal
 fn ExpectSameAsLinear(world: *TestWorld, shape: PhysicsQueries.CastShape, ray: PhysicsQueries.Ray, options: PhysicsQueries.QueryOptions) !bool {
     const engine_context = world.mEngineContext;
-    const by_tree = try PhysicsQueries.ShapeCast(engine_context, &engine_context.mEditorWorld, shape, ray, options);
-    const by_testing_all = try PhysicsQueries.ShapeCastLinear(engine_context, &engine_context.mEditorWorld, shape, ray, options);
+    const by_tree = try engine_context.mSystems.RunSystem(ShapeCastSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{ &engine_context.mEditorWorld, shape, ray, options });
+    const by_testing_all = try engine_context.mSystems.RunSystem(ShapeCastSystem.Linear, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{ &engine_context.mEditorWorld, shape, ray, options });
     try std.testing.expectEqual(by_testing_all == null, by_tree == null);
     const expected = by_testing_all orelse return false;
     const actual = by_tree.?;
@@ -268,11 +269,11 @@ test "a query right after something moves finds it where it was moved to, with n
 
     //moved far off the ray, where the tree built this frame doesn't have it
     try wall.SetTranslation(engine_context, .{ .x = 0, .y = 30, .z = 0 });
-    try std.testing.expect(try PhysicsQueries.RayCast(engine_context, editor_world, ALONG_X, .{}) == null);
+    try std.testing.expect(try engine_context.mSystems.RunSystem(ShapeCastSystem, engine_context, &editor_world.mEManager.mECSManager, .{ editor_world, PhysicsQueries.RAY, ALONG_X, PhysicsQueries.QueryOptions{} }) == null);
 
     //and a ray along y through where it is now finds it
     const along_y = PhysicsQueries.Ray{ .Origin = .{ .x = 0, .y = 20, .z = 0 }, .Dir = .{ .x = 0, .y = 1, .z = 0 } };
-    const hit = (try PhysicsQueries.RayCast(engine_context, editor_world, along_y, .{})).?;
+    const hit = (try engine_context.mSystems.RunSystem(ShapeCastSystem, engine_context, &editor_world.mEManager.mECSManager, .{ editor_world, PhysicsQueries.RAY, along_y, PhysicsQueries.QueryOptions{} })).?;
     try std.testing.expectEqual(wall.mID, hit.Collider.mID);
     try std.testing.expectApproxEqAbs(@as(f32, 9.5), hit.T, eps);
 }
@@ -306,6 +307,6 @@ test "a collider destroyed after the tree was built is never hit" {
     try editor_world.BuildBVH(engine_context);
 
     try near.Delete(engine_context);
-    const hit = (try PhysicsQueries.RayCast(engine_context, editor_world, ALONG_X, .{})).?;
+    const hit = (try engine_context.mSystems.RunSystem(ShapeCastSystem, engine_context, &editor_world.mEManager.mECSManager, .{ editor_world, PhysicsQueries.RAY, ALONG_X, PhysicsQueries.QueryOptions{} })).?;
     try std.testing.expectEqual(far.mID, hit.Collider.mID);
 }

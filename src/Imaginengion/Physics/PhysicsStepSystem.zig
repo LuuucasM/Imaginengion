@@ -5,6 +5,7 @@
 //!
 //!     try engine_context.mSystems.RunSystem(PhysicsStepSystem, engine_context, &world.mEManager.mECSManager, .{world});
 const std = @import("std");
+const BVHRefitSystem = @import("../Core/BVHRefitSystem.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const Tracy = @import("../Core/Tracy.zig");
@@ -96,7 +97,7 @@ pub fn Run(engine_context: *EngineContext, world_manager: *WorldManager) !void {
         try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world_manager.mEManager.mECSManager, .{world_manager});
         //and the world's tree with them: only the colliders, all the broad pass walks. Also takes in whatever moved
         //since the tree was built, before physics, so no refit is needed ahead of the step
-        world_manager.mBVH.Refit(engine_context, world_manager, BVH.Mask.PHYSICS);
+        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &world_manager.mEManager.mECSManager, .{ world_manager, BVH.Mask.PHYSICS });
 
         try physics._CollisionManager.BroadPass(engine_context, world_manager, collider_groups);
         physics._CollisionManager.NarrowPass(SUB_STEP_DT);

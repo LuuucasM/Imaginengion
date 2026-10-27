@@ -1,4 +1,5 @@
 const std = @import("std");
+const BVHRefitSystem = @import("../Core/BVHRefitSystem.zig");
 
 const Window = @import("../Windows/Window.zig");
 const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
@@ -238,6 +239,10 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process
     engine_context.mUIManager.LoadTheme(engine_context);
     //the editor's own UI is always in use; the simulate world's joins it while the game is played
     try engine_context.StartUsingWorld(&engine_context.mEditorWorld);
+    //the world being edited and the template being edited aren't played, but their UI is laid out every frame, and
+    //layout reads scrolling from the UI's ECS
+    try engine_context.mGameWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
+    try engine_context.mTmplEditWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
 
     //editor UI keeps its pixel size when the window grows instead of scaling up: the editor world's
     //overlays all measure the screen in pixels
@@ -487,11 +492,11 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         try engine_context.mUIManager.UpdateBeforeLayout(engine_context);
         //after the style pass, which would put its fading colors back to the theme's
         try self.mSaveNotice.Update(engine_context);
-        try LayoutSystem.UpdateLayouts(&engine_context.mGameWorld, engine_context);
-        try LayoutSystem.UpdateLayouts(&engine_context.mEditorWorld, engine_context);
-        try LayoutSystem.UpdateLayouts(&engine_context.mTmplEditWorld, engine_context);
+        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &engine_context.mGameWorld.mEManager.mECSManager, .{&engine_context.mGameWorld});
+        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
+        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &engine_context.mTmplEditWorld.mEManager.mECSManager, .{&engine_context.mTmplEditWorld});
         if (self.mEditorState == .Play) {
-            try LayoutSystem.UpdateLayouts(&engine_context.mSimulateWorld, engine_context);
+            try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &engine_context.mSimulateWorld.mEManager.mECSManager, .{&engine_context.mSimulateWorld});
         }
         //popups go against what opened them, scrollbars where their regions are scrolled and the caret where the laid
         //out text puts it
@@ -520,11 +525,11 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const refit_bvh_zone = Tracy.ZoneInit("Refit BVH", @src());
         defer refit_bvh_zone.Deinit();
-        engine_context.mGameWorld.mBVH.Refit(engine_context, &engine_context.mGameWorld, WorldBVH.ALL_ITEMS);
-        engine_context.mEditorWorld.mBVH.Refit(engine_context, &engine_context.mEditorWorld, WorldBVH.ALL_ITEMS);
-        engine_context.mTmplEditWorld.mBVH.Refit(engine_context, &engine_context.mTmplEditWorld, WorldBVH.ALL_ITEMS);
+        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &engine_context.mGameWorld.mEManager.mECSManager, .{ &engine_context.mGameWorld, WorldBVH.ALL_ITEMS });
+        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{ &engine_context.mEditorWorld, WorldBVH.ALL_ITEMS });
+        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &engine_context.mTmplEditWorld.mEManager.mECSManager, .{ &engine_context.mTmplEditWorld, WorldBVH.ALL_ITEMS });
         if (self.mEditorState == .Play) {
-            engine_context.mSimulateWorld.mBVH.Refit(engine_context, &engine_context.mSimulateWorld, WorldBVH.ALL_ITEMS);
+            try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &engine_context.mSimulateWorld.mEManager.mECSManager, .{ &engine_context.mSimulateWorld, WorldBVH.ALL_ITEMS });
         }
     }
     //------------------END Refit BVH
