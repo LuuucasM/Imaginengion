@@ -539,30 +539,6 @@ fn _TypesIn(comptime ECSManagerT: type, comptime types: []const type) []const ty
     return in_ecs;
 }
 
-/// Unchecked records (ECSManager.UncheckedRecord) on all four of the world's ECSs, for engine work done inside a system
-/// that isn't the system's own: structural operations and the bookkeeping they set off, which reach across the world's
-/// ECSs (deleting a scene reads its entities), and scripts
-pub const UncheckedScope = struct {
-    mE: EManager.ECSManagerT.SystemRecord = EManager.ECSManagerT.UncheckedRecord,
-    mGC: GCManager.ECSManagerT.SystemRecord = GCManager.ECSManagerT.UncheckedRecord,
-    mP: PManager.ECSManagerT.SystemRecord = PManager.ECSManagerT.UncheckedRecord,
-    mS: SManager.ECSManagerT.SystemRecord = SManager.ECSManagerT.UncheckedRecord,
-
-    pub fn Enter(self: *UncheckedScope, world: *WorldManager) void {
-        world.mEManager.mECSManager.EnterSystem(&self.mE);
-        world.mGCManager.mECSManager.EnterSystem(&self.mGC);
-        world.mPManager.mECSManager.EnterSystem(&self.mP);
-        world.mSManager.mECSManager.EnterSystem(&self.mS);
-    }
-
-    pub fn Leave(self: *UncheckedScope, world: *WorldManager) void {
-        world.mSManager.mECSManager.LeaveSystem(&self.mS);
-        world.mPManager.mECSManager.LeaveSystem(&self.mP);
-        world.mGCManager.mECSManager.LeaveSystem(&self.mGC);
-        world.mEManager.mECSManager.LeaveSystem(&self.mE);
-    }
-};
-
 /// What a system run on a world (RunSystem) can take as parameters, each by its type
 pub const SystemParams = struct {
     mEngineContext: *EngineContext,

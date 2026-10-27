@@ -8,6 +8,10 @@ const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
+const Systems = @import("../ECS/Systems.zig");
+const EManager = @import("../ECSManagers/EManager.zig");
+const PManager = @import("../ECSManagers/PManager.zig");
+const SManager = @import("../ECSManagers/SManager.zig");
 
 const Entity = @import("../ECSObjects/Entity.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
@@ -112,57 +116,73 @@ fn RunScriptsFrom(
     args: anytype,
 ) !ScriptResult {
     _ValidateScriptType(ObjectType, script_type);
-
-    const zone = Tracy.ZoneInit("ScriptsProcessor::RunScript(" ++ Tracy.ShortTypeName(ObjectType) ++ ", " ++ Tracy.ShortTypeName(script_type) ++ ", " ++ world_name ++ ")", @src());
-    defer zone.Deinit();
-
-    const frame_allocator = engine_context.FrameAllocator();
-    const manager = world_manager.GetManager(ObjectType);
-
-    var script_scope: ScriptScope = .{};
-    script_scope.Enter(world_manager);
-    defer script_scope.Leave(world_manager, engine_context);
-
-    const script_ids = try manager.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
-    SortByOwnerStackPos(ObjectType, world_manager, script_ids.items);
-
-    for (script_ids.items) |script_id| {
-        if (!manager.mECSManager.IsActiveEntity(script_id)) continue;
-        //sorted from the top of the stack down, so the rest are no higher
-        if (above) |stack_pos| {
-            if (OwnerStackPos(ObjectType, world_manager, OwnerOf(ObjectType, world_manager, script_id)) <= stack_pos) break;
-        }
-
-        const script_component = manager.GetComponent(ScriptComponent, script_id) orelse continue;
-        const owner = ObjectType{ .mID = OwnerOf(ObjectType, world_manager, script_id), .mManager = world_manager };
-        if (RunHook(ObjectType, script_type, engine_context, script_component, &owner, args) == .Handled) return .Handled;
-    }
-
-    return .Continue;
+    const S = ScriptLoop(ObjectType, script_type, world_name, @TypeOf(args));
+    return engine_context.mSystems.RunSystem(S, engine_context, &world_manager.GetManager(ObjectType).mECSManager, .{ world_manager, above, args });
 }
 
-/// Every script loop holds a list of script ids, or walks an object's script children, while the scripts it runs can
-/// delete things, so ScriptComponent is locked in each of the world's object ECSs for the loop (see ECSManager.Lock): a
-/// delete of anything with a script in it, the running script's own object among them, waits until the loop is done.
-/// The runner's own work (finding owners, ordering by the scene stack) runs unchecked; each script then locks and is
-/// checked by what it lists itself, its Reads and Writes, in the window its DLL puts around every hook (ScriptExport)
-const ScriptScope = struct {
-    mUnchecked: WorldManager.UncheckedScope = .{},
+/// Every script loop is a system (ECS/Systems.zig) from the ECS of the objects whose scripts it runs. It holds a list of
+/// script ids, or walks an object's script children, while the scripts it runs can delete things, so it lists
+/// ScriptComponent: a delete of anything with a script in that ECS, the running script's own object among them, waits
+/// until the loop is done. It reads what it orders them by (the scene stack) the same way, and each script then runs as
+/// a system of its own inside it, locked and checked by its hook's own lists (ScriptExport.HookSystem)
+fn ScriptLoop(comptime ObjectType: type, comptime script_type: type, comptime world_name: []const u8, comptime Args: type) type {
+    return struct {
+        pub const Name = std.fmt.comptimePrint("ScriptsProcessor::RunScript({s}, {s}, {s})", .{ Tracy.ShortTypeName(ObjectType), Tracy.ShortTypeName(script_type), world_name });
+        pub const Reads = OrderReads(ObjectType);
+        pub const Writes = &.{};
 
-    fn Enter(self: *ScriptScope, world: *WorldManager) void {
-        inline for (.{ GameContext, Player, Scene, Entity }) |ObjectType| world.GetManager(ObjectType).mECSManager.Lock(&.{ScriptComponent});
-        self.mUnchecked.Enter(world);
-    }
+        pub fn Run(engine_context: *EngineContext, world_manager: *WorldManager, above: ?usize, args: Args) !ScriptResult {
+            const frame_allocator = engine_context.FrameAllocator();
+            const manager = world_manager.GetManager(ObjectType);
 
-    fn Leave(self: *ScriptScope, world: *WorldManager, engine_context: *EngineContext) void {
-        self.mUnchecked.Leave(world);
-        inline for (.{ GameContext, Player, Scene, Entity }) |ObjectType| {
-            world.GetManager(ObjectType).mECSManager.Unlock(engine_context, &.{ScriptComponent}) catch |err| {
-                std.log.err("What the scripts changed could not all be made: {s}", .{@errorName(err)});
-            };
+            const script_ids = try manager.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
+            SortByOwnerStackPos(ObjectType, world_manager, script_ids.items);
+
+            for (script_ids.items) |script_id| {
+                if (!manager.mECSManager.IsActiveEntity(script_id)) continue;
+                //sorted from the top of the stack down, so the rest are no higher
+                if (above) |stack_pos| {
+                    if (OwnerStackPos(ObjectType, world_manager, OwnerOf(ObjectType, world_manager, script_id)) <= stack_pos) break;
+                }
+
+                const script_component = manager.GetComponent(ScriptComponent, script_id) orelse continue;
+                const owner = ObjectType{ .mID = OwnerOf(ObjectType, world_manager, script_id), .mManager = world_manager };
+                if (RunHook(ObjectType, script_type, engine_context, script_component, &owner, args) == .Handled) return .Handled;
+            }
+
+            return .Continue;
         }
-    }
-};
+    };
+}
+
+/// A loop over one object's own script children of one type, until one hands back .Handled: what it reads is their
+/// ScriptComponents, in that object's ECS
+fn OwnScriptsLoop(comptime ObjectType: type, comptime script_type: type, comptime Args: type) type {
+    return struct {
+        pub const Name = std.fmt.comptimePrint("ScriptsProcessor::RunOwnScripts({s}, {s})", .{ Tracy.ShortTypeName(ObjectType), Tracy.ShortTypeName(script_type) });
+        pub const Reads = &.{ScriptComponent};
+        pub const Writes = &.{};
+
+        pub fn Run(engine_context: *EngineContext, owner: ObjectType, args: Args) ScriptResult {
+            var script_iter = owner.GetIterator(.Script);
+            while (script_iter.next()) |script| {
+                if (!script.HasComponent(script_type)) continue;
+
+                const script_component = script.GetComponent(ScriptComponent) orelse continue;
+                if (RunHook(ObjectType, script_type, engine_context, script_component, &owner, args) == .Handled) return .Handled;
+            }
+            return .Continue;
+        }
+    };
+}
+
+/// What a script loop reads besides the scripts' ScriptComponents, to order them by the scene stack: an entity's scene
+/// and where that scene sits in it, a scene's own place
+fn OrderReads(comptime ObjectType: type) []const type {
+    if (ObjectType == Entity) return &.{ ScriptComponent, EntitySceneComponent, Systems.In(SManager.ECSManagerT, StackPosComponent) };
+    if (ObjectType == Scene) return &.{ ScriptComponent, StackPosComponent };
+    return &.{ScriptComponent};
+}
 
 /// Runs the hook `script_type` stands for (its Hook) of one script child, whose ScriptComponent is `script_component`,
 /// on `owner`. A script with nothing to run is skipped (.Continue): one that never loaded, one that is stopped (a file
@@ -281,17 +301,9 @@ fn RunCollisionScripts(comptime script_type: type, engine_context: *EngineContex
     _ValidateScriptType(Entity, script_type);
     if (!owner.IsActive()) return;
 
-    var script_scope: ScriptScope = .{};
-    script_scope.Enter(owner.mManager);
-    defer script_scope.Leave(owner.mManager, engine_context);
-
-    var script_iter = owner.GetIterator(.Script);
-    while (script_iter.next()) |script| {
-        if (!script.HasComponent(script_type)) continue;
-
-        const script_component = script.GetComponent(ScriptComponent) orelse continue;
-        if (RunHook(Entity, script_type, engine_context, script_component, &owner, .{ &other, info }) == .Handled) return;
-    }
+    const args = .{ &other, info };
+    const S = OwnScriptsLoop(Entity, script_type, @TypeOf(args));
+    _ = try engine_context.mSystems.RunSystem(S, engine_context, &owner.mManager.mEManager.mECSManager, .{ owner, args });
 }
 
 /// Hands the pointer's and the UI's events to the event scripts of the entities they are sent to (OnPointerEventScript,
@@ -383,19 +395,8 @@ pub const EventScripts = struct {
 /// object's, e.g. the start scripts of a scene that has just loaded
 pub fn RunOwnScripts(comptime ObjectType: type, comptime script_type: type, engine_context: *EngineContext, owner: ObjectType, args: anytype) !ScriptResult {
     _ValidateScriptType(ObjectType, script_type);
-
-    var script_scope: ScriptScope = .{};
-    script_scope.Enter(owner.mManager);
-    defer script_scope.Leave(owner.mManager, engine_context);
-
-    var script_iter = owner.GetIterator(.Script);
-    while (script_iter.next()) |script| {
-        if (!script.HasComponent(script_type)) continue;
-
-        const script_component = script.GetComponent(ScriptComponent) orelse continue;
-        if (RunHook(ObjectType, script_type, engine_context, script_component, &owner, args) == .Handled) return .Handled;
-    }
-    return .Continue;
+    const S = OwnScriptsLoop(ObjectType, script_type, @TypeOf(args));
+    return engine_context.mSystems.RunSystem(S, engine_context, &owner.mManager.GetManager(ObjectType).mECSManager, .{ owner, args });
 }
 
 /// Hands the game events sent in `world` for `phase` (WorldManager.Emit) to every script in it with a handler for them,
@@ -424,23 +425,39 @@ pub fn ProcessGameEvents(engine_context: *EngineContext, world: *WorldManager, c
 /// Runs every handler in `world` for the game event with id `id`, whose bytes are at `event`, until one hands back
 /// .Handled
 fn RunEventHandlers(engine_context: *EngineContext, world: *WorldManager, id: u64, event: *const anyopaque) !ScriptResult {
-    var script_scope: ScriptScope = .{};
-    script_scope.Enter(world);
-    defer script_scope.Leave(world, engine_context);
-
-    inline for (.{ GameContext, Player, Scene, Entity }) |ObjectType| {
-        const manager = world.GetManager(ObjectType);
-        const script_ids = try manager.GetGroup(engine_context.FrameAllocator(), GroupQuery{ .Component = GameEventScript });
-        SortByOwnerStackPos(ObjectType, world, script_ids.items);
-        for (script_ids.items) |script_id| {
-            if (!manager.mECSManager.IsActiveEntity(script_id)) continue;
-            const script_component = manager.GetComponent(ScriptComponent, script_id) orelse continue;
-            const owner = ObjectType{ .mID = OwnerOf(ObjectType, world, script_id), .mManager = world };
-            if (RunHandler(ObjectType, engine_context, script_component, &owner, id, event) == .Handled) return .Handled;
-        }
-    }
-    return .Continue;
+    return engine_context.mSystems.RunSystem(EventHandlersLoop, engine_context, &world.mGCManager.mECSManager, .{ world, id, event });
 }
+
+/// The loop over every script in a world with game event handlers: from the game context ECS, whose scripts go first,
+/// to the players', the scenes' and the entities', each ordered the way RunScript orders them
+const EventHandlersLoop = struct {
+    pub const Name = "ScriptsProcessor::RunEventHandlers";
+    pub const Reads = &.{
+        ScriptComponent,
+        Systems.In(PManager.ECSManagerT, ScriptComponent),
+        Systems.In(SManager.ECSManagerT, ScriptComponent),
+        Systems.In(EManager.ECSManagerT, ScriptComponent),
+        //the scene stack order
+        Systems.In(EManager.ECSManagerT, EntitySceneComponent),
+        Systems.In(SManager.ECSManagerT, StackPosComponent),
+    };
+    pub const Writes = &.{};
+
+    pub fn Run(engine_context: *EngineContext, world: *WorldManager, id: u64, event: *const anyopaque) !ScriptResult {
+        inline for (.{ GameContext, Player, Scene, Entity }) |ObjectType| {
+            const manager = world.GetManager(ObjectType);
+            const script_ids = try manager.GetGroup(engine_context.FrameAllocator(), GroupQuery{ .Component = GameEventScript });
+            SortByOwnerStackPos(ObjectType, world, script_ids.items);
+            for (script_ids.items) |script_id| {
+                if (!manager.mECSManager.IsActiveEntity(script_id)) continue;
+                const script_component = manager.GetComponent(ScriptComponent, script_id) orelse continue;
+                const owner = ObjectType{ .mID = OwnerOf(ObjectType, world, script_id), .mManager = world };
+                if (RunHandler(ObjectType, engine_context, script_component, &owner, id, event) == .Handled) return .Handled;
+            }
+        }
+        return .Continue;
+    }
+};
 
 /// Runs one script child's handler for the game event with id `id`, if it has one and can run (see RunHook)
 fn RunHandler(comptime ObjectType: type, engine_context: *EngineContext, script_component: *const ScriptComponent, owner: *const ObjectType, id: u64, event: *const anyopaque) ScriptResult {

@@ -21,6 +21,7 @@ const ScriptABI = @import("../../Scripts/ScriptABI.zig");
 const ScriptExport = @import("../../Scripts/ScriptExport.zig");
 const ScriptsProcessor = @import("../../Scripts/ScriptsProcessor.zig");
 const Systems = @import("../../ECS/Systems.zig");
+const ECSManager = @import("../../ECS/ECSManager.zig");
 const SManager = @import("../../ECSManagers/SManager.zig");
 const ScriptComponent = @import("../../ECSComponents/Shared/ScriptComponent.zig");
 const ScenePhysicsComponent = @import("../../ECSComponents/SComponents.zig").PhysicsComponent;
@@ -251,4 +252,38 @@ test "each hook is locked by its own lists, its owner's script component too" {
     try std.testing.expectEqual(@as(u16, 2), gPhysicsSeen.mScriptLocks);
     try std.testing.expectEqual(@as(u32, 0), game_world.mEManager.mECSManager.mLockTotal);
     try std.testing.expectEqual(@as(u32, 0), game_world.mSManager.mECSManager.mLockTotal);
+}
+
+/// Reads its scene's physics settings without listing them through In
+const ReachesScene = struct {
+    pub const OnUpdate = struct {
+        pub const Reads = &.{EntityComponents.EntitySceneComponent};
+        pub const Writes = &.{};
+
+        pub fn Run(_: *ReachesScene, _: *EngineContext, owner: Entity) ScriptABI.ScriptResult {
+            const scene = owner.GetComponent(EntityComponents.EntitySceneComponent).?.mScene;
+            _ = scene.GetComponent(ScenePhysicsComponent);
+            return .Continue;
+        }
+    };
+};
+const ReachesSceneExports = ScriptExport.Exports(ReachesScene, "ReachesScene", &.{});
+
+test "a hook reaching another kind of ECS without listing it there is reported" {
+    if (!std.debug.runtime_safety) return error.SkipZigTest;
+    //the mistake is made on purpose: reported as a warning, kept off the build runner's output
+    ECSManager.access_report_level = .warn;
+    std.testing.log_level = .err;
+    defer ECSManager.access_report_level = .err;
+    defer std.testing.log_level = .warn;
+    const before = ECSManager.ReportedCount();
+
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    var handle = try world.ScriptAssetFor(&ReachesSceneExports.info);
+    defer handle.ReleaseAsset();
+    _ = try world.EntityWithScript(handle);
+
+    try world.RunUpdateScripts();
+    try std.testing.expectEqual(before + 1, ECSManager.ReportedCount());
 }
