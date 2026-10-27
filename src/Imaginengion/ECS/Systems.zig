@@ -370,8 +370,8 @@ fn _CheckArgs(comptime S: type, comptime Args: type) void {
 // together, each type once), and of those the ones it writes
 fn _Plan(comptime S: type, comptime Start: type) struct { kinds: []const type, types: []const []const type, writes: []const []const type } {
     @setEvalBranchQuota(100_000);
-    const write_entries = _Entries(S, "Writes", S.Writes);
-    const entries = _Entries(S, "Reads", S.Reads) ++ write_entries;
+    const write_entries = ListedTypes(S.Name, "Writes", S.Writes);
+    const entries = ListedTypes(S.Name, "Reads", S.Reads) ++ write_entries;
 
     var kinds: []const type = &.{Start};
     for (entries) |entry| {
@@ -410,9 +410,10 @@ fn _TypesInKind(comptime entries: []const type, comptime Start: type, comptime K
     return kind_types;
 }
 
-// the entries of one of the system's lists, as a slice: written as &.{ A, B }, .{ A, B } or a []const type. A type
-// listed twice in the same list is a mistake
-fn _Entries(comptime S: type, comptime list_name: []const u8, comptime list: anytype) []const type {
+/// The entries of a system's Reads or Writes (`list_name`), as a slice: written as &.{ A, B }, .{ A, B } or a []const
+/// type. A type listed twice in the same list is a mistake. `name` is the system's, for the compile errors; for what
+/// builds a system's lists out of others, as ScriptExport does for a script's hooks
+pub fn ListedTypes(comptime name: []const u8, comptime list_name: []const u8, comptime list: anytype) []const type {
     comptime var entries: []const type = &.{};
     const L = @TypeOf(list);
     switch (@typeInfo(L)) {
@@ -421,25 +422,25 @@ fn _Entries(comptime S: type, comptime list_name: []const u8, comptime list: any
                 entries = entries ++ [_]type{listed};
             },
             .one => inline for (list.*) |listed| {
-                entries = entries ++ [_]type{_ListedType(S, list_name, listed)};
+                entries = entries ++ [_]type{_ListedType(name, list_name, listed)};
             },
-            else => @compileError(S.Name ++ ": " ++ list_name ++ " has to be a list of components, &.{ ... }"),
+            else => @compileError(name ++ ": " ++ list_name ++ " has to be a list of components, &.{ ... }"),
         },
         .@"struct", .array => inline for (list) |listed| {
-            entries = entries ++ [_]type{_ListedType(S, list_name, listed)};
+            entries = entries ++ [_]type{_ListedType(name, list_name, listed)};
         },
-        else => @compileError(S.Name ++ ": " ++ list_name ++ " has to be a list of components, &.{ ... }"),
+        else => @compileError(name ++ ": " ++ list_name ++ " has to be a list of components, &.{ ... }"),
     }
     for (entries, 0..) |listed, listed_ind| {
         for (entries[listed_ind + 1 ..]) |other| {
-            if (listed == other) @compileError(S.Name ++ " lists " ++ @typeName(listed) ++ " twice in " ++ list_name);
+            if (listed == other) @compileError(name ++ " lists " ++ @typeName(listed) ++ " twice in " ++ list_name);
         }
     }
     return entries;
 }
 
-fn _ListedType(comptime S: type, comptime list_name: []const u8, comptime listed: anytype) type {
-    if (@TypeOf(listed) != type) @compileError(S.Name ++ ": " ++ list_name ++ " has something that isn't a component type in it");
+fn _ListedType(comptime name: []const u8, comptime list_name: []const u8, comptime listed: anytype) type {
+    if (@TypeOf(listed) != type) @compileError(name ++ ": " ++ list_name ++ " has something that isn't a component type in it");
     return listed;
 }
 

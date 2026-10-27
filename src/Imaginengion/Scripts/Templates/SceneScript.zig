@@ -1,40 +1,58 @@
 const std = @import("std");
 const IM = @import("IM");
-
-//What this script touches: every component it gets from an object (GetComponent), its owner's or anything else's. Both are
-//needed, &.{} for none. They are locked while it runs, so making or deleting things that have them waits until it is
-//done, and a Debug build stops on anything it touches but didn't list. Writes for the ones it changes, Reads for the rest
-pub const Reads = &.{};
-pub const Writes = &.{};
-//e.g. pub const Writes = &.{IM.EntityComponents.TransformComponent};
+//this script: what each hook's Run takes as self
+const Script = @This();
 
 //Variables: shown in the Scripts panel and saved, one set per scene the script is on. Each needs a default
 //mBall: IM.Entity = .uninit,
 
 //Hooks: take the // off any you want. Return .Continue to let the next script have its turn, .Handled to stop it here, .Warning when something didn't go as planned. An error (try) is logged and hands back .Error
+//
+//Each hook lists what it touches: every component it gets from an object, its owner's or anything else's. Writes for
+//the ones it changes (GetComponentMut), Reads for the rest (GetComponent), &.{} for none. A plain type is one on a
+//scene; one on another kind of object goes through IM.In, e.g. IM.In(IM.EECS, IM.EntityComponents.TransformComponent).
+//They are locked while the hook runs, so making or deleting things that have them waits until it is done, and a Debug
+//build reports anything it touches but didn't list.
 
 //when the scene starts
-pub fn OnSceneStart(self: *@This(), engine_context: *IM.EngineContext, owner: IM.SceneLayer) !IM.ScriptResult {
-    _ = .{ self, engine_context, owner };
-    return .Continue;
-}
+pub const OnSceneStart = struct {
+    pub const Reads = &.{};
+    pub const Writes = &.{};
+
+    pub fn Run(self: *Script, engine_context: *IM.EngineContext, owner: IM.SceneLayer) !IM.ScriptResult {
+        _ = .{ self, engine_context, owner };
+        return .Continue;
+    }
+};
 
 //every frame
-//pub fn OnUpdate(self: *@This(), engine_context: *IM.EngineContext, owner: IM.SceneLayer) !IM.ScriptResult {
-//    _ = .{ self, engine_context, owner };
-//    return .Continue;
-//}
+//pub const OnUpdate = struct {
+//    pub const Reads = &.{};
+//    pub const Writes = &.{};
+//    pub fn Run(self: *Script, engine_context: *IM.EngineContext, owner: IM.SceneLayer) !IM.ScriptResult {
+//        _ = .{ self, engine_context, owner };
+//        return .Continue;
+//    }
+//};
 
 //every physics step, dt seconds long, before the scene's entities': apply forces here
-//pub fn OnPhysicsUpdate(self: *@This(), engine_context: *IM.EngineContext, owner: IM.SceneLayer, dt: f32) !IM.ScriptResult {
-//    _ = .{ self, engine_context, owner, dt };
-//    return .Continue;
-//}
+//pub const OnPhysicsUpdate = struct {
+//    pub const Reads = &.{};
+//    pub const Writes = &.{};
+//    pub fn Run(self: *Script, engine_context: *IM.EngineContext, owner: IM.SceneLayer, dt: f32) !IM.ScriptResult {
+//        _ = .{ self, engine_context, owner, dt };
+//        return .Continue;
+//    }
+//};
 
 //Game events: import one by its file name, send it with owner.GetWorld().Emit(engine_context, ScoreEvent{}), and handle
-//it with a function of any name whose last parameter is it
+//it with a hook of any name whose Run's last parameter is it
 //const ScoreEvent = @import("ScoreEvent");
-//pub fn OnScore(self: *@This(), engine_context: *IM.EngineContext, owner: IM.SceneLayer, event: *const ScoreEvent) !IM.ScriptResult {
-//    _ = .{ self, engine_context, owner, event };
-//    return .Continue;
-//}
+//pub const OnScore = struct {
+//    pub const Reads = &.{};
+//    pub const Writes = &.{};
+//    pub fn Run(self: *Script, engine_context: *IM.EngineContext, owner: IM.SceneLayer, event: *const ScoreEvent) !IM.ScriptResult {
+//        _ = .{ self, engine_context, owner, event };
+//        return .Continue;
+//    }
+//};

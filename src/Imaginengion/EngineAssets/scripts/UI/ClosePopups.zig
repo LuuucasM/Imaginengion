@@ -5,23 +5,26 @@ const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
 const EntityComponents = @import("IM").EntityComponents;
-
-/// What it touches, through WidgetActions.ClosePopups: closing a popup folds its layout item
-pub const Reads = &.{};
-pub const Writes = &.{EntityComponents.LayoutItemComponent};
+const ClosePopups = @This();
 
 /// Stock widget script: clicking the entity closes every open popup, a menu's item once it is picked (see
 /// WidgetActions.ClosePopups). Put the item's own script on it too, for what picking it does
 /// Hands the click on (.Continue): the entity's own scripts and the ones it is inside still hear it
-pub fn OnPointerEvent(_: *@This(), engine_context: *EngineContext, owner: Entity, event: *const PointerEvent) ScriptResult {
-    _ = owner;
-    switch (event.*) {
-        .PointerClicked => |click| {
-            if (click.mButton == .BUTTON_LEFT) {
-                WidgetActions.ClosePopups(engine_context) catch |err| std.log.err("ClosePopups script: {s}", .{@errorName(err)});
-            }
-        },
-        else => {},
+pub const OnPointerEvent = struct {
+    /// What it touches, through WidgetActions.ClosePopups: closing a popup folds its layout item
+    pub const Reads = &.{};
+    pub const Writes = &.{EntityComponents.LayoutItemComponent};
+
+    pub fn Run(_: *ClosePopups, engine_context: *EngineContext, owner: Entity, event: *const PointerEvent) ScriptResult {
+        _ = owner;
+        switch (event.*) {
+            .PointerClicked => |click| {
+                if (click.mButton == .BUTTON_LEFT) {
+                    WidgetActions.ClosePopups(engine_context) catch |err| std.log.err("ClosePopups script: {s}", .{@errorName(err)});
+                }
+            },
+            else => {},
+        }
+        return .Continue;
     }
-    return .Continue;
-}
+};

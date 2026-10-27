@@ -5,10 +5,7 @@ const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
 const EntityComponents = @import("IM").EntityComponents;
-
-/// What it touches, through WidgetActions.Fold: folds the content's layout item and turns the arrow's text
-pub const Reads = &.{};
-pub const Writes = &.{ EntityComponents.LayoutItemComponent, EntityComponents.TextComponent };
+const Fold = @This();
 
 /// What clicking folds away and out again
 mContent: Entity = .uninit,
@@ -19,15 +16,21 @@ mArrow: Entity = .uninit,
 /// Stock widget script: clicking the entity folds its content away, or out again, and turns its arrow: a collapsing
 /// header (see WidgetActions.Fold)
 /// Hands the click on (.Continue): the entity's own scripts and the ones it is inside still hear it
-pub fn OnPointerEvent(self: *@This(), engine_context: *EngineContext, owner: Entity, event: *const PointerEvent) ScriptResult {
-    _ = owner;
-    switch (event.*) {
-        .PointerClicked => |click| {
-            if (click.mButton == .BUTTON_LEFT) {
-                WidgetActions.Fold(engine_context, self.mContent, self.mArrow) catch |err| std.log.err("Fold script: {s}", .{@errorName(err)});
-            }
-        },
-        else => {},
+pub const OnPointerEvent = struct {
+    /// What it touches, through WidgetActions.Fold: folds the content's layout item and turns the arrow's text
+    pub const Reads = &.{};
+    pub const Writes = &.{ EntityComponents.LayoutItemComponent, EntityComponents.TextComponent };
+
+    pub fn Run(self: *Fold, engine_context: *EngineContext, owner: Entity, event: *const PointerEvent) ScriptResult {
+        _ = owner;
+        switch (event.*) {
+            .PointerClicked => |click| {
+                if (click.mButton == .BUTTON_LEFT) {
+                    WidgetActions.Fold(engine_context, self.mContent, self.mArrow) catch |err| std.log.err("Fold script: {s}", .{@errorName(err)});
+                }
+            },
+            else => {},
+        }
+        return .Continue;
     }
-    return .Continue;
-}
+};

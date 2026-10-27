@@ -1,5 +1,6 @@
-//! What a script lists it touches, its Reads and Writes (ScriptExport.AccessOf): locked on its owner's world while each
-//! of its hooks runs, and the only components a Debug build lets it get pointers into. No DLL is built: the scripts are
+//! What each hook of a script lists it touches, its Reads and Writes: locked while that hook runs as a system from its
+//! owner's ECS (ScriptExport.HookSystem), with the owner's ScriptComponent, and the only components a Debug build lets
+//! it get pointers into. No DLL is built: the scripts are
 //! exported in-process (ScriptExport.Exports) and put straight onto an asset, and run the way the engine runs them.
 //! Run with `zig build test-engine`.
 const std = @import("std");
@@ -19,6 +20,10 @@ const OnUpdateScript = EntityComponents.OnUpdateScript;
 const ScriptABI = @import("../../Scripts/ScriptABI.zig");
 const ScriptExport = @import("../../Scripts/ScriptExport.zig");
 const ScriptsProcessor = @import("../../Scripts/ScriptsProcessor.zig");
+const Systems = @import("../../ECS/Systems.zig");
+const SManager = @import("../../ECSManagers/SManager.zig");
+const ScriptComponent = @import("../../ECSComponents/Shared/ScriptComponent.zig");
+const ScenePhysicsComponent = @import("../../ECSComponents/SComponents.zig").PhysicsComponent;
 
 /// What the scripts below saw while their hooks ran
 const Seen = struct {
@@ -33,39 +38,87 @@ var gSeen: Seen = .{};
 
 /// Writes transforms, and makes a new entity with one
 const Spawner = struct {
-    //the scene it makes the entity in, from its owner's
-    pub const Reads = &.{EntityComponents.EntitySceneComponent};
-    pub const Writes = &.{TransformComponent};
+    pub const OnUpdate = struct {
+        //the scene it makes the entity in, from its owner's
+        pub const Reads = &.{EntityComponents.EntitySceneComponent};
+        pub const Writes = &.{TransformComponent};
 
-    pub fn OnUpdate(_: *@This(), engine_context: *EngineContext, owner: Entity) !ScriptABI.ScriptResult {
-        const entity_ecs = &owner.mManager.mEManager.mECSManager;
-        gSeen.mTransformLocked = entity_ecs.mLockCounts[EManager.ECSManagerT.ComponentInd(TransformComponent)] > 0;
-        gSeen.mAllowsTransform = entity_ecs.AllowsAccess(TransformComponent);
-        gSeen.mAllowsRigidBody = entity_ecs.AllowsAccess(RigidBodyComponent);
+        pub fn Run(_: *Spawner, engine_context: *EngineContext, owner: Entity) !ScriptABI.ScriptResult {
+            const entity_ecs = &owner.mManager.mEManager.mECSManager;
+            gSeen.mTransformLocked = entity_ecs.mLockCounts[EManager.ECSManagerT.ComponentInd(TransformComponent)] > 0;
+            gSeen.mAllowsTransform = entity_ecs.AllowsAccess(TransformComponent);
+            gSeen.mAllowsRigidBody = entity_ecs.AllowsAccess(RigidBodyComponent);
 
-        const transforms_before = entity_ecs.NumWithComponent(TransformComponent);
-        const scene = owner.GetComponent(EntityComponents.EntitySceneComponent).?.mScene;
-        gSeen.mSpawn = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
-        //it reads as having its transform, but the array didn't take it while the script was running
-        gSeen.mSpawnStaged = gSeen.mSpawn.HasComponent(TransformComponent) and
-            entity_ecs.NumWithComponent(TransformComponent) == transforms_before;
-        return .Continue;
-    }
+            const transforms_before = entity_ecs.NumWithComponent(TransformComponent);
+            const scene = owner.GetComponent(EntityComponents.EntitySceneComponent).?.mScene;
+            gSeen.mSpawn = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+            //it reads as having its transform, but the array didn't take it while the script was running
+            gSeen.mSpawnStaged = gSeen.mSpawn.HasComponent(TransformComponent) and
+                entity_ecs.NumWithComponent(TransformComponent) == transforms_before;
+            return .Continue;
+        }
+    };
 };
 const SpawnerExports = ScriptExport.Exports(Spawner, "Spawner", &.{});
 
 /// Deletes the object it is on
 const SelfDeleter = struct {
-    pub const Reads = &.{};
-    pub const Writes = &.{};
+    pub const OnUpdate = struct {
+        pub const Reads = &.{};
+        pub const Writes = &.{};
 
-    pub fn OnUpdate(_: *@This(), engine_context: *EngineContext, owner: Entity) !ScriptABI.ScriptResult {
-        try owner.Delete(engine_context);
-        gSeen.mOwnerAliveAfterDelete = owner.IsActive();
-        return .Continue;
-    }
+        pub fn Run(_: *SelfDeleter, engine_context: *EngineContext, owner: Entity) !ScriptABI.ScriptResult {
+            try owner.Delete(engine_context);
+            gSeen.mOwnerAliveAfterDelete = owner.IsActive();
+            return .Continue;
+        }
+    };
 };
 const SelfDeleterExports = ScriptExport.Exports(SelfDeleter, "SelfDeleter", &.{});
+
+/// What TwoHooks saw in each of its hooks
+const HookSeen = struct {
+    mTransformLocked: bool = false,
+    mRigidBodyLocked: bool = true,
+    mScriptLocks: u16 = 0,
+    mScenePhysicsLocked: bool = true,
+};
+var gUpdateSeen: HookSeen = .{};
+var gPhysicsSeen: HookSeen = .{};
+
+fn SeeLocks(seen: *HookSeen, owner: Entity) void {
+    const entity_ecs = &owner.mManager.mEManager.mECSManager;
+    const scene_ecs = &owner.mManager.mSManager.mECSManager;
+    seen.mTransformLocked = entity_ecs.mLockCounts[EManager.ECSManagerT.ComponentInd(TransformComponent)] > 0;
+    seen.mRigidBodyLocked = entity_ecs.mLockCounts[EManager.ECSManagerT.ComponentInd(RigidBodyComponent)] > 0;
+    seen.mScriptLocks = entity_ecs.mLockCounts[EManager.ECSManagerT.ComponentInd(ScriptComponent)];
+    seen.mScenePhysicsLocked = scene_ecs.mLockCounts[SManager.ECSManagerT.ComponentInd(ScenePhysicsComponent)] > 0;
+}
+
+/// Two hooks touching different things: each is locked by its own lists only
+const TwoHooks = struct {
+    pub const OnUpdate = struct {
+        pub const Reads = &.{};
+        pub const Writes = &.{TransformComponent};
+
+        pub fn Run(_: *TwoHooks, _: *EngineContext, owner: Entity) ScriptABI.ScriptResult {
+            SeeLocks(&gUpdateSeen, owner);
+            return .Continue;
+        }
+    };
+
+    pub const OnPhysicsUpdate = struct {
+        //the scene's gravity, from the scene ECS
+        pub const Reads = &.{Systems.In(SManager.ECSManagerT, ScenePhysicsComponent)};
+        pub const Writes = &.{RigidBodyComponent};
+
+        pub fn Run(_: *TwoHooks, _: *EngineContext, owner: Entity, _: f32) ScriptABI.ScriptResult {
+            SeeLocks(&gPhysicsSeen, owner);
+            return .Continue;
+        }
+    };
+};
+const TwoHooksExports = ScriptExport.Exports(TwoHooks, "TwoHooks", &.{});
 
 const TestWorld = struct {
     mEngineContext: *EngineContext,
@@ -169,4 +222,33 @@ test "a script deleting its own object goes once the scripts are done, not while
 
     try std.testing.expect(gSeen.mOwnerAliveAfterDelete);
     try std.testing.expect(!entity.IsActive());
+}
+
+test "each hook is locked by its own lists, its owner's script component too" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    gUpdateSeen = .{};
+    gPhysicsSeen = .{};
+
+    var handle = try world.ScriptAssetFor(&TwoHooksExports.info);
+    defer handle.ReleaseAsset();
+    _ = try world.EntityWithScript(handle);
+    const game_world = &world.mEngineContext.mGameWorld;
+
+    try world.RunUpdateScripts();
+    try ScriptsProcessor.RunPhysicsUpdateScripts(world.mEngineContext, .{ .mWorld = game_world, .mDT = 1.0 / 60.0 });
+
+    //OnUpdate: its transform, not the physics hook's
+    try std.testing.expect(gUpdateSeen.mTransformLocked);
+    try std.testing.expect(!gUpdateSeen.mRigidBodyLocked);
+    try std.testing.expect(!gUpdateSeen.mScenePhysicsLocked);
+    //OnPhysicsUpdate: its rigid body, and through In the scene's physics in the scene ECS
+    try std.testing.expect(gPhysicsSeen.mRigidBodyLocked);
+    try std.testing.expect(gPhysicsSeen.mScenePhysicsLocked);
+    try std.testing.expect(!gPhysicsSeen.mTransformLocked);
+    //the hook locks the script component on top of the script runner's own lock
+    try std.testing.expectEqual(@as(u16, 2), gUpdateSeen.mScriptLocks);
+    try std.testing.expectEqual(@as(u16, 2), gPhysicsSeen.mScriptLocks);
+    try std.testing.expectEqual(@as(u32, 0), game_world.mEManager.mECSManager.mLockTotal);
+    try std.testing.expectEqual(@as(u32, 0), game_world.mSManager.mECSManager.mLockTotal);
 }

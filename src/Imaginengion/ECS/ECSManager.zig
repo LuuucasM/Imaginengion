@@ -919,6 +919,14 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return self._FindComponent(component_type, entity_id);
         }
 
+        /// The component just added to the entity, for what adds it to hand back (Manager.AddComponent fetches it
+        /// again after the bookkeeping the add sets off). Mutable and not checked: what was added is the adder's
+        pub fn GetAddedComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
+            _ValidateType(component_type);
+            std.debug.assert(self.IsActiveEntity(entity_id));
+            return self._FindComponent(component_type, entity_id);
+        }
+
         // the component on the entity, or its staged copy
         fn _FindComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
             if (self.mComponentManager.GetComponent(component_type, entity_id)) |component| return component;

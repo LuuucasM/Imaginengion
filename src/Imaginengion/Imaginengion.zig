@@ -94,6 +94,7 @@ pub const Bus = @import("ECSObjects/Bus.zig");
 
 //Scene Stuff -----------------------------------------
 pub const SceneLayer = @import("ECSObjects/Scene.zig");
+pub const SceneComponents = @import("ECSComponents/SComponents.zig");
 
 //Player and Game Context Stuff ------------------------
 pub const Player = @import("ECSObjects/Player.zig");
@@ -108,6 +109,15 @@ pub const ScriptABI = @import("Scripts/ScriptABI.zig");
 pub const ScriptExport = @import("Scripts/ScriptExport.zig");
 //game events: an event file's Phase is a GamePhase (see Scripts/GameEvents.zig)
 pub const GamePhase = @import("Scripts/GameEvents.zig").GamePhase;
+//what a hook touches in another kind of ECS than its owner's: IM.In(IM.GCECS, IM.GCComponents.AttribComponent)
+pub const In = @import("ECS/Systems.zig").In;
+//the kinds of ECS, for In
+pub const EECS = @import("ECSManagers/EManager.zig").ECSManagerT;
+pub const SECS = @import("ECSManagers/SManager.zig").ECSManagerT;
+pub const PECS = @import("ECSManagers/PManager.zig").ECSManagerT;
+pub const GCECS = @import("ECSManagers/GCManager.zig").ECSManagerT;
+pub const UIECS = @import("UI/UIManager.zig").ECSManagerT;
+pub const AudioECS = @import("AudioManager/AudioManager.zig").ECSManagerT;
 
 //Event Stuff -----------------------------------------------
 pub const KeyboardPressedEvent = @import("Events/WindowEventData.zig").KeyboardPressedEvent;

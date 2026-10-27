@@ -228,7 +228,7 @@ pub fn Core(comptime Self: type) type {
             _ = try self.mECSManager.AddComponent(engine_context, obj_id, new_component);
             try OnComponentAdded(self, engine_context, obj_id, Self.ECSManagerT.ComponentInd(component_t));
             //fetched again: what OnComponentAdded adds can move a component that went on right away
-            return self.mECSManager.GetComponentMut(component_t, obj_id).?;
+            return self.mECSManager.GetAddedComponent(component_t, obj_id).?;
         }
 
         /// Adds the component now, see ECSManager.AddComponentSync for when that is safe, and runs OnComponentAdded
