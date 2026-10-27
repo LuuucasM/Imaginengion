@@ -1,7 +1,6 @@
 //Tests that need the engine module, run by `zig build test-engine`
 test {
     _ = @import("Tests/ECS/ECSTests.zig");
-    _ = @import("Tests/ECS/SystemTests.zig");
     _ = @import("Tests/ECS/SystemsLayerTests.zig");
     _ = @import("Tests/ECSObjects/DeleteTests.zig");
     _ = @import("Tests/Serializer/SerializerTests.zig");

@@ -4,7 +4,6 @@ const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
 const EventManager = @import("../Events/EventManager.zig");
-const System = @import("System.zig");
 pub const BuiltinComponentCount = @import("Components.zig").BuiltinComponentCount;
 pub const MainObjectComponent = @import("Components.zig").MainObjectComponent;
 pub const EntityTagComponent = @import("Components.zig").EntityTagComponent;
@@ -490,57 +489,10 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         }
 
         //--------systems----------
-        /// Runs a system (see System.zig) on this ECS: what it touches is locked while it runs (see Lock), and the queue
-        /// drains when it is done if that was the last lock. Its parameters are supplied by type: this ECS itself as
-        /// `*Self`, anything else asked of `provider` (`provider.Get(T)`, `.{}` when the system needs nothing else).
-        /// Everything it touches has to be in this ECS; a system across several ECSs is run by what owns them
-        pub fn RunSystem(self: *Self, engine_context: *EngineContext, comptime S: type, provider: anytype) anyerror!void {
-            comptime System.Validate(S);
-            inline for (S.Accessed) |accessed_type| {
-                if (comptime !HasType(accessed_type)) @compileError("System " ++ S.Name ++ " touches " ++ @typeName(accessed_type) ++ ", which " ++ debug_name ++ " does not have");
-            }
-
-            const zone = Tracy.ZoneInit(S.Name, @src());
-            defer zone.Deinit();
-
-            self.Lock(S.Accessed);
-            //all writable: the Reads/Writes split is checked for systems run through the systems layer (Systems.zig)
-            var record = comptime SystemRecordFor(S.Name, &.{}, S.Accessed);
-            self.EnterSystem(&record);
-            System.Call(S, SystemParams(@TypeOf(provider)){ .mECS = self, .mProvider = provider }) catch |err| {
-                self.LeaveSystem(&record);
-                self.Unlock(engine_context, S.Accessed) catch |unlock_err| {
-                    std.log.err("What " ++ S.Name ++ " changed could not all be made: {s}", .{@errorName(unlock_err)});
-                };
-                return err;
-            };
-            //left before the unlock: what the drain sets off isn't the system's doing
-            self.LeaveSystem(&record);
-            try self.Unlock(engine_context, S.Accessed);
-        }
-
-        // what RunSystem supplies a system's parameters from: this ECS, and the caller's provider for the rest
-        fn SystemParams(comptime Provider: type) type {
-            return struct {
-                mECS: *Self,
-                mProvider: Provider,
-
-                pub fn Get(params: @This(), comptime T: type) T {
-                    if (T == *Self) {
-                        return params.mECS;
-                    } else if (@hasDecl(Provider, "Get")) {
-                        return params.mProvider.Get(T);
-                    } else {
-                        @compileError("a system run on " ++ debug_name ++ " wants a " ++ @typeName(T) ++ ", and nothing given to RunSystem can supply one");
-                    }
-                }
-            };
-        }
-
         /// Each component's slot is set when a running system may get pointers into it
         pub const AllowedSet = std.bit_set.StaticBitSet(components_types.len + BuiltinComponentCount);
 
-        /// What RunSystem keeps on its own stack while a system runs on this ECS, so the debug checks know what it
+        /// What a run of a system (Systems.RunSystem) keeps on its own stack on this ECS, so the debug checks know what it
         /// listed. Chained: the innermost one is what is checked, a system inside another can't lean on what the outer
         /// one listed
         pub const SystemRecord = struct {

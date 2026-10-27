@@ -5,7 +5,6 @@ const std = @import("std");
 const EngineContext = @import("EngineContext.zig");
 const Tracy = @import("Tracy.zig");
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
-const System = @import("../ECS/System.zig");
 const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType;
 const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
 const WorldBVH = @import("WorldBVH.zig");
@@ -445,126 +444,6 @@ pub fn GetObjectByUUID(self: *WorldManager, comptime obj_t: type, uuid: u64) ?ob
 }
 
 /// Returns the manager that owns objects of type obj_t (Entity -> EManager, Scene -> SManager, ...)
-/// Runs a system (ECS/System.zig) on this world, in a SystemScope: each component it touches is locked in every one of
-/// the world's ECSs that has it (an entity's, a scene's, a player's, a game context's), so a shared one like
-/// NameComponent is locked on all of them. Its parameters can be any of what SystemParams supplies
-pub fn RunSystem(self: *WorldManager, engine_context: *EngineContext, comptime S: type) anyerror!void {
-    comptime System.Validate(S);
-
-    const zone = Tracy.ZoneInit(S.Name, @src());
-    defer zone.Deinit();
-
-    var scope: SystemScope(S.Name, S.Accessed) = .{};
-    scope.Enter(self);
-    System.Call(S, SystemParams{ .mEngineContext = engine_context, .mWorld = self }) catch |err| {
-        scope.Leave(self, engine_context) catch |leave_err| {
-            std.log.err("What " ++ S.Name ++ " changed could not all be made: {s}", .{@errorName(leave_err)});
-        };
-        return err;
-    };
-    try scope.Leave(self, engine_context);
-}
-
-/// The window a system runs in on a world, for whatever touches components the way a system does: RunSystem's, and a
-/// script's hook (ScriptExport). While it is entered the components in `accessed` are locked in each of the world's
-/// ECSs that has them, and each of the four ECSs holds a record of what may be touched there (for the debug checks),
-/// one where nothing in `accessed` lives included
-pub fn SystemScope(comptime name: [:0]const u8, comptime accessed: []const type) type {
-    inline for (accessed) |accessed_type| {
-        const in_world = comptime blk: {
-            @setEvalBranchQuota(100_000);
-            break :blk EManager.ECSManagerT.HasType(accessed_type) or GCManager.ECSManagerT.HasType(accessed_type) or
-                PManager.ECSManagerT.HasType(accessed_type) or SManager.ECSManagerT.HasType(accessed_type);
-        };
-        if (!in_world) @compileError(name ++ " touches " ++ @typeName(accessed_type) ++ ", which none of a world's objects have");
-    }
-
-    return struct {
-        const Scope = @This();
-        const e_types = _TypesIn(EManager.ECSManagerT, accessed);
-        const gc_types = _TypesIn(GCManager.ECSManagerT, accessed);
-        const p_types = _TypesIn(PManager.ECSManagerT, accessed);
-        const s_types = _TypesIn(SManager.ECSManagerT, accessed);
-
-        mE: EManager.ECSManagerT.SystemRecord = EManager.ECSManagerT.SystemRecordFor(name, &.{}, e_types),
-        mGC: GCManager.ECSManagerT.SystemRecord = GCManager.ECSManagerT.SystemRecordFor(name, &.{}, gc_types),
-        mP: PManager.ECSManagerT.SystemRecord = PManager.ECSManagerT.SystemRecordFor(name, &.{}, p_types),
-        mS: SManager.ECSManagerT.SystemRecord = SManager.ECSManagerT.SystemRecordFor(name, &.{}, s_types),
-
-        pub fn Enter(scope: *Scope, world: *WorldManager) void {
-            world.mEManager.mECSManager.Lock(e_types);
-            world.mGCManager.mECSManager.Lock(gc_types);
-            world.mPManager.mECSManager.Lock(p_types);
-            world.mSManager.mECSManager.Lock(s_types);
-            world.mEManager.mECSManager.EnterSystem(&scope.mE);
-            world.mGCManager.mECSManager.EnterSystem(&scope.mGC);
-            world.mPManager.mECSManager.EnterSystem(&scope.mP);
-            world.mSManager.mECSManager.EnterSystem(&scope.mS);
-        }
-
-        /// The records go first, so what the drains set off isn't charged to it. Every ECS is let go of even when one
-        /// fails to drain, and the first failure is handed back
-        pub fn Leave(scope: *Scope, world: *WorldManager, engine_context: *EngineContext) !void {
-            world.mSManager.mECSManager.LeaveSystem(&scope.mS);
-            world.mPManager.mECSManager.LeaveSystem(&scope.mP);
-            world.mGCManager.mECSManager.LeaveSystem(&scope.mGC);
-            world.mEManager.mECSManager.LeaveSystem(&scope.mE);
-
-            var first_err: ?anyerror = null;
-            world.mSManager.mECSManager.Unlock(engine_context, s_types) catch |err| {
-                if (first_err == null) first_err = err;
-            };
-            world.mPManager.mECSManager.Unlock(engine_context, p_types) catch |err| {
-                if (first_err == null) first_err = err;
-            };
-            world.mGCManager.mECSManager.Unlock(engine_context, gc_types) catch |err| {
-                if (first_err == null) first_err = err;
-            };
-            world.mEManager.mECSManager.Unlock(engine_context, e_types) catch |err| {
-                if (first_err == null) first_err = err;
-            };
-            if (first_err) |err| return err;
-        }
-    };
-}
-
-// the ones of `types` that the ECS type `ECSManagerT` has
-fn _TypesIn(comptime ECSManagerT: type, comptime types: []const type) []const type {
-    //every type checked against a whole component list
-    @setEvalBranchQuota(100_000);
-    comptime var in_ecs: []const type = &.{};
-    for (types) |listed_type| {
-        if (ECSManagerT.HasType(listed_type)) in_ecs = in_ecs ++ [_]type{listed_type};
-    }
-    return in_ecs;
-}
-
-/// What a system run on a world (RunSystem) can take as parameters, each by its type
-pub const SystemParams = struct {
-    mEngineContext: *EngineContext,
-    mWorld: *WorldManager,
-
-    pub fn Get(self: SystemParams, comptime T: type) T {
-        if (T == *EngineContext) {
-            return self.mEngineContext;
-        } else if (T == *WorldManager) {
-            return self.mWorld;
-        } else if (T == *EManager) {
-            return &self.mWorld.mEManager;
-        } else if (T == *GCManager) {
-            return &self.mWorld.mGCManager;
-        } else if (T == *PManager) {
-            return &self.mWorld.mPManager;
-        } else if (T == *SManager) {
-            return &self.mWorld.mSManager;
-        } else if (T == *PhysicsManager) {
-            return &self.mWorld.mPhysicsManager;
-        } else {
-            @compileError("a system run on a world can't be given a " ++ @typeName(T) ++ ", see WorldManager.SystemParams");
-        }
-    }
-};
-
 pub fn GetManager(self: *WorldManager, comptime obj_t: type) *ManagerT(obj_t) {
     if (obj_t == Entity) {
         return &self.mEManager;

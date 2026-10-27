@@ -544,3 +544,43 @@ test "changing a component only listed in Reads is reported" {
     //Position once (one entity or all of them, it's the same mistake) and Gravity once
     try std.testing.expectEqual(before + 2, ECS.ReportedCount());
 }
+
+const ReadsPositionOnly = struct {
+    pub const Name = "ReadsPositionOnly";
+    pub const Reads = &.{Position};
+    pub const Writes = &.{};
+
+    pub fn Run(_: *EngineContext, bodies: *BodyECS, allows: *[3]bool) void {
+        allows[0] = bodies.AllowsAccess(BodyECS.ParentComponent) and bodies.AllowsAccess(BodyECS.ChildComponent);
+        allows[1] = bodies.AllowsAccess(ECS.MainObjectComponent) and bodies.AllowsWrite(ECS.MainObjectComponent);
+        allows[2] = bodies.AllowsAccess(Health);
+    }
+};
+
+test "the hierarchy and tags are always allowed in a run, what it didn't list isn't" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    var allows: [3]bool = .{ false, false, true };
+
+    try layer.mSystems.RunSystem(ReadsPositionOnly, layer.mEngineContext, &layer.mBodies, .{ &layer.mBodies, &allows });
+
+    try std.testing.expect(allows[0]);
+    try std.testing.expect(allows[1]);
+    try std.testing.expect(!allows[2]);
+    //and everything again once it is done
+    try std.testing.expect(layer.mBodies.AllowsAccess(Health));
+}
+
+test "a change can only go straight to storage that isn't locked" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const bodies = &layer.mBodies;
+
+    bodies.Lock(&.{ Position, ECS.MainObjectComponent });
+    try std.testing.expect(!bodies.CanChangeStorage(Position.Ind));
+    try std.testing.expect(bodies.CanChangeStorage(Health.Ind));
+    //a tag has no storage to move, locked or not
+    try std.testing.expect(bodies.CanChangeStorage(ECS.MainObjectComponent.Ind));
+    try bodies.Unlock(layer.mEngineContext, &.{ Position, ECS.MainObjectComponent });
+    try std.testing.expect(bodies.CanChangeStorage(Position.Ind));
+}
