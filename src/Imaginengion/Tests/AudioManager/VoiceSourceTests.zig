@@ -7,7 +7,11 @@ const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
 const Player = @import("../../ECSObjects/Player.zig");
 const GameContext = @import("../../ECSObjects/GameContext.zig");
-const VoiceComponent = @import("../../ECSComponents/VComponents.zig").VoiceComponent;
+const VComponents = @import("../../ECSComponents/VComponents.zig");
+const VoiceComponent = VComponents.VoiceComponent;
+const VoiceFadeComponent = VComponents.VoiceFadeComponent;
+const BusComponent = VComponents.BusComponent;
+const AudioManager = @import("../../AudioManager/AudioManager.zig");
 const AudioComponent = @import("../../ECSComponents/Shared/AudioComponent.zig");
 const ObjectRef = @import("../../ECSComponents/Entity/ObjectRefComponent.zig").Ref;
 
@@ -59,4 +63,36 @@ test "every object type plays its AudioComponent as an attached voice, and StopA
         source.StopAudio();
         try std.testing.expectEqual(0, audio_component.mVoiceToken);
     }
+}
+
+test "the mix reaches each object type's AudioComponent, and fades out a voice whose source stopped" {
+    const engine_context = try InitEngine();
+    defer DeinitEngine(engine_context);
+    const world = &engine_context.mEditorWorld;
+    const audio = &engine_context.mAudioManager;
+    //a world in use: the mix reads its objects' AudioComponents through In
+    try world.ConnectTo(engine_context, &audio.mECSManager);
+    //held: paused and already faded out, so the mix reads no asset and needs no asset manager
+    const master = audio.GetMasterBus();
+    master.SetPaused(true);
+    master.GetComponentMut(BusComponent).?.mGain = 0;
+
+    const scene = try world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const sources = .{
+        try scene.CreateEntity(engine_context, Entity.DefaultConfig),
+        scene,
+        try world.CreatePlayer(engine_context, Player.DefaultConfig),
+        try world.CreateGameContext(engine_context, GameContext.DefaultConfig),
+    };
+    var voices: [sources.len]@import("../../ECSObjects/Voice.zig") = undefined;
+    inline for (sources, 0..) |source, i| {
+        _ = try source.AddComponent(engine_context, AudioComponent{});
+        voices[i] = (try source.PlayAudio(engine_context)).?;
+        //its token moves on, so the mix finds it orphaned
+        source.StopAudio();
+    }
+
+    //the fade is started inside the mix, with VoiceFadeComponent locked: it waits, and lands as the mix ends
+    try engine_context.mSystems.RunSystem(AudioManager.Mix, engine_context, &audio.mECSManager, .{audio});
+    for (voices) |voice| try std.testing.expect(voice.HasComponent(VoiceFadeComponent));
 }

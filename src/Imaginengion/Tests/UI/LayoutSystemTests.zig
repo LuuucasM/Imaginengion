@@ -333,18 +333,18 @@ test "drawing an overlay records its screen, and only a changed screen lays it o
     try inside.ClearLayoutDirty(engine_context);
 
     //scale with screen is 1080 units tall whatever the height, so a 1080p view is one unit per pixel
-    try LayoutSystem.RecordViewArea(game_world, &scenes, ViewOf(1920, 1080, 1), engine_context);
+    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, &game_world.mEManager.mECSManager, .{ game_world, &scenes, ViewOf(1920, 1080, 1) });
     try std.testing.expect(corner.HasComponent(LayoutDirtyTag));
     try std.testing.expect(!inside.HasComponent(LayoutDirtyTag));
     try world.Update();
     try ExpectXY(910, 515, corner);
 
     //the same shape at 720p is the same canvas, so nothing to redo
-    try LayoutSystem.RecordViewArea(game_world, &scenes, ViewOf(1280, 720, 1), engine_context);
+    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, &game_world.mEManager.mECSManager, .{ game_world, &scenes, ViewOf(1280, 720, 1) });
     try std.testing.expect(!corner.HasComponent(LayoutDirtyTag));
 
     //narrower is a different canvas: the corner follows the new right edge
-    try LayoutSystem.RecordViewArea(game_world, &scenes, ViewOf(1000, 1080, 1), engine_context);
+    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, &game_world.mEManager.mECSManager, .{ game_world, &scenes, ViewOf(1000, 1080, 1) });
     try std.testing.expect(corner.HasComponent(LayoutDirtyTag));
     try world.Update();
     try ExpectXY(450, 515, corner);
@@ -360,7 +360,7 @@ test "a constant pixel size world's overlays fit its size in pixels over the dis
     const other = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const scenes = [_]Scene.Type{ scene.mID, other.mID };
 
-    try LayoutSystem.RecordViewArea(&engine_context.mEditorWorld, &scenes, ViewOf(1600, 900, 2), engine_context);
+    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{ &engine_context.mEditorWorld, &scenes, ViewOf(1600, 900, 2) });
     for ([_]Scene{ scene, other }) |overlay| {
         const area = overlay.GetComponent(SceneComponent).?.mLayoutArea.?;
         try std.testing.expectApproxEqAbs(@as(f32, 800), area.x, eps);
@@ -376,7 +376,7 @@ test "a game scene among the overlays records nothing" {
     const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const scenes = [_]Scene.Type{level.mID};
 
-    try LayoutSystem.RecordViewArea(&engine_context.mEditorWorld, &scenes, ViewOf(1600, 900, 1), engine_context);
+    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{ &engine_context.mEditorWorld, &scenes, ViewOf(1600, 900, 1) });
     try std.testing.expect(level.GetComponent(SceneComponent).?.mLayoutArea == null);
 }
 

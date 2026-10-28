@@ -28,6 +28,11 @@ const ParentComponent = @import("../ECS/Components.zig").ParentComponent(Bus.Typ
 const ChildComponent = @import("../ECS/Components.zig").ChildComponent(Bus.Type);
 const AudioComponent = @import("../ECSComponents/EComponents.zig").AudioComponent;
 const AudioAsset = @import("../ECSComponents/AComponents.zig").AudioAsset;
+const Systems = @import("../ECS/Systems.zig");
+const EManager = @import("../ECSManagers/EManager.zig");
+const SManager = @import("../ECSManagers/SManager.zig");
+const PManager = @import("../ECSManagers/PManager.zig");
+const GCManager = @import("../ECSManagers/GCManager.zig");
 const AudioManager = @This();
 
 //voices and buses share this one ECS, told apart by their components (VoiceComponent, BusComponent)
@@ -211,7 +216,9 @@ pub fn StopVoice(self: *AudioManager, engine_context: *EngineContext, voice: Voi
 
 fn StartFade(self: *AudioManager, engine_context: *EngineContext, voice_id: Voice.Type) !void {
     if (self.HasComponent(VoiceFadeComponent, voice_id)) return;
-    _ = try self.mECSManager.AddComponentSync(engine_context, voice_id, VoiceFadeComponent{ .mFramesLeft = FADE_FRAMES });
+    //not AddComponentSync: the mix starts fades with VoiceFadeComponent locked. There the add waits for the mix to end,
+    //still readable, so the fade stage fades it this same mix
+    _ = try self.mECSManager.AddComponent(engine_context, voice_id, VoiceFadeComponent{ .mFramesLeft = FADE_FRAMES });
 }
 
 /// A token no component holds yet. Never 0, which is what a component that has not played anything holds
@@ -375,85 +382,112 @@ fn IsBusHeld(self: *AudioManager, bus_id: Bus.Type) bool {
 /// spatial) slot in as stages of their own. Where a stage gets its modifier depends on the voice (see VoiceState):
 /// live from its source's AudioComponent, from its own copies, or from what it played last
 pub fn OnUpdate(self: *AudioManager, engine_context: *EngineContext) !void {
-    const buffered_frames = self.mOutputBuffer.AvailableRead() / AUDIO_CHANNELS;
-
-    Tracy.Plot("Audio/Buffered Frames", .{ .color = 0x8BC34A }, buffered_frames);
+    Tracy.Plot("Audio/Buffered Frames", .{ .color = 0x8BC34A }, self.mOutputBuffer.AvailableRead() / AUDIO_CHANNELS);
     Tracy.Plot("Audio/Underruns", .{ .color = 0xF44336 }, self.mAudioContext.GetUnderrunCount());
     Tracy.Plot("Audio/Voices", .{ .color = 0x03A9F4 }, self.mECSManager.NumWithComponent(VoiceComponent));
 
-    if (buffered_frames >= TARGET_FRAMES) return;
-
-    const frame_allocator = engine_context.FrameAllocator();
-    const frames_to_produce = TARGET_FRAMES - buffered_frames;
-    const samples_to_produce = frames_to_produce * AUDIO_CHANNELS;
-
-    const voices = try self.GetGroup(frame_allocator, .{ .Component = VoiceComponent });
-
-    //one buffer per voice, back to back, since every stage needs every voice's output from the one before it
-    const voice_buffers = try frame_allocator.alloc(f32, voices.items.len * samples_to_produce);
-    const voice_frames = try frame_allocator.alloc(u64, voices.items.len);
-
-    //read stage
-    for (voices.items, 0..) |voice_id, i| {
-        const voice_buffer = voice_buffers[i * samples_to_produce ..][0..samples_to_produce];
-        voice_frames[i] = try self.ReadVoice(engine_context, voice_id, voice_buffer);
-    }
-
-    //volume stage: a changed volume slides over from the last one across this buffer instead of jumping
-    for (voices.items, 0..) |voice_id, i| {
-        if (voice_frames[i] == 0) continue;
-        const voice_component = self.GetComponentMut(VoiceComponent, voice_id).?;
-        const volume = switch (self.GetVoiceState(voice_id)) {
-            .Attached => |source_component| source_component.mVolume,
-            .Detached => self.GetComponent(VolumeComponent, voice_id).?.mVolume,
-            .Orphaned => voice_component.mLastVolume,
-        };
-        const voice_samples = voice_buffers[i * samples_to_produce ..][0 .. voice_frames[i] * AUDIO_CHANNELS];
-        AudioMath.ApplyRamp(AUDIO_CHANNELS, voice_samples, voice_component.mLastVolume, volume);
-        voice_component.mLastVolume = volume;
-    }
-
-    //fade stage
-    for (voices.items, 0..) |voice_id, i| {
-        const fade_component = self.GetComponentMut(VoiceFadeComponent, voice_id) orelse continue;
-        const voice_samples = voice_buffers[i * samples_to_produce ..][0 .. voice_frames[i] * AUDIO_CHANNELS];
-        //anything after the end of the fade is silent, so it is left out of the mix
-        voice_frames[i] = AudioMath.ApplyFade(AUDIO_CHANNELS, voice_samples, &fade_component.mFramesLeft, FADE_FRAMES);
-        if (fade_component.mFramesLeft == 0) {
-            try self.DeleteVoice(engine_context, voice_id);
-        }
-    }
-
-    //bus stage: each voice is added into its bus, then the tree is mixed children first, each bus applying its own
-    //gain before it is added into its parent. What comes out of Master is the mix
-    const buses = try self.GetGroup(frame_allocator, .{ .Component = BusComponent });
-    const bus_buffers = try frame_allocator.alloc(f32, buses.items.len * samples_to_produce);
-    @memset(bus_buffers, 0);
-
-    var bus_indices: BusIndices = .empty;
-    try bus_indices.ensureTotalCapacity(frame_allocator, @intCast(buses.items.len));
-    for (buses.items, 0..) |bus_id, i| {
-        bus_indices.putAssumeCapacity(bus_id, i);
-    }
-
-    for (voices.items, 0..) |voice_id, i| {
-        const voice_samples = voice_buffers[i * samples_to_produce ..][0 .. voice_frames[i] * AUDIO_CHANNELS];
-        if (voice_samples.len == 0) continue;
-        const bus_id = self.ResolveBus(self.GetComponent(VoiceComponent, voice_id).?.mBusID);
-        const bus_buffer = bus_buffers[bus_indices.get(bus_id).? * samples_to_produce ..][0..samples_to_produce];
-        for (bus_buffer[0..voice_samples.len], voice_samples) |*mixed, sample| {
-            mixed.* += sample;
-        }
-    }
-
-    const mixed_buffer = self.MixBus(self.mMasterBus.mID, bus_buffers, samples_to_produce, &bus_indices);
-
-    for (mixed_buffer) |*sample| {
-        sample.* = std.math.clamp(sample.*, -1.0, 1.0);
-    }
-
-    _ = self.mOutputBuffer.PushSlice(mixed_buffer);
+    try engine_context.mSystems.RunSystem(Mix, engine_context, &self.mECSManager, .{self});
 }
+
+/// The mix itself (OnUpdate), as a system from the audio ECS. An attached voice reads its source's AudioComponent,
+/// which is on any of the four object types, in whichever world in use it is (EngineContext.StartUsingWorld)
+pub const Mix = struct {
+    pub const Name = "AudioMix";
+    pub const Reads = &.{
+        //a detached voice's own copies of what it plays
+        VoiceAssetComponent,
+        VolumeComponent,
+        VoicePitchComponent,
+        //an attached voice's source
+        Systems.In(EManager.ECSManagerT, AudioComponent),
+        Systems.In(SManager.ECSManagerT, AudioComponent),
+        Systems.In(PManager.ECSManagerT, AudioComponent),
+        Systems.In(GCManager.ECSManagerT, AudioComponent),
+    };
+    pub const Writes = &.{
+        //where each voice is in its asset, and what it played last
+        VoiceComponent,
+        VoiceFadeComponent,
+        //each bus's gain, gliding toward its volume
+        BusComponent,
+    };
+
+    pub fn Run(engine_context: *EngineContext, self: *AudioManager) !void {
+        const buffered_frames = self.mOutputBuffer.AvailableRead() / AUDIO_CHANNELS;
+        if (buffered_frames >= TARGET_FRAMES) return;
+
+        const frame_allocator = engine_context.FrameAllocator();
+        const frames_to_produce = TARGET_FRAMES - buffered_frames;
+        const samples_to_produce = frames_to_produce * AUDIO_CHANNELS;
+
+        const voices = try self.GetGroup(frame_allocator, .{ .Component = VoiceComponent });
+
+        //one buffer per voice, back to back, since every stage needs every voice's output from the one before it
+        const voice_buffers = try frame_allocator.alloc(f32, voices.items.len * samples_to_produce);
+        const voice_frames = try frame_allocator.alloc(u64, voices.items.len);
+
+        //read stage
+        for (voices.items, 0..) |voice_id, i| {
+            const voice_buffer = voice_buffers[i * samples_to_produce ..][0..samples_to_produce];
+            voice_frames[i] = try self.ReadVoice(engine_context, voice_id, voice_buffer);
+        }
+
+        //volume stage: a changed volume slides over from the last one across this buffer instead of jumping
+        for (voices.items, 0..) |voice_id, i| {
+            if (voice_frames[i] == 0) continue;
+            const voice_component = self.GetComponentMut(VoiceComponent, voice_id).?;
+            const volume = switch (self.GetVoiceState(voice_id)) {
+                .Attached => |source_component| source_component.mVolume,
+                .Detached => self.GetComponent(VolumeComponent, voice_id).?.mVolume,
+                .Orphaned => voice_component.mLastVolume,
+            };
+            const voice_samples = voice_buffers[i * samples_to_produce ..][0 .. voice_frames[i] * AUDIO_CHANNELS];
+            AudioMath.ApplyRamp(AUDIO_CHANNELS, voice_samples, voice_component.mLastVolume, volume);
+            voice_component.mLastVolume = volume;
+        }
+
+        //fade stage
+        for (voices.items, 0..) |voice_id, i| {
+            const fade_component = self.GetComponentMut(VoiceFadeComponent, voice_id) orelse continue;
+            const voice_samples = voice_buffers[i * samples_to_produce ..][0 .. voice_frames[i] * AUDIO_CHANNELS];
+            //anything after the end of the fade is silent, so it is left out of the mix
+            voice_frames[i] = AudioMath.ApplyFade(AUDIO_CHANNELS, voice_samples, &fade_component.mFramesLeft, FADE_FRAMES);
+            if (fade_component.mFramesLeft == 0) {
+                try self.DeleteVoice(engine_context, voice_id);
+            }
+        }
+
+        //bus stage: each voice is added into its bus, then the tree is mixed children first, each bus applying its own
+        //gain before it is added into its parent. What comes out of Master is the mix
+        const buses = try self.GetGroup(frame_allocator, .{ .Component = BusComponent });
+        const bus_buffers = try frame_allocator.alloc(f32, buses.items.len * samples_to_produce);
+        @memset(bus_buffers, 0);
+
+        var bus_indices: BusIndices = .empty;
+        try bus_indices.ensureTotalCapacity(frame_allocator, @intCast(buses.items.len));
+        for (buses.items, 0..) |bus_id, i| {
+            bus_indices.putAssumeCapacity(bus_id, i);
+        }
+
+        for (voices.items, 0..) |voice_id, i| {
+            const voice_samples = voice_buffers[i * samples_to_produce ..][0 .. voice_frames[i] * AUDIO_CHANNELS];
+            if (voice_samples.len == 0) continue;
+            const bus_id = self.ResolveBus(self.GetComponent(VoiceComponent, voice_id).?.mBusID);
+            const bus_buffer = bus_buffers[bus_indices.get(bus_id).? * samples_to_produce ..][0..samples_to_produce];
+            for (bus_buffer[0..voice_samples.len], voice_samples) |*mixed, sample| {
+                mixed.* += sample;
+            }
+        }
+
+        const mixed_buffer = self.MixBus(self.mMasterBus.mID, bus_buffers, samples_to_produce, &bus_indices);
+
+        for (mixed_buffer) |*sample| {
+            sample.* = std.math.clamp(sample.*, -1.0, 1.0);
+        }
+
+        _ = self.mOutputBuffer.PushSlice(mixed_buffer);
+    }
+};
 
 const BusIndices = std.AutoHashMapUnmanaged(Bus.Type, usize);
 

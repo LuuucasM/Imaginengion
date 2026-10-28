@@ -145,6 +145,18 @@ pub fn CloseTop(self: *PopupSystem, engine_context: *EngineContext) !void {
     try self.CloseAbove(engine_context, self.mOpen.items.len - 1);
 }
 
+/// Escape reached the top popup's turn (UIManager.KeyTakerFor): it closes, as CloseTop. A system from the UI's ECS
+pub const OnEscape = struct {
+    pub const Name = "PopupOnEscape";
+    pub const Reads = &.{};
+    //a popup is closed through its item's mCollapsed
+    pub const Writes = &.{Systems.In(EECS, LayoutItemComponent)};
+
+    pub fn Run(engine_context: *EngineContext, self: *PopupSystem) !void {
+        try self.CloseTop(engine_context);
+    }
+};
+
 /// Where the top popup's scene sits in the scene stack, which is its turn at Escape. Null if no popup is open
 pub fn TopStackPos(self: *const PopupSystem) ?usize {
     if (self.mOpen.items.len == 0) return null;
@@ -176,26 +188,30 @@ pub fn PointerPoint(popup: Entity, pointer_input: PointerSystem.Input) ?Vec2(f32
 /// above the topmost one the press is inside. A press on what opened a popup counts as inside it, so clicking a
 /// dropdown's or menu's button again is left to the button's own script to close it, rather than closing it here only
 /// for the click to open it again
-pub fn OnPressed(self: *PopupSystem, engine_context: *EngineContext, pointer: *const PointerSystem) !void {
-    const zone = Tracy.ZoneInit("PopupSystem::OnPressed", @src());
-    defer zone.Deinit();
-    const chain = pointer.mHovered.items;
-    var keep = self.TopmostContaining(chain);
-    var index = self.mOpen.items.len;
-    while (index > 0) {
-        index -= 1;
-        if (keep != null and index <= keep.?) break;
-        const opener = switch (self.mOpen.items[index].mAt) {
-            .Opener => |opener| opener,
-            .Point => continue,
-        };
-        if (opener.IsActive() and Contains(chain, opener)) {
-            keep = index;
-            break;
+pub const OnPressed = struct {
+    pub const Name = "PopupOnPressed";
+    pub const Reads = &.{};
+    pub const Writes = &.{Systems.In(EECS, LayoutItemComponent)};
+
+    pub fn Run(engine_context: *EngineContext, self: *PopupSystem, pointer: *const PointerSystem) !void {
+        const chain = pointer.mHovered.items;
+        var keep = self.TopmostContaining(chain);
+        var index = self.mOpen.items.len;
+        while (index > 0) {
+            index -= 1;
+            if (keep != null and index <= keep.?) break;
+            const opener = switch (self.mOpen.items[index].mAt) {
+                .Opener => |opener| opener,
+                .Point => continue,
+            };
+            if (opener.IsActive() and Contains(chain, opener)) {
+                keep = index;
+                break;
+            }
         }
+        try self.CloseAbove(engine_context, if (keep) |kept| kept + 1 else 0);
     }
-    try self.CloseAbove(engine_context, if (keep) |kept| kept + 1 else 0);
-}
+};
 
 /// Once a frame, after layout and before world transforms: places each open popup against what opened it, and lets
 /// go of popups that have been deleted. In `worlds`, the ones whose UI is in use, every popup that isn't open is kept

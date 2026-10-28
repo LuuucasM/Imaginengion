@@ -29,6 +29,11 @@ const UIComponents = @import("../ECSComponents/UIComponents.zig");
 const ElementOwnerComponent = UIComponents.ElementOwnerComponent;
 const UIElementComponent = @import("../ECSComponents/EComponents.zig").UIElementComponent;
 const TextComponent = @import("../ECSComponents/EComponents.zig").TextComponent;
+const EntitySceneComponent = @import("../ECSComponents/EComponents.zig").EntitySceneComponent;
+const StackPosComponent = @import("../ECSComponents/SComponents.zig").StackPosComponent;
+const Systems = @import("../ECS/Systems.zig");
+const EManager = @import("../ECSManagers/EManager.zig");
+const SManager = @import("../ECSManagers/SManager.zig");
 const UIEventData = @import("../Events/UIEventData.zig");
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const EventManager = @import("../Events/EventManager.zig");
@@ -132,11 +137,11 @@ pub fn OnInputEvent(self: *UIManager, engine_context: *EngineContext, pointer: *
     switch (event) {
         .MousePressed => |e| {
             //popups first, so a text input in one that closes ends its edit before the keyboard moves on
-            try self.mPopupSystem.OnPressed(engine_context, pointer);
-            try self.mFocusSystem.OnPressed(engine_context, pointer, e._ButtonCode);
+            try engine_context.mSystems.RunSystem(PopupSystem.OnPressed, engine_context, &self.mECSManager, .{ &self.mPopupSystem, pointer });
+            try engine_context.mSystems.RunSystem(FocusSystem.OnPressed, engine_context, &self.mECSManager, .{ &self.mFocusSystem, pointer, e._ButtonCode });
         },
-        .TextTyped => |e| try self.mFocusSystem.OnTextTyped(engine_context, e.Text()),
-        .MouseScrolled => |e| try self.mScrollSystem.OnWheel(engine_context, pointer, e._XOffset, e._YOffset),
+        .TextTyped => |e| try engine_context.mSystems.RunSystem(FocusSystem.OnTextTyped, engine_context, &self.mECSManager, .{ &self.mFocusSystem, e.Text() }),
+        .MouseScrolled => |e| try engine_context.mSystems.RunSystem(ScrollSystem.OnWheel, engine_context, &self.mECSManager, .{ &self.mScrollSystem, pointer, e._XOffset, e._YOffset }),
         else => {},
     }
 }
@@ -158,26 +163,36 @@ pub const KeyTaker = struct {
 /// whoever does that runs the scenes above the taker's first, and if none of them kept the key, hands it to OnKeyTaken.
 /// The scenes below never hear it. A text input with the keyboard takes every key, the top popup takes Escape; the one
 /// whose scene is higher goes first, and in the same scene the text input does, since it has the keyboard
-pub fn KeyTakerFor(self: *const UIManager, key: ScanCodes) ?KeyTaker {
-    const focus_pos = self.mFocusSystem.FocusedStackPos();
-    const popup_pos = if (key == .ESCAPE) self.mPopupSystem.TopStackPos() else null;
-    if (popup_pos) |pos| {
-        if (focus_pos == null or pos > focus_pos.?) {
-            const popups = self.mPopupSystem.OpenPopups();
-            return .{ .World = popups[popups.len - 1].mPopup.mManager, .StackPos = pos, .Kind = .Popup };
+/// A system from the UI's ECS, which reaches the taker's scene through In:
+///
+///     const taker = try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui.mECSManager, .{ ui, key });
+pub const FindKeyTaker = struct {
+    pub const Name = "FindKeyTaker";
+    //the focused input's or top popup's scene, and its place in the stack
+    pub const Reads = &.{ Systems.In(EManager.ECSManagerT, EntitySceneComponent), Systems.In(SManager.ECSManagerT, StackPosComponent) };
+    pub const Writes = &.{};
+
+    pub fn Run(_: *EngineContext, self: *const UIManager, key: ScanCodes) ?KeyTaker {
+        const focus_pos = self.mFocusSystem.FocusedStackPos();
+        const popup_pos = if (key == .ESCAPE) self.mPopupSystem.TopStackPos() else null;
+        if (popup_pos) |pos| {
+            if (focus_pos == null or pos > focus_pos.?) {
+                const popups = self.mPopupSystem.OpenPopups();
+                return .{ .World = popups[popups.len - 1].mPopup.mManager, .StackPos = pos, .Kind = .Popup };
+            }
         }
+        if (focus_pos) |pos| return .{ .World = self.mFocusSystem.Focused().?.mManager, .StackPos = pos, .Kind = .Focus };
+        return null;
     }
-    if (focus_pos) |pos| return .{ .World = self.mFocusSystem.Focused().?.mManager, .StackPos = pos, .Kind = .Focus };
-    return null;
-}
+};
 
 /// The key reached the UI's turn and nothing above it kept it
 pub fn OnKeyTaken(self: *UIManager, engine_context: *EngineContext, taker: KeyTaker, event: WindowEventData.KeyboardPressedEvent) !void {
     const zone = Tracy.ZoneInit("UIManager::OnKeyTaken", @src());
     defer zone.Deinit();
     switch (taker.Kind) {
-        .Focus => try self.mFocusSystem.OnKeyPressed(engine_context, event),
-        .Popup => try self.mPopupSystem.CloseTop(engine_context),
+        .Focus => try engine_context.mSystems.RunSystem(FocusSystem.OnKeyPressed, engine_context, &self.mECSManager, .{ &self.mFocusSystem, event }),
+        .Popup => try engine_context.mSystems.RunSystem(PopupSystem.OnEscape, engine_context, &self.mECSManager, .{&self.mPopupSystem}),
     }
 }
 
@@ -186,12 +201,12 @@ pub fn OnKeyTaken(self: *UIManager, engine_context: *EngineContext, taker: KeyTa
 pub fn OnPointerEvent(self: *UIManager, engine_context: *EngineContext, event: EntityPointerEvent) !void {
     const zone = Tracy.ZoneInit("UIManager::OnPointerEvent", @src());
     defer zone.Deinit();
-    try self.mScrollSystem.OnPointerEvent(engine_context, event);
-    try self.mNumberFieldSystem.OnPointerEvent(engine_context, event);
+    try engine_context.mSystems.RunSystem(ScrollSystem.OnPointerEvent, engine_context, &self.mECSManager, .{ &self.mScrollSystem, event });
+    try engine_context.mSystems.RunSystem(NumberFieldSystem.OnPointerEvent, engine_context, &self.mECSManager, .{ &self.mNumberFieldSystem, event });
     //a file dropped on an asset field
     try self.mBindingSystem.OnPointerEvent(engine_context, event);
     switch (event.mEvent) {
-        .PointerClicked => |e| try self.mFocusSystem.OnClicked(engine_context, event.mEntity, e),
+        .PointerClicked => |e| try engine_context.mSystems.RunSystem(FocusSystem.OnClicked, engine_context, &self.mECSManager, .{ &self.mFocusSystem, event.mEntity, e }),
         else => {},
     }
 }
@@ -222,7 +237,7 @@ fn OnOwnUIEvent(self: *UIManager, engine_context: *EngineContext, event: *const 
         .Entity => |e| e,
         else => return .Continue,
     };
-    try self.mNumberFieldSystem.OnUIEvent(engine_context, entity_event);
+    try engine_context.mSystems.RunSystem(NumberFieldSystem.OnUIEvent, engine_context, &self.mECSManager, .{ &self.mNumberFieldSystem, entity_event });
     try self.mBindingSystem.OnUIEvent(engine_context, entity_event);
     return .Continue;
 }
@@ -235,13 +250,13 @@ pub fn UpdateBeforeLayout(self: *UIManager, engine_context: *EngineContext) !voi
     defer zone.Deinit();
     //fields' values onto their widgets first, which the number fields then show
     try self.mBindingSystem.Update(engine_context);
-    try self.mNumberFieldSystem.Update(engine_context);
+    try engine_context.mSystems.RunSystem(NumberFieldSystem.Update, engine_context, &self.mECSManager, .{&self.mNumberFieldSystem});
     //not loaded before CurrentTheme: read for the first time, or again after its file changed
     const was_loaded = self.mTheme.IsIDValid() and engine_context.mAssetManager.IsLoaded(ThemeAsset, self.mTheme.mID);
     const theme = self.CurrentTheme(engine_context) orelse return;
     const restyle_all = !was_loaded or self.mStyledTheme != self.mTheme.mID or self.mStyleSystem.ThemesReread(engine_context);
     self.mStyledTheme = self.mTheme.mID;
-    try self.mStyleSystem.Update(engine_context, theme, self.PlainTexture(engine_context), restyle_all);
+    try engine_context.mSystems.RunSystem(StyleSystem.Update, engine_context, &self.mECSManager, .{ &self.mStyleSystem, theme, self.PlainTexture(engine_context), restyle_all });
 }
 
 /// Once a frame, after layout and before world transforms: open popups are placed against what opened them, scrollbars

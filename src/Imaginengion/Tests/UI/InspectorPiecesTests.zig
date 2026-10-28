@@ -45,6 +45,8 @@ const TestWorld = struct {
         try engine_context.mAssetManager.Init(engine_context);
         try engine_context.mUIManager.Init(engine_context);
         try engine_context.mEditorWorld.Init(engine_context);
+        //the editor's own UI is in use, which its input reaches
+        try engine_context.mEditorWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
         self.mScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         self.mPanel = try self.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
         self.mObject = try self.mScene.CreateEntity(engine_context, Entity.DefaultConfig);

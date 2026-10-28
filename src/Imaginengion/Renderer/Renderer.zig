@@ -59,6 +59,8 @@ const CameraRay = @import("../Math/CameraRay.zig");
 const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
 const ShapeGeometry = @import("ShapeGeometry.zig");
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
+const Systems = @import("../ECS/Systems.zig");
+const PManager = @import("../ECSManagers/PManager.zig");
 
 const SDFPipeline = @import("backends/SDFPipeline.zig").SDFPipeline;
 
@@ -327,7 +329,7 @@ mSDFShading: ShadingBuffers = .{},
 /// The render targets the shapes being drawn show (ViewportComponent), copied into their slots at the start of the draw's
 /// command buffer, before anything samples them
 mShownCopies: std.ArrayList(RenderTargetComponent.Shown) = .empty,
-/// The world's screen space this render's overlay shapes are in (FillFromTree), which the overlay pass looks at from
+/// The world's screen space this render's overlay shapes are in (Fill), which the overlay pass looks at from
 /// the camera as seen from there (OverlayPushConstants). Null when they were placed in world space (FillView)
 mOverlayCanvas: ?OverlayCanvas.CanvasTransform = null,
 
@@ -419,7 +421,7 @@ pub fn RenderWorld(self: *Renderer, world_manager: *WorldManager, view_scenes: V
     defer zone.Deinit();
 
     //the screen each overlay is drawn on is what its layout fits into
-    try LayoutSystem.RecordViewArea(world_manager, view_scenes.Overlays, camera_view, engine_context);
+    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, &world_manager.mEManager.mECSManager, .{ world_manager, view_scenes.Overlays, camera_view });
     try self.Render(engine_context, world_manager, view_scenes, camera_view, stats, push_constants, compute_texture, rendering_mode);
 }
 
@@ -433,13 +435,13 @@ pub fn RenderScene(self: *Renderer, scene: Scene, stats: *RenderStats, engine_co
         .GameLayer => .{ .Game = .{ .One = scene.mID }, .Overlays = &.{} },
         .OverlayLayer => .{ .Game = .None, .Overlays = &scene_id },
     };
-    try LayoutSystem.RecordViewArea(scene.mManager, view_scenes.Overlays, camera_view, engine_context);
+    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, &scene.mManager.mEManager.mECSManager, .{ scene.mManager, view_scenes.Overlays, camera_view });
     try self.Render(engine_context, scene.mManager, view_scenes, camera_view, stats, push_constants, compute_texture, rendering_mode);
 }
 
 fn Render(self: *Renderer, engine_context: *EngineContext, world: *WorldManager, view_scenes: ViewScenes, camera_view: CameraView, stats: *RenderStats, push_constants: PushConstants, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
     self.mSDFPushConstants = push_constants;
-    try self.FillFromTree(engine_context, world, view_scenes, camera_view, stats);
+    try engine_context.mSystems.RunSystem(Fill, engine_context, &world.mEManager.mECSManager, .{ self, world, view_scenes, camera_view, stats });
     self.mSDFShading.AddStats(stats);
     try self.EndRendering(stats, engine_context, compute_texture, rendering_mode);
 }
@@ -447,25 +449,49 @@ fn Render(self: *Renderer, engine_context: *EngineContext, world: *WorldManager,
 /// Fills both passes' shapes from the world's trees (WorldBVH), refit to where everything is this frame: one shape for
 /// each of a layer's tree items, in the tree's order, so the tree's own nodes are the pass's BVH. A layer the view
 /// shows none of is left empty, so its pass is skipped. Every shape is in its tree's units: the overlay's in the world's
-/// screen space (canvas units), which the overlay pass looks at from the camera as seen from there (OverlayPushConstants)
-pub fn FillFromTree(self: *Renderer, engine_context: *EngineContext, world: *WorldManager, view_scenes: ViewScenes, camera_view: CameraView, stats: *RenderStats) !void {
-    const zone = Tracy.ZoneInit("Renderer::FillFromTree", @src());
-    defer zone.Deinit();
-    try self.BeginRendering(engine_context.EngineAllocator());
+/// screen space (canvas units), which the overlay pass looks at from the camera as seen from there (OverlayPushConstants).
+/// The part of a render that reads the world, as a system from its entity ECS; the GPU work after it (EndRendering)
+/// reads none of it:
+///
+///     try engine_context.mSystems.RunSystem(Renderer.Fill, engine_context, &world.mEManager.mECSManager, .{ renderer, world, view_scenes, camera_view, stats });
+pub const Fill = struct {
+    pub const Name = "RenderFill";
+    pub const Reads = &FILL_READS;
+    pub const Writes = FILL_WRITES;
 
-    const bvh = &world.mBVH;
-    const canvas = ShapeGeometry.WorldCanvas(world, camera_view);
-    self.mOverlayCanvas = canvas;
-    const colliders: ?Renderer2D.ColliderShadings = if (self.mShowColliders) try Renderer2D.AddColliderShadings(engine_context, &self.mSDFShading) else null;
+    pub fn Run(engine_context: *EngineContext, self: *Renderer, world: *WorldManager, view_scenes: ViewScenes, camera_view: CameraView, stats: *RenderStats) !void {
+        try self.BeginRendering(engine_context.EngineAllocator());
 
-    const game_scenes: u64 = switch (view_scenes.Game) {
-        .All => std.math.maxInt(u64),
-        .One => |scene_id| bvh.SceneBits(&.{scene_id}),
-        .None => 0,
-    };
-    try self.FillLayer(engine_context, world, bvh.Tree(.OverlayLayer), &self.mR2D.mOverlayData, bvh.SceneBits(view_scenes.Overlays), CanvasCameraView(camera_view, canvas), colliders, stats);
-    try self.FillLayer(engine_context, world, bvh.Tree(.GameLayer), &self.mR2D.mGameData, game_scenes, camera_view, colliders, stats);
-}
+        const bvh = &world.mBVH;
+        const canvas = ShapeGeometry.WorldCanvas(world, camera_view);
+        self.mOverlayCanvas = canvas;
+        const colliders: ?Renderer2D.ColliderShadings = if (self.mShowColliders) try Renderer2D.AddColliderShadings(engine_context, &self.mSDFShading) else null;
+
+        const game_scenes: u64 = switch (view_scenes.Game) {
+            .All => std.math.maxInt(u64),
+            .One => |scene_id| bvh.SceneBits(&.{scene_id}),
+            .None => 0,
+        };
+        try self.FillLayer(engine_context, world, bvh.Tree(.OverlayLayer), &self.mR2D.mOverlayData, bvh.SceneBits(view_scenes.Overlays), CanvasCameraView(camera_view, canvas), colliders, stats);
+        try self.FillLayer(engine_context, world, bvh.Tree(.GameLayer), &self.mR2D.mGameData, game_scenes, camera_view, colliders, stats);
+    }
+};
+
+/// What filling a render reads (Fill, FillView): every part of what is drawn, and the masks it is cut by
+const FILL_READS = [_]type{
+    TransformComponent,
+    ShapeComponent,
+    SurfaceComponent,
+    TextComponent,
+    ColliderComponent,
+    MaskComponent,
+    //how a merge's parts combine
+    EntityComponents.CombineOpComponent,
+    //a quad showing a player's view
+    ViewportComponent,
+};
+/// A viewport quad's player hands out the slot its render target is shown in (Viewports.ShownTarget)
+const FILL_WRITES = &.{Systems.In(PManager.ECSManagerT, RenderTargetComponent)};
 
 /// One layer's shapes for this render, one for each of `tree`'s items. An item with nothing to draw (hidden or gone since
 /// the tree was built, in a scene the view doesn't show, a text's click box, a see-through quad, cut off by its mask)
@@ -589,33 +615,40 @@ pub fn OverlayPushConstants(push_constants: PushConstants, canvas: ?OverlayCanva
     return overlay;
 }
 
-/// FillFromTree the old way, with no tree: what the view shows gathered (ShapeGeometry.GatherViewShapes) and each
+/// Fill the old way, with no tree: what the view shows gathered (ShapeGeometry.GatherViewShapes) and each
 /// shape placed in front of its camera one at a time, the overlay's in world space, then found by testing them all.
-/// What FillFromTree is checked against in the tests. Never called by the engine, so it isn't compiled into it
-pub fn FillView(self: *Renderer, engine_context: *EngineContext, world: *WorldManager, view_scenes: ViewScenes, camera_view: CameraView, stats: *RenderStats) !void {
-    const engine_allocator = engine_context.EngineAllocator();
-    const frame_allocator = engine_context.FrameAllocator();
-    try self.BeginRendering(engine_allocator);
-    self.mOverlayCanvas = null;
+/// What Fill is checked against in the tests. Never called by the engine, so it isn't compiled into it
+pub const FillView = struct {
+    pub const Name = "RenderFillView";
+    //and the scene each gathered shape is in
+    pub const Reads = &(FILL_READS ++ [_]type{EntityComponents.EntitySceneComponent});
+    pub const Writes = FILL_WRITES;
 
-    const view = try ShapeGeometry.GatherViewShapes(frame_allocator, world, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
-    try self.mR2D.mOverlayData.SetMasks(engine_allocator, &view.Masks);
-    try self.mR2D.mGameData.SetMasks(engine_allocator, &view.Masks);
-    stats.TotalObjects += view.Shapes.items.len;
-    for (view.Shapes.items) |shape| try self.DrawShape(engine_context, shape, &view.Masks);
+    pub fn Run(engine_context: *EngineContext, self: *Renderer, world: *WorldManager, view_scenes: ViewScenes, camera_view: CameraView, stats: *RenderStats) !void {
+        const engine_allocator = engine_context.EngineAllocator();
+        const frame_allocator = engine_context.FrameAllocator();
+        try self.BeginRendering(engine_allocator);
+        self.mOverlayCanvas = null;
 
-    if (self.mShowColliders) {
-        const colliders = try ShapeGeometry.GatherViewShapes(frame_allocator, world, camera_view, view_scenes, .{ .Component = ColliderComponent });
-        const shadings = try Renderer2D.AddColliderShadings(engine_context, &self.mSDFShading);
-        for (colliders.Shapes.items) |shape| {
-            const transform_component = shape.Entity.GetComponent(TransformComponent) orelse continue;
-            const collider = shape.Entity.GetComponent(ColliderComponent).?;
-            try self.mR2D.DrawCollider(self.ViewBuffers(shape.Canvas), engine_context, transform_component, collider, shape.Canvas, camera_view, shadings);
+        const view = try ShapeGeometry.GatherViewShapes(frame_allocator, world, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
+        try self.mR2D.mOverlayData.SetMasks(engine_allocator, &view.Masks);
+        try self.mR2D.mGameData.SetMasks(engine_allocator, &view.Masks);
+        stats.TotalObjects += view.Shapes.items.len;
+        for (view.Shapes.items) |shape| try self.DrawShape(engine_context, shape, &view.Masks);
+
+        if (self.mShowColliders) {
+            const colliders = try ShapeGeometry.GatherViewShapes(frame_allocator, world, camera_view, view_scenes, .{ .Component = ColliderComponent });
+            const shadings = try Renderer2D.AddColliderShadings(engine_context, &self.mSDFShading);
+            for (colliders.Shapes.items) |shape| {
+                const transform_component = shape.Entity.GetComponent(TransformComponent) orelse continue;
+                const collider = shape.Entity.GetComponent(ColliderComponent).?;
+                try self.mR2D.DrawCollider(self.ViewBuffers(shape.Canvas), engine_context, transform_component, collider, shape.Canvas, camera_view, shadings);
+            }
         }
+        self.mR2D.mOverlayData.FinishView();
+        self.mR2D.mGameData.FinishView();
     }
-    self.mR2D.mOverlayData.FinishView();
-    self.mR2D.mGameData.FinishView();
-}
+};
 
 /// The pass a gathered shape is drawn in: the overlay's when it has a canvas
 fn ViewBuffers(self: *Renderer, canvas: ?OverlayCanvas.CanvasTransform) *Renderer2D.RenderBuffers {

@@ -28,6 +28,9 @@ const FocusedTag = EntityComponents.FocusedTag;
 const SelectedTag = EntityComponents.SelectedTag;
 const StyleComponent = @import("../ECSComponents/UIComponents.zig").StyleComponent;
 const StyleDirtyTag = @import("../ECSComponents/UIComponents.zig").StyleDirtyTag;
+const ElementOwnerComponent = @import("../ECSComponents/UIComponents.zig").ElementOwnerComponent;
+const Systems = @import("../ECS/Systems.zig");
+const EECS = @import("../ECSManagers/EManager.zig").ECSManagerT;
 const DisabledTag = EntityComponents.DisabledTag;
 const GameLayerTag = EntityComponents.GameLayerTag;
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
@@ -82,37 +85,40 @@ pub fn ClearWarnings(self: *StyleSystem, engine_allocator: std.mem.Allocator) vo
 /// Once a frame, before layout (a font changing changes sizes): every styled element marked dirty, in every world, has
 /// its entity take its style out of its theme file, or out of `theme` (the editor's) if it names none, and is no longer
 /// marked. `restyle_all` for every styled element instead, for a theme that is new or was just read again
-pub fn Update(self: *StyleSystem, engine_context: *EngineContext, theme: *const ThemeAsset, plain_texture: AssetHandle, restyle_all: bool) !void {
-    const zone = Tracy.ZoneInit("StyleSystem::Update", @src());
-    defer zone.Deinit();
-    const ui_manager = &engine_context.mUIManager;
-    const frame_allocator = engine_context.FrameAllocator();
-    const element_ids = if (restyle_all)
-        try ui_manager.GetGroup(frame_allocator, .{ .Component = StyleComponent })
-    else
-        try ui_manager.GetGroup(frame_allocator, .{ .Component = StyleDirtyTag });
-    zone.Value(element_ids.items.len);
-    //every styled element is about to say which theme it takes its style from
-    if (restyle_all) self.mThemesUsed.clearRetainingCapacity();
-    for (element_ids.items) |element_id| {
-        const element = UIElement{ .mID = element_id, .mManager = ui_manager };
-        const entity = element.GetOwner();
-        //no entity has taken it yet: it stays marked until one does
-        if (!entity.IsActive()) continue;
-        if (element.HasComponent(StyleDirtyTag)) try ui_manager.mECSManager.RemoveComponentSync(engine_context, element_id, @TypeOf(ui_manager.mECSManager).ComponentInd(StyleDirtyTag));
+pub const Update = struct {
+    pub const Name = "StyleUpdate";
+    pub const Reads = &.{ StyleComponent, ElementOwnerComponent };
+    pub const Writes = &.{ Systems.In(EECS, SurfaceComponent), Systems.In(EECS, ShapeComponent), Systems.In(EECS, TextComponent) };
 
-        const style_component = element.GetComponent(StyleComponent) orelse continue;
-        const name = style_component.mStyle.items;
-        const style_theme = try self.ThemeOf(engine_context, style_component.*) orelse theme;
-        const style = style_theme.GetStyle(name) orelse {
-            try self.WarnMissing(engine_context.EngineAllocator(), name);
-            continue;
-        };
-        try Apply(engine_context, entity, style.*, plain_texture);
-        //at once: nothing holds on to the component past here, and next frame it is no longer styled
-        if (style_component.mOnce) try element.RemoveComponentSync(engine_context, StyleComponent);
+    pub fn Run(engine_context: *EngineContext, self: *StyleSystem, theme: *const ThemeAsset, plain_texture: AssetHandle, restyle_all: bool) !void {
+        const ui_manager = &engine_context.mUIManager;
+        const frame_allocator = engine_context.FrameAllocator();
+        const element_ids = if (restyle_all)
+            try ui_manager.GetGroup(frame_allocator, .{ .Component = StyleComponent })
+        else
+            try ui_manager.GetGroup(frame_allocator, .{ .Component = StyleDirtyTag });
+        //every styled element is about to say which theme it takes its style from
+        if (restyle_all) self.mThemesUsed.clearRetainingCapacity();
+        for (element_ids.items) |element_id| {
+            const element = UIElement{ .mID = element_id, .mManager = ui_manager };
+            const entity = element.GetOwner();
+            //no entity has taken it yet: it stays marked until one does
+            if (!entity.IsActive()) continue;
+            if (element.HasComponent(StyleDirtyTag)) try ui_manager.mECSManager.RemoveComponentSync(engine_context, element_id, @TypeOf(ui_manager.mECSManager).ComponentInd(StyleDirtyTag));
+
+            const style_component = element.GetComponent(StyleComponent) orelse continue;
+            const name = style_component.mStyle.items;
+            const style_theme = try self.ThemeOf(engine_context, style_component.*) orelse theme;
+            const style = style_theme.GetStyle(name) orelse {
+                try self.WarnMissing(engine_context.EngineAllocator(), name);
+                continue;
+            };
+            try Apply(engine_context, entity, style.*, plain_texture);
+            //by the end of this pass (StyleComponent is locked while it runs), so next frame it is no longer styled
+            if (style_component.mOnce) try element.RemoveComponent(engine_context, StyleComponent);
+        }
     }
-}
+};
 
 /// The theme file a style names, read in if it isn't yet and remembered as used. Null for a style that names none,
 /// which takes the editor's theme, or one that can't be read

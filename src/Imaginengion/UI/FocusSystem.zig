@@ -117,48 +117,67 @@ pub fn Caret(self: *const FocusSystem) usize {
 /// The left button on a text input (or anything inside one) gives it the keyboard, with the caret where it went down,
 /// unless it waits for a double click (OnClicked). Any button anywhere outside the focused text input ends its edit,
 /// keeping it
-pub fn OnPressed(self: *FocusSystem, engine_context: *EngineContext, pointer: *const PointerSystem, button: MouseCodes) !void {
-    const zone = Tracy.ZoneInit("FocusSystem::OnPressed", @src());
-    defer zone.Deinit();
-    var pressed: ?Entity = null;
-    for (pointer.mHovered.items) |entity| {
-        if (entity.IsActive() and UIManager.HasUIComponent(entity, TextInputComponent)) {
-            pressed = entity;
-            break;
-        }
-    }
-    if (pressed == null and pointer.mHovered.items.len > 0) pressed = ChildTextInput(pointer.mHovered.items[0]);
+pub const OnPressed = struct {
+    pub const Name = "FocusOnPressed";
+    pub const Reads = &.{
+        TextInputComponent,
+        Systems.In(EECS, EntityComponents.UIElementComponent),
+        //the text it starts with, and where in it the press went down
+        Systems.In(EECS, TextComponent),
+        Systems.In(EECS, TransformComponent),
+    };
+    pub const Writes = &.{};
 
-    if (self.Focused()) |focused| {
-        if (pressed != null and Same(pressed.?, focused)) {
-            if (button == .BUTTON_LEFT) try self.PlaceCaretAt(engine_context, focused, pointer.mInput);
-            return;
+    pub fn Run(engine_context: *EngineContext, self: *FocusSystem, pointer: *const PointerSystem, button: MouseCodes) !void {
+        var pressed: ?Entity = null;
+        for (pointer.mHovered.items) |entity| {
+            if (entity.IsActive() and UIManager.HasUIComponent(entity, TextInputComponent)) {
+                pressed = entity;
+                break;
+            }
         }
-        try self.EndEdit(engine_context, .Submit);
-    }
+        if (pressed == null and pointer.mHovered.items.len > 0) pressed = ChildTextInput(pointer.mHovered.items[0]);
 
-    if (button != .BUTTON_LEFT) return;
-    const text_input = pressed orelse return;
-    if (UIManager.GetUIComponent(text_input, TextInputComponent).?.mFocusOn != .Press) return;
-    if (try self.Focus(engine_context, text_input)) try self.PlaceCaretAt(engine_context, text_input, pointer.mInput);
-}
+        if (self.Focused()) |focused| {
+            if (pressed != null and Same(pressed.?, focused)) {
+                if (button == .BUTTON_LEFT) try self.PlaceCaretAt(engine_context, focused, pointer.mInput);
+                return;
+            }
+            try self.EndEdit(engine_context, .Submit);
+        }
+
+        if (button != .BUTTON_LEFT) return;
+        const text_input = pressed orelse return;
+        if (UIManager.GetUIComponent(text_input, TextInputComponent).?.mFocusOn != .Press) return;
+        if (try self.Focus(engine_context, text_input)) try self.PlaceCaretAt(engine_context, text_input, pointer.mInput);
+    }
+};
 
 /// One of the frame's pointer clicks: a double click (left button) on a text input that focuses on one gives it the
 /// keyboard, with the caret at the end of its text
-pub fn OnClicked(self: *FocusSystem, engine_context: *EngineContext, clicked: Entity, e: PointerClickedEvent) !void {
-    const zone = Tracy.ZoneInit("FocusSystem::OnClicked", @src());
-    defer zone.Deinit();
-    if (e.mButton != .BUTTON_LEFT or e.mClicks != 2 or !clicked.IsActive()) return;
-    //one event per entity in the chain: the text input's own, or the box it is in when that is what was clicked
-    const entity = if (UIManager.HasUIComponent(clicked, TextInputComponent))
-        clicked
-    else if (Same(clicked, e.mTarget))
-        ChildTextInput(clicked) orelse return
-    else
-        return;
-    if (UIManager.GetUIComponent(entity, TextInputComponent).?.mFocusOn != .DoubleClick) return;
-    _ = try self.Focus(engine_context, entity);
-}
+pub const OnClicked = struct {
+    pub const Name = "FocusOnClicked";
+    pub const Reads = &.{
+        TextInputComponent,
+        Systems.In(EECS, EntityComponents.UIElementComponent),
+        //the text it starts with
+        Systems.In(EECS, TextComponent),
+    };
+    pub const Writes = &.{};
+
+    pub fn Run(engine_context: *EngineContext, self: *FocusSystem, clicked: Entity, e: PointerClickedEvent) !void {
+        if (e.mButton != .BUTTON_LEFT or e.mClicks != 2 or !clicked.IsActive()) return;
+        //one event per entity in the chain: the text input's own, or the box it is in when that is what was clicked
+        const entity = if (UIManager.HasUIComponent(clicked, TextInputComponent))
+            clicked
+        else if (Same(clicked, e.mTarget))
+            ChildTextInput(clicked) orelse return
+        else
+            return;
+        if (UIManager.GetUIComponent(entity, TextInputComponent).?.mFocusOn != .DoubleClick) return;
+        _ = try self.Focus(engine_context, entity);
+    }
+};
 
 /// The one text input directly inside `box`, null if there is none or more than one (no telling which was meant). A
 /// press on the box a text input sits in (a text field's padding, past the end of its text, or anywhere in it while it
@@ -222,41 +241,49 @@ pub fn EndEdit(self: *FocusSystem, engine_context: *EngineContext, how: EndHow) 
 }
 
 /// A key went down (or repeated, from being held) and it is the focused text input's turn at it
-pub fn OnKeyPressed(self: *FocusSystem, engine_context: *EngineContext, e: KeyboardPressedEvent) !void {
-    const zone = Tracy.ZoneInit("FocusSystem::OnKeyPressed", @src());
-    defer zone.Deinit();
-    const focused = self.Focused() orelse return;
-    const text = focused.GetComponentMut(TextComponent) orelse return;
-    //code may have changed the text since
-    self.mCaret = @min(self.mCaret, text.mText.items.len);
-    self.mBlinkTime = 0;
+pub const OnKeyPressed = struct {
+    pub const Name = "FocusOnKeyPressed";
+    pub const Reads = &.{};
+    pub const Writes = &.{Systems.In(EECS, TextComponent)};
 
-    const input = &engine_context.mInputManager;
-    const ctrl = input.IsKeyPressedUnfiltered(.LCTRL) or input.IsKeyPressedUnfiltered(.RCTRL);
-    switch (e._InputCode) {
-        .BACKSPACE, .KP_BACKSPACE => if (TextEdit.Backspace(&text.mText, &self.mCaret)) try self.Changed(engine_context, focused),
-        .DELETE => if (TextEdit.Delete(&text.mText, self.mCaret)) try self.Changed(engine_context, focused),
-        .LEFT => self.mCaret = TextEdit.PrevBoundary(text.mText.items, self.mCaret),
-        .RIGHT => self.mCaret = TextEdit.NextBoundary(text.mText.items, self.mCaret),
-        .HOME => self.mCaret = 0,
-        .END => self.mCaret = text.mText.items.len,
-        .RETURN, .RETURN2, .KP_ENTER => try self.EndEdit(engine_context, .Submit),
-        .ESCAPE => try self.EndEdit(engine_context, .Revert),
-        .V => if (ctrl) {
-            const clipboard = try engine_context.mAppWindow.GetClipboardText(engine_context.FrameAllocator());
-            try self.Type(engine_context, clipboard);
-        },
-        else => {},
+    pub fn Run(engine_context: *EngineContext, self: *FocusSystem, e: KeyboardPressedEvent) !void {
+        const focused = self.Focused() orelse return;
+        const text = focused.GetComponentMut(TextComponent) orelse return;
+        //code may have changed the text since
+        self.mCaret = @min(self.mCaret, text.mText.items.len);
+        self.mBlinkTime = 0;
+
+        const input = &engine_context.mInputManager;
+        const ctrl = input.IsKeyPressedUnfiltered(.LCTRL) or input.IsKeyPressedUnfiltered(.RCTRL);
+        switch (e._InputCode) {
+            .BACKSPACE, .KP_BACKSPACE => if (TextEdit.Backspace(&text.mText, &self.mCaret)) try self.Changed(engine_context, focused),
+            .DELETE => if (TextEdit.Delete(&text.mText, self.mCaret)) try self.Changed(engine_context, focused),
+            .LEFT => self.mCaret = TextEdit.PrevBoundary(text.mText.items, self.mCaret),
+            .RIGHT => self.mCaret = TextEdit.NextBoundary(text.mText.items, self.mCaret),
+            .HOME => self.mCaret = 0,
+            .END => self.mCaret = text.mText.items.len,
+            .RETURN, .RETURN2, .KP_ENTER => try self.EndEdit(engine_context, .Submit),
+            .ESCAPE => try self.EndEdit(engine_context, .Revert),
+            .V => if (ctrl) {
+                const clipboard = try engine_context.mAppWindow.GetClipboardText(engine_context.FrameAllocator());
+                try self.Type(engine_context, clipboard);
+            },
+            else => {},
+        }
     }
-}
+};
 
 /// Text was typed (a TextTyped event): it goes in at the caret
-pub fn OnTextTyped(self: *FocusSystem, engine_context: *EngineContext, typed: []const u8) !void {
-    const zone = Tracy.ZoneInit("FocusSystem::OnTextTyped", @src());
-    defer zone.Deinit();
-    const copy = try engine_context.FrameAllocator().dupe(u8, typed);
-    try self.Type(engine_context, copy);
-}
+pub const OnTextTyped = struct {
+    pub const Name = "FocusOnTextTyped";
+    pub const Reads = &.{};
+    pub const Writes = &.{Systems.In(EECS, TextComponent)};
+
+    pub fn Run(engine_context: *EngineContext, self: *FocusSystem, typed: []const u8) !void {
+        const copy = try engine_context.FrameAllocator().dupe(u8, typed);
+        try self.Type(engine_context, copy);
+    }
+};
 
 /// Puts `bytes` in at the caret, without their line breaks: a text input is one line, and Enter ends the edit
 fn Type(self: *FocusSystem, engine_context: *EngineContext, bytes: []u8) !void {

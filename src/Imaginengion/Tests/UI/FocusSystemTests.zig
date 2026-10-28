@@ -3,6 +3,7 @@
 //! the way the editor hands them over, and text without a font puts the caret at the start of its line. Run with
 //! `zig build test-engine`.
 const std = @import("std");
+const KeyboardPressedEvent = @import("../../Events/WindowEventData.zig").KeyboardPressedEvent;
 
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
@@ -82,16 +83,16 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         try engine_context.mPointerSystem.Update(engine_context, .{ .Target = target });
         try engine_context.mPointerSystem.OnPressed(engine_context, button);
-        try engine_context.mUIManager.mFocusSystem.OnPressed(engine_context, &engine_context.mPointerSystem, button);
+        try engine_context.mSystems.RunSystem(FocusSystem.OnPressed, engine_context, &engine_context.mUIManager.mECSManager, .{ &engine_context.mUIManager.mFocusSystem, &engine_context.mPointerSystem, button });
         try engine_context.mPointerSystem.OnReleased(engine_context, button);
     }
 
     fn Key(self: *TestWorld, key: ScanCodes) !void {
-        try self.mEngineContext.mUIManager.mFocusSystem.OnKeyPressed(self.mEngineContext, .{ ._InputCode = key, ._Repeat = 0 });
+        try self.mEngineContext.mSystems.RunSystem(FocusSystem.OnKeyPressed, self.mEngineContext, &self.mEngineContext.mUIManager.mECSManager, .{ &self.mEngineContext.mUIManager.mFocusSystem, KeyboardPressedEvent{ ._InputCode = key, ._Repeat = 0 } });
     }
 
     fn Type(self: *TestWorld, text: []const u8) !void {
-        try self.mEngineContext.mUIManager.mFocusSystem.OnTextTyped(self.mEngineContext, text);
+        try self.mEngineContext.mSystems.RunSystem(FocusSystem.OnTextTyped, self.mEngineContext, &self.mEngineContext.mUIManager.mECSManager, .{ &self.mEngineContext.mUIManager.mFocusSystem, text });
     }
 
     fn TextOf(entity: Entity) []const u8 {

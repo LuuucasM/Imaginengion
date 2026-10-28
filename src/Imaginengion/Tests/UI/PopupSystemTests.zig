@@ -119,8 +119,8 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         try engine_context.mPointerSystem.Update(engine_context, .{ .Target = target });
         try engine_context.mPointerSystem.OnPressed(engine_context, .BUTTON_LEFT);
-        try engine_context.mUIManager.mPopupSystem.OnPressed(engine_context, &engine_context.mPointerSystem);
-        try engine_context.mUIManager.mFocusSystem.OnPressed(engine_context, &engine_context.mPointerSystem, .BUTTON_LEFT);
+        try engine_context.mSystems.RunSystem(PopupSystem.OnPressed, engine_context, &engine_context.mUIManager.mECSManager, .{ &engine_context.mUIManager.mPopupSystem, &engine_context.mPointerSystem });
+        try engine_context.mSystems.RunSystem(FocusSystem.OnPressed, engine_context, &engine_context.mUIManager.mECSManager, .{ &engine_context.mUIManager.mFocusSystem, &engine_context.mPointerSystem, .BUTTON_LEFT });
         try engine_context.mPointerSystem.OnReleased(engine_context, .BUTTON_LEFT);
     }
 
@@ -333,7 +333,7 @@ test "closing a popup ends the edit of a text field in it, keeping it" {
     try world.Open(world.mMenu, world.mButton);
     try world.Press(world.mField);
     try std.testing.expect(engine_context.mUIManager.mFocusSystem.Focused() != null);
-    try engine_context.mUIManager.mFocusSystem.OnTextTyped(engine_context, "hi");
+    try engine_context.mSystems.RunSystem(FocusSystem.OnTextTyped, engine_context, &engine_context.mUIManager.mECSManager, .{ &engine_context.mUIManager.mFocusSystem, "hi" });
 
     try engine_context.mUIManager.mPopupSystem.CloseAll(engine_context);
     try std.testing.expect(engine_context.mUIManager.mFocusSystem.Focused() == null);
@@ -377,26 +377,26 @@ test "Escape goes to the top popup, unless a text input in the same scene has th
     try world.Frame();
 
     //nothing open, nothing typed into: the UI takes nothing
-    try std.testing.expect(ui_manager.KeyTakerFor(.ESCAPE) == null);
+    try std.testing.expect((try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui_manager.mECSManager, .{ ui_manager, .ESCAPE })) == null);
 
     try world.Open(world.mMenu, world.mButton);
-    const escape = ui_manager.KeyTakerFor(.ESCAPE).?;
+    const escape = (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui_manager.mECSManager, .{ ui_manager, .ESCAPE })).?;
     try std.testing.expectEqual(.Popup, escape.Kind);
     try std.testing.expectEqual(stack_pos, escape.StackPos);
     //the world whose scene stack that is a place in
     try std.testing.expectEqual(&engine_context.mEditorWorld, escape.World);
-    try std.testing.expect(ui_manager.KeyTakerFor(.A) == null);
+    try std.testing.expect((try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui_manager.mECSManager, .{ ui_manager, .A })) == null);
 
     //typing into the menu's field: it has the keyboard, and it is in the popup's scene, so it goes first
     try world.Press(world.mField);
-    try std.testing.expectEqual(.Focus, ui_manager.KeyTakerFor(.ESCAPE).?.Kind);
-    try std.testing.expectEqual(.Focus, ui_manager.KeyTakerFor(.A).?.Kind);
-    try std.testing.expectEqual(&engine_context.mEditorWorld, ui_manager.KeyTakerFor(.A).?.World);
+    try std.testing.expectEqual(.Focus, (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui_manager.mECSManager, .{ ui_manager, .ESCAPE })).?.Kind);
+    try std.testing.expectEqual(.Focus, (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui_manager.mECSManager, .{ ui_manager, .A })).?.Kind);
+    try std.testing.expectEqual(&engine_context.mEditorWorld, (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui_manager.mECSManager, .{ ui_manager, .A })).?.World);
 
     //Escape ends the edit first, then the next one closes the menu
-    try ui_manager.OnKeyTaken(engine_context, ui_manager.KeyTakerFor(.ESCAPE).?, .{ ._InputCode = .ESCAPE, ._Repeat = 0 });
+    try ui_manager.OnKeyTaken(engine_context, (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui_manager.mECSManager, .{ ui_manager, .ESCAPE })).?, .{ ._InputCode = .ESCAPE, ._Repeat = 0 });
     try std.testing.expect(ui_manager.mFocusSystem.Focused() == null);
     try std.testing.expect(ui_manager.mPopupSystem.IsOpen(world.mMenu));
-    try ui_manager.OnKeyTaken(engine_context, ui_manager.KeyTakerFor(.ESCAPE).?, .{ ._InputCode = .ESCAPE, ._Repeat = 0 });
+    try ui_manager.OnKeyTaken(engine_context, (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui_manager.mECSManager, .{ ui_manager, .ESCAPE })).?, .{ ._InputCode = .ESCAPE, ._Repeat = 0 });
     try std.testing.expect(!ui_manager.mPopupSystem.IsOpen(world.mMenu));
 }

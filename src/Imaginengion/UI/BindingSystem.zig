@@ -4,6 +4,8 @@
 //! the field's own OnChange runs, then what its component needs after an edit (dirty tags), and an inspector whose
 //! field decides what else is shown is asked to be built again (TakeRebuild).
 //! Showing a value never sends an event, so a widget never hears back what it was just given. Part of the UIManager.
+//! Not a system, unlike the UI's other parts: a binding reaches whatever field the inspector bound (any object's
+//! component, a UI element's, an audio bus), so what it touches is only known at run time, never as Reads/Writes lists
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");

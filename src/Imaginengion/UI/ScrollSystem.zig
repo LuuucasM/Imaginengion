@@ -47,51 +47,65 @@ pub const empty: ScrollSystem = .{};
 
 /// The mouse wheel turned while the pointer is over what the pointer system has it over. Notches up (y) scroll up,
 /// notches right (x) scroll right
-pub fn OnWheel(_: *ScrollSystem, engine_context: *EngineContext, pointer: *const PointerSystem, notches_x: f32, notches_y: f32) !void {
-    const zone = Tracy.ZoneInit("ScrollSystem::OnWheel", @src());
-    defer zone.Deinit();
-    if (notches_y != 0) {
-        if (NearestScrolling(pointer.mHovered.items, .Y)) |region| try ScrollBy(engine_context, region, .{ .x = 0, .y = -notches_y * Step(region) });
+pub const OnWheel = struct {
+    pub const Name = "ScrollOnWheel";
+    pub const Reads = &.{ ScrollComponent, Systems.In(EECS, EntityComponents.UIElementComponent) };
+    pub const Writes = &.{ScrollStateComponent};
+
+    pub fn Run(engine_context: *EngineContext, _: *ScrollSystem, pointer: *const PointerSystem, notches_x: f32, notches_y: f32) !void {
+        if (notches_y != 0) {
+            if (NearestScrolling(pointer.mHovered.items, .Y)) |region| try ScrollBy(engine_context, region, .{ .x = 0, .y = -notches_y * Step(region) });
+        }
+        if (notches_x != 0) {
+            if (NearestScrolling(pointer.mHovered.items, .X)) |region| try ScrollBy(engine_context, region, .{ .x = notches_x * Step(region), .y = 0 });
+        }
     }
-    if (notches_x != 0) {
-        if (NearestScrolling(pointer.mHovered.items, .X)) |region| try ScrollBy(engine_context, region, .{ .x = notches_x * Step(region), .y = 0 });
-    }
-}
+};
 
 /// A frame's pointer events: a scrollbar thumb being dragged scrolls its region, as much as keeps the thumb under the
 /// pointer
-pub fn OnPointerEvent(_: *ScrollSystem, engine_context: *EngineContext, event: EntityPointerEvent) !void {
-    const zone = Tracy.ZoneInit("ScrollSystem::OnPointerEvent", @src());
-    defer zone.Deinit();
-    const drag = switch (event.mEvent) {
-        .PointerDrag => |drag| drag,
-        else => return,
+pub const OnPointerEvent = struct {
+    pub const Name = "ScrollOnPointerEvent";
+    pub const Reads = &.{
+        Systems.In(EECS, EntityComponents.UIElementComponent),
+        //the region's scale and size, which the drag is measured against
+        Systems.In(EECS, TransformComponent),
+        Systems.In(EECS, LayoutItemComponent),
+        Systems.In(EECS, EntityComponents.ShapeComponent),
     };
-    //one event per entity in the chain: only the thumb's own
-    if (event.mEntity.mID != drag.mTarget.mID or event.mEntity.mManager != drag.mTarget.mManager) return;
-    if (drag.mButton != .BUTTON_LEFT) return;
+    pub const Writes = &.{ScrollStateComponent};
 
-    const thumb = drag.mTarget;
-    if (!thumb.IsActive()) return;
-    const region = Parent(thumb) orelse return;
-    const state = UIManager.GetUIComponent(region, ScrollStateComponent) orelse return;
-    const axis: Layout.Axis = if (IsThumb(state.mThumbY, thumb)) .Y else if (IsThumb(state.mThumbX, thumb)) .X else return;
+    pub fn Run(engine_context: *EngineContext, _: *ScrollSystem, event: EntityPointerEvent) !void {
+        const drag = switch (event.mEvent) {
+            .PointerDrag => |drag| drag,
+            else => return,
+        };
+        //one event per entity in the chain: only the thumb's own
+        if (event.mEntity.mID != drag.mTarget.mID or event.mEntity.mManager != drag.mTarget.mManager) return;
+        if (drag.mButton != .BUTTON_LEFT) return;
 
-    //the drag is in the units the region is placed in, before its own scale
-    const scale = if (region.GetComponent(TransformComponent)) |transform| transform.GetWorldScale() else Vec3(f32){ .x = 1, .y = 1, .z = 1 };
-    const size = RegionSize(region) orelse return;
-    const track = Get(size, axis);
-    const content = Get(state.mContentSize, axis);
-    const travel = track - ThumbLength(track, content);
-    if (travel <= 0) return;
-    //the thumb's whole travel is the whole scroll range
-    const per_unit = (content - track) / travel;
-    switch (axis) {
-        //dragging the thumb down scrolls down, and down is -y
-        .Y => try ScrollBy(engine_context, region, .{ .x = 0, .y = -drag.mDelta.y / scale.y * per_unit }),
-        .X => try ScrollBy(engine_context, region, .{ .x = drag.mDelta.x / scale.x * per_unit, .y = 0 }),
+        const thumb = drag.mTarget;
+        if (!thumb.IsActive()) return;
+        const region = Parent(thumb) orelse return;
+        const state = UIManager.GetUIComponent(region, ScrollStateComponent) orelse return;
+        const axis: Layout.Axis = if (IsThumb(state.mThumbY, thumb)) .Y else if (IsThumb(state.mThumbX, thumb)) .X else return;
+
+        //the drag is in the units the region is placed in, before its own scale
+        const scale = if (region.GetComponent(TransformComponent)) |transform| transform.GetWorldScale() else Vec3(f32){ .x = 1, .y = 1, .z = 1 };
+        const size = RegionSize(region) orelse return;
+        const track = Get(size, axis);
+        const content = Get(state.mContentSize, axis);
+        const travel = track - ThumbLength(track, content);
+        if (travel <= 0) return;
+        //the thumb's whole travel is the whole scroll range
+        const per_unit = (content - track) / travel;
+        switch (axis) {
+            //dragging the thumb down scrolls down, and down is -y
+            .Y => try ScrollBy(engine_context, region, .{ .x = 0, .y = -drag.mDelta.y / scale.y * per_unit }),
+            .X => try ScrollBy(engine_context, region, .{ .x = drag.mDelta.x / scale.x * per_unit, .y = 0 }),
+        }
     }
-}
+};
 
 /// Once a frame, after layout and before world transforms: every scrolling region in `worlds` (the ones whose UI is in
 /// use) whose children run past it gets a thumb along that edge, placed for how far it is scrolled, and one that no

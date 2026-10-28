@@ -40,6 +40,8 @@ const TestPanel = struct {
         engine_context.* = .{};
         try engine_context.mUIManager.Init(engine_context);
         try engine_context.mEditorWorld.Init(engine_context);
+        //the editor's own UI is in use, which its UI passes reach
+        try engine_context.mEditorWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
         self.mScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         self.mPanel = try UIElementPanel.Build(engine_context, self.mScene, .{ .StockScripts = false });
         try self.mPanel.Toggle(engine_context);

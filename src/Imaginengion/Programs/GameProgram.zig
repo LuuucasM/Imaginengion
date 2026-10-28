@@ -380,7 +380,7 @@ fn OnSystemEvent(_: *anyopaque, engine_context: *EngineContext, event: *const Wi
 /// EditorProgram.OnKeyboardPressedEvent. The players hear what the scenes leave them, and never a key the UI took
 fn OnKeyboardPressed(engine_context: *EngineContext, e: WindowEventData.KeyboardPressedEvent) !void {
     const ui_manager = &engine_context.mUIManager;
-    if (ui_manager.KeyTakerFor(e._InputCode)) |taker| {
+    if (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui_manager.mECSManager, .{ ui_manager, e._InputCode })) |taker| {
         if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Game, engine_context, taker.StackPos, .{&e}) == .Continue) {
             try ui_manager.OnKeyTaken(engine_context, taker, e);
         }

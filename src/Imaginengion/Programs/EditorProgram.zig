@@ -239,10 +239,10 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process
     engine_context.mUIManager.LoadTheme(engine_context);
     //the editor's own UI is always in use; the simulate world's joins it while the game is played
     try engine_context.StartUsingWorld(&engine_context.mEditorWorld);
-    //the world being edited and the template being edited aren't played, but their UI is laid out every frame, and
-    //layout reads scrolling from the UI's ECS
-    try engine_context.mGameWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
-    try engine_context.mTmplEditWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
+    //the world being edited and the template being edited aren't played, but their UI is laid out every frame and the
+    //components panel previews their sounds
+    try engine_context.StartUsingWorld(&engine_context.mGameWorld);
+    try engine_context.StartUsingWorld(&engine_context.mTmplEditWorld);
 
     //editor UI keeps its pixel size when the window grows instead of scaling up: the editor world's
     //overlays all measure the screen in pixels
@@ -1068,7 +1068,7 @@ pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineConte
     //scene by scene from the top of the stack. When the UI takes the key (a text input with the keyboard, the top
     //popup's Escape) it does at its own scene's turn: the scenes above hear it first and can keep it, the scenes below
     //never do. The editor's own UI is over everything in the window, so when it takes a key the game never hears it
-    const editor_taker: ?UIManager.KeyTaker = if (ui_manager.KeyTakerFor(e._InputCode)) |taker| (if (taker.World == &engine_context.mEditorWorld) taker else null) else null;
+    const editor_taker: ?UIManager.KeyTaker = if (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui_manager.mECSManager, .{ ui_manager, e._InputCode })) |taker| (if (taker.World == &engine_context.mEditorWorld) taker else null) else null;
     if (editor_taker != null) {
         if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Editor, engine_context, editor_taker.?.StackPos, .{&e}) == .Continue) {
             try ui_manager.OnKeyTaken(engine_context, editor_taker.?, e);
@@ -1081,7 +1081,7 @@ pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineConte
         _ = try ScriptsProcessor.RunScript(Player, PlayerOnInputPressedScript, .Editor, engine_context, .{&e});
     }
     if (self.mEditorState == .Play) {
-        if (ui_manager.KeyTakerFor(e._InputCode)) |taker| {
+        if (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui_manager.mECSManager, .{ ui_manager, e._InputCode })) |taker| {
             if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Simulate, engine_context, taker.StackPos, .{&e}) == .Continue) {
                 try ui_manager.OnKeyTaken(engine_context, taker, e);
             }

@@ -22,6 +22,9 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const AttribComponent = EntityComponents.AttribComponent;
 const TextComponent = EntityComponents.TextComponent;
 const NumberFieldComponent = @import("../ECSComponents/UIComponents.zig").NumberFieldComponent;
+const ElementOwnerComponent = @import("../ECSComponents/UIComponents.zig").ElementOwnerComponent;
+const Systems = @import("../ECS/Systems.zig");
+const EECS = @import("../ECSManagers/EManager.zig").ECSManagerT;
 
 /// How much of itself a size moves per unit dragged
 const SIZE_SHARE: f64 = 0.01;
@@ -42,68 +45,80 @@ mDragged: ?Entity = null,
 mRemainder: f64 = 0,
 
 /// A frame's pointer events: a field being dragged changes its value
-pub fn OnPointerEvent(self: *NumberFieldSystem, engine_context: *EngineContext, event: EntityPointerEvent) !void {
-    const zone = Tracy.ZoneInit("NumberFieldSystem::OnPointerEvent", @src());
-    defer zone.Deinit();
-    const entity = event.mEntity;
-    switch (event.mEvent) {
-        .PointerDragStart => |e| if (e.mButton == .BUTTON_LEFT and IsField(entity)) {
-            self.mDragged = entity;
-            self.mRemainder = 0;
-        },
-        .PointerDrag => |e| if (e.mButton == .BUTTON_LEFT and IsField(entity)) {
-            if (self.mDragged == null or !Same(self.mDragged.?, entity)) {
+pub const OnPointerEvent = struct {
+    pub const Name = "NumberFieldOnPointerEvent";
+    pub const Reads = &.{ NumberFieldComponent, Systems.In(EECS, EntityComponents.UIElementComponent) };
+    pub const Writes = &.{Systems.In(EECS, AttribComponent)};
+
+    pub fn Run(engine_context: *EngineContext, self: *NumberFieldSystem, event: EntityPointerEvent) !void {
+        const entity = event.mEntity;
+        switch (event.mEvent) {
+            .PointerDragStart => |e| if (e.mButton == .BUTTON_LEFT and IsField(entity)) {
                 self.mDragged = entity;
                 self.mRemainder = 0;
-            }
-            try self.Drag(engine_context, entity, e.mDelta.x);
-        },
-        .PointerDragEnd => if (self.mDragged != null and Same(self.mDragged.?, entity)) {
-            self.mDragged = null;
-        },
-        else => {},
+            },
+            .PointerDrag => |e| if (e.mButton == .BUTTON_LEFT and IsField(entity)) {
+                if (self.mDragged == null or !Same(self.mDragged.?, entity)) {
+                    self.mDragged = entity;
+                    self.mRemainder = 0;
+                }
+                try self.Drag(engine_context, entity, e.mDelta.x);
+            },
+            .PointerDragEnd => if (self.mDragged != null and Same(self.mDragged.?, entity)) {
+                self.mDragged = null;
+            },
+            else => {},
+        }
     }
-}
+};
 
 /// A frame's UI events: an edit kept in a field's text sets its value
-pub fn OnUIEvent(_: *NumberFieldSystem, engine_context: *EngineContext, event: EntityUIEvent) !void {
-    const zone = Tracy.ZoneInit("NumberFieldSystem::OnUIEvent", @src());
-    defer zone.Deinit();
-    const submitted = switch (event.mEvent) {
-        .TextSubmitted => |e| e,
-        else => return,
-    };
-    //one event per entity in the chain: the field's own
-    const field = event.mEntity;
-    if (!IsField(field) or !field.IsActive()) return;
-    const label = LabelOf(field) orelse return;
-    if (!Same(label, submitted.mTarget)) return;
+pub const OnUIEvent = struct {
+    pub const Name = "NumberFieldOnUIEvent";
+    pub const Reads = &.{ NumberFieldComponent, Systems.In(EECS, EntityComponents.UIElementComponent) };
+    pub const Writes = &.{ Systems.In(EECS, AttribComponent), Systems.In(EECS, TextComponent) };
 
-    const typed = std.mem.trim(u8, label.GetComponent(TextComponent).?.mText.items, " \t");
-    if (ParseNumber(typed)) |number| {
-        try SetValue(engine_context, field, number);
-    }
-    //either way the text goes back to showing the value: formatted, or back from what wasn't a number
-    try ShowValue(engine_context, field, label);
-}
+    pub fn Run(engine_context: *EngineContext, _: *NumberFieldSystem, event: EntityUIEvent) !void {
+        const submitted = switch (event.mEvent) {
+            .TextSubmitted => |e| e,
+            else => return,
+        };
+        //one event per entity in the chain: the field's own
+        const field = event.mEntity;
+        if (!IsField(field) or !field.IsActive()) return;
+        const label = LabelOf(field) orelse return;
+        if (!Same(label, submitted.mTarget)) return;
 
-/// Once a frame, before layout (the text's size can change): every field not being typed into shows its value
-pub fn Update(_: *NumberFieldSystem, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("NumberFieldSystem::Update", @src());
-    defer zone.Deinit();
-    const ui_manager = &engine_context.mUIManager;
-    const focused = ui_manager.mFocusSystem.Focused();
-    const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = NumberFieldComponent });
-    for (element_ids.items) |element_id| {
-        const element = UIElement{ .mID = element_id, .mManager = ui_manager };
-        const field = element.GetOwner();
-        //an element no entity has taken yet has nothing to show
-        if (!field.IsIDValid() or !field.IsActive()) continue;
-        const label = LabelOf(field) orelse continue;
-        if (focused != null and Same(focused.?, label)) continue;
+        const typed = std.mem.trim(u8, label.GetComponent(TextComponent).?.mText.items, " \t");
+        if (ParseNumber(typed)) |number| {
+            try SetValue(engine_context, field, number);
+        }
+        //either way the text goes back to showing the value: formatted, or back from what wasn't a number
         try ShowValue(engine_context, field, label);
     }
-}
+};
+
+/// Once a frame, before layout (the text's size can change): every field not being typed into shows its value
+pub const Update = struct {
+    pub const Name = "NumberFieldUpdate";
+    pub const Reads = &.{ NumberFieldComponent, ElementOwnerComponent, Systems.In(EECS, EntityComponents.UIElementComponent), Systems.In(EECS, AttribComponent) };
+    pub const Writes = &.{Systems.In(EECS, TextComponent)};
+
+    pub fn Run(engine_context: *EngineContext, _: *NumberFieldSystem) !void {
+        const ui_manager = &engine_context.mUIManager;
+        const focused = ui_manager.mFocusSystem.Focused();
+        const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = NumberFieldComponent });
+        for (element_ids.items) |element_id| {
+            const element = UIElement{ .mID = element_id, .mManager = ui_manager };
+            const field = element.GetOwner();
+            //an element no entity has taken yet has nothing to show
+            if (!field.IsIDValid() or !field.IsActive()) continue;
+            const label = LabelOf(field) orelse continue;
+            if (focused != null and Same(focused.?, label)) continue;
+            try ShowValue(engine_context, field, label);
+        }
+    }
+};
 
 /// Moves a field's value by `units` dragged, keeping what a whole number can't show yet
 fn Drag(self: *NumberFieldSystem, engine_context: *EngineContext, field: Entity, units: f32) !void {

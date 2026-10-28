@@ -1,4 +1,4 @@
-//! The renderer's shapes made from the world's trees (Renderer.FillFromTree), the overlay's in canvas units and looked
+//! The renderer's shapes made from the world's trees (Renderer.Fill), the overlay's in canvas units and looked
 //! at from the camera as seen from the canvas, checked against making them the old way for one view (Renderer.FillView),
 //! the overlay's placed in world space: every pixel traced through both on the CPU marcher has to come out the same
 //! color. No window or GPU. Run with `zig build test-engine`.
@@ -193,12 +193,12 @@ fn ExpectSamePictures(engine_context: *EngineContext, random: std.Random, view_s
     var from_tree: Renderer = .{};
     defer FreeCPU(&from_tree, engine_allocator);
     from_tree.mShowColliders = show_colliders;
-    try from_tree.FillFromTree(engine_context, world, view_scenes, VIEW, &stats);
+    try engine_context.mSystems.RunSystem(Renderer.Fill, engine_context, &world.mEManager.mECSManager, .{ &from_tree, world, view_scenes, VIEW, &stats });
 
     var one_view: Renderer = .{};
     defer FreeCPU(&one_view, engine_allocator);
     one_view.mShowColliders = show_colliders;
-    try one_view.FillView(engine_context, world, view_scenes, VIEW, &stats);
+    try engine_context.mSystems.RunSystem(Renderer.FillView, engine_context, &world.mEManager.mECSManager, .{ &one_view, world, view_scenes, VIEW, &stats });
 
     const push_constants = ViewPushConstants();
     const tree_overlay = Renderer.OverlayPushConstants(push_constants, from_tree.mOverlayCanvas);
@@ -411,7 +411,7 @@ test "a tree item's surface is put at its place before the build, so a tie at th
     var stats: RenderStats = .{};
     var renderer: Renderer = .{};
     defer FreeCPU(&renderer, engine_context.EngineAllocator());
-    try renderer.FillFromTree(engine_context, &engine_context.mEditorWorld, .{ .Overlays = &.{} }, VIEW, &stats);
+    try engine_context.mSystems.RunSystem(Renderer.Fill, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{ &renderer, &engine_context.mEditorWorld, Renderer.ViewScenes{ .Overlays = &.{} }, VIEW, &stats });
 
     const tree = engine_context.mEditorWorld.mBVH.Tree(.GameLayer);
     for (renderer.mR2D.mGameData.mShapeBufferBase.items, tree.mItems.items) |shape, item| {

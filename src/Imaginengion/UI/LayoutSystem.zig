@@ -17,7 +17,6 @@
 //!
 //!     try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &world.mEManager.mECSManager, .{world});
 const std = @import("std");
-const Tracy = @import("../Core/Tracy.zig");
 const Systems = @import("../ECS/Systems.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
@@ -106,29 +105,37 @@ pub fn MarkSceneDirty(scene: Scene, engine_context: *EngineContext) !void {
 
 /// Each overlay scene in `overlay_scenes` records the screen this view draws it on, in its own canvas units (the
 /// view's size in pixels over the world's pixels per unit): what its layout roots fit into. When that changes,
-/// because the view was resized or the world's scale mode changed, its trees are laid out again. Called by the
-/// renderer as it draws each view, so a scene drawn by several views of different sizes fits the last one drawn
-pub fn RecordViewArea(world: *WorldManager, overlay_scenes: []const Scene.Type, camera_view: CameraView, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("LayoutSystem::RecordViewArea", @src());
-    defer zone.Deinit();
-    //every overlay scene of the world is on the one screen space, so they all fit into the same area
-    const pixels_per_unit = world.OverlayPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale);
-    //a view with no size has nothing to fit into, and would divide by nothing
-    if (pixels_per_unit <= 0) return;
-    const area = Vec2(f32){ .x = camera_view.TargetWidth / pixels_per_unit, .y = camera_view.TargetHeight / pixels_per_unit };
-    for (overlay_scenes) |scene_id| {
-        const scene = world.GetScene(scene_id);
-        if (!scene.IsActive() or scene.GetLayer() != .OverlayLayer) continue;
+/// because the view was resized or the world's scale mode changed, its trees are laid out again. Run by the renderer
+/// as it draws each view, so a scene drawn by several views of different sizes fits the last one drawn. A system from
+/// the world's entity ECS:
+///
+///     try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, &world.mEManager.mECSManager, .{ world, overlay_scenes, camera_view });
+pub const RecordViewArea = struct {
+    pub const Name = "RecordViewArea";
+    //which of the scene's entities are the roots to tag (MarkSceneDirty)
+    pub const Reads = &.{ LayoutItemComponent, LayoutComponent, EntitySceneComponent };
+    pub const Writes = &.{Systems.In(SManager.ECSManagerT, SceneComponent)};
 
-        const scene_component = scene.GetComponentMut(SceneComponent).?;
+    pub fn Run(engine_context: *EngineContext, world: *WorldManager, overlay_scenes: []const Scene.Type, camera_view: CameraView) !void {
+        //every overlay scene of the world is on the one screen space, so they all fit into the same area
+        const pixels_per_unit = world.OverlayPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale);
+        //a view with no size has nothing to fit into, and would divide by nothing
+        if (pixels_per_unit <= 0) return;
+        const area = Vec2(f32){ .x = camera_view.TargetWidth / pixels_per_unit, .y = camera_view.TargetHeight / pixels_per_unit };
+        for (overlay_scenes) |scene_id| {
+            const scene = world.GetScene(scene_id);
+            if (!scene.IsActive() or scene.GetLayer() != .OverlayLayer) continue;
 
-        if (scene_component.mLayoutArea) |old_area| {
-            if (old_area.x == area.x and old_area.y == area.y) continue;
+            const scene_component = scene.GetComponentMut(SceneComponent).?;
+
+            if (scene_component.mLayoutArea) |old_area| {
+                if (old_area.x == area.x and old_area.y == area.y) continue;
+            }
+            scene_component.mLayoutArea = area;
+            try MarkSceneDirty(scene, engine_context);
         }
-        scene_component.mLayoutArea = area;
-        try MarkSceneDirty(scene, engine_context);
     }
-}
+};
 
 /// Whether layout sizes and places this entity: it has a LayoutItemComponent, or it is a container, which is laid
 /// out as if it had the default item

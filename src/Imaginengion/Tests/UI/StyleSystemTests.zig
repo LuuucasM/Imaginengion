@@ -2,6 +2,7 @@
 //! an entity's quad and text. Themes are read from text here rather than loaded as assets, except the engine's default,
 //! which is read from its file so a broken one is caught. Run with `zig build test-engine`.
 const std = @import("std");
+const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
@@ -49,6 +50,8 @@ const TestWorld = struct {
         engine_context.* = .{};
         try engine_context.mUIManager.Init(engine_context);
         try engine_context.mEditorWorld.Init(engine_context);
+        //the editor's own UI is in use, which its UI passes reach
+        try engine_context.mEditorWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
         //as the editor has it (EditorProgram), so a theme's sizes are the overlay's own units (StyleSystem.ThemeUnit)
         engine_context.mEditorWorld.mOverlayScaleMode = .ConstantPixelSize;
         self.mScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
@@ -81,12 +84,12 @@ const TestWorld = struct {
 
     fn Update(self: *TestWorld) !void {
         //no plain texture to fill with: there are no assets here
-        try self.mEngineContext.mUIManager.mStyleSystem.Update(self.mEngineContext, &self.mTheme, .uninit, false);
+        try self.mEngineContext.mSystems.RunSystem(StyleSystem.Update, self.mEngineContext, &self.mEngineContext.mUIManager.mECSManager, .{ &self.mEngineContext.mUIManager.mStyleSystem, &self.mTheme, AssetHandle.uninit, false });
     }
 
     /// The style pass for a theme that is new or was just read again
     fn UpdateAll(self: *TestWorld) !void {
-        try self.mEngineContext.mUIManager.mStyleSystem.Update(self.mEngineContext, &self.mTheme, .uninit, true);
+        try self.mEngineContext.mSystems.RunSystem(StyleSystem.Update, self.mEngineContext, &self.mEngineContext.mUIManager.mECSManager, .{ &self.mEngineContext.mUIManager.mStyleSystem, &self.mTheme, AssetHandle.uninit, true });
     }
 };
 
@@ -409,6 +412,7 @@ test "a style names a theme file of its own, and is taken out of it instead of t
     try engine_context.mAssetManager.Init(engine_context);
     try engine_context.mUIManager.Init(engine_context);
     try engine_context.mEditorWorld.Init(engine_context);
+    try engine_context.mEditorWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
     var editor_theme = ThemeAsset{};
     try editor_theme.FromJson(engine_context, THEME);
     defer {
@@ -435,7 +439,7 @@ test "a style names a theme file of its own, and is taken out of it instead of t
     try UIManager.Style(engine_context, entity, "Button");
     UIManager.GetUIComponentMut(entity, StyleComponent).?.mTheme = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Eng } });
 
-    try engine_context.mUIManager.mStyleSystem.Update(engine_context, &editor_theme, .uninit, false);
+    try engine_context.mSystems.RunSystem(StyleSystem.Update, engine_context, &engine_context.mUIManager.mECSManager, .{ &engine_context.mUIManager.mStyleSystem, &editor_theme, AssetHandle.uninit, false });
     try ExpectColor(.{ 1, 0, 0, 1 }, entity.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
     //read in, and so watched for its file changing
     try std.testing.expect(!engine_context.mUIManager.mStyleSystem.ThemesReread(engine_context));

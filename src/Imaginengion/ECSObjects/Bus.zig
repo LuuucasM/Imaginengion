@@ -65,7 +65,7 @@ pub fn SetVolume(self: Bus, volume: f32) void {
 
 /// Pausing fades everything under the bus out, then holds it where it is. Unpausing fades it back in from there
 pub fn SetPaused(self: Bus, paused: bool) void {
-    if (self.GetComponent(BusComponent)) |bus_component| bus_component.mPaused = paused;
+    if (self.GetComponentMut(BusComponent)) |bus_component| bus_component.mPaused = paused;
 }
 
 pub const AddComponent = Core.AddComponent;
