@@ -30,7 +30,7 @@ test "the stats window starts closed, opens and closes, and shows the loop, the 
     }
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
 
-    const panel = try StatsPanel.Build(engine_context, scene, .{ .StockScripts = false });
+    var panel = try StatsPanel.Build(engine_context, scene, .{ .StockScripts = false });
     try std.testing.expect(!panel.IsOpen());
     //closed, it shows nothing new
     engine_context.mDT = 0.02;
@@ -70,6 +70,22 @@ test "the stats window starts closed, opens and closes, and shows the loop, the 
     const content = panel.mFPS.GetComponent(@import("../../ECS/Components.zig").ChildComponent(Entity.Type)).?.mParent;
     try std.testing.expect(UIManager.HasUIComponent(engine_context.mEditorWorld.GetEntity(content), UIComponents.ScrollComponent));
 
+    //its lines only change every so often, however often the loop goes round
+    engine_context.mDT = StatsPanel.REFRESH_SECONDS / 4;
+    try panel.Update(engine_context, &engine_context.mEngineStats);
+    try std.testing.expectEqualStrings("Loop time: 15625 us (0.01563 s)", TextOf(panel.mLoopTime));
+    engine_context.mDT = StatsPanel.REFRESH_SECONDS;
+    try panel.Update(engine_context, &engine_context.mEngineStats);
+    try std.testing.expect(!std.mem.eql(u8, "Loop time: 15625 us (0.01563 s)", TextOf(panel.mLoopTime)));
+
     try panel.Toggle(engine_context);
     try std.testing.expect(!panel.IsOpen());
+
+    //closed for a moment, it shows the latest as soon as it opens again
+    engine_context.mDT = 0;
+    try panel.Update(engine_context, &engine_context.mEngineStats);
+    try panel.Toggle(engine_context);
+    const shown_before = try engine_context.FrameAllocator().dupe(u8, TextOf(panel.mLoopTime));
+    try panel.Update(engine_context, &engine_context.mEngineStats);
+    try std.testing.expect(!std.mem.eql(u8, shown_before, TextOf(panel.mLoopTime)));
 }

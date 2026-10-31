@@ -155,3 +155,16 @@ test "a script deleting its own object goes once the scripts are done, not while
     try std.testing.expect(gSeen.mOwnerAliveAfterDelete);
     try std.testing.expect(!entity.IsActive());
 }
+
+test "a scene's group holds its entities, not the script children on them" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+
+    var handle = try world.ScriptAssetFor(&SpawnerExports.info);
+    defer handle.ReleaseAsset();
+    const entity = try world.EntityWithScript(handle);
+
+    //a script child has a transform too, but no scene
+    const with_transforms = try world.mScene.GetEntityGroup(world.mEngineContext.FrameAllocator(), .{ .Component = TransformComponent });
+    try std.testing.expectEqualSlices(Entity.Type, &.{entity.mID}, with_transforms.items);
+}

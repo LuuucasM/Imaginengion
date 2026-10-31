@@ -205,10 +205,11 @@ fn FilterEntityByScene(self: Scene, list_allocator: std.mem.Allocator, entity_re
     var i: usize = 0;
 
     while (i < end_index) {
-        const script_entity = self.GetEntity(entity_result_list.items[i]);
-        const scene_component = script_entity.GetComponent(EntitySceneComponent).?;
+        const entity = self.GetEntity(entity_result_list.items[i]);
+        //a script child has none: it isn't in a scene itself, its owner is
+        const scene_component = entity.GetComponent(EntitySceneComponent);
 
-        if (scene_component.mScene.mID != self.mID) {
+        if (scene_component == null or scene_component.?.mScene.mID != self.mID) {
             entity_result_list.items[i] = entity_result_list.items[end_index - 1];
             end_index -= 1;
         } else {

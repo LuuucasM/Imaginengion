@@ -21,6 +21,10 @@ const StatsPanel = @This();
 const AT = @import("../Math/MathTypes.zig").Vec2(f32){ .x = 300, .y = 100 };
 const SIZE = @import("../Math/MathTypes.zig").Vec2(f32){ .x = 420, .y = 380 };
 
+/// How often its lines are refreshed. A line that changes is laid out and drawn again, and the loop time changes every
+/// pass of the loop, so refreshing every pass would cost more than most of what it shows
+pub const REFRESH_SECONDS: f32 = 0.25;
+
 /// One world's section: a line for each stat
 const WorldLines = struct {
     Objects: Entity,
@@ -44,6 +48,8 @@ mFPS: Entity = .uninit,
 mGame: WorldLines = undefined,
 mEditor: WorldLines = undefined,
 mSimulate: WorldLines = undefined,
+/// Since its lines were last refreshed. Starts due, so they show as soon as it opens
+mSinceRefresh: f32 = REFRESH_SECONDS,
 
 /// Builds the window, closed, at the top of `scene`
 pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Options) !StatsPanel {
@@ -78,11 +84,18 @@ pub fn Toggle(self: StatsPanel, engine_context: *EngineContext) !void {
     }
 }
 
-/// Once a frame, before layout, while it is open: the loop's time and rates, and the last rendered frame's stats
-pub fn Update(self: StatsPanel, engine_context: *EngineContext, stats: *const EngineStats) !void {
+/// Once a frame, before layout, while it is open: every REFRESH_SECONDS, the loop's time and rates, and the last rendered
+/// frame's stats
+pub fn Update(self: *StatsPanel, engine_context: *EngineContext, stats: *const EngineStats) !void {
     const zone = Tracy.ZoneInit("StatsPanel::Update", @src());
     defer zone.Deinit();
-    if (!self.IsOpen()) return;
+    if (!self.IsOpen()) {
+        self.mSinceRefresh = REFRESH_SECONDS;
+        return;
+    }
+    self.mSinceRefresh += engine_context.mDT;
+    if (self.mSinceRefresh < REFRESH_SECONDS) return;
+    self.mSinceRefresh = 0;
 
     //a pass of the loop can skip rendering when the GPU is behind, so frames drawn are counted apart from it
     const dt = engine_context.mDT;
