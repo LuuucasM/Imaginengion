@@ -20,7 +20,7 @@ const InternalData = struct {
     Accumulator: f32,
 };
 
-const PHYSICS_DT: f32 = 1.0 / 60.0;
+pub const PHYSICS_DT: f32 = 1.0 / 60.0;
 
 /// How many substeps one fixed step is split into (PhysicsStepSystem)
 pub const SUB_STEPS: u32 = 2;

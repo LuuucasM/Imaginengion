@@ -64,6 +64,15 @@ pub fn Run(engine_context: *EngineContext, world_manager: *WorldManager) !void {
         entity.GetComponentMut(RigidBodyComponent).?.ApplyForce(force);
     }
 
+    //a MoveTo becomes the velocity that arrives at its target as the substeps end, so what the body hits feels that speed
+    for (kinematic_bodies.items) |entity_id| {
+        const entity = world_manager.GetEntity(entity_id);
+        const entity_rb = entity.GetComponentMut(RigidBodyComponent).?;
+        const target = entity_rb._MoveTarget orelse continue;
+        const to_target = target.SubVec(entity.GetComponent(TransformComponent).?.GetTranslation());
+        entity_rb.SetVelocity(to_target.DivScalar(PhysicsManager.PHYSICS_DT));
+    }
+
     //contacts are found before anything moves, from where the bodies are and how fast they are going, so
     //the solver can stop a body at a surface before the move that would have carried it through
     for (0..PhysicsManager.SUB_STEPS) |_| {
@@ -73,8 +82,8 @@ pub fn Run(engine_context: *EngineContext, world_manager: *WorldManager) !void {
             defer integrate_zone.Deinit();
             integrate_zone.Value(dynamic_bodies.items.len);
 
-            //only dynamic bodies: code sets a kinematic body's velocity and nothing else changes it, no
-            //gravity and no force
+            //only dynamic bodies: code sets a kinematic body's velocity, with no gravity and no force. All that
+            //changes it after that is being stopped by what blocks it
             for (dynamic_bodies.items) |entity_id| {
                 const entity = world_manager.GetEntity(entity_id);
                 const entity_rb = entity.GetComponentMut(RigidBodyComponent).?;
@@ -121,7 +130,13 @@ pub fn Run(engine_context: *EngineContext, world_manager: *WorldManager) !void {
         world_manager.GetEntity(entity_id).GetComponentMut(RigidBodyComponent).?._Force = std.mem.zeroes(Vec3(f32));
     }
     for (kinematic_bodies.items) |entity_id| {
-        world_manager.GetEntity(entity_id).GetComponentMut(RigidBodyComponent).?._Force = std.mem.zeroes(Vec3(f32));
+        const entity_rb = world_manager.GetEntity(entity_id).GetComponentMut(RigidBodyComponent).?;
+        entity_rb._Force = std.mem.zeroes(Vec3(f32));
+        //a MoveTo is over once it has arrived, it doesn't carry on past its target
+        if (entity_rb._MoveTarget != null) {
+            entity_rb._MoveTarget = null;
+            entity_rb._Velocity = std.mem.zeroes(Vec3(f32));
+        }
     }
 }
 

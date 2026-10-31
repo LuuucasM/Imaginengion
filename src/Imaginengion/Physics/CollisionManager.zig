@@ -75,10 +75,11 @@ pub fn QueryColliderGroups(world_manager: *WorldManager, frame_allocator: std.me
     return .{ .mDynamic = dynamic.items, .mKinematic = kinematic.items, .mStatic = static.items };
 }
 
-/// Which pairs AddBroadPair keeps: any that can interact, or only those where one side is a trigger
+/// What a solid pair does when it meets: the solver pushes the dynamic side, or neither side can be pushed and a
+/// kinematic one is stopped (StopKinematicBodies)
 const Pairing = enum {
-    Any,
-    TriggerOnly,
+    Push,
+    StopOnly,
 };
 
 const SOLVER_ITERS: u32 = 4;
@@ -203,8 +204,8 @@ const Pairable = struct {
 /// world's BVH with its box, grown by how far it can reach (WorldBVH.ColliderBounds), and pairs with the colliders whose
 /// boxes it overlaps. Only pairs that can interact are kept, the same as BroadPassLinear, which tries every pair:
 /// - a dynamic body can be pushed, so it pairs with anything. Two dynamic ones are paired from the lower collider id
-/// - a kinematic body against a static or another kinematic one: neither can be pushed, so all such a pair can give is
-///   the event of them touching. Built only when one side is a trigger (see AddBroadPair's TriggerOnly)
+/// - a kinematic body against a static or another kinematic one: neither can be pushed, so a kinematic side stops at
+///   the other when their filters say they block (see Pairing's StopOnly)
 /// - static colliders never walk: neither side of a static pair ever moves
 /// A layer's tree only holds its own colliders, so game and overlay colliders never pair. The tree has to be refit to
 /// this substep (PhysicsManager.Step). groups is QueryColliderGroups, fetched once by the caller for every substep
@@ -255,14 +256,14 @@ fn PairNearby(self: *CollisionManager, engine_context: *EngineContext, world_man
             const lower = visitor.mOrigin.mCollider < target_id;
             switch (origin_kind) {
                 .Dynamic => switch (target.mKind) {
-                    .Dynamic => if (lower) try visitor.Pair(target, .Any),
-                    .Kinematic, .Static => try visitor.Pair(target, .Any),
+                    .Dynamic => if (lower) try visitor.Pair(target, .Push),
+                    .Kinematic, .Static => try visitor.Pair(target, .Push),
                 },
                 //a dynamic one has already found it
                 .Kinematic => switch (target.mKind) {
                     .Dynamic => {},
-                    .Kinematic => if (lower) try visitor.Pair(target, .TriggerOnly),
-                    .Static => try visitor.Pair(target, .TriggerOnly),
+                    .Kinematic => if (lower) try visitor.Pair(target, .StopOnly),
+                    .Static => try visitor.Pair(target, .StopOnly),
                 },
                 .Static => unreachable,
             }
@@ -291,30 +292,29 @@ pub fn BroadPassLinear(self: *CollisionManager, engine_context: *EngineContext, 
     //a dynamic body can be pushed, so every pair with one in it can need solving: dynamic against everything
     for (0..groups.mDynamic.len) |i| {
         for (i + 1..groups.mDynamic.len) |j| {
-            try self.AddBroadPair(engine_context, world_manager, groups.mDynamic[i], groups.mDynamic[j], .Any);
+            try self.AddBroadPair(engine_context, world_manager, groups.mDynamic[i], groups.mDynamic[j], .Push);
         }
     }
     for (groups.mDynamic) |origin| {
         for (groups.mKinematic) |target| {
-            try self.AddBroadPair(engine_context, world_manager, origin, target, .Any);
+            try self.AddBroadPair(engine_context, world_manager, origin, target, .Push);
         }
         for (groups.mStatic) |target| {
-            try self.AddBroadPair(engine_context, world_manager, origin, target, .Any);
+            try self.AddBroadPair(engine_context, world_manager, origin, target, .Push);
         }
     }
 
-    //a kinematic body against a static or another kinematic one: neither can be pushed, so all such a pair
-    //can give is the event of them touching. Built only when one side is a trigger, where the event is the
-    //point (a platform entering a zone). Two solid ones would be work every substep for an event that is
-    //rarely wanted, an elevator against its shaft. Static against static is never built: neither ever moves.
+    //a kinematic body against a static or another kinematic one: neither can be pushed, so a kinematic side stops at
+    //the other when their filters say they block. An elevator that should pass its shaft leaves the shaft out of its
+    //mask. Static against static is never built: neither ever moves.
     for (groups.mKinematic) |origin| {
         for (groups.mStatic) |target| {
-            try self.AddBroadPair(engine_context, world_manager, origin, target, .TriggerOnly);
+            try self.AddBroadPair(engine_context, world_manager, origin, target, .StopOnly);
         }
     }
     for (0..groups.mKinematic.len) |i| {
         for (i + 1..groups.mKinematic.len) |j| {
-            try self.AddBroadPair(engine_context, world_manager, groups.mKinematic[i], groups.mKinematic[j], .TriggerOnly);
+            try self.AddBroadPair(engine_context, world_manager, groups.mKinematic[i], groups.mKinematic[j], .StopOnly);
         }
     }
 }
@@ -333,7 +333,6 @@ fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_m
     const collision_type = GetCollisionType(collider_origin, collider_target);
 
     if (collision_type == .Ignore) return;
-    if (pairing == .TriggerOnly and collision_type == .Block) return;
 
     const contact: Contact = .{
         .mOrigin = entity_origin,
@@ -342,6 +341,7 @@ fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_m
         .mTargetBody = world_manager.GetEntity(target.mBody),
         .mNormal = Vec3(f32){ .x = 0, .y = 0, .z = 0 },
         .mSeparation = 0,
+        .mStopOnly = pairing == .StopOnly,
     };
 
     switch (collision_type) {
@@ -525,27 +525,34 @@ pub fn PreSolverPass(self: *CollisionManager, engine_context: *EngineContext, ev
     self._BlockingContacts.items.len = end;
 }
 
-/// Sets the velocities the bodies move with this substep, before they move. Three passes over the solid contacts:
-///   1. how fast each pair is closing and sliding, recorded before anything changes it, for the bounce and friction
-///   2. stop at the surface: a pair may close no faster than takes it to the surface by the end of dt, so a fast
+/// Sets the velocities the bodies move with this substep, before they move. Four passes over the solid contacts:
+///   1. kinematic bodies stop at what blocks them (StopKinematicBodies). First, since what a dynamic body feels from
+///      one is the velocity it is left with: a platform a wall has stopped no longer pushes the box in front of it
+///   2. how fast each pair is closing and sliding, recorded before anything changes it, for the bounce and friction
+///   3. stop at the surface: a pair may close no faster than takes it to the surface by the end of dt, so a fast
 ///      body arrives at what it would have passed through. Then friction, which drags against the pair sliding along
 ///      each other, as hard as how hard the stop pushed them together allows. Iterated, so a body in several contacts
 ///      at once settles against all of them: each pass reads the velocities the last one left
-///   3. bounce: a pair the solver pushed apart leaves at its restitution times the speed it came in at. Done apart
-///      from 2, which on its own leaves a body arriving at the surface with next to no speed left to bounce
+///   4. bounce: a pair the solver pushed apart leaves at its restitution times the speed it came in at. Done apart
+///      from 3, which on its own leaves a body arriving at the surface with next to no speed left to bounce
 pub fn SolveVelocities(self: *CollisionManager, dt: f32) void {
     const zone = Tracy.ZoneInit("CollisionManager::SolveVelocities", @src());
     defer zone.Deinit();
     zone.Value(self._BlockingContacts.items.len);
 
     for (self._BlockingContacts.items) |*contact| {
+        contact.mImpulse = 0;
+        contact.mBounce = 0;
+        contact.mFrictionImpulse = std.mem.zeroes(Vec3(f32));
+    }
+
+    self.StopKinematicBodies(dt);
+
+    for (self._BlockingContacts.items) |*contact| {
         const q_rb_origin = contact.mOriginBody.GetComponent(RigidBodyComponent);
         const q_rb_target = contact.mTargetBody.GetComponent(RigidBodyComponent);
         contact.mApproachSpeed = -RelativeNormalVelocity(contact.*, q_rb_origin, q_rb_target);
         contact.mSlipSpeed = RelativeTangentVelocity(contact.*, q_rb_origin, q_rb_target).Len();
-        contact.mImpulse = 0;
-        contact.mBounce = 0;
-        contact.mFrictionImpulse = std.mem.zeroes(Vec3(f32));
     }
 
     for (0..SOLVER_ITERS) |_| {
@@ -569,6 +576,36 @@ pub fn SolveVelocities(self: *CollisionManager, dt: f32) void {
 
         Bounce(contact, q_rb_origin, q_rb_target);
     }
+}
+
+/// Stops the kinematic bodies at the static and kinematic bodies that block them. Iterated, so one in a corner settles
+/// against both of its walls. What is taken off stays off, the same as a dynamic body stopped by a wall: it slides along
+/// the wall with what is left, and code gives it a new velocity to go on
+fn StopKinematicBodies(self: *CollisionManager, dt: f32) void {
+    for (0..SOLVER_ITERS) |_| {
+        for (self._BlockingContacts.items) |*contact| {
+            if (!contact.mStopOnly) continue;
+            StopOnlyAtSurface(contact, contact.mOriginBody.GetComponentMut(RigidBodyComponent), contact.mTargetBody.GetComponentMut(RigidBodyComponent), dt);
+        }
+    }
+}
+
+/// StopAtSurface for a pair neither side of can be pushed. Each side only loses its own speed toward the other, split
+/// by how fast each is coming, so a body at rest is not shoved and one against a static body takes all of the stop.
+/// A pair already overlapping (a translation set into a wall) is not pushed apart: it can not go deeper, and can leave
+fn StopOnlyAtSurface(contact: *Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent, dt: f32) void {
+    const normal_velocity = RelativeNormalVelocity(contact.*, q_rb_origin, q_rb_target);
+    const allowed_closing = @max(contact.mSeparation, 0.0) / dt;
+    if (normal_velocity >= -allowed_closing) return; //they won't get past the surface at this speed
+
+    const too_fast = -(normal_velocity + allowed_closing);
+    const origin_closing = @max(VelocityOf(contact.mOriginBody, q_rb_origin).Dot(contact.mNormal), 0.0);
+    const target_closing = @max(-VelocityOf(contact.mTargetBody, q_rb_target).Dot(contact.mNormal), 0.0);
+    const closing = origin_closing + target_closing;
+
+    if (q_rb_origin) |rb_origin| rb_origin.AddVelocity(contact.mNormal.MulScalar(-too_fast * origin_closing / closing));
+    if (q_rb_target) |rb_target| rb_target.AddVelocity(contact.mNormal.MulScalar(too_fast * target_closing / closing));
+    contact.mImpulse += too_fast;
 }
 
 /// For trigger pairs that are apart: whether the path the two take this substep goes into each other, which sets

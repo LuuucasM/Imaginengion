@@ -185,8 +185,11 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "c1904df8c5a0dd68",
+  "active": "227b09fd17928a22",
   "lastOpenFiles": [
+    "Research/Decomposition of 3D shapes.pdf",
+    "Research/Lipschitz pruning.pdf",
+    "Research/LightSQ.pdf",
     "longer term things to do or fix.md",
     "things to do and fix.md",
     "First game friction.md",
@@ -217,12 +220,9 @@
     "Engine Notes/2026 9 sept/event system thoughts.md",
     "Untitled.base",
     "Engine Notes/2026 9 sept",
-    "Adding new scripts to engine.md",
     "Engine Notes/2026 8 august",
     "Engine Notes/2026 7 July",
     "Engine Notes/2026 6 June",
-    "Engine Notes/2026 5 May",
-    "Engine Notes/2026 4 April",
     "Scene Manager.canvas",
     "ECS.canvas",
     "Home.canvas"

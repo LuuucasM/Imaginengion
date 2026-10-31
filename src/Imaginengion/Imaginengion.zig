@@ -24,6 +24,7 @@ test {
     _ = @import("Tests/Physics/PauseTests.zig");
     _ = @import("Tests/Physics/RayCastTests.zig");
     _ = @import("Tests/Physics/PhysicsQueriesTests.zig");
+    _ = @import("Tests/Physics/PhysicsUtilsTests.zig");
     _ = @import("Tests/Physics/CollisionLayersTests.zig");
     _ = @import("Tests/Physics/CollisionMaskTests.zig");
     _ = @import("Tests/Math/SDFFunctionsTests.zig");
@@ -132,6 +133,8 @@ pub const Widgets = @import("UI/Widgets.zig");
 pub const CollisionInfo = @import("Physics/Collisions.zig").CollisionInfo;
 pub const PreSolveInfo = @import("Physics/Collisions.zig").PreSolveInfo;
 pub const PhysicsQueries = @import("Physics/PhysicsQueries.zig");
+//moving a body by its type: PhysicsUtils.Dyn and PhysicsUtils.Kin
+pub const PhysicsUtils = @import("Physics/PhysicsUtils.zig");
 //what a ray or a shape hits: engine_context.mSystems.RunSystem(ShapeCastSystem, ...), see the file
 pub const ShapeCastSystem = @import("Physics/ShapeCastSystem.zig");
 pub const CollisionMask = @import("Physics/CollisionMask.zig");

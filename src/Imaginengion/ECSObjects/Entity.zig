@@ -273,6 +273,8 @@ pub fn OnBodyTypeTagAdded(self: Entity, engine_context: *EngineContext, comptime
     inline for (BodyTypeTags) |tag_type| {
         if (tag_type != added_tag and self.HasComponent(tag_type)) try self.RemoveComponentSync(engine_context, tag_type);
     }
+    //a MoveTo asked of the old type isn't carried over to the new one
+    if (self.GetComponentMut(RigidBodyComponent)) |rigid_body| rigid_body._MoveTarget = null;
     try self.SyncRigidBody(engine_context);
 }
 

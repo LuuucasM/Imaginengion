@@ -818,6 +818,173 @@ test "a kinematic body pushes a dynamic one and is not pushed back" {
     try std.testing.expectEqual(@as(f32, 0), paddle.GetComponent(TransformComponent).?.GetTranslation().x);
 }
 
+test "MoveTo arrives by the end of the step and stops there" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //the velocity it had is replaced for the move, and not gone back to after it
+    const body = try MakeMovingBody(engine_context, scene, KinematicBodyTag, .{ .x = 3, .y = 0, .z = 0 });
+    body.GetComponentMut(RigidBodyComponent).?.MoveTo(.{ .x = 1, .y = 2, .z = 0 });
+
+    for (0..2) |_| {
+        try PhysicsFrame(engine_context);
+        try std.testing.expectApproxEqAbs(@as(f32, 1), body.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+        try std.testing.expectApproxEqAbs(@as(f32, 2), body.GetComponent(TransformComponent).?.GetTranslation().y, eps);
+        try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(body).x, eps);
+    }
+}
+
+/// A solid box 1 across with no rigid body at the given spot, which collides as a static body would
+fn MakeWall(engine_context: *EngineContext, scene: Scene, position: Vec3(f32)) !Entity {
+    const wall = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try wall.AddComponent(engine_context, CollidingShape(.Box));
+    try wall.SetTranslation(engine_context, position);
+    return wall;
+}
+
+/// A solid kinematic box 1 across at the given spot, already moving
+fn MakeKinematicBox(engine_context: *EngineContext, scene: Scene, position: Vec3(f32), velocity: Vec3(f32)) !Entity {
+    const box = try MakeMovingBody(engine_context, scene, KinematicBodyTag, velocity);
+    _ = try box.AddComponent(engine_context, CollidingShape(.Box));
+    try box.SetTranslation(engine_context, position);
+    return box;
+}
+
+test "a kinematic body stops at the surface of a wall it blocks with, and the pair touches" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //a gap of 2, and it goes 1 a step
+    const box = try MakeKinematicBox(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 60, .y = 0, .z = 0 });
+    _ = try MakeWall(engine_context, scene, .{ .x = 3, .y = 0, .z = 0 });
+
+    for (0..4) |_| try PhysicsFrame(engine_context);
+    try std.testing.expectApproxEqAbs(@as(f32, 2), box.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(box).x, eps);
+    try std.testing.expectEqual(@as(usize, 1), QueuedCount(engine_context, .CollisionBegin));
+}
+
+test "a kinematic body passes through a wall its filter doesn't block" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const box = try MakeKinematicBox(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 60, .y = 0, .z = 0 });
+    const wall = try MakeWall(engine_context, scene, .{ .x = 3, .y = 0, .z = 0 });
+    //an elevator and its shaft: the wall is on a layer the box doesn't respond to
+    const filter = &wall.GetComponentMut(ColliderComponent).?.mCollisionFilter;
+    filter.CategoryMask.unset(0);
+    filter.CategoryMask.set(1);
+
+    for (0..4) |_| try PhysicsFrame(engine_context);
+    try std.testing.expectApproxEqAbs(@as(f32, 4), box.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 60), VelocityOf(box).x, eps);
+}
+
+test "a kinematic body slides along a wall with what the stop leaves" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //touching a tall wall on its right, heading into it and up it
+    const box = try MakeKinematicBox(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 6, .y = 6, .z = 0 });
+    const wall = try MakeWall(engine_context, scene, .{ .x = 1, .y = 0, .z = 0 });
+    wall.GetComponentMut(ColliderComponent).?.mBoxSize = .{ .x = 1, .y = 20, .z = 1 };
+
+    try PhysicsFrame(engine_context);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), box.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.1), box.GetComponent(TransformComponent).?.GetTranslation().y, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(box).x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 6), VelocityOf(box).y, eps);
+}
+
+test "a kinematic body stops at another kinematic one without shoving it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const moving = try MakeKinematicBox(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 60, .y = 0, .z = 0 });
+    const still = try MakeKinematicBox(engine_context, scene, .{ .x = 3, .y = 0, .z = 0 }, .{ .x = 0, .y = 0, .z = 0 });
+
+    for (0..4) |_| try PhysicsFrame(engine_context);
+    try std.testing.expectApproxEqAbs(@as(f32, 2), moving.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 3), still.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(still).x, eps);
+}
+
+test "two kinematic bodies heading at each other both stop, each losing its own speed" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //a gap of 2, closed from the left twice as fast as from the right
+    const left = try MakeKinematicBox(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 40, .y = 0, .z = 0 });
+    const right = try MakeKinematicBox(engine_context, scene, .{ .x = 3, .y = 0, .z = 0 }, .{ .x = -20, .y = 0, .z = 0 });
+
+    for (0..4) |_| try PhysicsFrame(engine_context);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), right.GetComponent(TransformComponent).?.GetTranslation().x - left.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(left).x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(right).x, eps);
+}
+
+test "MoveTo stops short at a wall" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const box = try MakeKinematicBox(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 0, .y = 0, .z = 0 });
+    _ = try MakeWall(engine_context, scene, .{ .x = 2, .y = 0, .z = 0 });
+
+    box.GetComponentMut(RigidBodyComponent).?.MoveTo(.{ .x = 5, .y = 0, .z = 0 });
+    try PhysicsFrame(engine_context);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), box.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(box).x, eps);
+}
+
+test "a kinematic body a wall has stopped doesn't push what is in front of it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //a tall paddle heading right, touching a wall at its top and a ball at its bottom
+    const paddle = try MakeKinematicBox(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 3, .y = 0, .z = 0 });
+    paddle.GetComponentMut(ColliderComponent).?.mBoxSize = .{ .x = 1, .y = 10, .z = 1 };
+    _ = try MakeWall(engine_context, scene, .{ .x = 1, .y = 3, .z = 0 });
+    const ball = try MakeBall(engine_context, scene, .{ .x = 1, .y = -3, .z = 0 }, .{ .x = 0, .y = 0, .z = 0 });
+
+    try PhysicsFrame(engine_context);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), paddle.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(ball).x, eps);
+}
+
+test "MoveTo hits with the speed of the move" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //a paddle at rest with a ball touching its right face, sent 0.05 in the 1/60 s of a step: a speed of 3
+    const paddle = try MakeMovingBody(engine_context, scene, KinematicBodyTag, .{ .x = 0, .y = 0, .z = 0 });
+    _ = try paddle.AddComponent(engine_context, CollidingShape(.Box));
+    const ball = try MakeBall(engine_context, scene, .{ .x = 1, .y = 0, .z = 0 }, .{ .x = 0, .y = 0, .z = 0 });
+
+    paddle.GetComponentMut(RigidBodyComponent).?.MoveTo(.{ .x = 0.05, .y = 0, .z = 0 });
+    try PhysicsFrame(engine_context);
+
+    try std.testing.expectApproxEqAbs(@as(f32, 3), VelocityOf(ball).x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(paddle).x, eps);
+}
+
 /// A wall 0.1 thick across x at the origin, and a small ball (radius 0.1) at x = -1 heading straight at it.
 /// At 120 substeps a second a speed of 120 is a whole unit a substep, which used to carry a ball like this
 /// clean through the wall without it ever being seen overlapping

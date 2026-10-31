@@ -217,7 +217,7 @@ test "a collider with no rigid body still takes part in the broad pass" {
     try std.testing.expectEqual(@as(usize, 1), collision_manager._BlockingContacts.items.len);
 }
 
-test "a kinematic body pairs with a dynamic one always, and with static and kinematic ones only through a trigger" {
+test "a kinematic body pairs with every body type by its filter" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
@@ -227,29 +227,29 @@ test "a kinematic body pairs with a dynamic one always, and with static and kine
     try collision_manager.Init(engine_context.EngineAllocator());
     defer collision_manager.Deinit(engine_context.EngineAllocator());
 
-    //a solid kinematic against a solid static and a solid kinematic: nothing can be pushed and nothing is a
-    //trigger, so no pairs at all
+    //two solid kinematics and a solid static: each kinematic can be stopped by the other two, so three solid pairs
     _ = try MakeBody(engine_context, scene, KinematicBodyTag);
     const static_body = try MakeBody(engine_context, scene, StaticBodyTag);
     const other_kinematic = try MakeBody(engine_context, scene, KinematicBodyTag);
 
     try RunBroadPass(&collision_manager, engine_context);
-    try std.testing.expectEqual(@as(usize, 0), collision_manager._BlockingContacts.items.len);
+    try std.testing.expectEqual(@as(usize, 3), collision_manager._BlockingContacts.items.len);
     try std.testing.expectEqual(@as(usize, 0), collision_manager._OverlapContacts.items.len);
 
-    //the static one becomes a zone: both kinematic bodies pair with it, as overlaps
+    //the static one becomes a zone: both kinematic bodies pair with it as overlaps, and stay solid to each other
     collision_manager.Reset(engine_context.EngineAllocator());
     static_body.GetComponentMut(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
 
     try RunBroadPass(&collision_manager, engine_context);
-    try std.testing.expectEqual(@as(usize, 0), collision_manager._BlockingContacts.items.len);
+    try std.testing.expectEqual(@as(usize, 1), collision_manager._BlockingContacts.items.len);
     try std.testing.expectEqual(@as(usize, 2), collision_manager._OverlapContacts.items.len);
 
-    //one kinematic body a trigger too: it now also pairs with the other kinematic one
+    //one kinematic body a trigger too: the pair between the two kinematic ones is an overlap now
     collision_manager.Reset(engine_context.EngineAllocator());
     other_kinematic.GetComponentMut(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
 
     try RunBroadPass(&collision_manager, engine_context);
+    try std.testing.expectEqual(@as(usize, 0), collision_manager._BlockingContacts.items.len);
     try std.testing.expectEqual(@as(usize, 3), collision_manager._OverlapContacts.items.len);
 
     //a dynamic body pairs with all three whatever they are: two of them are triggers, the first kinematic is solid

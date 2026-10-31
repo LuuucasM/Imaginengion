@@ -28,6 +28,8 @@ mGravityScale: Vec3(f32) = .{ .x = 1.0, .y = 1.0, .z = 1.0 },
 _InvMass: f32 = 1.0,
 _Velocity: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
 _Force: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
+//where MoveTo asked a kinematic body to be by the end of the next physics step, which then lets go of it
+_MoveTarget: ?Vec3(f32) = null,
 
 pub fn Deinit(_: *RigidBodyComponent, _: *EngineContext) void {}
 
@@ -45,7 +47,8 @@ pub fn GetMass(self: *const RigidBodyComponent) f32 {
 /// Applies continuous force to the rigid body physically accurate
 /// Force must be in newtons form. It pushes until the end of the current physics step and is let go of after
 /// it, so a force that should go on pushing is applied again every step: from an OnPhysicsUpdate script, which
-/// runs at the start of each one. Applied from a once a frame script it only reaches the next step
+/// runs at the start of each one. Applied from a once a frame script it only reaches the next step.
+/// Only a dynamic body is moved by it, it is lost on a static or kinematic one
 ///
 /// INPUT:
 ///     self: The rigid body self
@@ -55,7 +58,8 @@ pub fn ApplyForce(self: *RigidBodyComponent, force: Vec3(f32)) void {
     self._Force.AddEqVec(force);
 }
 
-/// Applies a one time force to the rigid body
+/// Applies a one time force to the rigid body. Only a dynamic body is moved by it, it is lost on a static or
+/// kinematic one
 ///
 /// INPUT:
 ///     self: the rigid body
@@ -65,8 +69,10 @@ pub fn ApplyImpulse(self: *RigidBodyComponent, impulse: Vec3(f32)) void {
     self._Velocity.AddEqVec(impulse.MulScalar(self._InvMass));
 }
 
-/// Directly set the velocity of the rigid body. This shouldnt be used to simply move an object
-/// But rather in less common situations where the velocity change does not need to be physically accurate
+/// Directly set the velocity of the rigid body. On a dynamic body this shouldnt be used to simply move an object
+/// But rather in less common situations where the velocity change does not need to be physically accurate.
+/// On a kinematic body it is the way to move it: it goes on at this velocity until it is given another, or
+/// something its collision filter blocks stops it. To send one to a position, see MoveTo
 ///
 /// INPUT:
 ///     self: the rigid body
@@ -74,6 +80,20 @@ pub fn ApplyImpulse(self: *RigidBodyComponent, impulse: Vec3(f32)) void {
 /// OUTPUT: VOID
 pub fn SetVelocity(self: *RigidBodyComponent, velocity: Vec3(f32)) void {
     self._Velocity = velocity;
+}
+
+/// Moves a kinematic body to a position by the end of the next physics step, then stops it. The step gives it the
+/// velocity that gets it there, so what it hits or carries on the way feels that speed, which setting its translation
+/// does not give them. To follow a path, call it every step from an OnPhysicsUpdate script. From a once a frame script
+/// it reaches the next step. It is lost on a dynamic or static body, and when asked for during the step's own substeps
+/// (an OnPreSolve script). A static or kinematic body its collision filter blocks stops it short of the position
+///
+/// INPUT:
+///     self: the rigid body
+///     target: where to be, in the same space as Entity.SetTranslation
+/// OUTPUT: VOID
+pub fn MoveTo(self: *RigidBodyComponent, target: Vec3(f32)) void {
+    self._MoveTarget = target;
 }
 
 /// Directly add velocity to the rigid body. This skips applying math so is not

@@ -32,8 +32,11 @@ pub const Contact = struct {
     //what the solver found and did on this substep, see CollisionManager.SolveVelocities
     //how fast the two were closing along mNormal before the solver did anything, which the bounce is worked out from
     mApproachSpeed: f32 = 0,
-    //how hard the solver pushed them apart, in total. Above 0 means they really met, gap or not
+    //how hard the solver pushed them apart, in total. Above 0 means they really met, gap or not. For a mStopOnly
+    //pair, which nothing is pushing, it is the closing speed taken away instead
     mImpulse: f32 = 0,
+    //neither side can be pushed, so a kinematic side is stopped at the surface instead (StopKinematicBodies)
+    mStopOnly: bool = false,
     //the restitution they bounced with, 0 if they did not bounce
     mBounce: f32 = 0,
     //how fast the two were sliding along each other before the solver did anything, which decides whether static or
