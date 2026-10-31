@@ -5,6 +5,7 @@ const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Assets = @import("../AComponents.zig");
 const FileMetaData = Assets.FileMetaData;
 const Bus = @import("../../ECSObjects/Bus.zig");
+const Voice = @import("../../ECSObjects/Voice.zig");
 const BusNameComponent = @import("../VComponents.zig").NameComponent;
 const UUIDComponent = @import("../Shared/UUIDComponent.zig");
 const Serializer = @import("../../Serializer/Serializer.zig");
@@ -37,17 +38,19 @@ mBus: Bus = .uninit,
 /// even if the entity is gone. For death screams, pickups, impacts. Can not loop, since nothing could stop them
 mStopWithSource: bool = true,
 
-/// Which batch of attached voices is this component's current one: a voice only plays while its token matches.
-/// 0 until the component first plays. Not saved, and a copy starts at 0, so it can never match an older voice
-mVoiceToken: u32 = 0,
+/// The first of the attached voices this component is playing, listed on from there through VoiceComponent.mNextVoice.
+/// Uninit while it plays none. Not saved, and a copy starts with none, since the voices are the original's
+mFirstVoice: Voice = .uninit,
 
-/// Stops every attached voice this component started. They notice at the next mix, since their token no longer
-/// matches. The next play hands the component a fresh token
+/// Stops every attached voice this component started. They fade out from the next mix on
 pub fn StopVoices(self: *AudioComponent) void {
-    self.mVoiceToken = 0;
+    if (self.mFirstVoice.IsIDValid()) self.mFirstVoice.mManager.OrphanVoices(self);
 }
 
+/// The ECS deinits a component however it goes: removed, its object deleted, or its whole world cleared, so this is
+/// where its attached voices find out
 pub fn Deinit(self: *AudioComponent, _: *EngineContext) void {
+    self.StopVoices();
     self.mAudioAsset.ReleaseAsset();
 }
 
@@ -57,9 +60,8 @@ pub fn Clone(self: *const AudioComponent, _: *EngineContext) !AudioComponent {
     // the copy releases the asset itself, so it needs its own reference
     new_component.mAudioAsset.RetainAsset();
 
-    //the original's voices are not the copy's: a re-copied world keeps its entity ids, so a copied token would let
-    //old voices play from the copy
-    new_component.mVoiceToken = 0;
+    //the original's voices are not the copy's
+    new_component.mFirstVoice = .uninit;
 
     return new_component;
 }

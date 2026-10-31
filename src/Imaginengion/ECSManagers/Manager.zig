@@ -178,6 +178,8 @@ pub fn Core(comptime Self: type) type {
                 const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
                 try LayoutSystem.OnEntityDestroyed(engine_context, entity);
             }
+
+            if (comptime Self == AudioManager) self.UnlinkVoice(obj_id);
         }
 
         fn _HasComponentType(comptime component_type: type) bool {

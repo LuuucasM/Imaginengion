@@ -61,8 +61,8 @@ const VoiceState = union(enum) {
     Detached,
     /// Plays from this AudioComponent, its source's
     Attached: *const AudioComponent,
-    /// Was attached, but its source object or AudioComponent is gone, or the component's token has moved on. Fades
-    /// out what it played last (VoiceComponent's mAssetID, mLastVolume, mLastPitch)
+    /// Was attached, but its source object or AudioComponent is gone, or the component stopped its voices. Fades out
+    /// what it played last (VoiceComponent's mAssetID, mLastVolume, mLastPitch)
     Orphaned,
 };
 
@@ -88,9 +88,6 @@ mECSManager: ECSManagerT = .empty,
 mEventManager: EventManagerT = .empty,
 /// Bus UUID -> the bus, for turning a saved bus reference back into a bus
 mUUIDToWorldID: std.AutoHashMapUnmanaged(u64, Bus.Type) = .empty,
-
-/// Hands out AudioComponent.mVoiceToken values, see NewVoiceToken
-mNextVoiceToken: u32 = 0,
 
 /// The root of the bus tree, made in Init. Everything is mixed through it, and it can not be deleted
 mMasterBus: Bus = .uninit,
@@ -167,10 +164,6 @@ pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: an
         return null;
     }
 
-    if (is_attached and audio_component.mVoiceToken == 0) {
-        audio_component.mVoiceToken = self.NewVoiceToken();
-    }
-
     //the voice lives in this manager's storage, so adding to it leaves audio_component (in the world's) where it is
     const engine_allocator = engine_context.EngineAllocator();
     const voice: Voice = .{ .mID = try self.mECSManager.CreateEntity(engine_allocator), .mManager = self };
@@ -178,7 +171,7 @@ pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: an
 
     _ = try self.mECSManager.AddComponent(engine_context, voice.mID, VoiceComponent{
         .mSource = if (is_attached) ObjectRef.Of(source) else null,
-        .mToken = if (is_attached) audio_component.mVoiceToken else 0,
+        .mNextVoice = if (is_attached) audio_component.mFirstVoice.mID else Voice.NullObject,
         //so a voice orphaned before its first mix still knows what to fade out, and does not slide in from silence
         .mAssetID = audio_component.mAudioAsset.mID,
         .mLastVolume = audio_component.mVolume,
@@ -186,7 +179,12 @@ pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: an
         .mBusID = audio_component.mBus.mID,
     });
 
-    if (!is_attached) {
+    if (is_attached) {
+        if (audio_component.mFirstVoice.IsIDValid()) {
+            self.GetComponentMut(VoiceComponent, audio_component.mFirstVoice.mID).?.mPrevVoice = voice.mID;
+        }
+        audio_component.mFirstVoice = voice;
+    } else {
         //its own copy of everything it plays, since the source may be gone before it finishes
         audio_component.mAudioAsset.RetainAsset();
         _ = self.mECSManager.AddComponent(engine_context, voice.mID, VoiceAssetComponent{ .mAsset = audio_component.mAudioAsset }) catch |err| {
@@ -215,11 +213,41 @@ fn StartFade(self: *AudioManager, engine_context: *EngineContext, voice_id: Voic
     _ = try self.mECSManager.AddComponent(engine_context, voice_id, VoiceFadeComponent{ .mFramesLeft = FADE_FRAMES });
 }
 
-/// A token no component holds yet. Never 0, which is what a component that has not played anything holds
-fn NewVoiceToken(self: *AudioManager) u32 {
-    self.mNextVoiceToken +%= 1;
-    if (self.mNextVoiceToken == 0) self.mNextVoiceToken = 1;
-    return self.mNextVoiceToken;
+/// Lets go of every attached voice playing from audio_component (AudioComponent.StopVoices, or the component going). Each
+/// is orphaned: the mix starts its fade the next time it reads it, and it no longer looks at the component
+pub fn OrphanVoices(self: *AudioManager, audio_component: *AudioComponent) void {
+    var voice_id = audio_component.mFirstVoice.mID;
+    while (voice_id != Voice.NullObject) {
+        const voice_component = self.GetComponentMut(VoiceComponent, voice_id).?;
+        voice_id = voice_component.mNextVoice;
+        voice_component.mSource = null;
+        voice_component.mOrphaned = true;
+        voice_component.mNextVoice = Voice.NullObject;
+        voice_component.mPrevVoice = Voice.NullObject;
+    }
+    audio_component.mFirstVoice = .uninit;
+}
+
+/// Takes a voice about to be destroyed out of its source's list (Core.OnObjectDestroyed). Nothing for a voice that is
+/// not attached, or for a bus
+pub fn UnlinkVoice(self: *AudioManager, voice_id: Voice.Type) void {
+    const voice_component = self.GetComponent(VoiceComponent, voice_id) orelse return;
+    const source = voice_component.mSource orelse return;
+
+    if (voice_component.mPrevVoice != Voice.NullObject) {
+        self.GetComponentMut(VoiceComponent, voice_component.mPrevVoice).?.mNextVoice = voice_component.mNextVoice;
+    } else {
+        const source_component = switch (source) {
+            inline else => |object| object.GetComponentMut(AudioComponent).?,
+        };
+        source_component.mFirstVoice = if (voice_component.mNextVoice != Voice.NullObject)
+            .{ .mID = voice_component.mNextVoice, .mManager = self }
+        else
+            .uninit;
+    }
+    if (voice_component.mNextVoice != Voice.NullObject) {
+        self.GetComponentMut(VoiceComponent, voice_component.mNextVoice).?.mPrevVoice = voice_component.mPrevVoice;
+    }
 }
 
 /// The root bus. Everything is mixed through it, and it can not be deleted
@@ -542,19 +570,14 @@ fn ReadVoice(self: *AudioManager, engine_context: *EngineContext, voice_id: Voic
     return frames_read;
 }
 
-/// Which kind of voice this is, and for an attached voice the AudioComponent it plays from. An attached voice is
-/// orphaned once its source object or AudioComponent is gone or the component's token has moved on (StopVoices, or a
-/// copy of the component: a cleared and re-copied world keeps its entity ids, but every copied component starts at
-/// token 0). It stays orphaned from then on, since its source is only ever looked at again to find it gone
+/// Which kind of voice this is, and for an attached voice the AudioComponent it plays from
 fn GetVoiceState(self: *AudioManager, voice_id: Voice.Type) VoiceState {
     const voice_component = self.GetComponent(VoiceComponent, voice_id).?;
 
-    const source = voice_component.mSource orelse return .Detached;
-    const source_component = switch (source) {
-        inline else => |object| if (object.IsActive()) object.GetComponent(AudioComponent) else null,
-    } orelse return .Orphaned;
-    if (source_component.mVoiceToken != voice_component.mToken) return .Orphaned;
-    return .{ .Attached = source_component };
+    const source = voice_component.mSource orelse return if (voice_component.mOrphaned) .Orphaned else .Detached;
+    return .{ .Attached = switch (source) {
+        inline else => |object| object.GetComponent(AudioComponent).?,
+    } };
 }
 
 /// Runs the voice and bus destroys queued this frame: the manager events hand each one to the ECS as a destroy, then

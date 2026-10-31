@@ -15,6 +15,7 @@ const AudioManager = @import("../../AudioManager/AudioManager.zig");
 const Bus = @import("../../ECSObjects/Bus.zig");
 const AudioComponent = @import("../../ECSComponents/Shared/AudioComponent.zig");
 const ObjectRef = @import("../../ECSComponents/Entity/ObjectRefComponent.zig").Ref;
+const Voice = @import("../../ECSObjects/Voice.zig");
 
 fn InitEngine() !*EngineContext {
     const engine_context = try std.heap.page_allocator.create(EngineContext);
@@ -60,10 +61,106 @@ test "every object type plays its AudioComponent as an attached voice, and StopA
         try std.testing.expectEqual(source.mID, source_id);
 
         const audio_component = source.GetComponent(AudioComponent).?;
-        try std.testing.expect(audio_component.mVoiceToken != 0);
+        try std.testing.expectEqual(voice.mID, audio_component.mFirstVoice.mID);
         source.StopAudio();
-        try std.testing.expectEqual(0, audio_component.mVoiceToken);
+        try std.testing.expect(!audio_component.mFirstVoice.IsIDValid());
+        try std.testing.expect(voice.GetComponent(VoiceComponent).?.mSource == null);
+        try std.testing.expect(voice.GetComponent(VoiceComponent).?.mOrphaned);
     }
+}
+
+test "a voice that goes leaves its source's list, wherever in the list it is" {
+    const engine_context = try InitEngine();
+    defer DeinitEngine(engine_context);
+    const world = &engine_context.mEditorWorld;
+    const audio = &engine_context.mAudioManager;
+
+    const scene = try world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const source = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try source.AddComponent(engine_context, AudioComponent{});
+    const oldest = (try source.PlayAudio(engine_context)).?;
+    const middle = (try source.PlayAudio(engine_context)).?;
+    const newest = (try source.PlayAudio(engine_context)).?;
+
+    //newest first
+    const audio_component = source.GetComponent(AudioComponent).?;
+    try std.testing.expectEqual(newest.mID, audio_component.mFirstVoice.mID);
+    try std.testing.expectEqual(middle.mID, newest.GetComponent(VoiceComponent).?.mNextVoice);
+    try std.testing.expectEqual(oldest.mID, middle.GetComponent(VoiceComponent).?.mNextVoice);
+    try std.testing.expectEqual(middle.mID, oldest.GetComponent(VoiceComponent).?.mPrevVoice);
+
+    try audio.mECSManager.DestroyEntity(engine_context, middle.mID);
+    try std.testing.expectEqual(oldest.mID, newest.GetComponent(VoiceComponent).?.mNextVoice);
+    try std.testing.expectEqual(newest.mID, oldest.GetComponent(VoiceComponent).?.mPrevVoice);
+
+    try audio.mECSManager.DestroyEntity(engine_context, newest.mID);
+    try std.testing.expectEqual(oldest.mID, audio_component.mFirstVoice.mID);
+    try std.testing.expectEqual(Voice.NullObject, oldest.GetComponent(VoiceComponent).?.mPrevVoice);
+
+    try audio.mECSManager.DestroyEntity(engine_context, oldest.mID);
+    try std.testing.expect(!audio_component.mFirstVoice.IsIDValid());
+
+    //an orphaned voice is on no list, so going touches nothing
+    const orphaned = (try source.PlayAudio(engine_context)).?;
+    source.StopAudio();
+    try audio.mECSManager.DestroyEntity(engine_context, orphaned.mID);
+}
+
+test "attached voices are orphaned however their source's AudioComponent goes" {
+    const engine_context = try InitEngine();
+    defer DeinitEngine(engine_context);
+    const world = &engine_context.mEditorWorld;
+    const audio = &engine_context.mAudioManager;
+    //held: see the mix test below
+    const master = audio.GetMasterBus();
+    master.SetPaused(true);
+    master.GetComponentMut(BusComponent).?.mGain = 0;
+
+    const scene = try world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const removed = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try removed.AddComponent(engine_context, AudioComponent{});
+    const removed_voice = (try removed.PlayAudio(engine_context)).?;
+    try removed.RemoveComponent(engine_context, AudioComponent);
+    try std.testing.expect(removed_voice.GetComponent(VoiceComponent).?.mOrphaned);
+
+    const deleted = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try deleted.AddComponent(engine_context, AudioComponent{});
+    const deleted_voice = (try deleted.PlayAudio(engine_context)).?;
+    try deleted.Delete(engine_context);
+    try std.testing.expect(deleted_voice.GetComponent(VoiceComponent).?.mOrphaned);
+
+    //two on the one component, so every one on the list is reached
+    const cleared = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try cleared.AddComponent(engine_context, AudioComponent{});
+    const cleared_voice_a = (try cleared.PlayAudio(engine_context)).?;
+    const cleared_voice_b = (try cleared.PlayAudio(engine_context)).?;
+    world.clearAndFree(engine_context, .All);
+    try std.testing.expect(cleared_voice_a.GetComponent(VoiceComponent).?.mOrphaned);
+    try std.testing.expect(cleared_voice_b.GetComponent(VoiceComponent).?.mOrphaned);
+
+    try engine_context.mSystems.RunSystem(AudioManager.Mix, engine_context, .{audio});
+    for ([_]Voice{ removed_voice, deleted_voice, cleared_voice_a, cleared_voice_b }) |voice| {
+        try std.testing.expect(voice.HasComponent(VoiceFadeComponent));
+    }
+}
+
+test "a copied AudioComponent has none of the original's voices" {
+    const engine_context = try InitEngine();
+    defer DeinitEngine(engine_context);
+    const world = &engine_context.mEditorWorld;
+
+    const scene = try world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const source = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try source.AddComponent(engine_context, AudioComponent{});
+    const voice = (try source.PlayAudio(engine_context)).?;
+
+    var copy = try source.GetComponent(AudioComponent).?.Clone(engine_context);
+    try std.testing.expect(!copy.mFirstVoice.IsIDValid());
+
+    //the copy going leaves the original's voice playing
+    copy.Deinit(engine_context);
+    try std.testing.expect(voice.GetComponent(VoiceComponent).?.mSource != null);
 }
 
 test "the mix reaches each object type's AudioComponent, and fades out a voice whose source stopped" {
@@ -83,11 +180,11 @@ test "the mix reaches each object type's AudioComponent, and fades out a voice w
         try world.CreatePlayer(engine_context, Player.DefaultConfig),
         try world.CreateGameContext(engine_context, GameContext.DefaultConfig),
     };
-    var voices: [sources.len]@import("../../ECSObjects/Voice.zig") = undefined;
+    var voices: [sources.len]Voice = undefined;
     inline for (sources, 0..) |source, i| {
         _ = try source.AddComponent(engine_context, AudioComponent{});
         voices[i] = (try source.PlayAudio(engine_context)).?;
-        //its token moves on, so the mix finds it orphaned
+        //orphaned, which the mix finds
         source.StopAudio();
     }
 
@@ -124,4 +221,35 @@ test "a sound played and a bus made in the middle of a run land when it ends" {
 
     try std.testing.expectEqual(@as(usize, 1), audio.mECSManager.NumWithComponent(VoiceComponent));
     try std.testing.expect(audio.GetBusByUUID(bus.GetUUID()) != null);
+}
+
+const PlaysTwiceInARun = struct {
+    pub const Name = "PlaysTwiceInARun";
+
+    pub fn Run(engine_context: *EngineContext, source: Entity, first: *Voice, second: *Voice) !void {
+        first.* = (try source.PlayAudio(engine_context)).?;
+        second.* = (try source.PlayAudio(engine_context)).?;
+    }
+};
+
+test "voices played in the middle of a run are listed through their staged copies" {
+    const engine_context = try InitEngine();
+    defer DeinitEngine(engine_context);
+    const world = &engine_context.mEditorWorld;
+    const scene = try world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const source = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try source.AddComponent(engine_context, AudioComponent{});
+
+    var first: Voice = undefined;
+    var second: Voice = undefined;
+    try engine_context.mSystems.RunSystem(PlaysTwiceInARun, engine_context, .{ source, &first, &second });
+
+    //landed by now, with the links made while they were staged
+    try std.testing.expectEqual(second.mID, source.GetComponent(AudioComponent).?.mFirstVoice.mID);
+    try std.testing.expectEqual(first.mID, second.GetComponent(VoiceComponent).?.mNextVoice);
+    try std.testing.expectEqual(second.mID, first.GetComponent(VoiceComponent).?.mPrevVoice);
+
+    source.StopAudio();
+    try std.testing.expect(first.GetComponent(VoiceComponent).?.mOrphaned);
+    try std.testing.expect(second.GetComponent(VoiceComponent).?.mOrphaned);
 }
