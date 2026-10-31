@@ -16,6 +16,7 @@ const PointerEvent = @import("../Events/PointerEventData.zig").PointerEvent;
 const UIEvent = @import("../Events/UIEventData.zig").UIEvent;
 const CollisionInfo = @import("../Physics/Collisions.zig").CollisionInfo;
 const PreSolveInfo = @import("../Physics/Collisions.zig").PreSolveInfo;
+const ObjectFileRef = @import("ObjectFileRef.zig").ObjectFileRef;
 
 /// What a hook hands back: whether what it ran for goes on to the next one in line, or stops with it
 pub const ScriptResult = enum(u8) {
@@ -163,6 +164,11 @@ pub const FieldKind = enum(u8) {
     Scene,
     Player,
     GameContext,
+    /// an object's file and the object loaded from it (ObjectFileRef)
+    EntityRef,
+    SceneRef,
+    PlayerRef,
+    GameContextRef,
 
     /// The kind of a variable of type T, null for a type a variable can't be
     pub fn Of(comptime T: type) ?FieldKind {
@@ -178,6 +184,10 @@ pub const FieldKind = enum(u8) {
             Scene => .Scene,
             Player => .Player,
             GameContext => .GameContext,
+            ObjectFileRef(Entity) => .EntityRef,
+            ObjectFileRef(Scene) => .SceneRef,
+            ObjectFileRef(Player) => .PlayerRef,
+            ObjectFileRef(GameContext) => .GameContextRef,
             CollisionMask => .CollisionMask,
             else => if (IsStaticBitSet(T)) .Bits else if (IsEnumSet(T)) .EnumSet else if (@typeInfo(T) == .@"enum" and switch (@sizeOf(T)) {
                 1, 2, 4 => true,
@@ -208,6 +218,17 @@ pub const FieldKind = enum(u8) {
             .Player => Player,
             .GameContext => GameContext,
             else => @compileError(@tagName(self) ++ " is not an object variable"),
+        };
+    }
+
+    /// The type of a variable holding an object's file and the object loaded from it
+    pub fn RefType(comptime self: FieldKind) type {
+        return switch (self) {
+            .EntityRef => ObjectFileRef(Entity),
+            .SceneRef => ObjectFileRef(Scene),
+            .PlayerRef => ObjectFileRef(Player),
+            .GameContextRef => ObjectFileRef(GameContext),
+            else => @compileError(@tagName(self) ++ " is not a file ref variable"),
         };
     }
 };

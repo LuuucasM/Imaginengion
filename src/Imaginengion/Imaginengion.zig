@@ -42,6 +42,7 @@ test {
     _ = @import("Tests/UI/StyleSystemTests.zig");
     _ = @import("Tests/Scripts/EventScriptsTests.zig");
     _ = @import("Tests/Scripts/ScriptValuesTests.zig");
+    _ = @import("Tests/Scripts/ObjectFileRefTests.zig");
     _ = @import("Tests/Scripts/ScriptRunTests.zig");
     _ = @import("Tests/Scripts/GameEventsTests.zig");
     _ = @import("Tests/UI/WidgetsTests.zig");
@@ -107,6 +108,11 @@ pub const ScriptABI = @import("Scripts/ScriptABI.zig");
 pub const ScriptExport = @import("Scripts/ScriptExport.zig");
 //game events: an event file's Phase is a GamePhase (see Scripts/GameEvents.zig)
 pub const GamePhase = @import("Scripts/GameEvents.zig").GamePhase;
+//variables naming an object's file and holding the object loaded from it (see Scripts/ObjectFileRef.zig)
+pub const EntityRef = @import("Scripts/ObjectFileRef.zig").ObjectFileRef(Entity);
+pub const SceneRef = @import("Scripts/ObjectFileRef.zig").ObjectFileRef(SceneLayer);
+pub const PlayerRef = @import("Scripts/ObjectFileRef.zig").ObjectFileRef(Player);
+pub const GameContextRef = @import("Scripts/ObjectFileRef.zig").ObjectFileRef(GameContext);
 
 //Event Stuff -----------------------------------------------
 pub const KeyboardPressedEvent = @import("Events/WindowEventData.zig").KeyboardPressedEvent;

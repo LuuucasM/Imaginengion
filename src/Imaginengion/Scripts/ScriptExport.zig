@@ -342,7 +342,7 @@ fn FieldsOf(comptime Script: type, comptime script_name: []const u8) [@typeInfo(
             @compileError(script_name ++ ": " ++ name ++ " needs a default value, what a new script starts with, e.g. " ++ name ++ ": " ++ @typeName(T) ++ " = ...");
         }
         const kind = FieldKind.Of(T) orelse @compileError(script_name ++ ": " ++ name ++ " is a " ++ @typeName(T) ++
-            ", which a script variable can't be. It can be f32, i32, u32, bool, an enum, a std.StaticBitSet or std.EnumSet (up to 64 bits), IM.CollisionMask, Vec2/Vec3/Vec4(f32), Entity, SceneLayer, Player or GameContext");
+            ", which a script variable can't be. It can be f32, i32, u32, bool, an enum, a std.StaticBitSet or std.EnumSet (up to 64 bits), IM.CollisionMask, Vec2/Vec3/Vec4(f32), Entity, SceneLayer, Player, GameContext, IM.EntityRef, IM.SceneRef, IM.PlayerRef or IM.GameContextRef");
         fields[i] = .{
             .mName = name.ptr,
             .mKind = kind,

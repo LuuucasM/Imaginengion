@@ -19,6 +19,7 @@ pub const Name: []const u8 = "ScriptComponent";
 pub fn Deinit(self: *ScriptComponent, engine_context: *EngineContext) void {
     //the asset is loaded while there is an instance: this component holds a reference to it, and a script is swapped in
     //place rather than unloaded when its file changes
+    if (ScriptValues.InstanceOf(self)) |instance| ScriptValues.ReleaseRefs(instance);
     if (self.mInstance) |id| {
         if (ScriptValues.AssetOf(self)) |asset| asset.FreeInstance(engine_context, id);
     }
@@ -38,6 +39,8 @@ pub fn Clone(self: *const ScriptComponent, engine_context: *EngineContext) !Scri
     if (self.mInstance) |id| {
         if (ScriptValues.AssetOf(self)) |asset| new_component.mInstance = try asset.NewInstance(engine_context, id);
     }
+    //the variables came across byte for byte, so each file ref needs its own reference
+    if (ScriptValues.InstanceOf(&new_component)) |instance| ScriptValues.RetainRefs(instance);
 
     return new_component;
 }

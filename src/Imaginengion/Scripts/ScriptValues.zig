@@ -3,9 +3,11 @@
 //! without knowing the script's type: shown in the editor, saved and loaded, copied with their object, pointed at the
 //! right world, and carried over to a new build of the script.
 //! An object variable (Entity, SceneLayer, Player, GameContext) is a handle into the same world as the script, saved as
-//! the object's UUID and found again once that is loaded, the way SpawnPossComponent's reference is
+//! the object's UUID and found again once that is loaded, the way SpawnPossComponent's reference is. A file ref variable
+//! (IM.SceneRef, ...) adds the object's file, and holds a reference on its asset that follows the variable around
 const std = @import("std");
 const ScriptABI = @import("ScriptABI.zig");
+const RemapObject = @import("ObjectFileRef.zig").RemapObject;
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -54,7 +56,7 @@ pub fn InstanceOf(component: *const ScriptComponent) ?Instance {
 /// An enum variable is set by its value's name, so the caller needn't have the script's enum type: `.Wait` does.
 /// error.NoSuchValue if the variable's enum has no value of that name. An enum set is set by its values' names the same
 /// way (error.NoSuchValue for one the variable's hasn't), and a bit set has to have as many bits as the variable. A
-/// CollisionMask is set as it is
+/// CollisionMask is set as it is, and a file ref takes a reference of its own
 pub fn Set(script: anytype, name: []const u8, value: anytype) !void {
     const T = @TypeOf(value);
     const kind: ScriptABI.FieldKind = comptime switch (@typeInfo(T)) {
@@ -79,6 +81,12 @@ pub fn Set(script: anytype, name: []const u8, value: anytype) !void {
                 ClearBits(field, data);
                 keys = value.iterator();
                 while (keys.next()) |key| SetBit(field, data, ValueIndex(field, @tagName(key)).?, true);
+            },
+            .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => {
+                const file_ref = At(T, data, field);
+                value.Retain();
+                file_ref.Release();
+                file_ref.* = value;
             },
             else => At(T, data, field).* = value,
         }
@@ -134,6 +142,10 @@ pub fn Write(info: *const ScriptInfo, data: *anyopaque, jw: anytype) !void {
                 if (object.mID == @TypeOf(object).NullObject or !object.IsActive()) continue;
                 const uuid = object.GetComponent(UUIDComponent) orelse continue;
                 try WriteField(jw, field, uuid.ID);
+            },
+            inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| {
+                const file_ref = At(kind.RefType(), data, field).*;
+                if (file_ref.IsSet()) try WriteField(jw, field, file_ref);
             },
         }
     }
@@ -200,6 +212,17 @@ pub fn Read(engine_context: *EngineContext, script: anytype, values: std.json.Va
                     .Field = @intCast(index),
                 });
             },
+            inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| {
+                if (value != .object) continue;
+                try At(kind.RefType(), data, field).ReadFile(engine_context, value);
+                const uuid = UUIDOf(value.object.get("Object") orelse continue) orelse continue;
+                try engine_context.mSerializer.AddResolveReq(engine_context.EngineAllocator(), .{
+                    .Requester = Serializer.Requester.Init(script),
+                    .UUID = uuid,
+                    .Resolve = ResolveRef,
+                    .Field = @intCast(index),
+                });
+            },
         }
     }
 }
@@ -220,6 +243,10 @@ fn ResolveRef(requester: Serializer.Requester, uuid: u64, field_index: u32) bool
                     const object = script.mManager.GetObjectByUUID(kind.ObjectType(), uuid) orelse return false;
                     At(kind.ObjectType(), instance.mData, field).* = object;
                 },
+                inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| {
+                    const Ref = kind.RefType();
+                    At(Ref, instance.mData, field).mObject = script.mManager.GetObjectByUUID(Ref.Object, uuid) orelse return false;
+                },
                 else => {},
             }
             return true;
@@ -234,7 +261,29 @@ pub fn CopyValues(from: *const ScriptComponent, to: *const ScriptComponent) void
     const dest = InstanceOf(to) orelse return;
     if (source.mInfo != dest.mInfo) return;
     const size = source.mInfo.mDataSize;
+    ReleaseRefs(dest);
     @memcpy(@as([*]u8, @ptrCast(dest.mData))[0..size], @as([*]const u8, @ptrCast(source.mData))[0..size]);
+    RetainRefs(dest);
+}
+
+/// Takes a reference for every file ref in `instance`: for variables just copied from another instance byte for byte
+pub fn RetainRefs(instance: Instance) void {
+    for (instance.mInfo.Fields()) |field| {
+        switch (field.mKind) {
+            inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| At(kind.RefType(), instance.mData, field).Retain(),
+            else => {},
+        }
+    }
+}
+
+/// Gives back the reference of every file ref in `instance`: for variables about to be freed or overwritten
+pub fn ReleaseRefs(instance: Instance) void {
+    for (instance.mInfo.Fields()) |field| {
+        switch (field.mKind) {
+            inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| At(kind.RefType(), instance.mData, field).Release(),
+            else => {},
+        }
+    }
 }
 
 /// Points every object variable at `world`: for a copy of a whole world, where ids carry over (WorldManager.Copy)
@@ -242,6 +291,7 @@ pub fn Retarget(instance: Instance, world: *WorldManager) void {
     for (instance.mInfo.Fields()) |field| {
         switch (field.mKind) {
             inline .Entity, .Scene, .Player, .GameContext => |kind| At(kind.ObjectType(), instance.mData, field).mManager = world,
+            inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| At(kind.RefType(), instance.mData, field).Retarget(world),
             else => {},
         }
     }
@@ -253,17 +303,8 @@ pub fn Retarget(instance: Instance, world: *WorldManager) void {
 pub fn RemapRefs(instance: Instance, ref_map: *const RefMap, world: *WorldManager) void {
     for (instance.mInfo.Fields()) |field| {
         switch (field.mKind) {
-            inline .Entity, .Scene, .Player, .GameContext => |kind| {
-                const object = At(kind.ObjectType(), instance.mData, field);
-                if (object.mID == @TypeOf(object.*).NullObject) continue;
-                if (kind == .Entity) {
-                    if (ref_map.Get(object.*)) |copy| {
-                        object.* = copy;
-                        continue;
-                    }
-                }
-                if (object.mManager != world) object.* = .uninit;
-            },
+            inline .Entity, .Scene, .Player, .GameContext => |kind| RemapObject(At(kind.ObjectType(), instance.mData, field), ref_map, world),
+            inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| At(kind.RefType(), instance.mData, field).RemapRefs(ref_map, world),
             else => {},
         }
     }
@@ -271,7 +312,7 @@ pub fn RemapRefs(instance: Instance, ref_map: *const RefMap, world: *WorldManage
 
 /// Copies variables from an old build's instance into a new build's, by name: one that is still there with the same
 /// kind keeps its value (an enum by its value's name, an enum set by its values' names, a bit set by its bits' numbers),
-/// anything else keeps the new build's default
+/// anything else keeps the new build's default. A file ref's reference moves with it, see ReleaseDropped
 pub fn CarryOver(old_info: *const ScriptInfo, old_data: *anyopaque, new_info: *const ScriptInfo, new_data: *anyopaque) void {
     for (new_info.Fields()) |new_field| {
         const old_field = for (old_info.Fields()) |old_field| {
@@ -305,6 +346,23 @@ pub fn CarryOver(old_info: *const ScriptInfo, old_data: *anyopaque, new_info: *c
         const from = @as([*]const u8, @ptrCast(old_data)) + old_field.mOffset;
         const to = @as([*]u8, @ptrCast(new_data)) + new_field.mOffset;
         @memcpy(to[0..new_field.mSize], from[0..new_field.mSize]);
+    }
+}
+
+/// Once a new build has taken over an old build's instance: gives back the reference of every file ref CarryOver didn't
+/// move to the new build, because it is gone or isn't the same kind of variable any more
+pub fn ReleaseDropped(old_info: *const ScriptInfo, old_data: *anyopaque, new_info: *const ScriptInfo) void {
+    for (old_info.Fields()) |old_field| {
+        switch (old_field.mKind) {
+            inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| {
+                const carried = for (new_info.Fields()) |new_field| {
+                    if (!std.mem.eql(u8, old_field.Name(), new_field.Name())) continue;
+                    break new_field.mKind == old_field.mKind and new_field.mSize == old_field.mSize;
+                } else false;
+                if (!carried) At(kind.RefType(), old_data, old_field).Release();
+            },
+            else => {},
+        }
     }
 }
 
@@ -365,6 +423,7 @@ pub fn BuildFields(engine_context: *EngineContext, parent: Entity, root: Entity,
             .Scene => _ = try builder.SceneRef(At(Scene, data, field), label, .{}),
             .Player => _ = try builder.PlayerRef(At(Player, data, field), label, .{}),
             .GameContext => _ = try builder.GameContextRef(At(GameContext, data, field), label, .{}),
+            inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| try builder.Struct(At(kind.RefType(), data, field), label),
         }
     }
 }

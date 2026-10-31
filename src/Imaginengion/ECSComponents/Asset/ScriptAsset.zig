@@ -95,6 +95,10 @@ pub fn Reload(self: *ScriptAsset, engine_context: *EngineContext, abs_path: []co
         ScriptValues.CarryOver(old_info, old_info.mGetInstance(id).?, new_info, new_info.mGetInstance(id).?);
     }
 
+    //only now that nothing can turn the new build down
+    live = self._Live.iterator(.{});
+    while (live.next()) |index| ScriptValues.ReleaseDropped(old_info, old_info.mGetInstance(@intCast(index)).?, new_info);
+
     old_info.mDeinit(engine_context);
     self._Lib.Close(engine_context);
     self._Lib = new_lib;
