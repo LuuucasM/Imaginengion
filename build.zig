@@ -4,6 +4,9 @@ const MakeEngineLib = @import("MakeEngineLib.zig").MakeEngineLib;
 const build_shaders = @import("build_shaders.zig");
 const build_script = @import("build_script.zig");
 
+/// For a game project's build.zig, which has the engine as a dependency
+pub const ProjectBuild = build_script.ProjectBuild;
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -90,38 +93,18 @@ pub fn build(b: *std.Build) void {
     editor_run_step.dependOn(&editor_run_cmd.step);
     //=========================================END EDITOR STEP=====================================
 
-    //=========================================GAME STEP=========================================
-    //the engine running a project's game with no editor
-    const game_exe = b.addExecutable(.{
-        .name = "ImaginGame",
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-            .root_source_file = b.path("src/Game.zig"),
-            .imports = &.{
-                .{ .name = "IM", .module = engine_module_eng },
-            },
-        }),
-    });
-
-    //zig build game: only builds it
-    const game_install = b.addInstallArtifact(game_exe, .{});
-    const game_step = b.step("game", "Build the game program");
-    if (no_bin) {
-        game_step.dependOn(&game_exe.step);
-    } else {
-        game_step.dependOn(&game_install.step);
-    }
-
-    //zig build rungame -- <path>/<name>.imprj: builds it and runs that project's game
-    const game_run_cmd = b.addRunArtifact(game_exe);
-    game_run_cmd.step.dependOn(&game_install.step);
-    game_run_cmd.addPassthruArgs();
-    const game_run_step = b.step("rungame", "Build and run a project's game: zig build rungame -- <path>/<name>.imprj");
-    game_run_step.dependOn(&game_run_cmd.step);
-    //=========================================END GAME STEP=====================================
-
     //=========================================TEST STEP=========================================
+    //Tests that need the whole engine module, because they use EngineContext (see Imaginengion.zig's
+    //test block). Kept off `test` while the engine itself does not build, so `zig build test` stays usable.
+    //This has to stay above any other step that reaches engine files by relative path: ZLS gives a file the imports of
+    //the first module to reach it, and only this one has SDL3 and the other C modules
+    const engine_test_step = b.step("test-engine", "Test Engine internals (needs the engine to compile)");
+
+    const engine_tests = b.addTest(.{ .root_module = engine_module_eng });
+    const run_engine_tests = b.addRunArtifact(engine_tests);
+
+    engine_test_step.dependOn(&run_engine_tests.step);
+
     const test_step = b.step("test", "Test Engine");
 
     //All test files live in src/Imaginengion/Tests/, mirroring the folder they cover. Standalone ones
@@ -144,16 +127,6 @@ pub fn build(b: *std.Build) void {
 
     if (test_build) {
         editor_run_step.dependOn(test_step);
-        game_run_step.dependOn(test_step);
     }
-
-    //Tests that need the whole engine module, because they use EngineContext (see Imaginengion.zig's
-    //test block). Kept off `test` while the engine itself does not build, so `zig build test` stays usable.
-    const engine_test_step = b.step("test-engine", "Test Engine internals (needs the engine to compile)");
-
-    const engine_tests = b.addTest(.{ .root_module = engine_module_eng });
-    const run_engine_tests = b.addRunArtifact(engine_tests);
-
-    engine_test_step.dependOn(&run_engine_tests.step);
     //=========================================END TEST STEP==================================================
 }

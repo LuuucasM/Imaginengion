@@ -92,6 +92,23 @@ test "a script's imports are followed through the files it reaches, by name and 
     }
 }
 
+test "the build.zig at the project's top isn't a project file, one further in is" {
+    var project = TestProject.Init();
+    defer project.Deinit();
+    try project.Write("build.zig", "");
+    try project.Write("zig-pkg/Package.zig", "");
+
+    const arena = project.mArena.allocator();
+    var files = try ScriptImports.FindProjectFiles(arena, std.testing.io, try project.Path("."));
+    try std.testing.expect(files.mByName.get("build") == null);
+    try std.testing.expect(files.mByName.get("Package") == null);
+
+    try project.Write("scripts/build.zig", "");
+    files = try ScriptImports.FindProjectFiles(arena, std.testing.io, try project.Path("."));
+    try std.testing.expect(files.mDuplicate == null);
+    try std.testing.expectEqualStrings(try project.Path("scripts/build.zig"), files.mByName.get("build").?);
+}
+
 test "a name no project file has, and two project files with one name, are reported" {
     var project = TestProject.Init();
     defer project.Deinit();

@@ -170,6 +170,15 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime
     };
 }
 
+/// Whether a file's struct is a script: it has a hook or a game event handler. A project's other .zig files (its events,
+/// its enums, its helpers) have neither
+pub fn IsScript(comptime File: type) bool {
+    for (std.enums.values(Hook)) |hook| {
+        if (@hasDecl(File, @tagName(hook))) return true;
+    }
+    return HandlerNames(File, @typeName(File)).len != 0;
+}
+
 /// What a hook or handler handed back, an error logged with the script's name and handed back as .Error
 fn Finish(comptime script_name: []const u8, comptime function_name: []const u8, result: anytype) ScriptResult {
     if (@typeInfo(@TypeOf(result)) == .error_union) {

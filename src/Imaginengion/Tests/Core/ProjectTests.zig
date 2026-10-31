@@ -44,6 +44,38 @@ const TestEngine = struct {
     }
 };
 
+test "the build files point at the engine, are put back when wrong, and a build.zig that isn't the editor's is left alone" {
+    const engine = try TestEngine.Init();
+    defer engine.Deinit();
+    const context = engine.mEngineContext;
+    const project = &context.mProject;
+    const io = context.Io();
+    const frame_allocator = context.FrameAllocator();
+
+    try project.New(context, try engine.TmpDirAbsPath());
+    const dir = project.GetDirectory();
+    try project.WriteBuildFiles(context);
+
+    const build_file = try dir.readFileAlloc(io, "build.zig", frame_allocator, .unlimited);
+    try std.testing.expect(std.mem.indexOf(u8, build_file, "@import(\"GameEngine\").ProjectBuild(b)") != null);
+
+    //from the test's temporary folder, which is inside the engine's: back up to it, with / and no drive
+    const zon = try dir.readFileAlloc(io, "build.zig.zon", frame_allocator, .unlimited);
+    try std.testing.expect(std.mem.indexOf(u8, zon, ".path = \"../") != null);
+    try std.testing.expect(std.mem.indexOfScalar(u8, zon, '\\') == null);
+
+    try dir.writeFile(io, .{ .sub_path = "build.zig.zon", .data = "out of date" });
+    try project.WriteBuildFiles(context);
+    try std.testing.expectEqualStrings(zon, try dir.readFileAlloc(io, "build.zig.zon", frame_allocator, .unlimited));
+
+    const own_build_file = "const std = @import(\"std\");\n";
+    try dir.writeFile(io, .{ .sub_path = "build.zig", .data = own_build_file });
+    try dir.writeFile(io, .{ .sub_path = "build.zig.zon", .data = "out of date" });
+    try project.WriteBuildFiles(context);
+    try std.testing.expectEqualStrings(own_build_file, try dir.readFileAlloc(io, "build.zig", frame_allocator, .unlimited));
+    try std.testing.expectEqualStrings("out of date", try dir.readFileAlloc(io, "build.zig.zon", frame_allocator, .unlimited));
+}
+
 test "the entries are kept from the project folder, and opening the project brings them back" {
     const saved_engine = try TestEngine.Init();
     defer saved_engine.Deinit();

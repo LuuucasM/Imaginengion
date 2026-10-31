@@ -1243,6 +1243,13 @@ fn NoticeSave(self: *EditorProgram, engine_context: *EngineContext, name: []cons
 }
 
 /// Does what a menu bar item was picked for
+/// Only for ZLS to see what the project's scripts import, so a project without them still opens and runs
+fn WriteProjectBuildFiles(engine_context: *EngineContext) void {
+    engine_context.mProject.WriteBuildFiles(engine_context) catch |err| {
+        std.log.warn("couldn't write the project's build files, so ZLS won't know what its scripts import: {s}", .{@errorName(err)});
+    };
+}
+
 fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: EditorMenuBar.Action) !void {
     const zone = Tracy.ZoneInit("EditorProgram::RunMenuAction", @src());
     defer zone.Deinit();
@@ -1271,6 +1278,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
             const abs_path = try PlatformUtils.OpenFolder(engine_context.FrameAllocator());
             if (abs_path.len > 0) {
                 try engine_context.mProject.New(engine_context, abs_path);
+                WriteProjectBuildFiles(engine_context);
                 try self.mContentBrowserPanel.SetRoot(engine_context, engine_context.mProject.GetPath());
             }
         },
@@ -1278,6 +1286,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
             const abs_path = try PlatformUtils.OpenFile(engine_context.FrameAllocator(), ".imprj");
             if (abs_path.len > 0) {
                 try engine_context.mProject.Open(engine_context, abs_path);
+                WriteProjectBuildFiles(engine_context);
                 try self.mContentBrowserPanel.SetRoot(engine_context, engine_context.mProject.GetPath());
             }
         },

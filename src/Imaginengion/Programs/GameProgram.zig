@@ -1,5 +1,5 @@
 //! The program a game runs on: the project's entries (Project.Entry) played in the game world, with no editor. Started
-//! with the project file's path as its first argument (`zig build rungame -- <path>/<name>.imprj`).
+//! with the project file's path as its first argument, by the .bat the project's `zig build game` makes next to it.
 //!
 //! The frame is the editor's while it plays (EditorProgram.OnUpdate), on mGameWorld and without the editor's own UI
 //! and panels. What the game starts as is up to its scripts: the entry scene is loaded and the entry player and game
@@ -84,7 +84,7 @@ pub fn Init(self: *GameProgram, engine_context: *EngineContext, args: std.proces
     const frame_allocator = engine_context.FrameAllocator();
     const arg_list = try args.toSlice(frame_allocator);
     if (arg_list.len < 2) {
-        std.log.err("No project to run: pass its project file, e.g. zig build rungame -- C:/Games/MyGame/MyGame.imprj", .{});
+        std.log.err("No project to run: pass its project file, e.g. ImaginGame.exe MyGame/MyGame.imprj", .{});
         return error.NoProject;
     }
     const project_path = if (std.fs.path.isAbsolute(arg_list[1]))

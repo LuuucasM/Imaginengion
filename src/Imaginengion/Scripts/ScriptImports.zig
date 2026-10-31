@@ -10,8 +10,8 @@ const std = @import("std");
 const NOT_PROJECT_FILES = [_][]const u8{ "std", "builtin", "root", "IM" };
 
 /// Folders a project's own files are never in: build output and caches, and hidden folders
-fn SkipFolder(name: []const u8) bool {
-    return name.len == 0 or name[0] == '.' or std.mem.eql(u8, name, "zig-out") or std.mem.eql(u8, name, "zig-cache");
+pub fn SkipFolder(name: []const u8) bool {
+    return name.len == 0 or name[0] == '.' or std.mem.eql(u8, name, "zig-out") or std.mem.eql(u8, name, "zig-cache") or std.mem.eql(u8, name, "zig-pkg");
 }
 
 pub const Import = union(enum) {
@@ -68,7 +68,7 @@ fn CommentStart(line: []const u8) usize {
     return line.len;
 }
 
-fn IsNotProjectFile(name: []const u8) bool {
+pub fn IsNotProjectFile(name: []const u8) bool {
     for (NOT_PROJECT_FILES) |builtin_name| {
         if (std.mem.eql(u8, name, builtin_name)) return true;
     }
@@ -85,8 +85,9 @@ pub const ProjectFiles = struct {
     mDuplicate: ?struct { Name: []const u8, First: []const u8, Second: []const u8 } = null,
 };
 
-/// Walks `project_path` for its .zig files. Every path found is a normalized one (resolved, the platform's separators),
-/// the same as Collect makes of a path import. Memory from `arena`
+/// Walks `project_path` for its .zig files, not counting the build.zig at its top (Project.WriteBuildFiles). Every path
+/// found is a normalized one (resolved, the platform's separators), the same as Collect makes of a path import. Memory
+/// from `arena`
 pub fn FindProjectFiles(arena: std.mem.Allocator, io: std.Io, given_project_path: []const u8) !ProjectFiles {
     const project_path = try std.fs.path.resolveAlloc(arena, &.{given_project_path});
     var files: ProjectFiles = .{};
@@ -104,7 +105,7 @@ pub fn FindProjectFiles(arena: std.mem.Allocator, io: std.Io, given_project_path
                 try walker.enter(io, entry);
             },
             .file => {
-                if (!std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+                if (!std.mem.endsWith(u8, entry.basename, ".zig") or std.mem.eql(u8, entry.path, "build.zig")) continue;
                 const name = try arena.dupe(u8, entry.basename[0 .. entry.basename.len - ".zig".len]);
                 const path = try std.fs.path.join(arena, &.{ project_path, entry.path });
                 const found = try files.mByName.getOrPut(arena, name);

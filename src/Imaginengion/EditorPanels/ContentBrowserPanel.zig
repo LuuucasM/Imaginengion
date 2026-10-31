@@ -11,6 +11,7 @@
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
+const Project = @import("../Core/Project.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const AManager = @import("../ECSManagers/AManager.zig");
@@ -372,8 +373,12 @@ fn ListFolder(engine_context: *EngineContext, path: []const u8) ![]Listed {
     defer dir.close(io);
 
     var listing: std.ArrayList(Listed) = .empty;
+    const at_project_top = std.mem.eql(u8, path, engine_context.mProject.GetPath());
     var iter = dir.iterate();
     while (try iter.next(io)) |entry| {
+        //what tools keep in a project (.zig-cache, .git, zig-out) and the editor's own build.zig aren't the game's
+        if (entry.kind == .directory and (entry.name[0] == '.' or std.mem.eql(u8, entry.name, "zig-out"))) continue;
+        if (at_project_top and std.mem.eql(u8, entry.name, Project.BUILD_FILE)) continue;
         const kind: Kind = if (entry.kind == .directory) .Folder else KindOf(entry.name) orelse continue;
         try listing.append(frame_allocator, .{ .Kind = kind, .Name = try frame_allocator.dupe(u8, entry.name) });
     }

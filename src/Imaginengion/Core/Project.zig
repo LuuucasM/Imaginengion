@@ -33,6 +33,39 @@ const SETTINGS_OWNERS = [_][]const u8{
 
 const STRINGIFY_OPTIONS: std.json.Stringify.Options = .{ .whitespace = .indent_2 };
 
+/// The project's build.zig, see WriteBuildFiles
+pub const BUILD_FILE = "build.zig";
+const BUILD_ZON_FILE = "build.zig.zon";
+/// How a build.zig starts when it's the editor's. One that doesn't is left alone
+const BUILD_FILE_MARK = "//Written by the editor";
+const BUILD_FILE_TEXT = BUILD_FILE_MARK ++
+    \\. Run from this folder: `zig build game` builds the game into zig-out/<name>/,
+    \\//`zig build rungame` builds and runs it, `zig build check` checks every .zig file compiles. Delete this comment to
+    \\//keep your own build.zig
+    \\const std = @import("std");
+    \\
+    \\pub fn build(b: *std.Build) void {
+    \\    @import("GameEngine").ProjectBuild(b);
+    \\}
+    \\
+;
+const BUILD_ZON_BEFORE_PATH =
+    \\//Written by the editor, and written again when the engine's path changes
+    \\.{
+    \\    .name = .game,
+    \\    .version = "0.0.0",
+    \\    .fingerprint = 0x232b318ccdcf85dd,
+    \\    .paths = .{""},
+    \\    .dependencies = .{
+    \\        .GameEngine = .{ .path = "
+;
+const BUILD_ZON_AFTER_PATH =
+    \\" },
+    \\    },
+    \\}
+    \\
+;
+
 /// What a built game starts from: the scene it opens, the player that views it and the game context it runs. Each one is
 /// an object file in the project
 pub const Entry = enum {
@@ -230,6 +263,46 @@ pub fn Save(self: *Project, engine_context: *EngineContext) !void {
     inline for (SETTINGS_OWNERS) |owner_field| {
         try self.SaveOwnerSettings(engine_context, owner_field);
     }
+}
+
+/// Gives the project the build.zig and build.zig.zon that build its game and let ZLS see what its scripts import
+/// (build_script.zig's ProjectBuild). For the editor, which like building a script needs the engine's folder to be the
+/// one it runs in. Called on every open, so an engine or project that moved is picked up
+pub fn WriteBuildFiles(self: *Project, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("Project::WriteBuildFiles", @src());
+    defer zone.Deinit();
+
+    const io = engine_context.Io();
+    const frame_allocator = engine_context.FrameAllocator();
+
+    const current = try self.ReadIfThere(engine_context, BUILD_FILE);
+    if (current) |text| {
+        if (!std.mem.startsWith(u8, text, BUILD_FILE_MARK)) return;
+    }
+
+    const engine_path = try std.Io.Dir.cwd().realPathFileAlloc(io, ".", frame_allocator);
+    const relative = try std.fs.path.relativeAlloc(frame_allocator, engine_path, null, self.mPath.items, engine_path);
+    //a dependency's path can't be absolute, and there is no relative one to another drive
+    if (std.fs.path.isAbsolute(relative)) return error.EngineOnAnotherDrive;
+    std.mem.replaceScalar(u8, relative, '\\', '/');
+    const zon = try std.fmt.allocPrint(frame_allocator, "{s}{f}{s}", .{ BUILD_ZON_BEFORE_PATH, std.zig.fmtString(relative), BUILD_ZON_AFTER_PATH });
+
+    //only when different: ZLS loads the build again when one changes
+    if (current == null or !std.mem.eql(u8, current.?, BUILD_FILE_TEXT)) {
+        try self.GetDirectory().writeFile(io, .{ .sub_path = BUILD_FILE, .data = BUILD_FILE_TEXT });
+    }
+    const current_zon = try self.ReadIfThere(engine_context, BUILD_ZON_FILE);
+    if (current_zon == null or !std.mem.eql(u8, current_zon.?, zon)) {
+        try self.GetDirectory().writeFile(io, .{ .sub_path = BUILD_ZON_FILE, .data = zon });
+    }
+}
+
+/// A file in the project folder's text for this frame, null if it isn't there
+fn ReadIfThere(self: *Project, engine_context: *EngineContext, rel_path: []const u8) !?[]const u8 {
+    return self.GetDirectory().readFileAlloc(engine_context.Io(), rel_path, engine_context.FrameAllocator(), .unlimited) catch |err| switch (err) {
+        error.FileNotFound => null,
+        else => |e| return e,
+    };
 }
 
 /// Saves and closes the open project, if there is one. What the owners hold stays as it is until the next New or Open
