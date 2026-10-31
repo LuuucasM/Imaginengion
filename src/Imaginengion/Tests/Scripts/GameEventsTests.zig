@@ -1,7 +1,8 @@
 //! Game events (Scripts/GameEvents.zig): a script's handlers found by their last parameter, events sent in a world
 //! (WorldManager.Emit) handed at their phase to every script with a handler, in order, until one handles it, and a
-//! stopped script left out. No DLL is built: the scripts are exported in-process (ScriptExport.Exports) and put straight
-//! onto an asset, the way ScriptValuesTests does.
+//! stopped script left out, and events sent right away (WorldManager.Dispatch) handled before the send returns. No DLL is
+//! built: the scripts are exported in-process (ScriptExport.Exports) and put straight onto an asset, the way
+//! ScriptValuesTests does.
 //! Run with `zig build test-engine`.
 const std = @import("std");
 
@@ -83,6 +84,26 @@ const Late = struct {
     }
 };
 const LateExports = ScriptExport.Exports(Late, "Late", &.{});
+
+/// Dispatches ScoreChanged from inside its handler for Scored: 'R' before, 'r' after
+const Relay = struct {
+    pub fn OnScored(_: *Relay, engine_context: *EngineContext, owner: GameContext, _: *const Scored) !ScriptResult {
+        Handled('R');
+        _ = try owner.GetWorld().Dispatch(engine_context, ScoreChanged{ .mTotal = 7 });
+        Handled('r');
+        return .Continue;
+    }
+};
+const RelayExports = ScriptExport.Exports(Relay, "Relay", &.{});
+
+/// Hears Collided, an event with nothing in it
+const Bumped = struct {
+    pub fn OnCollided(_: *Bumped, _: *EngineContext, _: GameContext, _: *const Collided) ScriptResult {
+        Handled('B');
+        return .Continue;
+    }
+};
+const BumpedExports = ScriptExport.Exports(Bumped, "Bumped", &.{});
 
 const TestWorld = struct {
     mEngineContext: *EngineContext,
@@ -202,4 +223,67 @@ test "a stopped script's handlers don't run" {
     try game_world.Emit(engine_context, Scored{ .mPoints = 1 });
     try ScriptsProcessor.ProcessGameEvents(engine_context, game_world, .AfterUpdate);
     try std.testing.expectEqualStrings("", gHandled.items);
+    try std.testing.expectEqual(ScriptResult.Continue, try game_world.Dispatch(engine_context, Scored{ .mPoints = 1 }));
+    try std.testing.expectEqualStrings("", gHandled.items);
+}
+
+test "a dispatched event is handled before the send returns, and says if a handler kept it from the rest" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+
+    const game_context = try game_world.CreateGameContext(engine_context, GameContext.DefaultConfig);
+    _ = try world.AddScript(game_context, &ScoreKeeperExports.info);
+    const text_entity = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    const text = try world.AddScript(text_entity, &ScoreTextExports.info);
+    _ = try world.AddScript(text_entity, &LateExports.info);
+    const ball = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+
+    const result = try game_world.Dispatch(engine_context, Scored{ .mPoints = 3, .mBy = ball });
+
+    //the game context, then ScoreText, which keeps it from Late. ScoreChanged was sent with Emit, so it waits
+    try std.testing.expectEqual(ScriptResult.Handled, result);
+    try std.testing.expectEqualStrings("GE", gHandled.items);
+    const text_instance = @import("../../Scripts/ScriptValues.zig").InstanceOf(text.GetComponent(@import("../../ECSComponents/Shared/ScriptComponent.zig")).?).?;
+    const text_values: *ScoreText = @ptrCast(@alignCast(text_instance.mData));
+    try std.testing.expectEqual(ball.mID, text_values.mLastBy.mID);
+
+    //only what the handler queued is waiting, Scored itself never was
+    const queue = game_world.mGameEventManager.GetQueue(.AfterUpdate);
+    try std.testing.expectEqual(@as(usize, 1), queue.mEntries.items.len);
+    try std.testing.expectEqual(GameEvents.IdOf(ScoreChanged), queue.mEntries.items[0].mId);
+}
+
+test "a dispatch from inside a handler finishes before that handler carries on" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+
+    const game_context = try game_world.CreateGameContext(engine_context, GameContext.DefaultConfig);
+    _ = try world.AddScript(game_context, &RelayExports.info);
+    const text_entity = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    const text = try world.AddScript(text_entity, &ScoreTextExports.info);
+
+    try std.testing.expectEqual(ScriptResult.Handled, try game_world.Dispatch(engine_context, Scored{}));
+
+    try std.testing.expectEqualStrings("RCrE", gHandled.items);
+    const text_instance = @import("../../Scripts/ScriptValues.zig").InstanceOf(text.GetComponent(@import("../../ECSComponents/Shared/ScriptComponent.zig")).?).?;
+    const text_values: *ScoreText = @ptrCast(@alignCast(text_instance.mData));
+    try std.testing.expectEqual(@as(u32, 7), text_values.mShown);
+}
+
+test "an event with nothing in it dispatches, ignoring its phase" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+
+    const game_context = try game_world.CreateGameContext(engine_context, GameContext.DefaultConfig);
+    _ = try world.AddScript(game_context, &BumpedExports.info);
+
+    try std.testing.expectEqual(ScriptResult.Continue, try game_world.Dispatch(engine_context, Collided{}));
+    try std.testing.expectEqualStrings("B", gHandled.items);
+    try std.testing.expectEqual(@as(usize, 0), game_world.mGameEventManager.GetQueue(.AfterPhysics).mEntries.items.len);
 }

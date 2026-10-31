@@ -6,6 +6,7 @@
 //! handles it with a function of any name whose last parameter is it (see ScriptExport). The engine never knows the
 //! event's type: each world keeps the events sent in it as bytes tagged with the event's id (GameEventManager), and at
 //! the event's phase hands them to the scripts with a handler for that id (ScriptsProcessor.ProcessGameEvents).
+//! world.Dispatch (WorldManager.Dispatch) sends one to the same handlers right away instead, skipping the queue and phase.
 //! The id comes from the event's name, the same in every script's DLL. That is safe through renames and edits because
 //! a script is rebuilt whenever a file it imports changes, and stops if that rebuild fails (ScriptsProcessor.SyncScripts)
 const std = @import("std");

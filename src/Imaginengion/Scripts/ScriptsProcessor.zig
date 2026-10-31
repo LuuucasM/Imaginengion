@@ -407,8 +407,8 @@ pub fn ProcessGameEvents(engine_context: *EngineContext, world: *WorldManager, c
 }
 
 /// Runs every handler in `world` for the game event with id `id`, whose bytes are at `event`, until one hands back
-/// .Handled
-fn RunEventHandlers(engine_context: *EngineContext, world: *WorldManager, id: u64, event: *const anyopaque) !ScriptResult {
+/// .Handled. What ProcessGameEvents does for each queued event, and WorldManager.Dispatch for an event sent right away
+pub fn RunEventHandlers(engine_context: *EngineContext, world: *WorldManager, id: u64, event: *const anyopaque) !ScriptResult {
     return engine_context.mSystems.RunSystem(EventHandlersLoop, engine_context, .{ world, id, event });
 }
 

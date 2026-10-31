@@ -18,6 +18,8 @@ const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
 const ScriptValues = @import("../Scripts/ScriptValues.zig");
 const GameEvents = @import("../Scripts/GameEvents.zig");
+const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
+const ScriptResult = @import("../Scripts/ScriptABI.zig").ScriptResult;
 const PathType = @import("../ECSManagers/AManager.zig").PathType;
 
 const EManager = @import("../ECSManagers/EManager.zig");
@@ -157,6 +159,16 @@ pub fn Emit(self: *WorldManager, engine_context: *EngineContext, event: anytype)
     const T = @TypeOf(event);
     comptime GameEvents.Check(T);
     try self.mGameEventManager.Insert(engine_context.EngineAllocator(), GameEvents.PhaseOf(T), GameEvents.IdOf(T), std.mem.asBytes(&event));
+}
+
+/// Sends the game event `event` in this world right now, whatever its phase: every script in it with a handler for it
+/// has run by the time this returns, and .Handled comes back if one kept it from the rest. Handlers run inside the
+/// caller, so what they write is there straight after, but objects and components they add or remove still land when
+/// the outermost system run ends. A handler dispatching the event that led to it recurses until the stack runs out
+pub fn Dispatch(self: *WorldManager, engine_context: *EngineContext, event: anytype) !ScriptResult {
+    const T = @TypeOf(event);
+    comptime GameEvents.Check(T);
+    return ScriptsProcessor.RunEventHandlers(engine_context, self, GameEvents.IdOf(T), &event);
 }
 
 pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options: ClearAndFreeOptions) void {
