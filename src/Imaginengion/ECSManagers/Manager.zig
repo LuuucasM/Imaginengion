@@ -85,33 +85,6 @@ pub fn Core(comptime Self: type) type {
         /// recoverable because the ECS managers live as fields of it.
         const _InWorld = Self == EManager or Self == GCManager or Self == PManager or Self == SManager;
 
-        /// Structural operations (creating, deleting) and the bookkeeping adding and removing set off run unchecked (see
-        /// Systems.UncheckedScope) on every ECS they can reach: for the world's objects their own and the world's other
-        /// three, since they reach across them (deleting a scene reads its entities), and the UI's and audio's when
-        /// those are connected (an element adopted, a style marked); otherwise the manager's own
-        const Unchecked = struct {
-            mScope: Systems.UncheckedScope(Self.ECSManagerT, _UncheckedKinds()) = undefined,
-
-            fn Enter(unchecked: *Unchecked, self: *Self, engine_context: *EngineContext) void {
-                unchecked.mScope.Enter(&engine_context.mSystems, &self.mECSManager);
-            }
-
-            fn Leave(unchecked: *Unchecked) void {
-                unchecked.mScope.Leave();
-            }
-        };
-
-        // the kinds of ECS besides this manager's own that its bookkeeping can reach
-        fn _UncheckedKinds() []const type {
-            if (!_InWorld) return &.{};
-            const reachable = [_]type{ EManager.ECSManagerT, GCManager.ECSManagerT, PManager.ECSManagerT, SManager.ECSManagerT, UIManager.ECSManagerT, AudioManager.ECSManagerT };
-            comptime var kinds: []const type = &.{};
-            inline for (reachable) |kind| {
-                if (kind != Self.ECSManagerT) kinds = kinds ++ [_]type{kind};
-            }
-            return kinds;
-        }
-
         fn ObjManager(self: *Self) @FieldType(UnderlyingObj(Self), "mManager") {
             if (Self == AManager or Self == AudioManager or Self == UIManager) {
                 return self;
@@ -129,11 +102,6 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn CreateObj(self: *Self, engine_context: *EngineContext, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {
-            //building an object is structural, governed by the locks, not by what a system around it listed
-            var unchecked: Unchecked = .{};
-            unchecked.Enter(self, engine_context);
-            defer unchecked.Leave();
-
             const new_obj: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.CreateEntity(engine_context.EngineAllocator()), .mManager = ObjManager(self) };
             try self.ApplyConfig(engine_context, new_obj.mID, config);
             return new_obj;
@@ -144,11 +112,6 @@ pub fn Core(comptime Self: type) type {
         /// their managers to delete there. Deleting an object that is already gone does nothing.
         pub fn DeleteObj(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !void {
             if (!self.mECSManager.IsActiveEntity(obj_id)) return;
-
-            //deleting is structural, governed by the locks, not by what a system around it listed
-            var unchecked: Unchecked = .{};
-            unchecked.Enter(self, engine_context);
-            defer unchecked.Leave();
 
             if (Self == EManager or Self == GCManager or Self == PManager) {
                 return try self.mECSManager.DestroyEntity(engine_context, obj_id);
@@ -175,10 +138,6 @@ pub fn Core(comptime Self: type) type {
         /// OnObjectDestroyed, just before it happens
         fn OnECSRemoval(ctx: *anyopaque, engine_context: *EngineContext, event: Self.ECSManagerT.ECSEventDataT.EventT) anyerror!void {
             const self: *Self = @ptrCast(@alignCast(ctx));
-            //bookkeeping, which reaches the other ECSs too (a style marked, a layout told), not a system's own work
-            var unchecked: Unchecked = .{};
-            unchecked.Enter(self, engine_context);
-            defer unchecked.Leave();
             switch (event) {
                 .RemoveComponent => |e| try OnComponentRemoved(self, engine_context, e.mEntityID, e.mComponentInd),
                 .DestroyEntity => |e| try OnObjectDestroyed(self, engine_context, e.mEntityID),
@@ -229,22 +188,19 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn CreateChild(self: *Self, engine_context: *EngineContext, parent_id: UnderlyingObjType(Self), child_type: ECSManager.ChildType, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {
-            var unchecked: Unchecked = .{};
-            unchecked.Enter(self, engine_context);
-            defer unchecked.Leave();
             const new_child: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.AddChild(engine_context, parent_id, child_type), .mManager = ObjManager(self) };
             try self.ApplyConfig(engine_context, new_child.mID, config);
             return new_child;
         }
 
-        /// Adds the component, staged if its type is locked (see ECSManager.AddComponent), and sets off what adding it
+        /// Adds the component, staged during a run (see ECSManager.AddComponent), and sets off what adding it
         /// does (OnComponentAdded) right away. Returns the staged copy for a staged one
         pub fn AddComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), new_component: anytype) !*@TypeOf(new_component) {
             const component_t = @TypeOf(new_component);
             _ = try self.mECSManager.AddComponent(engine_context, obj_id, new_component);
             try OnComponentAdded(self, engine_context, obj_id, Self.ECSManagerT.ComponentInd(component_t));
             //fetched again: what OnComponentAdded adds can move a component that went on right away
-            return self.mECSManager.GetAddedComponent(component_t, obj_id).?;
+            return self.mECSManager.GetComponentMut(component_t, obj_id).?;
         }
 
         /// Adds the component now, see ECSManager.AddComponentSync for when that is safe, and runs OnComponentAdded
@@ -263,11 +219,6 @@ pub fn Core(comptime Self: type) type {
         /// (see ECSManager.AddComponent), so all of it can read the component it is about either way.
         /// anyerror because it adds components through AddComponent, which comes back here
         pub fn OnComponentAdded(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), component_ind: usize) anyerror!void {
-            //bookkeeping, not the work of a system it might run inside
-            var unchecked: Unchecked = .{};
-            unchecked.Enter(self, engine_context);
-            defer unchecked.Leave();
-
             const ECSManagerT = Self.ECSManagerT;
 
             if (comptime Self == EManager) {
@@ -330,7 +281,7 @@ pub fn Core(comptime Self: type) type {
             return false;
         }
 
-        /// Takes the component off, right away unless it has to wait (see ECSManager.Lock); OnComponentRemoved runs just
+        /// Takes the component off, right away unless it has to wait (see ECSManager.mRunDepth); OnComponentRemoved runs just
         /// before it does
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), comptime component_type: type) !void {
             try self.mECSManager.RemoveComponent(engine_context, obj_id, @TypeOf(self.mECSManager).ComponentInd(component_type));
@@ -356,7 +307,7 @@ pub fn Core(comptime Self: type) type {
             return self.mECSManager.GetComponent(component_type, obj_id);
         }
 
-        /// GetComponent for changing it: a running system has to list `component_type` in its Writes
+        /// GetComponent for changing it
         pub fn GetComponentMut(self: *Self, component_type: type, obj_id: UnderlyingObjType(Self)) ?*component_type {
             return self.mECSManager.GetComponentMut(component_type, obj_id);
         }

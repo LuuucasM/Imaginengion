@@ -50,8 +50,6 @@ const TestWorld = struct {
         engine_context.* = .{};
         try engine_context.mUIManager.Init(engine_context);
         try engine_context.mEditorWorld.Init(engine_context);
-        //the editor's own UI is in use, which layout reads scrolling from
-        try engine_context.mEditorWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
 
         const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         scene.GetComponentMut(SceneComponent).?.mLayoutArea = .{ .x = 1920, .y = 1080 };
@@ -91,15 +89,15 @@ const TestWorld = struct {
     fn Frame(self: *TestWorld) !void {
         const engine_context = self.mEngineContext;
         const world = &engine_context.mEditorWorld;
-        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &world.mEManager.mECSManager, .{world});
-        try engine_context.mSystems.RunSystem(ScrollSystem.Update, engine_context, &engine_context.mUIManager.mECSManager, .{ &engine_context.mUIManager.mScrollSystem, &[_]*WorldManager{world} });
-        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world.mEManager.mECSManager, .{world});
+        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, .{world});
+        try engine_context.mSystems.RunSystem(ScrollSystem.Update, engine_context, .{ &engine_context.mUIManager.mScrollSystem, &[_]*WorldManager{world} });
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{world});
     }
 
     fn Wheel(self: *TestWorld, over: Entity, notches_x: f32, notches_y: f32) !void {
         const engine_context = self.mEngineContext;
         try engine_context.mPointerSystem.Update(engine_context, .{ .Target = over });
-        try engine_context.mSystems.RunSystem(ScrollSystem.OnWheel, engine_context, &engine_context.mUIManager.mECSManager, .{ &engine_context.mUIManager.mScrollSystem, &engine_context.mPointerSystem, notches_x, notches_y });
+        try engine_context.mSystems.RunSystem(ScrollSystem.OnWheel, engine_context, .{ &engine_context.mUIManager.mScrollSystem, &engine_context.mPointerSystem, notches_x, notches_y });
     }
 
     fn EndFrame(self: *TestWorld) !void {
@@ -186,7 +184,7 @@ test "dragging a thumb scrolls as much as keeps it under the pointer" {
 
     const thumb = Clip(world.mList).mThumbY.?;
     //10 down the track, which has 50 - 27.8 to travel for 40 of scrolling
-    try engine_context.mSystems.RunSystem(ScrollSystem.OnPointerEvent, engine_context, &engine_context.mUIManager.mECSManager, .{ &engine_context.mUIManager.mScrollSystem, EntityPointerEvent{ .mEntity = thumb, .mEvent = .{ .PointerDrag = .{
+    try engine_context.mSystems.RunSystem(ScrollSystem.OnPointerEvent, engine_context, .{ &engine_context.mUIManager.mScrollSystem, EntityPointerEvent{ .mEntity = thumb, .mEvent = .{ .PointerDrag = .{
         .mButton = .BUTTON_LEFT,
         .mDelta = .{ .x = 0, .y = -10, .z = 0 },
         .mTotal = .{ .x = 0, .y = -10, .z = 0 },
@@ -198,7 +196,7 @@ test "dragging a thumb scrolls as much as keeps it under the pointer" {
     try ExpectThumb(thumb, THICK, length, 50 - THICK / 2, 25 - length / 2 - 10);
 
     //the same drag heard by the list it is in (the chain's other events) changes nothing more
-    try engine_context.mSystems.RunSystem(ScrollSystem.OnPointerEvent, engine_context, &engine_context.mUIManager.mECSManager, .{ &engine_context.mUIManager.mScrollSystem, EntityPointerEvent{ .mEntity = world.mList, .mEvent = .{ .PointerDrag = .{
+    try engine_context.mSystems.RunSystem(ScrollSystem.OnPointerEvent, engine_context, .{ &engine_context.mUIManager.mScrollSystem, EntityPointerEvent{ .mEntity = world.mList, .mEvent = .{ .PointerDrag = .{
         .mButton = .BUTTON_LEFT,
         .mDelta = .{ .x = 0, .y = -10, .z = 0 },
         .mTotal = .{ .x = 0, .y = -10, .z = 0 },

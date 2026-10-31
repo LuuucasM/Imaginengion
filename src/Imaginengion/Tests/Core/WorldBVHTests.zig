@@ -51,8 +51,8 @@ const TestWorld = struct {
     fn Build(self: *TestWorld) !*WorldBVH {
         const engine_context = self.mEngineContext;
         const world = &engine_context.mEditorWorld;
-        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world.mEManager.mECSManager, .{world});
-        try engine_context.mSystems.RunSystem(BVHBuildSystem, engine_context, &world.mEManager.mECSManager, .{ world, TestFonts{} });
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{world});
+        try engine_context.mSystems.RunSystem(BVHBuildSystem, engine_context, .{ world, TestFonts{} });
         return &world.mBVH;
     }
 };
@@ -277,7 +277,7 @@ test "a letter's box in canvas units, placed by a view's canvas, is the box that
     const hud = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const text = try AddText(engine_context, hud, "AA", .{ .x = 120, .y = -40, .z = 0 });
     try text.SetScale(engine_context, .{ .x = 3, .y = 2, .z = 1 });
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mEditorWorld});
 
     const view = CameraView{
         .Pose = .{ .Position = .{ .x = 4, .y = 1, .z = 7 }, .Rotation = .{ .w = 0.9238795, .x = 0, .y = 0.3826834, .z = 0 } },
@@ -346,8 +346,8 @@ test "a refit follows what has moved, and every box above it still holds it" {
     try moved.SetTranslation(engine_context, .{ .x = 100, .y = -30, .z = 5 });
     try ball.SetTranslation(engine_context, .{ .x = -40, .y = 0, .z = 0 });
     try sign.SetTranslation(engine_context, .{ .x = 0, .y = 60, .z = 0 });
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &editor_world.mEManager.mECSManager, .{editor_world});
-    try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &editor_world.mEManager.mECSManager, .{ editor_world, WorldBVH.ALL_ITEMS });
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{editor_world});
+    try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ editor_world, WorldBVH.ALL_ITEMS });
 
     //the same tree, its boxes moved
     try std.testing.expectEqual(node_count, tree.mNodes.items.len);
@@ -385,8 +385,8 @@ test "a physics refit places only colliders again, and the tree still holds ever
 
     //everything moves, only the collider is placed again
     for ([_]Entity{ rock, sign, ball }) |entity| try entity.SetTranslation(engine_context, .{ .x = 50, .y = 50, .z = 0 });
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &editor_world.mEManager.mECSManager, .{editor_world});
-    try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &editor_world.mEManager.mECSManager, .{ editor_world, BVH.Mask.PHYSICS });
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{editor_world});
+    try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ editor_world, BVH.Mask.PHYSICS });
 
     try ExpectNear(.{ .x = 50, .y = 50, .z = 0 }, tree.mBVHItems.items[IndexOf(tree, ball)].Bounds.Center());
     try ExpectNear(rock_before.Center(), tree.mBVHItems.items[IndexOf(tree, rock)].Bounds.Center());
@@ -399,7 +399,7 @@ test "a physics refit places only colliders again, and the tree still holds ever
     try ExpectTreeHoldsItems(tree);
 
     //and the full refit before rendering places the rest
-    try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &editor_world.mEManager.mECSManager, .{ editor_world, WorldBVH.ALL_ITEMS });
+    try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ editor_world, WorldBVH.ALL_ITEMS });
     try ExpectNear(.{ .x = 50, .y = 50, .z = 0 }, tree.mBVHItems.items[IndexOf(tree, rock)].Bounds.Center());
     try ExpectTreeHoldsItems(tree);
 }
@@ -422,7 +422,7 @@ test "a physics step keeps a moving body's collider in the tree where its last s
     const tree = &bvh.mGame;
     try editor_world.OnPhysicsUpdate(engine_context);
     //the last substep's move, which the tree hasn't seen
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &editor_world.mEManager.mECSManager, .{editor_world});
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{editor_world});
 
     //refit at the start of every substep, before the bodies move: one substep behind where the ball ended up
     const ball_y = ball.GetComponent(TransformComponent).?.GetWorldPosition().y;
@@ -467,7 +467,7 @@ test "an entity destroyed after the build keeps its box through a refit, and the
     try rock.Delete(engine_context);
     try ball.Delete(engine_context);
     try std.testing.expect(!rock.IsActive());
-    try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &editor_world.mEManager.mECSManager, .{ editor_world, WorldBVH.ALL_ITEMS });
+    try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ editor_world, WorldBVH.ALL_ITEMS });
 
     try std.testing.expectEqual(rock_box, tree.mBVHItems.items[IndexOf(tree, rock)].Bounds);
     try ExpectTreeHoldsItems(tree);
@@ -494,8 +494,8 @@ test "a text's click box is the whole text area, the same box picking tests, and
     try std.testing.expectEqual(expected, tree.mBVHItems.items[text_ind.?].Bounds);
 
     try sign.SetTranslation(engine_context, .{ .x = -20, .y = 1, .z = 0 });
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &editor_world.mEManager.mECSManager, .{editor_world});
-    try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &editor_world.mEManager.mECSManager, .{ editor_world, BVH.Mask.PICK });
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{editor_world});
+    try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ editor_world, BVH.Mask.PICK });
     const moved = WorldBVH.BoxBounds(ShapeGeometry.TextBox(TestFont, transform, text, &TEST_FONT, null));
     try std.testing.expectEqual(moved, tree.mBVHItems.items[text_ind.?].Bounds);
 }

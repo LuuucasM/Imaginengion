@@ -133,9 +133,6 @@ pub fn StartGame(engine_context: *EngineContext) !void {
     }
     if (missing) return error.NoProjectEntry;
 
-    //the game world's UI and sounds are the ones in use, from before anything in it starts
-    try engine_context.StartUsingWorld(&engine_context.mGameWorld);
-
     //all three are the files themselves, UUIDs and all, as in the editor's Play, so scripts can find them by UUID
     _ = try engine_context.mGameWorld.Load(Scene, engine_context, project.GetEntry(.Scene), .Prj);
     _ = try engine_context.mGameWorld.Load(Player, engine_context, project.GetEntry(.Player), .Prj);
@@ -247,7 +244,7 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
         const layout_zone = Tracy.ZoneInit("Layout Update Section", @src());
         defer layout_zone.Deinit();
         try engine_context.mUIManager.UpdateBeforeLayout(engine_context);
-        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &game_world.mEManager.mECSManager, .{game_world});
+        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, .{game_world});
         const ui_worlds = [_]*WorldManager{game_world};
         try engine_context.mUIManager.UpdateAfterLayout(engine_context, &ui_worlds);
     }
@@ -257,7 +254,7 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
     {
         const world_transform_zone = Tracy.ZoneInit("World Transform Update Section", @src());
         defer world_transform_zone.Deinit();
-        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &game_world.mEManager.mECSManager, .{game_world});
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{game_world});
     }
     //---------------End World Transform Update ------------
 
@@ -266,7 +263,7 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
     {
         const refit_bvh_zone = Tracy.ZoneInit("Refit BVH", @src());
         defer refit_bvh_zone.Deinit();
-        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &game_world.mEManager.mECSManager, .{ game_world, WorldBVH.ALL_ITEMS });
+        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ game_world, WorldBVH.ALL_ITEMS });
     }
     //------------------END Refit BVH
 
@@ -380,7 +377,7 @@ fn OnSystemEvent(_: *anyopaque, engine_context: *EngineContext, event: *const Wi
 /// EditorProgram.OnKeyboardPressedEvent. The players hear what the scenes leave them, and never a key the UI took
 fn OnKeyboardPressed(engine_context: *EngineContext, e: WindowEventData.KeyboardPressedEvent) !void {
     const ui_manager = &engine_context.mUIManager;
-    if (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui_manager.mECSManager, .{ ui_manager, e._InputCode })) |taker| {
+    if (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, .{ ui_manager, e._InputCode })) |taker| {
         if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Game, engine_context, taker.StackPos, .{&e}) == .Continue) {
             try ui_manager.OnKeyTaken(engine_context, taker, e);
         }

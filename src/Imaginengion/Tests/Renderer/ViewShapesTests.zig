@@ -283,7 +283,7 @@ test "everything under a mask is cut by it, through any depth, the mask itself i
     const child = try QuadAt(engine_context, region, .{ .x = 0, .y = 0, .z = 1 }, .{ .x = 10, .y = 10 });
     const grandchild = try QuadAt(engine_context, child, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 1, .y = 1 });
     const outside = try AddQuad(engine_context, level);
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mEditorWorld});
 
     const view = try GatherView(engine_context, .{ .Overlays = &.{} });
     const shapes = view.Shapes.items;
@@ -321,7 +321,7 @@ test "a mask inside another is cut by both, and an overlay's is placed by its ca
     panel.GetComponentMut(ShapeComponent).?.GetQuadMut().?.Size = .{ .x = 200, .y = 100 };
     _ = try panel.AddComponent(engine_context, MaskComponent{});
     const row = try QuadAt(engine_context, panel, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 10, .y = 10 });
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mEditorWorld});
 
     const view = try GatherView(engine_context, .{ .Overlays = &.{hud.mID} });
     const shapes = view.Shapes.items;
@@ -352,7 +352,7 @@ test "a subtract mask keeps what is outside it, and a mask with no shape leaves 
     const shapeless = try hole.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     _ = try shapeless.AddComponent(engine_context, MaskComponent{});
     const holed = try QuadAt(engine_context, shapeless, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 10, .y = 10 });
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mEditorWorld});
 
     const view = try GatherView(engine_context, .{ .Overlays = &.{} });
     const mask = Find(view.Shapes.items, holed).Mask;
@@ -382,7 +382,7 @@ test "a merge is gathered once, as its root, in place of its parts, but not text
     _ = try label.AddComponent(engine_context, SurfaceComponent{});
     const held = try QuadAt(engine_context, part, .{ .x = 0, .y = 2, .z = 0 }, .{ .x = 1, .y = 1 });
     _ = try held.AddComponent(engine_context, EntityComponents.MainObjectComponent{});
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mEditorWorld});
 
     const shapes = try Gather(engine_context, .{ .Overlays = &.{} });
     try std.testing.expectEqual(@as(usize, 3), shapes.len);
@@ -460,7 +460,7 @@ test "a ray through a viewport quad lands on the pixel of the picture under it, 
     const quad = try AddQuad(engine_context, overlay);
     quad.GetComponentMut(ShapeComponent).?.GetQuadMut().?.Size = .{ .x = 400, .y = 200 };
     try quad.SetTranslation(engine_context, .{ .x = 100, .y = 50, .z = 0 });
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mEditorWorld});
     const picture = Vec2(f32){ .x = 800, .y = 400 };
 
     const center = Viewports.QuadPixelOnRay(quad, RayThroughCanvas(overlay, .{ .x = 100, .y = 50, .z = 0 }), VIEW, picture, .OnView).?;

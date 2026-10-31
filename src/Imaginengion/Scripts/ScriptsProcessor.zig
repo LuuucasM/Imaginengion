@@ -9,8 +9,6 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const Systems = @import("../ECS/Systems.zig");
-const EManager = @import("../ECSManagers/EManager.zig");
-const PManager = @import("../ECSManagers/PManager.zig");
 const SManager = @import("../ECSManagers/SManager.zig");
 
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -117,19 +115,15 @@ fn RunScriptsFrom(
 ) !ScriptResult {
     _ValidateScriptType(ObjectType, script_type);
     const S = ScriptLoop(ObjectType, script_type, world_name, @TypeOf(args));
-    return engine_context.mSystems.RunSystem(S, engine_context, &world_manager.GetManager(ObjectType).mECSManager, .{ world_manager, above, args });
+    return engine_context.mSystems.RunSystem(S, engine_context, .{ world_manager, above, args });
 }
 
-/// Every script loop is a system (ECS/Systems.zig) from the ECS of the objects whose scripts it runs. It holds a list of
-/// script ids, or walks an object's script children, while the scripts it runs can delete things, so it lists
-/// ScriptComponent: a delete of anything with a script in that ECS, the running script's own object among them, waits
-/// until the loop is done. It reads what it orders them by (the scene stack) the same way, and each script then runs as
-/// a system of its own inside it, locked and checked by its hook's own lists (ScriptExport.HookSystem)
+/// Every script loop is a system (ECS/Systems.zig). It holds a list of script ids, or walks an object's script children,
+/// while the scripts it runs can delete things, and the scripts' hooks run inside it (ScriptExport.RunHook): what they
+/// add, remove or delete, the running script's own object among them, waits until the loop is done
 fn ScriptLoop(comptime ObjectType: type, comptime script_type: type, comptime world_name: []const u8, comptime Args: type) type {
     return struct {
         pub const Name = std.fmt.comptimePrint("ScriptsProcessor::RunScript({s}, {s}, {s})", .{ Tracy.ShortTypeName(ObjectType), Tracy.ShortTypeName(script_type), world_name });
-        pub const Reads = OrderReads(ObjectType);
-        pub const Writes = &.{};
 
         pub fn Run(engine_context: *EngineContext, world_manager: *WorldManager, above: ?usize, args: Args) !ScriptResult {
             const frame_allocator = engine_context.FrameAllocator();
@@ -160,8 +154,6 @@ fn ScriptLoop(comptime ObjectType: type, comptime script_type: type, comptime wo
 fn OwnScriptsLoop(comptime ObjectType: type, comptime script_type: type, comptime Args: type) type {
     return struct {
         pub const Name = std.fmt.comptimePrint("ScriptsProcessor::RunOwnScripts({s}, {s})", .{ Tracy.ShortTypeName(ObjectType), Tracy.ShortTypeName(script_type) });
-        pub const Reads = &.{ScriptComponent};
-        pub const Writes = &.{};
 
         pub fn Run(engine_context: *EngineContext, owner: ObjectType, args: Args) ScriptResult {
             var script_iter = owner.GetIterator(.Script);
@@ -174,14 +166,6 @@ fn OwnScriptsLoop(comptime ObjectType: type, comptime script_type: type, comptim
             return .Continue;
         }
     };
-}
-
-/// What a script loop reads besides the scripts' ScriptComponents, to order them by the scene stack: an entity's scene
-/// and where that scene sits in it, a scene's own place
-fn OrderReads(comptime ObjectType: type) []const type {
-    if (ObjectType == Entity) return &.{ ScriptComponent, EntitySceneComponent, Systems.In(SManager.ECSManagerT, StackPosComponent) };
-    if (ObjectType == Scene) return &.{ ScriptComponent, StackPosComponent };
-    return &.{ScriptComponent};
 }
 
 /// Runs the hook `script_type` stands for (its Hook) of one script child, whose ScriptComponent is `script_component`,
@@ -303,7 +287,7 @@ fn RunCollisionScripts(comptime script_type: type, engine_context: *EngineContex
 
     const args = .{ &other, info };
     const S = OwnScriptsLoop(Entity, script_type, @TypeOf(args));
-    _ = try engine_context.mSystems.RunSystem(S, engine_context, &owner.mManager.mEManager.mECSManager, .{ owner, args });
+    _ = try engine_context.mSystems.RunSystem(S, engine_context, .{ owner, args });
 }
 
 /// Hands the pointer's and the UI's events to the event scripts of the entities they are sent to (OnPointerEventScript,
@@ -396,7 +380,7 @@ pub const EventScripts = struct {
 pub fn RunOwnScripts(comptime ObjectType: type, comptime script_type: type, engine_context: *EngineContext, owner: ObjectType, args: anytype) !ScriptResult {
     _ValidateScriptType(ObjectType, script_type);
     const S = OwnScriptsLoop(ObjectType, script_type, @TypeOf(args));
-    return engine_context.mSystems.RunSystem(S, engine_context, &owner.mManager.GetManager(ObjectType).mECSManager, .{ owner, args });
+    return engine_context.mSystems.RunSystem(S, engine_context, .{ owner, args });
 }
 
 /// Hands the game events sent in `world` for `phase` (WorldManager.Emit) to every script in it with a handler for them,
@@ -425,23 +409,13 @@ pub fn ProcessGameEvents(engine_context: *EngineContext, world: *WorldManager, c
 /// Runs every handler in `world` for the game event with id `id`, whose bytes are at `event`, until one hands back
 /// .Handled
 fn RunEventHandlers(engine_context: *EngineContext, world: *WorldManager, id: u64, event: *const anyopaque) !ScriptResult {
-    return engine_context.mSystems.RunSystem(EventHandlersLoop, engine_context, &world.mGCManager.mECSManager, .{ world, id, event });
+    return engine_context.mSystems.RunSystem(EventHandlersLoop, engine_context, .{ world, id, event });
 }
 
 /// The loop over every script in a world with game event handlers: from the game context ECS, whose scripts go first,
 /// to the players', the scenes' and the entities', each ordered the way RunScript orders them
 const EventHandlersLoop = struct {
     pub const Name = "ScriptsProcessor::RunEventHandlers";
-    pub const Reads = &.{
-        ScriptComponent,
-        Systems.In(PManager.ECSManagerT, ScriptComponent),
-        Systems.In(SManager.ECSManagerT, ScriptComponent),
-        Systems.In(EManager.ECSManagerT, ScriptComponent),
-        //the scene stack order
-        Systems.In(EManager.ECSManagerT, EntitySceneComponent),
-        Systems.In(SManager.ECSManagerT, StackPosComponent),
-    };
-    pub const Writes = &.{};
 
     pub fn Run(engine_context: *EngineContext, world: *WorldManager, id: u64, event: *const anyopaque) !ScriptResult {
         inline for (.{ GameContext, Player, Scene, Entity }) |ObjectType| {

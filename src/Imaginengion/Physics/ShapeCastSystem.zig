@@ -1,13 +1,12 @@
 //! The first collider a shape hits moving from a ray's origin along its direction (which must be of length 1), as a
-//! system run from the world's entity ECS. A ray cast is the same with PhysicsQueries.RAY, a sphere of no size:
+//! system. A ray cast is the same with PhysicsQueries.RAY, a sphere of no size:
 //!
-//!     const hit = try engine_context.mSystems.RunSystem(ShapeCastSystem, engine_context, &world.mEManager.mECSManager, .{ world, PhysicsQueries.RAY, ray, options });
+//!     const hit = try engine_context.mSystems.RunSystem(ShapeCastSystem, engine_context, .{ world, PhysicsQueries.RAY, ray, options });
 //!
 //! The world's transforms are brought up to date first, so a cast straight after moving something sees it moved, and
-//! when anything had moved the tree's colliders are placed again too: both are runs of their own inside this one, so a
-//! cast only lists what it reads. Each pairing has the simplest test that is exact for it: a sphere against a sphere is
-//! a ray against a sphere of both radii, a sphere against a box a ray against the box grown by the radius, which is a
-//! rounded box. A box has no such shortcut and is swept by sphere tracing instead (Collisions.SweepAlong), which a path
+//! when anything had moved the tree's colliders are placed again too: both are runs of their own inside this one. Each
+//! pairing has the simplest test that is exact for it: a sphere against a sphere is a ray against a sphere of both radii,
+//! a sphere against a box a ray against the box grown by the radius, which is a rounded box. A box has no such shortcut and is swept by sphere tracing instead (Collisions.SweepAlong), which a path
 //! grazing a surface can run out of steps on and miss
 const std = @import("std");
 const BVHRefitSystem = @import("../Core/BVHRefitSystem.zig");
@@ -36,14 +35,12 @@ const RayIntersect = @import("../Math/RayIntersect.zig");
 const HitInfo = RayIntersect.HitInfo;
 
 pub const Name = "ShapeCast";
-pub const Reads = &.{ ColliderComponent, TransformComponent };
-pub const Writes = &.{};
 
 pub fn Run(engine_context: *EngineContext, world: *WorldManager, shape: CastShape, ray: Ray, options: QueryOptions) !?PhysicsHit {
     //anything moved since the tree was last refit, whatever moved it: a script teleporting a body, the last substep
     if (world.NumEntitiesWith(TransformDirtyTag) > 0) {
-        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world.mEManager.mECSManager, .{world});
-        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &world.mEManager.mECSManager, .{ world, BVH.Mask.PHYSICS });
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{world});
+        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ world, BVH.Mask.PHYSICS });
     }
 
     const Visitor = struct {
@@ -84,11 +81,9 @@ pub fn Run(engine_context: *EngineContext, world: *WorldManager, shape: CastShap
 /// tests. Never run by the engine, so it isn't compiled into it
 pub const Linear = struct {
     pub const Name = "ShapeCastLinear";
-    pub const Reads = &.{ ColliderComponent, TransformComponent };
-    pub const Writes = &.{};
 
     pub fn Run(engine_context: *EngineContext, world: *WorldManager, shape: CastShape, ray: Ray, options: QueryOptions) !?PhysicsHit {
-        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world.mEManager.mECSManager, .{world});
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{world});
         const filter = Filter.Init(options);
         const colliders = try world.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
         var nearest: RayIntersect.NearestHit(Entity) = .{};

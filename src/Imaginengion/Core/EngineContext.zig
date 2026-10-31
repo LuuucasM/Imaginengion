@@ -69,9 +69,9 @@ pub const WorldType = enum {
 
 mDT: f32 = 1.0 / 60.0,
 
-/// The systems layer: every ECS in the engine that systems run across, and which of them know each other (see
-/// ECS/Systems.zig). Each world registers and connects its own four in its Init, the UI and audio theirs; the programs
-/// connect the UI and audio to the worlds in use (StartUsingWorld). Registered ECSs point into it, so it stays here
+/// The systems layer: runs the engine's passes, holding structural changes in every ECS it knows while they run (see
+/// ECS/Systems.zig). Each world registers its own four in its Init, the UI and audio theirs. Registered ECSs point into
+/// it, so it stays here
 mSystems: Systems = .empty,
 
 mAppWindow: Window = .{},
@@ -151,20 +151,6 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     self.mAssetEntityScene = try self.mAssetWorld.NewScene(self, .GameLayer, .{ .bAddSceneUUID = false, .bAddSceneName = false });
 
     try self.mTmplEditWorld.Init(self);
-}
-
-/// Connects the UI's and audio's ECSs to `world`'s four, for a world whose UI and sounds are in use: the one being
-/// played, the editor's own. A system that runs from the UI or audio reaches the world's components through In only
-/// while it is connected. Connecting one already connected does nothing
-pub fn StartUsingWorld(self: *EngineContext, world: *WorldManager) !void {
-    try world.ConnectTo(self, &self.mUIManager.mECSManager);
-    try world.ConnectTo(self, &self.mAudioManager.mECSManager);
-}
-
-/// Undoes StartUsingWorld, for a world that stops being played
-pub fn StopUsingWorld(self: *EngineContext, world: *WorldManager) void {
-    world.DisconnectFrom(self, &self.mUIManager.mECSManager);
-    world.DisconnectFrom(self, &self.mAudioManager.mECSManager);
 }
 
 /// Points every event manager in the engine at Program.OnEvent, the single synchronous entry

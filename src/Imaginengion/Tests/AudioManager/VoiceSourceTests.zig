@@ -12,6 +12,7 @@ const VoiceComponent = VComponents.VoiceComponent;
 const VoiceFadeComponent = VComponents.VoiceFadeComponent;
 const BusComponent = VComponents.BusComponent;
 const AudioManager = @import("../../AudioManager/AudioManager.zig");
+const Bus = @import("../../ECSObjects/Bus.zig");
 const AudioComponent = @import("../../ECSComponents/Shared/AudioComponent.zig");
 const ObjectRef = @import("../../ECSComponents/Entity/ObjectRefComponent.zig").Ref;
 
@@ -70,8 +71,6 @@ test "the mix reaches each object type's AudioComponent, and fades out a voice w
     defer DeinitEngine(engine_context);
     const world = &engine_context.mEditorWorld;
     const audio = &engine_context.mAudioManager;
-    //a world in use: the mix reads its objects' AudioComponents through In
-    try world.ConnectTo(engine_context, &audio.mECSManager);
     //held: paused and already faded out, so the mix reads no asset and needs no asset manager
     const master = audio.GetMasterBus();
     master.SetPaused(true);
@@ -93,6 +92,36 @@ test "the mix reaches each object type's AudioComponent, and fades out a voice w
     }
 
     //the fade is started inside the mix, with VoiceFadeComponent locked: it waits, and lands as the mix ends
-    try engine_context.mSystems.RunSystem(AudioManager.Mix, engine_context, &audio.mECSManager, .{audio});
+    try engine_context.mSystems.RunSystem(AudioManager.Mix, engine_context, .{audio});
     for (voices) |voice| try std.testing.expect(voice.HasComponent(VoiceFadeComponent));
+}
+
+const PlaysInARun = struct {
+    pub const Name = "PlaysInARun";
+
+    pub fn Run(engine_context: *EngineContext, source: Entity, master: Bus, bus: *Bus) !void {
+        const voice = (try source.PlayAudio(engine_context)).?;
+        //made in the middle of a run, so it waits, and reads as made
+        try std.testing.expect(voice.HasComponent(VoiceComponent));
+        try std.testing.expectEqual(@as(usize, 1), engine_context.mAudioManager.mECSManager.NumWithComponent(VoiceComponent));
+        try std.testing.expectEqual(@as(usize, 0), engine_context.mAudioManager.mECSManager.mComponentManager.NumWithComponent(VoiceComponent));
+        bus.* = try master.CreateChild(engine_context, .Entity, .{ .bAddVolume = true, .bAddName = true, .bAddUUID = true });
+        try std.testing.expect(bus.HasComponent(BusComponent));
+    }
+};
+
+test "a sound played and a bus made in the middle of a run land when it ends" {
+    const engine_context = try InitEngine();
+    defer DeinitEngine(engine_context);
+    const world = &engine_context.mEditorWorld;
+    const scene = try world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const source = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try source.AddComponent(engine_context, AudioComponent{});
+
+    var bus: Bus = undefined;
+    const audio = &engine_context.mAudioManager;
+    try engine_context.mSystems.RunSystem(PlaysInARun, engine_context, .{ source, audio.GetMasterBus(), &bus });
+
+    try std.testing.expectEqual(@as(usize, 1), audio.mECSManager.NumWithComponent(VoiceComponent));
+    try std.testing.expect(audio.GetBusByUUID(bus.GetUUID()) != null);
 }

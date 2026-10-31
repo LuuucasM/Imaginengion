@@ -28,9 +28,6 @@ const FocusedTag = EntityComponents.FocusedTag;
 const SelectedTag = EntityComponents.SelectedTag;
 const StyleComponent = @import("../ECSComponents/UIComponents.zig").StyleComponent;
 const StyleDirtyTag = @import("../ECSComponents/UIComponents.zig").StyleDirtyTag;
-const ElementOwnerComponent = @import("../ECSComponents/UIComponents.zig").ElementOwnerComponent;
-const Systems = @import("../ECS/Systems.zig");
-const EECS = @import("../ECSManagers/EManager.zig").ECSManagerT;
 const DisabledTag = EntityComponents.DisabledTag;
 const GameLayerTag = EntityComponents.GameLayerTag;
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
@@ -87,8 +84,6 @@ pub fn ClearWarnings(self: *StyleSystem, engine_allocator: std.mem.Allocator) vo
 /// marked. `restyle_all` for every styled element instead, for a theme that is new or was just read again
 pub const Update = struct {
     pub const Name = "StyleUpdate";
-    pub const Reads = &.{ StyleComponent, ElementOwnerComponent };
-    pub const Writes = &.{ Systems.In(EECS, SurfaceComponent), Systems.In(EECS, ShapeComponent), Systems.In(EECS, TextComponent) };
 
     pub fn Run(engine_context: *EngineContext, self: *StyleSystem, theme: *const ThemeAsset, plain_texture: AssetHandle, restyle_all: bool) !void {
         const ui_manager = &engine_context.mUIManager;
@@ -114,7 +109,7 @@ pub const Update = struct {
                 continue;
             };
             try Apply(engine_context, entity, style.*, plain_texture);
-            //by the end of this pass (StyleComponent is locked while it runs), so next frame it is no longer styled
+            //by the end of this pass, so next frame it is no longer styled
             if (style_component.mOnce) try element.RemoveComponent(engine_context, StyleComponent);
         }
     }

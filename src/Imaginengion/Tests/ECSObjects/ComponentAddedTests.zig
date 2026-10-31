@@ -42,16 +42,18 @@ const TestWorld = struct {
 
     /// How many entities have `component_type` in the entity ECS's arrays, which is what queries see
     fn NumInArrays(self: *TestWorld, comptime component_type: type) usize {
-        return self.mEngineContext.mEditorWorld.mEManager.mECSManager.NumWithComponent(component_type);
+        return self.mEngineContext.mEditorWorld.mEManager.mECSManager.mComponentManager.NumWithComponent(component_type);
     }
 
-    /// Locks these entity components, so their adds are staged until Unlock
-    fn Lock(self: *TestWorld, comptime locked_types: []const type) void {
-        self.mEngineContext.mEditorWorld.mEManager.mECSManager.Lock(locked_types);
+    /// As if a run had started: adds are staged until Release
+    fn Hold(self: *TestWorld) void {
+        self.mEngineContext.mSystems.mRunDepth += 1;
     }
 
-    fn Unlock(self: *TestWorld, comptime locked_types: []const type) !void {
-        try self.mEngineContext.mEditorWorld.mEManager.mECSManager.Unlock(self.mEngineContext, locked_types);
+    /// As if the run had ended
+    fn Release(self: *TestWorld) !void {
+        self.mEngineContext.mSystems.mRunDepth -= 1;
+        _ = try self.mEngineContext.mEditorWorld.mEManager.mECSManager.LandQueued(self.mEngineContext);
     }
 
     /// The world's ECS events at the end of the frame, listeners included
@@ -68,7 +70,7 @@ test "a transform is tagged dirty as soon as it is added" {
 
     const entity = try world.NewBlankEntity();
     const transforms_before = world.NumInArrays(TransformComponent);
-    world.Lock(&.{TransformComponent});
+    world.Hold();
     _ = try entity.AddComponent(engine_context, TransformComponent{});
 
     //the tag is on now, while the transform itself is only staged
@@ -76,7 +78,7 @@ test "a transform is tagged dirty as soon as it is added" {
     try std.testing.expect(entity.HasComponent(TransformComponent));
     try std.testing.expectEqual(transforms_before, world.NumInArrays(TransformComponent));
 
-    try world.Unlock(&.{TransformComponent});
+    try world.Release();
 
     try std.testing.expectEqual(transforms_before + 1, world.NumInArrays(TransformComponent));
     try std.testing.expect(entity.HasComponent(TransformDirtyTag));
@@ -89,7 +91,7 @@ test "a rigid body gets its type tag and mass as soon as it is added, and lands 
 
     const entity = try world.NewBlankEntity();
     //below the minimum, which syncing the body brings back up
-    world.Lock(&.{RigidBodyComponent});
+    world.Hold();
     const staged_body = try entity.AddComponent(engine_context, RigidBodyComponent{ ._Mass = 0 });
 
     //synced through the staged copy
@@ -97,7 +99,7 @@ test "a rigid body gets its type tag and mass as soon as it is added, and lands 
     try std.testing.expectEqual(RigidBodyComponent.MIN_MASS, staged_body._Mass);
     try std.testing.expectEqual(staged_body, entity.GetComponent(RigidBodyComponent).?);
 
-    try world.Unlock(&.{RigidBodyComponent});
+    try world.Release();
 
     const rigid_body = entity.GetComponent(RigidBodyComponent).?;
     try std.testing.expect(rigid_body != staged_body);
@@ -111,9 +113,9 @@ test "a body type tag replaces the type a staged body had" {
     const engine_context = world.mEngineContext;
 
     const entity = try world.NewBlankEntity();
-    world.Lock(&.{RigidBodyComponent});
+    world.Hold();
     _ = try entity.AddComponent(engine_context, RigidBodyComponent{});
-    try world.Unlock(&.{RigidBodyComponent});
+    try world.Release();
     try std.testing.expect(entity.HasComponent(DynamicBodyTag));
 
     //the body is still staged, and the tag swap reaches it all the same
@@ -135,11 +137,11 @@ test "a staged add for an entity deleted the same frame goes with it" {
     const engine_context = world.mEngineContext;
 
     const entity = try world.NewBlankEntity();
-    world.Lock(&.{ RigidBodyComponent, TransformComponent });
+    world.Hold();
     _ = try entity.AddComponent(engine_context, RigidBodyComponent{});
     try engine_context.mEditorWorld.mEManager.mECSManager.DestroyEntity(engine_context, entity.mID);
     _ = try entity.AddComponent(engine_context, TransformComponent{});
-    try world.Unlock(&.{ RigidBodyComponent, TransformComponent });
+    try world.Release();
 
     try world.EndOfFrame();
 

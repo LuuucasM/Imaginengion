@@ -28,11 +28,6 @@ const ParentComponent = @import("../ECS/Components.zig").ParentComponent(Bus.Typ
 const ChildComponent = @import("../ECS/Components.zig").ChildComponent(Bus.Type);
 const AudioComponent = @import("../ECSComponents/EComponents.zig").AudioComponent;
 const AudioAsset = @import("../ECSComponents/AComponents.zig").AudioAsset;
-const Systems = @import("../ECS/Systems.zig");
-const EManager = @import("../ECSManagers/EManager.zig");
-const SManager = @import("../ECSManagers/SManager.zig");
-const PManager = @import("../ECSManagers/PManager.zig");
-const GCManager = @import("../ECSManagers/GCManager.zig");
 const AudioManager = @This();
 
 //voices and buses share this one ECS, told apart by their components (VoiceComponent, BusComponent)
@@ -116,7 +111,6 @@ pub fn Deinit(self: *AudioManager, engine_context: *EngineContext) void {
 /// with voices and buses without a sound card. Pair it with DeinitMixer
 pub fn InitMixer(self: *AudioManager, engine_context: *EngineContext) !void {
     try self.mECSManager.Init(engine_context.EngineAllocator());
-    //known to the systems layer; connected to the worlds it plays from by the programs (EngineContext.StartUsingWorld)
     try engine_context.mSystems.Register(engine_context.EngineAllocator(), &self.mECSManager);
     //a destroyed bus's UUID comes out of the map (Core.OnObjectDestroyed)
     Core.HookRemovals(self);
@@ -182,7 +176,7 @@ pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: an
     const voice: Voice = .{ .mID = try self.mECSManager.CreateEntity(engine_allocator), .mManager = self };
     errdefer self.DeleteVoice(engine_context, voice.mID) catch {};
 
-    _ = try self.mECSManager.AddComponentSync(engine_context, voice.mID, VoiceComponent{
+    _ = try self.mECSManager.AddComponent(engine_context, voice.mID, VoiceComponent{
         .mSource = if (is_attached) ObjectRef.Of(source) else null,
         .mToken = if (is_attached) audio_component.mVoiceToken else 0,
         //so a voice orphaned before its first mix still knows what to fade out, and does not slide in from silence
@@ -195,13 +189,13 @@ pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: an
     if (!is_attached) {
         //its own copy of everything it plays, since the source may be gone before it finishes
         audio_component.mAudioAsset.RetainAsset();
-        _ = self.mECSManager.AddComponentSync(engine_context, voice.mID, VoiceAssetComponent{ .mAsset = audio_component.mAudioAsset }) catch |err| {
+        _ = self.mECSManager.AddComponent(engine_context, voice.mID, VoiceAssetComponent{ .mAsset = audio_component.mAudioAsset }) catch |err| {
             var unused_handle = audio_component.mAudioAsset;
             unused_handle.ReleaseAsset();
             return err;
         };
-        _ = try self.mECSManager.AddComponentSync(engine_context, voice.mID, VolumeComponent{ .mVolume = audio_component.mVolume });
-        _ = try self.mECSManager.AddComponentSync(engine_context, voice.mID, VoicePitchComponent{ .mPitch = audio_component.mPitch });
+        _ = try self.mECSManager.AddComponent(engine_context, voice.mID, VolumeComponent{ .mVolume = audio_component.mVolume });
+        _ = try self.mECSManager.AddComponent(engine_context, voice.mID, VoicePitchComponent{ .mPitch = audio_component.mPitch });
     }
 
     return voice;
@@ -216,7 +210,7 @@ pub fn StopVoice(self: *AudioManager, engine_context: *EngineContext, voice: Voi
 
 fn StartFade(self: *AudioManager, engine_context: *EngineContext, voice_id: Voice.Type) !void {
     if (self.HasComponent(VoiceFadeComponent, voice_id)) return;
-    //not AddComponentSync: the mix starts fades with VoiceFadeComponent locked. There the add waits for the mix to end,
+    //not AddComponentSync: the mix starts fades during its run. There the add waits for the mix to end,
     //still readable, so the fade stage fades it this same mix
     _ = try self.mECSManager.AddComponent(engine_context, voice_id, VoiceFadeComponent{ .mFramesLeft = FADE_FRAMES });
 }
@@ -284,15 +278,15 @@ fn NewBus(self: *AudioManager, engine_context: *EngineContext, parent_id: ?Bus.T
         try self.mECSManager.CreateEntity(engine_allocator);
 
     //what makes it a bus, so not up to the config: a blank bus being read from a file still needs one
-    _ = try self.mECSManager.AddComponentSync(engine_context, bus_id, BusComponent{});
+    _ = try self.mECSManager.AddComponent(engine_context, bus_id, BusComponent{});
 
     if (config.bAddVolume) {
-        _ = try self.mECSManager.AddComponentSync(engine_context, bus_id, VolumeComponent{});
+        _ = try self.mECSManager.AddComponent(engine_context, bus_id, VolumeComponent{});
     }
     if (config.bAddName) {
         var name_component: NameComponent = .empty;
         try name_component.mName.appendSlice(engine_allocator, name);
-        _ = self.mECSManager.AddComponentSync(engine_context, bus_id, name_component) catch |err| {
+        _ = self.mECSManager.AddComponent(engine_context, bus_id, name_component) catch |err| {
             name_component.mName.deinit(engine_allocator);
             return err;
         };
@@ -300,7 +294,7 @@ fn NewBus(self: *AudioManager, engine_context: *EngineContext, parent_id: ?Bus.T
     if (config.bAddUUID) {
         const io_source = std.Random.IoSource{ .io = engine_context.Io() };
         const uuid = io_source.interface().int(u64);
-        _ = try self.mECSManager.AddComponentSync(engine_context, bus_id, UUIDComponent{ .ID = uuid });
+        _ = try self.mECSManager.AddComponent(engine_context, bus_id, UUIDComponent{ .ID = uuid });
         try self.AddUUID(engine_allocator, uuid, bus_id);
     }
 
@@ -386,31 +380,12 @@ pub fn OnUpdate(self: *AudioManager, engine_context: *EngineContext) !void {
     Tracy.Plot("Audio/Underruns", .{ .color = 0xF44336 }, self.mAudioContext.GetUnderrunCount());
     Tracy.Plot("Audio/Voices", .{ .color = 0x03A9F4 }, self.mECSManager.NumWithComponent(VoiceComponent));
 
-    try engine_context.mSystems.RunSystem(Mix, engine_context, &self.mECSManager, .{self});
+    try engine_context.mSystems.RunSystem(Mix, engine_context, .{self});
 }
 
-/// The mix itself (OnUpdate), as a system from the audio ECS. An attached voice reads its source's AudioComponent,
-/// which is on any of the four object types, in whichever world in use it is (EngineContext.StartUsingWorld)
+/// The mix itself (OnUpdate), as a system
 pub const Mix = struct {
     pub const Name = "AudioMix";
-    pub const Reads = &.{
-        //a detached voice's own copies of what it plays
-        VoiceAssetComponent,
-        VolumeComponent,
-        VoicePitchComponent,
-        //an attached voice's source
-        Systems.In(EManager.ECSManagerT, AudioComponent),
-        Systems.In(SManager.ECSManagerT, AudioComponent),
-        Systems.In(PManager.ECSManagerT, AudioComponent),
-        Systems.In(GCManager.ECSManagerT, AudioComponent),
-    };
-    pub const Writes = &.{
-        //where each voice is in its asset, and what it played last
-        VoiceComponent,
-        VoiceFadeComponent,
-        //each bus's gain, gliding toward its volume
-        BusComponent,
-    };
 
     pub fn Run(engine_context: *EngineContext, self: *AudioManager) !void {
         const buffered_frames = self.mOutputBuffer.AvailableRead() / AUDIO_CHANNELS;

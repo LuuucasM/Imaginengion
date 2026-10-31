@@ -1,7 +1,7 @@
 //! The world transform pass: brings every moved transform's world values up to date, and those of everything under
 //! it. Run before the world's trees are built, before drawing, and inside the physics step after anything moves:
 //!
-//!     try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world.mEManager.mECSManager, .{world});
+//!     try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{world});
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
@@ -18,8 +18,6 @@ const Vec3 = MathTypes.Vec3;
 const Quat = MathTypes.Quat;
 
 pub const Name = "WorldTransforms";
-pub const Reads = &.{};
-pub const Writes = &.{TransformComponent};
 
 //the transform walk adds translations and multiplies rotations and scales,
 //so this is what a root of the hierarchy accumulates from

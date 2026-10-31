@@ -4,6 +4,7 @@
 //! the UI components' own rows (optional limits, the popup presets, an entity's name, a scroll edit laying the entity
 //! out again). Edits are made the way the widgets make them. No window needed. Run with `zig build test-engine`.
 const std = @import("std");
+const BindingSystem = @import("../../UI/BindingSystem.zig");
 
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
@@ -40,8 +41,6 @@ const TestPanel = struct {
         engine_context.* = .{};
         try engine_context.mUIManager.Init(engine_context);
         try engine_context.mEditorWorld.Init(engine_context);
-        //the editor's own UI is in use, which its UI passes reach
-        try engine_context.mEditorWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
         self.mScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         self.mPanel = try UIElementPanel.Build(engine_context, self.mScene, .{ .StockScripts = false });
         try self.mPanel.Toggle(engine_context);
@@ -244,7 +243,7 @@ test "the popup's placement shows as a preset, Custom when none, and picking one
 
     //moved off every preset by code: shown as Custom
     element.GetComponentMut(UIComponents.PopupComponent).?.mPlacement.Anchor.x = 0.5;
-    try engine_context.mUIManager.mBindingSystem.Update(engine_context);
+    try engine_context.mSystems.RunSystem(BindingSystem.Update, engine_context, .{&engine_context.mUIManager.mBindingSystem});
     try std.testing.expectEqualStrings("Custom", UIManager.LabelOf(dropdown).?.GetComponent(TextComponent).?.mText.items);
 
     //Right, picked from the list
@@ -274,7 +273,7 @@ test "a popup ref shows its popup's name, and a scroll edit lays the entity out 
     const name = Part(rows[0], 1);
     try std.testing.expectEqualStrings("Menu", UIManager.LabelOf(name).?.GetComponent(TextComponent).?.mText.items);
     element.GetComponentMut(UIComponents.PopupRefComponent).?.mPopup = .uninit;
-    try engine_context.mUIManager.mBindingSystem.Update(engine_context);
+    try engine_context.mSystems.RunSystem(BindingSystem.Update, engine_context, .{&engine_context.mUIManager.mBindingSystem});
     try std.testing.expectEqualStrings("None", UIManager.LabelOf(name).?.GetComponent(TextComponent).?.mText.items);
 
     try entity.ClearLayoutDirty(engine_context);

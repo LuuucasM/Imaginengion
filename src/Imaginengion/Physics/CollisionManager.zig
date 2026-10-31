@@ -623,7 +623,7 @@ pub fn CorrectPositions(self: *CollisionManager, world_manager: *WorldManager, e
 
         try MoveAlongNormal(engine_context, contact, q_rb_origin, q_rb_target, distance);
     }
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world_manager.mEManager.mECSManager, .{world_manager});
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{world_manager});
 }
 
 pub fn PostsolverPass(self: *CollisionManager, engine_context: *EngineContext) !void {

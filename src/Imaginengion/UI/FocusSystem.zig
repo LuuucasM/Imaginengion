@@ -33,7 +33,6 @@ const Vec3 = MathTypes.Vec3;
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const UIManager = @import("UIManager.zig");
 const TextInputComponent = @import("../ECSComponents/UIComponents.zig").TextInputComponent;
-const StyleComponent = @import("../ECSComponents/UIComponents.zig").StyleComponent;
 const FocusedTag = EntityComponents.FocusedTag;
 const TextComponent = EntityComponents.TextComponent;
 const ShapeComponent = EntityComponents.ShapeComponent;
@@ -43,8 +42,6 @@ const NameComponent = EntityComponents.NameComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const StackPosComponent = @import("../ECSComponents/SComponents.zig").StackPosComponent;
-const Systems = @import("../ECS/Systems.zig");
-const EECS = @import("../ECSManagers/EManager.zig").ECSManagerT;
 
 const FocusSystem = @This();
 
@@ -119,14 +116,6 @@ pub fn Caret(self: *const FocusSystem) usize {
 /// keeping it
 pub const OnPressed = struct {
     pub const Name = "FocusOnPressed";
-    pub const Reads = &.{
-        TextInputComponent,
-        Systems.In(EECS, EntityComponents.UIElementComponent),
-        //the text it starts with, and where in it the press went down
-        Systems.In(EECS, TextComponent),
-        Systems.In(EECS, TransformComponent),
-    };
-    pub const Writes = &.{};
 
     pub fn Run(engine_context: *EngineContext, self: *FocusSystem, pointer: *const PointerSystem, button: MouseCodes) !void {
         var pressed: ?Entity = null;
@@ -157,13 +146,6 @@ pub const OnPressed = struct {
 /// keyboard, with the caret at the end of its text
 pub const OnClicked = struct {
     pub const Name = "FocusOnClicked";
-    pub const Reads = &.{
-        TextInputComponent,
-        Systems.In(EECS, EntityComponents.UIElementComponent),
-        //the text it starts with
-        Systems.In(EECS, TextComponent),
-    };
-    pub const Writes = &.{};
 
     pub fn Run(engine_context: *EngineContext, self: *FocusSystem, clicked: Entity, e: PointerClickedEvent) !void {
         if (e.mButton != .BUTTON_LEFT or e.mClicks != 2 or !clicked.IsActive()) return;
@@ -243,8 +225,6 @@ pub fn EndEdit(self: *FocusSystem, engine_context: *EngineContext, how: EndHow) 
 /// A key went down (or repeated, from being held) and it is the focused text input's turn at it
 pub const OnKeyPressed = struct {
     pub const Name = "FocusOnKeyPressed";
-    pub const Reads = &.{};
-    pub const Writes = &.{Systems.In(EECS, TextComponent)};
 
     pub fn Run(engine_context: *EngineContext, self: *FocusSystem, e: KeyboardPressedEvent) !void {
         const focused = self.Focused() orelse return;
@@ -276,8 +256,6 @@ pub const OnKeyPressed = struct {
 /// Text was typed (a TextTyped event): it goes in at the caret
 pub const OnTextTyped = struct {
     pub const Name = "FocusOnTextTyped";
-    pub const Reads = &.{};
-    pub const Writes = &.{Systems.In(EECS, TextComponent)};
 
     pub fn Run(engine_context: *EngineContext, self: *FocusSystem, typed: []const u8) !void {
         const copy = try engine_context.FrameAllocator().dupe(u8, typed);
@@ -299,31 +277,11 @@ fn Type(self: *FocusSystem, engine_context: *EngineContext, bytes: []u8) !void {
 }
 
 /// Once a frame, after layout and before world transforms: keeps the caret on the text and blinking, and lets go if
-/// the focused text input has gone. A system from the UI's ECS, reaching the text input's world through In:
+/// the focused text input has gone. A system:
 ///
-///     try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, &ui.mECSManager, .{&ui.mFocusSystem});
+///     try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, .{&ui.mFocusSystem});
 pub const Update = struct {
     pub const Name = "FocusUpdate";
-    pub const Reads = &.{
-        TextInputComponent,
-        //the text the caret follows
-        Systems.In(EECS, TextComponent),
-        Systems.In(EECS, EntityComponents.UIElementComponent),
-        //whether layout places the caret (Entity.SetTranslation)
-        Systems.In(EECS, EntityComponents.LayoutItemComponent),
-        Systems.In(EECS, EntityComponents.LayoutComponent),
-        //the scene the caret is made in
-        Systems.In(EECS, EntitySceneComponent),
-    };
-    pub const Writes = &.{
-        //a new caret is styled (UIManager.Style)
-        StyleComponent,
-        //the caret: its quad, where it is, and its name when it is made
-        Systems.In(EECS, ShapeComponent),
-        Systems.In(EECS, SurfaceComponent),
-        Systems.In(EECS, TransformComponent),
-        Systems.In(EECS, NameComponent),
-    };
 
     pub fn Run(engine_context: *EngineContext, self: *FocusSystem) !void {
         defer self.SyncTextInput(engine_context);

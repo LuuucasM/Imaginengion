@@ -33,11 +33,6 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const UIManager = @import("UIManager.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
 const PopupComponent = @import("../ECSComponents/UIComponents.zig").PopupComponent;
-const ElementOwnerComponent = @import("../ECSComponents/UIComponents.zig").ElementOwnerComponent;
-const UIElementComponent = EntityComponents.UIElementComponent;
-const Systems = @import("../ECS/Systems.zig");
-const EECS = @import("../ECSManagers/EManager.zig").ECSManagerT;
-const SManager = @import("../ECSManagers/SManager.zig");
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
@@ -145,12 +140,9 @@ pub fn CloseTop(self: *PopupSystem, engine_context: *EngineContext) !void {
     try self.CloseAbove(engine_context, self.mOpen.items.len - 1);
 }
 
-/// Escape reached the top popup's turn (UIManager.KeyTakerFor): it closes, as CloseTop. A system from the UI's ECS
+/// Escape reached the top popup's turn (UIManager.KeyTakerFor): it closes, as CloseTop. A system
 pub const OnEscape = struct {
     pub const Name = "PopupOnEscape";
-    pub const Reads = &.{};
-    //a popup is closed through its item's mCollapsed
-    pub const Writes = &.{Systems.In(EECS, LayoutItemComponent)};
 
     pub fn Run(engine_context: *EngineContext, self: *PopupSystem) !void {
         try self.CloseTop(engine_context);
@@ -190,8 +182,6 @@ pub fn PointerPoint(popup: Entity, pointer_input: PointerSystem.Input) ?Vec2(f32
 /// for the click to open it again
 pub const OnPressed = struct {
     pub const Name = "PopupOnPressed";
-    pub const Reads = &.{};
-    pub const Writes = &.{Systems.In(EECS, LayoutItemComponent)};
 
     pub fn Run(engine_context: *EngineContext, self: *PopupSystem, pointer: *const PointerSystem) !void {
         const chain = pointer.mHovered.items;
@@ -215,28 +205,11 @@ pub const OnPressed = struct {
 
 /// Once a frame, after layout and before world transforms: places each open popup against what opened it, and lets
 /// go of popups that have been deleted. In `worlds`, the ones whose UI is in use, every popup that isn't open is kept
-/// closed, so they all start closed however they were saved. A system run once over all of them, from the UI's ECS:
+/// closed, so they all start closed however they were saved. A system run once over all of them:
 ///
-///     try engine_context.mSystems.RunSystem(PopupSystem.Update, engine_context, &ui.mECSManager, .{ &ui.mPopupSystem, worlds });
+///     try engine_context.mSystems.RunSystem(PopupSystem.Update, engine_context, .{ &ui.mPopupSystem, worlds });
 pub const Update = struct {
     pub const Name = "PopupUpdate";
-    pub const Reads = &.{
-        PopupComponent,
-        ElementOwnerComponent,
-        //where an opener is and how big
-        Systems.In(EECS, UIElementComponent),
-        Systems.In(EECS, EntityComponents.ShapeComponent),
-        //an overlay popup is kept on its scene's screen
-        Systems.In(EECS, EntitySceneComponent),
-        Systems.In(SManager.ECSManagerT, SceneComponent),
-        //whether layout places it (Entity.SetTranslation)
-        Systems.In(EECS, EntityComponents.LayoutComponent),
-    };
-    pub const Writes = &.{
-        //a popup is opened and closed through its item's mCollapsed
-        Systems.In(EECS, LayoutItemComponent),
-        Systems.In(EECS, TransformComponent),
-    };
 
     pub fn Run(engine_context: *EngineContext, self: *PopupSystem, worlds: []const *WorldManager) !void {
         //one deleted, and the ones opened from it go with it

@@ -24,50 +24,6 @@ pub const GroupQuery = union(enum) {
     Component: type,
 };
 
-/// A run of a system through the systems layer (Systems.RunSystem), while it goes on: which system, and the run it is
-/// inside of. Each record the run puts on an ECS names it, so the debug checks can tell an ECS the run was given from
-/// one it wasn't
-pub const RunInfo = struct {
-    mName: [:0]const u8,
-    mOuter: ?*const RunInfo,
-};
-
-/// The level the debug checks report a mistake at. An error by default, which also fails a test that runs into one
-/// (Zig's test runner fails any test that logs an error); a test that makes a mistake on purpose lowers it to warn
-pub var access_report_level: std.log.Level = .err;
-
-// what the debug checks have reported, so a mistake in a loop is reported once and not on every pass: a hash of who
-// made it, in which kind of ECS, and what. Once every slot is used everything is reported
-var reported_keys: [64]u64 = undefined;
-var reported_count: usize = 0;
-
-/// How many different mistakes the debug checks have reported so far, for tests
-pub fn ReportedCount() usize {
-    return reported_count;
-}
-
-// reports a debug check's mistake, unless the same one was reported before
-fn _Report(who: []const u8, where: []const u8, what: u64, comptime format: []const u8, args: anytype) void {
-    var hasher = std.hash.Wyhash.init(0);
-    hasher.update(who);
-    hasher.update(where);
-    hasher.update(std.mem.asBytes(&what));
-    const key = hasher.final();
-    for (reported_keys[0..reported_count]) |reported_key| {
-        if (reported_key == key) return;
-    }
-    if (reported_count < reported_keys.len) {
-        reported_keys[reported_count] = key;
-        reported_count += 1;
-    }
-    switch (access_report_level) {
-        .err => std.log.err(format, args),
-        .warn => std.log.warn(format, args),
-        .info => std.log.info(format, args),
-        .debug => std.log.debug(format, args),
-    }
-}
-
 pub fn ECSManager(entity_t: type, comptime components_types: []const type, comptime debug_name: [:0]const u8) type {
     return struct {
         // ECSEventData's events are generic over the id type, so bind them here before handing the pair to EventManager
@@ -84,8 +40,6 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         pub const ComponentInd = ComponentManagerT.ComponentInd;
         /// The components this ECS was made with, builtins not included.
         pub const ComponentTypes = components_types;
-        /// The name this ECS type was made with, which the systems layer tells kinds of ECS apart by (Systems.KindId)
-        pub const DebugName = debug_name;
         pub const ECSCallbackList = ECSEventManager.CallbackList;
         pub const ECSEventCallback = ECSEventManager.EventCallback;
         const Self = @This();
@@ -96,11 +50,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             .mECSEventManager = .empty,
             .mStagingArena = .init,
             .mStaged = .empty,
-            .mLockCounts = @splat(0),
-            .mLockTotal = 0,
             .mRemovalHook = null,
-            .mCurrentSystem = null,
-            .mRunMarker = null,
+            .mRunDepth = null,
         };
 
         /// Told about each removal and destroy just before it happens, made right away or drained from the queue,
@@ -127,16 +78,15 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         /// find it in the meantime. It is also the record of what is still staged: a queued add whose component is
         /// no longer listed here (taken back off by RemoveComponentSync) is skipped.
         mStaged: std.AutoHashMapUnmanaged(StagedKey, *anyopaque),
-        /// How many times each component's storage is locked (see Lock), by ComponentInd
-        mLockCounts: [components_types.len + BuiltinComponentCount]u16,
-        /// Every lock in mLockCounts added up: the queue drains when this gets back to 0
-        mLockTotal: u32,
         mRemovalHook: ?RemovalHook,
-        /// The innermost system running on this ECS (see SystemRecord), for the debug checks
-        mCurrentSystem: ?*const SystemRecord,
-        /// Where the systems layer this ECS is registered with keeps the run going on now (see Systems.Register), for
-        /// the debug check that a run only touches the ECSs it was given. Null outside any layer
-        mRunMarker: ?*const ?*const RunInfo,
+        /// How many runs of the systems layer are going on now, shared by every ECS it knows, null for one it doesn't. While
+        /// any is, this ECS holds off structural changes, for whatever keeps pointers, slices or lists of ids into its storage:
+        ///   - an add is staged (see AddComponent)
+        ///   - a removal or a destroy is queued
+        /// Once anything is queued everything after it is queued as well, so changes always land in the order they were
+        /// asked for. Tags are the exception, with no storage to move, and so are parents and children, linked as they are
+        /// asked for: both are always made right away.
+        mRunDepth: ?*const u32,
 
         pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
             _ValidateCompList(components_types);
@@ -231,11 +181,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return new_entity_id;
         }
 
-        /// Destroys the entity and everything under it, its children and scripts, right away. Queued instead (see
-        /// Lock) when any of them has a component whose type is locked, or something is queued already.
+        /// Destroys the entity and everything under it, its children and scripts, right away. Queued instead while a run
+        /// goes on (see mRunDepth), or when something is queued already.
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
             std.debug.assert(self.IsActiveEntity(entity_id));
-            if (self._HasQueued() or self._SubtreeLocked(entity_id)) {
+            if (self._Queues()) {
                 try self.mECSEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .DestroyEntity = .{ .mEntityID = entity_id } });
                 return;
             }
@@ -248,8 +198,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         }
 
         /// Copies an entity along with its children and scripts, the components staged on them included. The copies
-        /// are made now, and their components added the way AddComponent adds them: staged for a locked type, right
-        /// away for anything else.
+        /// are made now, and their components added the way AddComponent adds them.
         /// The copy joins the original's parent as another child, or becomes a root when the original is one.
         pub fn DuplicateEntity(self: *Self, engine_context: *EngineContext, original_entity_id: entity_t) !entity_t {
             std.debug.assert(self.IsActiveEntity(original_entity_id));
@@ -320,7 +269,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         fn _StageOrAddCopy(self: *Self, engine_context: *EngineContext, new_entity_id: entity_t, component_ind: usize, staged_component: *anyopaque) !void {
             // the clone is this ECS's until it is on the entity or queued
             errdefer self.mComponentManager.DeinitStaged(engine_context, component_ind, staged_component);
-            if (self.mComponentManager.IsTag(component_ind) or !self._Queues(component_ind)) {
+            if (self.mComponentManager.IsTag(component_ind) or !self._Queues()) {
                 self._CheckStorageChange(component_ind, "Adding");
                 try self.mComponentManager.AddStaged(engine_context.EngineAllocator(), new_entity_id, component_ind, staged_component);
             } else {
@@ -358,21 +307,26 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         /// How many entities currently have `component_type`, without building a group.
         pub fn NumWithComponent(self: Self, comptime component_type: type) usize {
             _ValidateType(component_type);
-            return self.mComponentManager.NumWithComponent(component_type);
+            var count = self.mComponentManager.NumWithComponent(component_type);
+            if (self.mStaged.count() > 0) {
+                var staged_keys = self.mStaged.keyIterator();
+                while (staged_keys.next()) |key| {
+                    if (key.mComponentInd == ComponentInd(component_type)) count += 1;
+                }
+            }
+            return count;
         }
 
         /// Every `component_type` in this ECS, for a pass over all of them that has no use for the
         /// ids. Only good until a component of that type is added or removed.
         pub fn GetComponentSlice(self: Self, comptime component_type: type) []const component_type {
             _ValidateType(component_type);
-            self._CheckAccess(component_type, false);
             return self.mComponentManager.GetComponentSlice(component_type);
         }
 
-        /// GetComponentSlice for changing them: a running system has to list `component_type` in its Writes
+        /// GetComponentSlice for changing them
         pub fn GetComponentSliceMut(self: Self, comptime component_type: type) []component_type {
             _ValidateType(component_type);
-            self._CheckAccess(component_type, true);
             return self.mComponentManager.GetComponentSlice(component_type);
         }
 
@@ -381,9 +335,59 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             _ValidateGroupQuery(query);
             const zone = Tracy.ZoneInit(debug_name ++ "::GetGroup", @src());
             defer zone.Deinit();
-            self._CheckQuery(query);
 
-            return try self.mComponentManager.GetGroup(query, allocator);
+            var result = try self.mComponentManager.GetGroup(query, allocator);
+            if (self.mStaged.count() > 0) try self._AddStagedToGroup(allocator, query, &result);
+            return result;
+        }
+
+        // storage only knows what has landed, so each entity with something staged is asked again with that counted: it
+        // joins the group if that makes it match, and leaves if that stops it matching (the second half of a Not)
+        fn _AddStagedToGroup(self: Self, allocator: std.mem.Allocator, comptime query: GroupQuery, result: *std.ArrayList(entity_t)) !void {
+            var entity_ids: std.ArrayList(entity_t) = .empty;
+            defer entity_ids.deinit(allocator);
+            try entity_ids.ensureTotalCapacity(allocator, self.mStaged.count());
+            var staged_keys = self.mStaged.keyIterator();
+            while (staged_keys.next()) |key| entity_ids.appendAssumeCapacity(key.mEntityID);
+            //by id, each once, so a group comes out the same every run
+            std.mem.sort(entity_t, entity_ids.items, {}, std.sort.asc(entity_t));
+
+            var previous: ?entity_t = null;
+            for (entity_ids.items) |entity_id| {
+                if (previous == entity_id) continue;
+                previous = entity_id;
+                const in_storage = self._MatchesQuery(query, entity_id, false);
+                const with_staged = self._MatchesQuery(query, entity_id, true);
+                if (with_staged and !in_storage) {
+                    try result.append(allocator, entity_id);
+                } else if (in_storage and !with_staged) {
+                    const index = std.mem.indexOfScalar(entity_t, result.items, entity_id).?;
+                    _ = result.orderedRemove(index);
+                }
+            }
+        }
+
+        fn _MatchesQuery(self: Self, comptime query: GroupQuery, entity_id: entity_t, count_staged: bool) bool {
+            switch (query) {
+                .Component => |component_type| {
+                    const component_ind = ComponentInd(component_type);
+                    if (self.mComponentManager.HasComponentInd(component_ind, entity_id)) return true;
+                    return count_staged and self._GetStaged(entity_id, component_ind) != null;
+                },
+                .And => |queries| {
+                    inline for (queries) |sub_query| {
+                        if (!self._MatchesQuery(sub_query, entity_id, count_staged)) return false;
+                    }
+                    return true;
+                },
+                .Or => |queries| {
+                    inline for (queries) |sub_query| {
+                        if (self._MatchesQuery(sub_query, entity_id, count_staged)) return true;
+                    }
+                    return false;
+                },
+                .Not => |not| return self._MatchesQuery(not.mFirst.*, entity_id, count_staged) and !self._MatchesQuery(not.mSecond.*, entity_id, count_staged),
+            }
         }
 
         pub fn EntityListDifference(self: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
@@ -488,144 +492,41 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             }
         }
 
-        //--------systems----------
-        /// Each component's slot is set when a running system may get pointers into it
-        pub const AllowedSet = std.bit_set.StaticBitSet(components_types.len + BuiltinComponentCount);
-
-        /// What a run of a system (Systems.RunSystem) keeps on its own stack on this ECS, so the debug checks know what it
-        /// listed. Chained: the innermost one is what is checked, a system inside another can't lean on what the outer
-        /// one listed
-        pub const SystemRecord = struct {
-            mName: [:0]const u8,
-            /// what it listed at all, in its Reads or its Writes
-            mAllowed: AllowedSet,
-            /// what it listed in its Writes, which it may get mutable pointers into (GetComponentMut)
-            mWritable: AllowedSet,
-            /// for engine code that runs inside a system without being its work (see UncheckedRecord)
-            mUnchecked: bool = false,
-            /// the systems layer's run that put it here; null for one put here some other way, which counts as a run of
-            /// its own
-            mRun: ?*const RunInfo = null,
-            mOuter: ?*const SystemRecord = null,
-        };
-
-        /// A record for engine code that runs inside a system without being the system's own work: the bookkeeping
-        /// adding, removing, creating and deleting set off, and code run on others' behalf (scripts). Nothing it touches
-        /// is charged to the system around it
-        pub const UncheckedRecord: SystemRecord = .{ .mName = "(unchecked)", .mAllowed = .empty, .mWritable = .empty, .mUnchecked = true };
-
-        /// The record for a system that reads `reads` and writes `writes`. A type may be in both
-        pub fn SystemRecordFor(comptime name: [:0]const u8, comptime reads: []const type, comptime writes: []const type) SystemRecord {
-            const sets = comptime blk: {
-                //each type looked up in the whole component list
-                @setEvalBranchQuota(100_000);
-                var allowed: AllowedSet = .empty;
-                var writable: AllowedSet = .empty;
-                for (reads) |listed_type| allowed.set(ComponentInd(listed_type));
-                for (writes) |listed_type| {
-                    allowed.set(ComponentInd(listed_type));
-                    writable.set(ComponentInd(listed_type));
-                }
-                break :blk .{ allowed, writable };
-            };
-            return .{ .mName = name, .mAllowed = sets[0], .mWritable = sets[1] };
+        /// Points this ECS at the systems layer's count of runs going on (null to stop), see mRunDepth
+        pub fn SetRunDepth(self: *Self, run_depth: ?*const u32) void {
+            self.mRunDepth = run_depth;
         }
 
-        /// Makes `record` the innermost one until LeaveSystem. It lives on the caller's stack
-        pub fn EnterSystem(self: *Self, record: *SystemRecord) void {
-            record.mOuter = self.mCurrentSystem;
-            self.mCurrentSystem = record;
+        // whether a run of the systems layer is going on, and this ECS is holding its changes for it
+        fn _InRun(self: Self) bool {
+            const run_depth = self.mRunDepth orelse return false;
+            return run_depth.* > 0;
         }
 
-        pub fn LeaveSystem(self: *Self, record: *const SystemRecord) void {
-            std.debug.assert(self.mCurrentSystem == record);
-            self.mCurrentSystem = record.mOuter;
+        /// Makes every change this ECS is holding, if there are any, and says whether there were: for the systems layer as
+        /// its last run ends
+        pub fn LandQueued(self: *Self, engine_context: *EngineContext) !bool {
+            if (!self._HasQueued()) return false;
+            try self._Drain(engine_context);
+            return true;
         }
 
-        /// Points this ECS at where a systems layer keeps its current run (null to stop), see mRunMarker
-        pub fn SetRunMarker(self: *Self, marker: ?*const ?*const RunInfo) void {
-            self.mRunMarker = marker;
-        }
-
-        /// Whether the system running now may get pointers into `component_type`: one it listed, or anything outside a
-        /// system or inside an unchecked record. Tags (nothing to point into) and the hierarchy components (read by
-        /// engine helpers everywhere) are always allowed
-        pub fn AllowsAccess(self: Self, comptime component_type: type) bool {
-            if (comptime @sizeOf(component_type) == 0) return true;
-            if (comptime component_type == ParentComponent or component_type == ChildComponent or component_type == SkipFieldComponent) return true;
-            const record = self.mCurrentSystem orelse return true;
-            if (record.mUnchecked) return true;
-            return record.mAllowed.isSet(ComponentInd(component_type));
-        }
-
-        /// Whether the system running now may get mutable pointers into `component_type` (GetComponentMut): one it
-        /// listed in its Writes, and the same exceptions as AllowsAccess
-        pub fn AllowsWrite(self: Self, comptime component_type: type) bool {
-            if (comptime @sizeOf(component_type) == 0) return true;
-            if (comptime component_type == ParentComponent or component_type == ChildComponent or component_type == SkipFieldComponent) return true;
-            const record = self.mCurrentSystem orelse return true;
-            if (record.mUnchecked) return true;
-            return record.mWritable.isSet(ComponentInd(component_type));
-        }
-
-        /// Whether an add or removal can go straight to this component's storage: a tag has none to move, and anything
-        /// else only when it isn't locked
+        /// Whether an add or removal can go straight to this component's storage: a tag has none to move, parents and
+        /// children are linked and unlinked as they are asked for, and anything else only outside a run
         pub fn CanChangeStorage(self: Self, component_ind: usize) bool {
-            return self.mComponentManager.IsTag(component_ind) or self.mLockCounts[component_ind] == 0;
+            if (self.mComponentManager.IsTag(component_ind)) return true;
+            if (component_ind == ParentComponent.Ind or component_ind == ChildComponent.Ind) return true;
+            return !self._InRun();
         }
 
-        // in safe builds, reports (once) a running system using this ECS when it wasn't given it, using a component it
-        // didn't list, or asking to change (`write`) one it only listed in its Reads. Logged rather than stopping: the
-        // mistake is in a list, and what it touches is still there
-        fn _CheckAccess(self: Self, comptime component_type: type, comptime write: bool) void {
-            if (!std.debug.runtime_safety) return;
-            if (self._RunNotGiven()) |run| {
-                _Report(run.mName, debug_name, std.math.maxInt(u64), "{s} used a " ++ debug_name ++ " it wasn't given: not the ECS it was run from, nor one connected to it through an In", .{run.mName});
-                return;
-            }
-            if (!self.AllowsAccess(component_type)) {
-                const name = self.mCurrentSystem.?.mName;
-                _Report(name, debug_name, ComponentInd(component_type), "{s} used {s} without listing it in its Reads or Writes", .{ name, @typeName(component_type) });
-                return;
-            }
-            if (write and !self.AllowsWrite(component_type)) {
-                const name = self.mCurrentSystem.?.mName;
-                _Report(name, debug_name, (1 << 32) | ComponentInd(component_type), "{s} asked to change {s} (GetComponentMut) but only lists it in its Reads", .{ name, @typeName(component_type) });
-            }
-        }
-
-        // GetGroup's query read as access: every component in it, kept and left out alike, since the ids it hands back
-        // are only good while those don't change
-        fn _CheckQuery(self: Self, comptime query: GroupQuery) void {
-            switch (query) {
-                .Component => |component_type| self._CheckAccess(component_type, false),
-                .And, .Or => |queries| inline for (queries) |sub_query| self._CheckQuery(sub_query),
-                .Not => |not| {
-                    self._CheckQuery(not.mFirst.*);
-                    self._CheckQuery(not.mSecond.*);
-                },
-            }
-        }
-
-        // the systems layer's run going on now, when this ECS isn't part of it: no record here, or only one put here by
-        // a run outside it. A record put here some other way (not by the layer) is a run of its own, and checked by its list
-        fn _RunNotGiven(self: Self) ?*const RunInfo {
-            const marker = self.mRunMarker orelse return null;
-            const run = marker.* orelse return null;
-            const record = self.mCurrentSystem orelse return run;
-            if (record.mUnchecked) return null;
-            const record_run = record.mRun orelse return null;
-            return if (record_run == run) null else run;
-        }
-
-        // in safe builds, a panic when a change reaches storage that is locked: it would move what a running system holds
+        // in safe builds, a panic when a change reaches storage during a run: it would move what a running system holds
         fn _CheckStorageChange(self: Self, component_ind: usize, comptime change: []const u8) void {
             if (!std.debug.runtime_safety) return;
             if (self.CanChangeStorage(component_ind)) return;
-            std.debug.panic(change ++ " {s} while it is locked, which would move what a running system holds", .{ComponentNames[component_ind]});
+            std.debug.panic(change ++ " {s} right away during a run, which would move what a running system holds", .{ComponentNames[component_ind]});
         }
 
-        // each slot's component type name, for the debug checks' messages
+        // each slot's component type name, for _CheckStorageChange's message
         const ComponentNames = blk: {
             var names: [components_types.len + BuiltinComponentCount][]const u8 = undefined;
             for ([_]type{ ParentComponent, ChildComponent, SkipFieldComponent, MainObjectComponent, EntityTagComponent, ScriptTagComponent }) |builtin_type| {
@@ -635,87 +536,26 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             break :blk names;
         };
 
-        /// Whether `component_type` is one of this ECS's components, the builtin ones included
-        pub fn HasType(comptime component_type: type) bool {
-            if (component_type == ParentComponent or component_type == ChildComponent or component_type == SkipFieldComponent or
-                component_type == MainObjectComponent or component_type == EntityTagComponent or component_type == ScriptTagComponent) return true;
-            inline for (components_types) |listed_type| {
-                if (listed_type == component_type) return true;
-            }
-            return false;
-        }
-
         //--------components related functions----------
-        /// Holds off structural changes to these components' storage until the matching Unlock, for code that keeps
-        /// pointers, slices or lists of ids into it while something it calls might change it. Adds, removals and
-        /// destroys are made right away, except that while a type is locked:
-        ///   - adding one is staged (see AddComponent)
-        ///   - removing one is queued
-        ///   - destroying an entity that has one, itself or anywhere under it, is queued
-        /// Once anything is queued everything after it is queued as well, whatever its type, so changes always land
-        /// in the order they were asked for. The queue drains, in that order, when the last lock in this ECS is let go
-        /// of. Tags are the exception: with no storage to move they are always added and removed right away.
-        /// Counted per type, so locks nest.
-        pub fn Lock(self: *Self, comptime locked_types: []const type) void {
-            inline for (locked_types) |locked_type| {
-                _ValidateType(locked_type);
-                self.mLockCounts[ComponentInd(locked_type)] += 1;
-                self.mLockTotal += 1;
-            }
-        }
-
-        /// Lets go of what Lock took, and drains the queue when that was the last lock in this ECS
-        pub fn Unlock(self: *Self, engine_context: *EngineContext, comptime locked_types: []const type) !void {
-            inline for (locked_types) |locked_type| {
-                _ValidateType(locked_type);
-                std.debug.assert(self.mLockCounts[ComponentInd(locked_type)] > 0);
-                self.mLockCounts[ComponentInd(locked_type)] -= 1;
-                self.mLockTotal -= 1;
-            }
-            if (self.mLockTotal == 0 and self._HasQueued()) try self._Drain(engine_context);
-        }
-
-        // whether a change to this slot waits in the queue: its type is locked, or something is queued already
-        fn _Queues(self: Self, component_ind: usize) bool {
-            return self.mLockCounts[component_ind] > 0 or self._HasQueued();
+        // whether a change waits in the queue: a run is going on, or something is queued already
+        fn _Queues(self: Self) bool {
+            return self._InRun() or self._HasQueued();
         }
 
         fn _HasQueued(self: Self) bool {
             return self.mECSEventManager.mEventsArray.get(.EndOfFrame).items.len > 0;
         }
 
-        // whether the entity or anything under it has a component whose type is locked
-        fn _SubtreeLocked(self: *Self, entity_id: entity_t) bool {
-            if (self.mLockTotal == 0) return false;
-
-            var skipfield = self.mComponentManager.GetComponent(SkipFieldComponent, entity_id).?.mSkipField;
-            var field_iter = skipfield.Iterator();
-            while (field_iter.next()) |component_ind| {
-                if (self.mLockCounts[component_ind] > 0) return true;
-            }
-
-            const parent_component = self.mComponentManager.GetComponent(ParentComponent, entity_id) orelse return false;
-            for ([_]entity_t{ parent_component.mFirstEntity, parent_component.mFirstScript }) |first_id| {
-                if (first_id == std.math.maxInt(entity_t)) continue;
-                var curr_id = first_id;
-                while (true) {
-                    if (self._SubtreeLocked(curr_id)) return true;
-                    curr_id = self.mComponentManager.GetComponent(ChildComponent, curr_id).?.mNext;
-                    if (curr_id == first_id) break; // the list is circular
-                }
-            }
-            return false;
-        }
-
-        /// Adds the component now, unless it has to wait (see Lock). Then it is staged instead: its storage only takes
-        /// it when the queue drains, so no component already in that array moves while it is locked. Until then
-        /// GetComponent and HasComponent find the staged copy, which is also what this returns, so the entity reads as
-        /// having it straight away; queries (GetGroup, GetComponentSlice, NumWithComponent) only see it once it lands.
+        /// Adds the component now, unless it has to wait (see mRunDepth). Then it is staged instead: its storage only
+        /// takes it when the queue drains, so no component already in that array moves during a run. Until then
+        /// GetComponent, HasComponent, GetGroup and NumWithComponent find the staged copy, which is also what this
+        /// returns, so the entity reads as having it straight away. Only GetComponentSlice, which hands back the storage
+        /// itself, doesn't see it until it lands.
         /// A tag has no storage that could move, so it always goes on right away.
         pub fn AddComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, new_component: anytype) !*@TypeOf(new_component) {
             const component_t = @TypeOf(new_component);
             if (comptime @sizeOf(component_t) == 0) return try self.AddComponentSync(engine_context, entity_id, new_component);
-            if (!self._Queues(ComponentInd(component_t))) return try self.AddComponentSync(engine_context, entity_id, new_component);
+            if (!self._Queues()) return try self.AddComponentSync(engine_context, entity_id, new_component);
 
             const zone = Tracy.ZoneInit(debug_name ++ "::AddComponent", @src());
             defer zone.Deinit();
@@ -787,17 +627,17 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return self.mComponentManager.GetComponent(component_t, entity_id).?;
         }
 
-        /// Removes the component right away, unless it has to wait (see Lock), when the removal is queued and the
+        /// Removes the component right away, unless it has to wait (see mRunDepth), when the removal is queued and the
         /// component stays readable until the queue drains. A tag always comes off right away.
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
             std.debug.assert(self.IsActiveEntity(entity_id));
             std.debug.assert(components_types.len + BuiltinComponentCount > component_ind);
             std.debug.assert(component_ind != SkipFieldComponent.Ind); // entity lifetime goes through DestroyEntity
-            if (self.mComponentManager.IsTag(component_ind) or !self._Queues(component_ind)) return try self._RemoveNow(engine_context, entity_id, component_ind);
+            if (self.mComponentManager.IsTag(component_ind) or !self._Queues()) return try self._RemoveNow(engine_context, entity_id, component_ind);
             try self.mECSEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
         }
 
-        /// RemoveComponent made right away even while the type is locked. Only where nothing holds a pointer into that
+        /// RemoveComponent made right away even during a run. Only where nothing holds a pointer into that
         /// component's storage: the removal swapRemoves from the dense array, which moves another entity's component.
         pub fn RemoveComponentSync(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
             std.debug.assert(self.IsActiveEntity(entity_id));
@@ -831,12 +671,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             }
         }
 
-        // the hook is bookkeeping, not the work of a system it might run inside, so it runs unchecked
         fn _CallRemovalHook(self: *Self, engine_context: *EngineContext, event: ECSEventDataT.EventT) !void {
             const hook = self.mRemovalHook orelse return;
-            var record = UncheckedRecord;
-            self.EnterSystem(&record);
-            defer self.LeaveSystem(&record);
             try hook.mFn(hook.mCtx, engine_context, event);
         }
 
@@ -859,21 +695,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         pub fn GetComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*const component_type {
             _ValidateType(component_type);
             std.debug.assert(self.IsActiveEntity(entity_id));
-            self._CheckAccess(component_type, false);
             return self._FindComponent(component_type, entity_id);
         }
 
-        /// GetComponent for changing it: a running system has to list `component_type` in its Writes
+        /// GetComponent for changing it
         pub fn GetComponentMut(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
-            _ValidateType(component_type);
-            std.debug.assert(self.IsActiveEntity(entity_id));
-            self._CheckAccess(component_type, true);
-            return self._FindComponent(component_type, entity_id);
-        }
-
-        /// The component just added to the entity, for what adds it to hand back (Manager.AddComponent fetches it
-        /// again after the bookkeeping the add sets off). Mutable and not checked: what was added is the adder's
-        pub fn GetAddedComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
             _ValidateType(component_type);
             std.debug.assert(self.IsActiveEntity(entity_id));
             return self._FindComponent(component_type, entity_id);
@@ -896,10 +722,10 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             self.mComponentManager.ResetComponent(engine_context, entity_id, component);
         }
 
-        /// Drains whatever is queued (see Lock). Nothing normally is by now: the queue drains when the last lock is let
-        /// go of, and every lock has to be let go of before this
+        /// Drains whatever is queued (see mRunDepth). Nothing normally is by now: the queue drains when the last run ends,
+        /// and every run has to have ended before this
         pub fn ProcessEvents(self: *Self, engine_context: *EngineContext) !void {
-            std.debug.assert(self.mLockTotal == 0);
+            std.debug.assert(!self._InRun());
             if (self._HasQueued()) try self._Drain(engine_context);
         }
 

@@ -48,18 +48,12 @@ fn Handled(mark: u8) void {
 const ScoreKeeper = struct {
     mTotal: u32 = 0,
 
-    pub const OnScored = struct {
-        //touches no components
-        pub const Reads = &.{};
-        pub const Writes = &.{};
-
-        pub fn Run(self: *ScoreKeeper, engine_context: *EngineContext, owner: GameContext, event: *const Scored) !ScriptResult {
-            Handled('G');
-            self.mTotal += event.mPoints;
-            try owner.GetWorld().Emit(engine_context, ScoreChanged{ .mTotal = self.mTotal });
-            return .Continue;
-        }
-    };
+    pub fn OnScored(self: *ScoreKeeper, engine_context: *EngineContext, owner: GameContext, event: *const Scored) !ScriptResult {
+        Handled('G');
+        self.mTotal += event.mPoints;
+        try owner.GetWorld().Emit(engine_context, ScoreChanged{ .mTotal = self.mTotal });
+        return .Continue;
+    }
 };
 const ScoreKeeperExports = ScriptExport.Exports(ScoreKeeper, "ScoreKeeper", &.{});
 
@@ -68,43 +62,25 @@ const ScoreText = struct {
     mShown: u32 = 0,
     mLastBy: Entity = .uninit,
 
-    pub const HearScore = struct {
-        //touches no components
-        pub const Reads = &.{};
-        pub const Writes = &.{};
-
-        pub fn Run(self: *ScoreText, _: *EngineContext, _: Entity, event: *const Scored) ScriptResult {
-            Handled('E');
-            self.mLastBy = event.mBy;
-            return .Handled;
-        }
-    };
-    pub const ShowTotal = struct {
-        //touches no components
-        pub const Reads = &.{};
-        pub const Writes = &.{};
-
-        pub fn Run(self: *ScoreText, _: *EngineContext, _: Entity, event: *const ScoreChanged) ScriptResult {
-            Handled('C');
-            self.mShown = event.mTotal;
-            return .Continue;
-        }
-    };
+    pub fn HearScore(self: *ScoreText, _: *EngineContext, _: Entity, event: *const Scored) ScriptResult {
+        Handled('E');
+        self.mLastBy = event.mBy;
+        return .Handled;
+    }
+    pub fn ShowTotal(self: *ScoreText, _: *EngineContext, _: Entity, event: *const ScoreChanged) ScriptResult {
+        Handled('C');
+        self.mShown = event.mTotal;
+        return .Continue;
+    }
 };
 const ScoreTextExports = ScriptExport.Exports(ScoreText, "ScoreText", &.{});
 
 /// A second entity script for Scored: never reached, ScoreText handles it first in its scene
 const Late = struct {
-    pub const OnScored = struct {
-        //touches no components
-        pub const Reads = &.{};
-        pub const Writes = &.{};
-
-        pub fn Run(_: *Late, _: *EngineContext, _: Entity, _: *const Scored) ScriptResult {
-            Handled('L');
-            return .Continue;
-        }
-    };
+    pub fn OnScored(_: *Late, _: *EngineContext, _: Entity, _: *const Scored) ScriptResult {
+        Handled('L');
+        return .Continue;
+    }
 };
 const LateExports = ScriptExport.Exports(Late, "Late", &.{});
 

@@ -83,7 +83,7 @@ const TestWorld = struct {
 
     fn Compile(self: *TestWorld, root: Entity) !SDFCompiler.Compiled {
         const engine_context = self.mEngineContext;
-        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mEditorWorld});
         return SDFCompiler.Compile(engine_context.EngineAllocator(), root, null, &self.mPrograms);
     }
 

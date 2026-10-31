@@ -71,8 +71,8 @@ mBVH: WorldBVH = .{},
 
 /// The world's trees over what it has now. Places what was made at the last commit first, since nothing has yet
 pub fn BuildBVH(self: *WorldManager, engine_context: *EngineContext) !void {
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &self.mEManager.mECSManager, .{self});
-    try engine_context.mSystems.RunSystem(BVHBuildSystem, engine_context, &self.mEManager.mECSManager, .{ self, BVHBuildSystem.AssetFonts{ .mEngineContext = engine_context } });
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{self});
+    try engine_context.mSystems.RunSystem(BVHBuildSystem, engine_context, .{ self, BVHBuildSystem.AssetFonts{ .mEngineContext = engine_context } });
 }
 
 /// How many screen pixels one unit of this world's screen space covers, on a target this tall
@@ -97,7 +97,7 @@ pub fn GetScene(self: *WorldManager, scene_id: Scene.Type) Scene {
 }
 
 /// Sets up the world, and makes its four ECSs (an entity's, a game context's, a player's, a scene's) known to the
-/// systems layer, each connected to the other three: a system run from one reaches the rest through In
+/// systems layer
 pub fn Init(self: *WorldManager, engine_context: *EngineContext) !void {
     const engine_allocator = engine_context.EngineAllocator();
     try self.mEManager.Init(engine_allocator);
@@ -107,23 +107,11 @@ pub fn Init(self: *WorldManager, engine_context: *EngineContext) !void {
     try self.mPhysicsManager.Init(engine_allocator);
 
     const systems = &engine_context.mSystems;
-    const ecss = self._ECSs();
-    inline for (ecss) |ecs| try systems.Register(engine_allocator, ecs);
-    inline for (ecss, 0..) |ecs, ecs_ind| {
-        inline for (ecss, 0..) |other, other_ind| {
-            if (other_ind > ecs_ind) try systems.Connect(engine_allocator, ecs, other);
-        }
+    inline for (self._ECSs()) |ecs| {
+        try systems.Register(engine_allocator, ecs);
+        //templates load into the asset world on demand, in the middle of a run, and are read straight back
+        if (self == &engine_context.mAssetWorld) ecs.SetRunDepth(null);
     }
-}
-
-/// Connects `ecs` (another ECS registered with the systems layer, like the UI's) to each of this world's four
-pub fn ConnectTo(self: *WorldManager, engine_context: *EngineContext, ecs: anytype) !void {
-    inline for (self._ECSs()) |own| try engine_context.mSystems.Connect(engine_context.EngineAllocator(), own, ecs);
-}
-
-/// Undoes ConnectTo
-pub fn DisconnectFrom(self: *WorldManager, engine_context: *EngineContext, ecs: anytype) void {
-    inline for (self._ECSs()) |own| engine_context.mSystems.Disconnect(own, ecs);
 }
 
 // the world's four ECSs
@@ -172,6 +160,8 @@ pub fn Emit(self: *WorldManager, engine_context: *EngineContext, event: anytype)
 }
 
 pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options: ClearAndFreeOptions) void {
+    //what a run holds names the entities going
+    std.debug.assert(engine_context.mSystems.mRunDepth == 0);
     const zone = Tracy.ZoneInit("WorldManager::clearAndFree", @src());
     defer zone.Deinit();
 
@@ -199,6 +189,8 @@ pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options
 }
 
 pub fn Copy(self: *WorldManager, engine_context: *EngineContext, other_world: *WorldManager) !void {
+    //what a run holds wouldn't be copied the way it lands
+    std.debug.assert(engine_context.mSystems.mRunDepth == 0);
     const zone = Tracy.ZoneInit("WorldManager::Copy", @src());
     defer zone.Deinit();
     try self.mEManager.Copy(engine_context, &other_world.mEManager);

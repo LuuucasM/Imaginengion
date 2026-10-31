@@ -32,8 +32,6 @@ const TestWorld = struct {
         engine_context.* = .{};
         try engine_context.mUIManager.Init(engine_context);
         try engine_context.mEditorWorld.Init(engine_context);
-        //the editor's own UI is in use, which its input reaches
-        try engine_context.mEditorWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
         const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         self.mPanel = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
         return self;
@@ -85,9 +83,9 @@ const TestWorld = struct {
         }
         const focus = &engine_context.mUIManager.mFocusSystem;
         try std.testing.expectEqual(label.mID, focus.Focused().?.mID);
-        for (0..TextOf(field).len) |_| try engine_context.mSystems.RunSystem(FocusSystem.OnKeyPressed, engine_context, &engine_context.mUIManager.mECSManager, .{ focus, KeyboardPressedEvent{ ._InputCode = .BACKSPACE, ._Repeat = 0 } });
-        try engine_context.mSystems.RunSystem(FocusSystem.OnTextTyped, engine_context, &engine_context.mUIManager.mECSManager, .{ focus, typed });
-        try engine_context.mSystems.RunSystem(FocusSystem.OnKeyPressed, engine_context, &engine_context.mUIManager.mECSManager, .{ focus, KeyboardPressedEvent{ ._InputCode = .RETURN, ._Repeat = 0 } });
+        for (0..TextOf(field).len) |_| try engine_context.mSystems.RunSystem(FocusSystem.OnKeyPressed, engine_context, .{ focus, KeyboardPressedEvent{ ._InputCode = .BACKSPACE, ._Repeat = 0 } });
+        try engine_context.mSystems.RunSystem(FocusSystem.OnTextTyped, engine_context, .{ focus, typed });
+        try engine_context.mSystems.RunSystem(FocusSystem.OnKeyPressed, engine_context, .{ focus, KeyboardPressedEvent{ ._InputCode = .RETURN, ._Repeat = 0 } });
         _ = try self.ProcessUIEvents();
     }
 
@@ -216,14 +214,14 @@ test "a field shows its value from the start, and again whenever code sets it, b
     try std.testing.expectEqualStrings("0.3", TestWorld.TextOf(field));
 
     field.GetComponentMut(AttribComponent).?.mData = .{ .float32 = 7 };
-    try engine_context.mSystems.RunSystem(NumberFieldSystem.Update, engine_context, &engine_context.mUIManager.mECSManager, .{&engine_context.mUIManager.mNumberFieldSystem});
+    try engine_context.mSystems.RunSystem(NumberFieldSystem.Update, engine_context, .{&engine_context.mUIManager.mNumberFieldSystem});
     try std.testing.expectEqualStrings("7.0", TestWorld.TextOf(field));
 
     //being typed into, its text is the player's until the edit ends
     const label = UIManager.LabelOf(field).?;
     _ = try engine_context.mUIManager.mFocusSystem.Focus(engine_context, label);
-    try engine_context.mSystems.RunSystem(FocusSystem.OnTextTyped, engine_context, &engine_context.mUIManager.mECSManager, .{ &engine_context.mUIManager.mFocusSystem, "1" });
-    try engine_context.mSystems.RunSystem(NumberFieldSystem.Update, engine_context, &engine_context.mUIManager.mECSManager, .{&engine_context.mUIManager.mNumberFieldSystem});
+    try engine_context.mSystems.RunSystem(FocusSystem.OnTextTyped, engine_context, .{ &engine_context.mUIManager.mFocusSystem, "1" });
+    try engine_context.mSystems.RunSystem(NumberFieldSystem.Update, engine_context, .{&engine_context.mUIManager.mNumberFieldSystem});
     try std.testing.expectEqualStrings("7.01", TestWorld.TextOf(field));
     //and dragging leaves the value alone meanwhile
     try world.Drag(field, &.{50});

@@ -5,7 +5,7 @@
 //! right for as long as the same things are in the world, which is until the next commit. An item whose entity has lost
 //! what places it keeps its box.
 //!
-//!     try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &world.mEManager.mECSManager, .{ world, WorldBVH.ALL_ITEMS });
+//!     try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ world, WorldBVH.ALL_ITEMS });
 const EngineContext = @import("EngineContext.zig");
 const WorldManager = @import("WorldManager.zig");
 const WorldBVH = @import("WorldBVH.zig");
@@ -19,18 +19,6 @@ const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 
 pub const Name = "BVHRefit";
-pub const Reads = &.{
-    TransformComponent,
-    EntityComponents.ShapeComponent,
-    SurfaceComponent,
-    TextComponent,
-    EntityComponents.ColliderComponent,
-    //how far a collider's body can move in a substep (CollisionManager.SubstepReach)
-    EntityComponents.RigidBodyComponent,
-    //how a merge's parts combine, compiled for its box (WorldBVH.MergeBounds)
-    EntityComponents.CombineOpComponent,
-};
-pub const Writes = &.{};
 
 pub fn Run(engine_context: *EngineContext, world: *WorldManager, mask: u4) void {
     const bvh = &world.mBVH;

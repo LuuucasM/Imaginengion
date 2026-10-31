@@ -110,9 +110,8 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, world_man
 fn Step(self: *PhysicsManager, engine_context: *EngineContext, world_manager: *WorldManager) !void {
     //synchronous, so everything listening is done before the step goes on
     _ = try self.mEventManager.Dispatch(engine_context, .{ .StepBegin = .{ .mWorld = world_manager, .mDT = PHYSICS_DT } });
-    const entity_ecs = &world_manager.mEManager.mECSManager;
     //what the listeners moved or turned, so the step starts from it. A local constant force reads the rotation
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, entity_ecs, .{world_manager});
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{world_manager});
 
-    try engine_context.mSystems.RunSystem(PhysicsStepSystem, engine_context, entity_ecs, .{world_manager});
+    try engine_context.mSystems.RunSystem(PhysicsStepSystem, engine_context, .{world_manager});
 }

@@ -43,8 +43,6 @@ const TestWorld = struct {
         try engine_context.mAssetManager.Init(engine_context);
         try engine_context.mUIManager.Init(engine_context);
         try engine_context.mEditorWorld.Init(engine_context);
-        //the editor's own UI is in use, which its UI passes reach
-        try engine_context.mEditorWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
         try engine_context.mGameWorld.Init(engine_context);
         try engine_context.mAudioManager.InitMixer(engine_context);
         self.mScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);

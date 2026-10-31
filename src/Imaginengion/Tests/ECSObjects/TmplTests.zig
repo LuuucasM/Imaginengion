@@ -330,6 +330,45 @@ test "a spawned menu's opener opens its own copy of the popup" {
 }
 
 /// The entity called `name` in `scene`
+const SpawnsInARun = struct {
+    pub const Name = "SpawnsInARun";
+
+    pub fn Run(engine_context: *EngineContext, world: *WorldManager, tmpl: AssetHandle, spawned: *[2]Scene) !void {
+        //the first one reads the file in, into the asset world, and copies what it read straight back out
+        for (spawned) |*scene| scene.* = try world.Spawn(Scene, engine_context, tmpl);
+    }
+};
+
+test "a scene template read in and spawned in the middle of a run lands whole" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const UIComponents = @import("../../ECSComponents/UIComponents.zig");
+
+    const menu = try world.TmplWorld().NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const popup = try menu.CreateEntity(engine_context, Entity.DefaultConfig);
+    try SetName(engine_context, popup, "Popup");
+    _ = try popup.AddComponent(engine_context, UIElementComponent{});
+    _ = try UIManager.ElementOf(popup).?.AddComponent(engine_context, UIComponents.PopupComponent{});
+    const opener = try menu.CreateEntity(engine_context, Entity.DefaultConfig);
+    try SetName(engine_context, opener, "Opener");
+    _ = try opener.AddComponent(engine_context, UIElementComponent{});
+    _ = try UIManager.ElementOf(opener).?.AddComponent(engine_context, UIComponents.PopupRefComponent{ .mPopup = popup });
+    const tmpl = try world.SaveTmpl(menu, "menu.imsc");
+
+    var spawned: [2]Scene = undefined;
+    const game_world = world.GameWorld();
+    try engine_context.mSystems.RunSystem(SpawnsInARun, engine_context, .{ game_world, tmpl, &spawned });
+
+    for (spawned) |copy| {
+        const copy_opener = try Named(engine_context, copy, "Opener");
+        const copy_popup = try Named(engine_context, copy, "Popup");
+        const opens = UIManager.GetUIComponent(copy_opener, UIComponents.PopupRefComponent).?.mPopup;
+        try std.testing.expectEqual(copy_popup.mID, opens.mID);
+        try std.testing.expectEqual(game_world, opens.mManager);
+    }
+}
+
 fn Named(engine_context: *EngineContext, scene: Scene, name: []const u8) !Entity {
     const ids = try scene.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = NameComponent });
     for (ids.items) |id| {
@@ -1069,7 +1108,7 @@ test "moving something in an open template updates where the transform pass puts
 
     const sword = FirstChild(panel.mRoot.entity);
     try sword.SetTranslation(engine_context, .{ .x = 3.0, .y = 0.0, .z = 0.0 });
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mTmplEditWorld.mEManager.mECSManager, .{&engine_context.mTmplEditWorld});
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mTmplEditWorld});
     try std.testing.expectEqual(@as(f32, 3.0), sword.GetComponent(TransformComponent).?.GetWorldPosition().x);
 
     try panel.Close(engine_context);

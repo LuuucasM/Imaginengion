@@ -41,8 +41,6 @@ const TestWorld = struct {
         self.mEngineContext.* = .{};
         try self.mEngineContext.mUIManager.Init(self.mEngineContext);
         try self.mEngineContext.mEditorWorld.Init(self.mEngineContext);
-        //the editor's own UI is in use, which layout reads scrolling from
-        try self.mEngineContext.mEditorWorld.ConnectTo(self.mEngineContext, &self.mEngineContext.mUIManager.mECSManager);
         return self;
     }
 
@@ -64,7 +62,7 @@ const TestWorld = struct {
     }
 
     fn Update(self: *TestWorld) !void {
-        try self.mEngineContext.mSystems.RunSystem(LayoutSystem, self.mEngineContext, &self.mEngineContext.mEditorWorld.mEManager.mECSManager, .{&self.mEngineContext.mEditorWorld});
+        try self.mEngineContext.mSystems.RunSystem(LayoutSystem, self.mEngineContext, .{&self.mEngineContext.mEditorWorld});
     }
 
     /// EditorProgram.OnUpdate's end of frame for the editor world, where queued removals and deletes happen
@@ -194,7 +192,7 @@ test "laying out a tree that hasn't changed doesn't dirty any transforms" {
     const ui = try PongMenu.Build(engine_context, try world.DrawnOverlay());
     try ui.mMenu.MarkLayoutDirty(engine_context);
     try world.Update();
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mEditorWorld});
     try std.testing.expectEqual(@as(usize, 0), engine_context.mEditorWorld.NumEntitiesWith(TransformDirtyTag));
 
     try ui.mQuit.MarkLayoutDirty(engine_context);
@@ -333,18 +331,18 @@ test "drawing an overlay records its screen, and only a changed screen lays it o
     try inside.ClearLayoutDirty(engine_context);
 
     //scale with screen is 1080 units tall whatever the height, so a 1080p view is one unit per pixel
-    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, &game_world.mEManager.mECSManager, .{ game_world, &scenes, ViewOf(1920, 1080, 1) });
+    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, .{ game_world, &scenes, ViewOf(1920, 1080, 1) });
     try std.testing.expect(corner.HasComponent(LayoutDirtyTag));
     try std.testing.expect(!inside.HasComponent(LayoutDirtyTag));
     try world.Update();
     try ExpectXY(910, 515, corner);
 
     //the same shape at 720p is the same canvas, so nothing to redo
-    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, &game_world.mEManager.mECSManager, .{ game_world, &scenes, ViewOf(1280, 720, 1) });
+    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, .{ game_world, &scenes, ViewOf(1280, 720, 1) });
     try std.testing.expect(!corner.HasComponent(LayoutDirtyTag));
 
     //narrower is a different canvas: the corner follows the new right edge
-    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, &game_world.mEManager.mECSManager, .{ game_world, &scenes, ViewOf(1000, 1080, 1) });
+    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, .{ game_world, &scenes, ViewOf(1000, 1080, 1) });
     try std.testing.expect(corner.HasComponent(LayoutDirtyTag));
     try world.Update();
     try ExpectXY(450, 515, corner);
@@ -360,7 +358,7 @@ test "a constant pixel size world's overlays fit its size in pixels over the dis
     const other = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const scenes = [_]Scene.Type{ scene.mID, other.mID };
 
-    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{ &engine_context.mEditorWorld, &scenes, ViewOf(1600, 900, 2) });
+    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, .{ &engine_context.mEditorWorld, &scenes, ViewOf(1600, 900, 2) });
     for ([_]Scene{ scene, other }) |overlay| {
         const area = overlay.GetComponent(SceneComponent).?.mLayoutArea.?;
         try std.testing.expectApproxEqAbs(@as(f32, 800), area.x, eps);
@@ -376,7 +374,7 @@ test "a game scene among the overlays records nothing" {
     const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const scenes = [_]Scene.Type{level.mID};
 
-    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{ &engine_context.mEditorWorld, &scenes, ViewOf(1600, 900, 1) });
+    try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, .{ &engine_context.mEditorWorld, &scenes, ViewOf(1600, 900, 1) });
     try std.testing.expect(level.GetComponent(SceneComponent).?.mLayoutArea == null);
 }
 
@@ -604,7 +602,7 @@ test "a child laid out in a panel in the world is gathered for drawing where lay
     _ = try child.AddComponent(engine_context, SurfaceComponent{});
 
     try world.Update();
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mEditorWorld});
 
     //the panel has no quad, so the child is all there is to draw: filling the panel, at its middle
     const shapes = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), &engine_context.mEditorWorld, ViewOf(1600, 900, 1), .{ .Overlays = &.{} }, ShapeGeometry.VISUALS_QUERY);

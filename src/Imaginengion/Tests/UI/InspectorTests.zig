@@ -4,6 +4,7 @@
 //! field after the component has moved in memory. Edits are made the way the widgets make them: a value on the widget and
 //! its event. No window needed. Run with `zig build test-engine`.
 const std = @import("std");
+const BindingSystem = @import("../../UI/BindingSystem.zig");
 const KeyboardPressedEvent = @import("../../Events/WindowEventData.zig").KeyboardPressedEvent;
 const FocusSystem = @import("../../UI/FocusSystem.zig");
 
@@ -44,8 +45,6 @@ const TestWorld = struct {
         engine_context.* = .{};
         try engine_context.mUIManager.Init(engine_context);
         try engine_context.mEditorWorld.Init(engine_context);
-        //the editor's own UI is in use, which its input reaches
-        try engine_context.mEditorWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
         self.mScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         self.mPanel = try self.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
         self.mObject = try self.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
@@ -67,7 +66,7 @@ const TestWorld = struct {
 
     /// The bindings put their fields on their widgets, as they do once a frame
     fn ShowFields(self: *TestWorld) !void {
-        try self.mEngineContext.mUIManager.mBindingSystem.Update(self.mEngineContext);
+        try self.mEngineContext.mSystems.RunSystem(BindingSystem.Update, self.mEngineContext, .{&self.mEngineContext.mUIManager.mBindingSystem});
     }
 
     /// The frame's UI events handed out, which is when edits are written
@@ -209,8 +208,8 @@ test "an enum is a dropdown, text a text field, and a struct with no UIRender sh
     try std.testing.expectEqualStrings("Hello", typed.GetComponent(TextComponent).?.mText.items);
     const focus = &engine_context.mUIManager.mFocusSystem;
     _ = try focus.Focus(engine_context, typed);
-    try engine_context.mSystems.RunSystem(FocusSystem.OnTextTyped, engine_context, &engine_context.mUIManager.mECSManager, .{ focus, "!" });
-    try engine_context.mSystems.RunSystem(FocusSystem.OnKeyPressed, engine_context, &engine_context.mUIManager.mECSManager, .{ focus, KeyboardPressedEvent{ ._InputCode = .RETURN, ._Repeat = 0 } });
+    try engine_context.mSystems.RunSystem(FocusSystem.OnTextTyped, engine_context, .{ focus, "!" });
+    try engine_context.mSystems.RunSystem(FocusSystem.OnKeyPressed, engine_context, .{ focus, KeyboardPressedEvent{ ._InputCode = .RETURN, ._Repeat = 0 } });
     try world.ProcessUIEvents();
     try std.testing.expectEqualStrings("Hello!", world.mObject.GetComponent(TextComponent).?.mText.items);
 }

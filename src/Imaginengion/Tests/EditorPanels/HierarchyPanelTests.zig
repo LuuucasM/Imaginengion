@@ -390,13 +390,13 @@ test "a ready-made UI entity in a game scene is built in world units, and stretc
     try std.testing.expectEqual(@as(f32, 1), button.GetComponent(TransformComponent).?.GetScale().x);
     try std.testing.expectApproxEqAbs(@as(f32, 1), label.GetComponent(TextComponent).?.mFontSize, 0.0001);
     try std.testing.expectApproxEqAbs(@as(f32, 6.0 / 16.0), button.GetComponent(LayoutComponent).?.mPadding.Left, 0.0001);
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &game_world.mEManager.mECSManager, .{game_world});
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{game_world});
     const text_params = ShapeGeometry.GetTextParams(label.GetComponent(TransformComponent).?, label.GetComponent(TextComponent).?);
     try std.testing.expectApproxEqAbs(@as(f32, 1), text_params.FontSize, 0.0001);
 
     //stretching the button stretches its label the same way, each axis on its own
     try button.SetScale(engine_context, .{ .x = 2, .y = 0.5, .z = 1 });
-    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &game_world.mEManager.mECSManager, .{game_world});
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{game_world});
     const stretched = ShapeGeometry.GetTextParams(label.GetComponent(TransformComponent).?, label.GetComponent(TextComponent).?);
     try std.testing.expectApproxEqAbs(@as(f32, 2), stretched.Stretch.x, 0.0001);
     try std.testing.expectApproxEqAbs(@as(f32, 0.5), stretched.Stretch.y, 0.0001);

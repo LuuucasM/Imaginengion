@@ -12,12 +12,10 @@
 //!   - its own TextComponent's bounds, for a leaf, whose text is what it fits to
 //!   - LayoutItemComponent.mComputedSize
 //!
-//! Runs before the transform pass each frame, which picks up the translations it set. A system run from the world's
-//! entity ECS:
+//! Runs before the transform pass each frame, which picks up the translations it set. A system:
 //!
-//!     try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &world.mEManager.mECSManager, .{world});
+//!     try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, .{world});
 const std = @import("std");
-const Systems = @import("../ECS/Systems.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -45,28 +43,9 @@ const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Ent
 const SceneComponent = @import("../ECSComponents/SComponents.zig").SceneComponent;
 const TextAsset = @import("../ECSComponents/AComponents.zig").TextAsset;
 const EManager = @import("../ECSManagers/EManager.zig");
-const SManager = @import("../ECSManagers/SManager.zig");
-const UIElementComponent = EntityComponents.UIElementComponent;
 const EventResult = @import("../Events/EventManager.zig").EventResult;
 
 pub const Name = "Layout";
-pub const Reads = &.{
-    LayoutComponent,
-    //an overlay root's scene, and the screen area it records (SceneComponent.mLayoutArea)
-    EntitySceneComponent,
-    Systems.In(SManager.ECSManagerT, SceneComponent),
-    //a container's scrolling, from its UI element
-    UIElementComponent,
-    Systems.In(UIManager.ECSManagerT, ScrollComponent),
-};
-pub const Writes = &.{
-    LayoutItemComponent,
-    TransformComponent,
-    //a quad's size, as the element's background
-    EntityComponents.ShapeComponent,
-    TextComponent,
-    Systems.In(UIManager.ECSManagerT, ScrollStateComponent),
-};
 
 /// Lays out every tree in `world` that has a dirty entity in it, each once however many of its entities are dirty
 pub fn Run(engine_context: *EngineContext, world: *WorldManager) !void {
@@ -109,12 +88,9 @@ pub fn MarkSceneDirty(scene: Scene, engine_context: *EngineContext) !void {
 /// as it draws each view, so a scene drawn by several views of different sizes fits the last one drawn. A system from
 /// the world's entity ECS:
 ///
-///     try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, &world.mEManager.mECSManager, .{ world, overlay_scenes, camera_view });
+///     try engine_context.mSystems.RunSystem(LayoutSystem.RecordViewArea, engine_context, .{ world, overlay_scenes, camera_view });
 pub const RecordViewArea = struct {
     pub const Name = "RecordViewArea";
-    //which of the scene's entities are the roots to tag (MarkSceneDirty)
-    pub const Reads = &.{ LayoutItemComponent, LayoutComponent, EntitySceneComponent };
-    pub const Writes = &.{Systems.In(SManager.ECSManagerT, SceneComponent)};
 
     pub fn Run(engine_context: *EngineContext, world: *WorldManager, overlay_scenes: []const Scene.Type, camera_view: CameraView) !void {
         //every overlay scene of the world is on the one screen space, so they all fit into the same area

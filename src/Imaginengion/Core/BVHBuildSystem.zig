@@ -2,7 +2,7 @@
 //! a frame right after the end-of-frame commit, after the world transform pass (WorldManager.BuildBVH), so the set of
 //! items can't change until the next one:
 //!
-//!     try engine_context.mSystems.RunSystem(BVHBuildSystem, engine_context, &world.mEManager.mECSManager, .{ world, BVHBuildSystem.AssetFonts{ .mEngineContext = engine_context } });
+//!     try engine_context.mSystems.RunSystem(BVHBuildSystem, engine_context, .{ world, BVHBuildSystem.AssetFonts{ .mEngineContext = engine_context } });
 //!
 //! `fonts.Get(text)` gives the font a text is laid out in, so a test can lay out in a stand in font.
 const std = @import("std");
@@ -28,11 +28,9 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
-const ShapeComponent = EntityComponents.ShapeComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
-const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const GameLayerTag = EntityComponents.GameLayerTag;
 const OverlayLayerTag = EntityComponents.OverlayLayerTag;
@@ -40,20 +38,6 @@ const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
 const TextAsset = @import("../ECSComponents/AComponents.zig").TextAsset;
 
 pub const Name = "BVHBuild";
-pub const Reads = &.{
-    SurfaceComponent,
-    TransformComponent,
-    ShapeComponent,
-    TextComponent,
-    ColliderComponent,
-    //each item's scene
-    EntitySceneComponent,
-    //how far a collider's body can move in a substep (CollisionManager.SubstepReach)
-    RigidBodyComponent,
-    //how a merge's parts combine, compiled for its box (WorldBVH.MergeBounds)
-    EntityComponents.CombineOpComponent,
-};
-pub const Writes = &.{};
 
 /// The fonts the engine's texts are laid out in: their TextAsset
 pub const AssetFonts = struct {

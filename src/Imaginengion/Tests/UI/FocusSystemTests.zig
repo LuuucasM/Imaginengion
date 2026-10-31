@@ -45,8 +45,6 @@ const TestWorld = struct {
         engine_context.* = .{};
         try engine_context.mUIManager.Init(engine_context);
         try engine_context.mEditorWorld.Init(engine_context);
-        //the editor's own UI is in use, which the caret is placed in
-        try engine_context.mEditorWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
 
         const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         self.mForm = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
@@ -83,16 +81,16 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         try engine_context.mPointerSystem.Update(engine_context, .{ .Target = target });
         try engine_context.mPointerSystem.OnPressed(engine_context, button);
-        try engine_context.mSystems.RunSystem(FocusSystem.OnPressed, engine_context, &engine_context.mUIManager.mECSManager, .{ &engine_context.mUIManager.mFocusSystem, &engine_context.mPointerSystem, button });
+        try engine_context.mSystems.RunSystem(FocusSystem.OnPressed, engine_context, .{ &engine_context.mUIManager.mFocusSystem, &engine_context.mPointerSystem, button });
         try engine_context.mPointerSystem.OnReleased(engine_context, button);
     }
 
     fn Key(self: *TestWorld, key: ScanCodes) !void {
-        try self.mEngineContext.mSystems.RunSystem(FocusSystem.OnKeyPressed, self.mEngineContext, &self.mEngineContext.mUIManager.mECSManager, .{ &self.mEngineContext.mUIManager.mFocusSystem, KeyboardPressedEvent{ ._InputCode = key, ._Repeat = 0 } });
+        try self.mEngineContext.mSystems.RunSystem(FocusSystem.OnKeyPressed, self.mEngineContext, .{ &self.mEngineContext.mUIManager.mFocusSystem, KeyboardPressedEvent{ ._InputCode = key, ._Repeat = 0 } });
     }
 
     fn Type(self: *TestWorld, text: []const u8) !void {
-        try self.mEngineContext.mSystems.RunSystem(FocusSystem.OnTextTyped, self.mEngineContext, &self.mEngineContext.mUIManager.mECSManager, .{ &self.mEngineContext.mUIManager.mFocusSystem, text });
+        try self.mEngineContext.mSystems.RunSystem(FocusSystem.OnTextTyped, self.mEngineContext, .{ &self.mEngineContext.mUIManager.mFocusSystem, text });
     }
 
     fn TextOf(entity: Entity) []const u8 {
@@ -350,7 +348,7 @@ test "the caret is a quad on a child of the text input, there only while it has 
     const focus = &engine_context.mUIManager.mFocusSystem;
 
     try world.Press(world.mName, .BUTTON_LEFT);
-    try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, &engine_context.mUIManager.mECSManager, .{focus});
+    try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, .{focus});
     const caret = focus.mCaretEntity.?;
     try std.testing.expect(caret.HasComponent(ShapeComponent));
     //colored by the theme
@@ -359,15 +357,15 @@ test "the caret is a quad on a child of the text input, there only while it has 
     //showing straight away, then blinking off
     try std.testing.expect(caret.GetComponent(SurfaceComponent).?.mShouldRender);
     focus.mBlinkTime = 0.75;
-    try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, &engine_context.mUIManager.mECSManager, .{focus});
+    try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, .{focus});
     try std.testing.expect(!caret.GetComponent(SurfaceComponent).?.mShouldRender);
     //an edit shows it again
     try world.Type("!");
-    try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, &engine_context.mUIManager.mECSManager, .{focus});
+    try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, .{focus});
     try std.testing.expect(caret.GetComponent(SurfaceComponent).?.mShouldRender);
 
     //the same caret every frame
-    try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, &engine_context.mUIManager.mECSManager, .{focus});
+    try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, .{focus});
     try std.testing.expectEqual(caret.mID, focus.mCaretEntity.?.mID);
 
     try world.Key(.RETURN);
@@ -382,12 +380,12 @@ test "a text input deleted while it has the keyboard lets go of it" {
     const engine_context = world.mEngineContext;
 
     try world.Press(world.mName, .BUTTON_LEFT);
-    try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, &engine_context.mUIManager.mECSManager, .{&engine_context.mUIManager.mFocusSystem});
+    try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, .{&engine_context.mUIManager.mFocusSystem});
     try world.mName.Delete(engine_context);
     try world.EndFrame();
     _ = try world.TakeEvents();
 
-    try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, &engine_context.mUIManager.mECSManager, .{&engine_context.mUIManager.mFocusSystem});
+    try engine_context.mSystems.RunSystem(FocusSystem.Update, engine_context, .{&engine_context.mUIManager.mFocusSystem});
     try std.testing.expect(engine_context.mUIManager.mFocusSystem.Focused() == null);
     try std.testing.expect(!engine_context.mInputManager.mKeyboardTaken);
     try std.testing.expectEqual(@as(usize, 0), (try world.TakeEvents()).len);

@@ -3,17 +3,15 @@
 //! pre-solve scripts, so adding or removing any of these waits until the step is done: a script deleting a body, or
 //! adding a collider, can't leave a dead id or a moved array behind it.
 //!
-//!     try engine_context.mSystems.RunSystem(PhysicsStepSystem, engine_context, &world.mEManager.mECSManager, .{world});
+//!     try engine_context.mSystems.RunSystem(PhysicsStepSystem, engine_context, .{world});
 const std = @import("std");
 const BVHRefitSystem = @import("../Core/BVHRefitSystem.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const BVH = @import("../Core/BVH.zig");
-const Systems = @import("../ECS/Systems.zig");
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const Entity = @import("../ECSObjects/Entity.zig");
-const SManager = @import("../ECSManagers/SManager.zig");
 const PhysicsManager = @import("PhysicsManager.zig");
 const CollisionManager = @import("CollisionManager.zig");
 const TransformSystem = @import("TransformSystem.zig");
@@ -23,7 +21,6 @@ const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const DynamicBodyTag = EntityComponents.DynamicBodyTag;
 const KinematicBodyTag = EntityComponents.KinematicBodyTag;
 const ConstantForceComponent = EntityComponents.ConstantForceComponent;
-const ColliderComponent = EntityComponents.ColliderComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const ScenePhysicsComponent = @import("../ECSComponents/SComponents.zig").PhysicsComponent;
@@ -31,14 +28,6 @@ const ScenePhysicsComponent = @import("../ECSComponents/SComponents.zig").Physic
 const Vec3 = @import("../Math/MathTypes.zig").Vec3;
 
 pub const Name = "PhysicsStep";
-pub const Reads = &.{
-    ColliderComponent,
-    ConstantForceComponent,
-    //gravity: each body's scene, and that scene's physics settings
-    EntitySceneComponent,
-    Systems.In(SManager.ECSManagerT, ScenePhysicsComponent),
-};
-pub const Writes = &.{ RigidBodyComponent, TransformComponent };
 
 const RigidBodyQuery = GroupQuery{ .Component = RigidBodyComponent };
 //moved by forces, gravity and their velocity
@@ -94,10 +83,10 @@ pub fn Run(engine_context: *EngineContext, world_manager: *WorldManager) !void {
         }
 
         //where the bodies start the substep, which is what the contacts are measured from
-        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &world_manager.mEManager.mECSManager, .{world_manager});
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{world_manager});
         //and the world's tree with them: only the colliders, all the broad pass walks. Also takes in whatever moved
         //since the tree was built, before physics, so no refit is needed ahead of the step
-        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &world_manager.mEManager.mECSManager, .{ world_manager, BVH.Mask.PHYSICS });
+        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ world_manager, BVH.Mask.PHYSICS });
 
         try physics._CollisionManager.BroadPass(engine_context, world_manager, collider_groups);
         physics._CollisionManager.NarrowPass(SUB_STEP_DT);

@@ -2,26 +2,16 @@
 //! exports `&Exports(Script, name).info` (see build_script.zig), and everything the engine needs comes from looking at
 //! the script's struct at compile time:
 //! - its variables, as a table of names, kinds and offsets (FieldDesc) the engine edits, saves and copies them with
-//! - its hooks: any of ScriptABI.Hook it has, each wrapped in a C-callable function that finds the variables for the
-//!   instance it is run on
-//! - its game event handlers: any hook-shaped struct whose Run's last parameter is a game event (see GameEvents),
-//!   whatever it is called, each wrapped the same way and listed by the event's id
+//! - its hooks: any of ScriptABI.Hook it has a function for, each wrapped in a C-callable function that finds the
+//!   variables for the instance it is run on
+//! - its game event handlers: any function whose last parameter is a game event (see GameEvents), whatever it is
+//!   called, each wrapped the same way and listed by the event's id
 //! - where the instances are kept: one sparse set per DLL, by the instance id the engine hands it, each instance in an
 //!   allocation of its own so it stays put
 //! - the project files it imports, which build_script.zig found and hands in, for the engine to watch
 //! A script that doesn't fit (a variable with no default, a hook with the wrong parameters) is a compile error saying
 //! what to change.
 //!
-//! A hook (or handler) is a struct with what it touches and its function, the way a system file is (ECS/Systems.zig):
-//!
-//!     pub const OnUpdate = struct {
-//!         pub const Reads = &.{ IM.In(IM.GCECS, IM.GCComponents.AttribComponent) };
-//!         pub const Writes = &.{IM.EntityComponents.TransformComponent};
-//!         pub fn Run(self: *Paddle, engine_context: *IM.EngineContext, owner: IM.Entity) !IM.ScriptResult { ... }
-//!     };
-//!
-//! Each runs as a system of its own (HookSystem) starting from its owner's own ECS: plain types there, In(...) for
-//! anything in another kind of ECS, and the owner's ScriptComponent locked as well, since the instance lives in it.
 const std = @import("std");
 const ScriptABI = @import("ScriptABI.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -31,8 +21,7 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
 const GameEvents = @import("GameEvents.zig");
-const Systems = @import("../ECS/Systems.zig");
-const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
+const Tracy = @import("../Core/Tracy.zig");
 
 const Hook = ScriptABI.Hook;
 const OwnerKind = ScriptABI.OwnerKind;
@@ -170,42 +159,13 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime
             return RunHook(@tagName(hook), engine_context, owner.*, self, args);
         }
 
-        /// Runs the hook or handler `name` as its system (HookSystem), from its owner's own ECS. What it hands back is
-        /// the result; a failure around it (no ECS connected for one of its In kinds, what it changed not all landing) is
-        /// logged with the script's name, and the result kept when the hook did run, .Error when it didn't
+        /// Runs the hook or handler `name`, which goes on inside the run of the script loop that got here
+        /// (ScriptsProcessor). What it hands back is the result, an error logged with the script's name and handed back as
+        /// .Error
         fn RunHook(comptime name: []const u8, engine_context: *EngineContext, owner: Owner, self: *Script, args: anytype) ScriptResult {
-            const S = HookSystem(Script, script_name, Owner, name, @TypeOf(args));
-            var result: ScriptResult = .Error;
-            const owner_ecs = &owner.mManager.GetManager(Owner).mECSManager;
-            engine_context.mSystems.RunSystem(S, engine_context, owner_ecs, .{ self, owner, args, &result }) catch |err| {
-                std.log.err("{s}.{s}: {s}", .{ script_name, name, @errorName(err) });
-            };
-            return result;
-        }
-    };
-}
-
-/// The system one hook or handler (`name`) of `Script` runs as: its own Reads and Writes, and ScriptComponent written
-/// as well, since the instance it runs on lives in its owner's ScriptComponent: a script deleting its own object waits
-/// until the hook is done. Run takes the context first, as every system's does, and hands the hook its parameters in
-/// the order scripts write them, (self, engine_context, owner, ...)
-fn HookSystem(comptime Script: type, comptime script_name: []const u8, comptime Owner: type, comptime name: []const u8, comptime Args: type) type {
-    const H = @field(Script, name);
-    const system_name = std.fmt.comptimePrint("{s}.{s}", .{ script_name, name });
-    const writes: []const type = comptime blk: {
-        const listed = Systems.ListedTypes(system_name, "Writes", H.Writes);
-        for (listed) |listed_type| {
-            if (listed_type == ScriptComponent) break :blk listed;
-        }
-        break :blk &(listed[0..listed.len].* ++ [_]type{ScriptComponent});
-    };
-    return struct {
-        pub const Name: [:0]const u8 = system_name;
-        pub const Reads = H.Reads;
-        pub const Writes = writes;
-
-        pub fn Run(engine_context: *EngineContext, self: *Script, owner: Owner, args: Args, result: *ScriptResult) void {
-            result.* = Finish(script_name, name, @call(.auto, H.Run, .{ self, engine_context, owner } ++ args));
+            const zone = Tracy.ZoneInit(std.fmt.comptimePrint("{s}.{s}", .{ script_name, name }), @src());
+            defer zone.Deinit();
+            return Finish(script_name, name, @call(.auto, @field(Script, name), .{ self, engine_context, owner } ++ args));
         }
     };
 }
@@ -221,23 +181,12 @@ fn Finish(comptime script_name: []const u8, comptime function_name: []const u8, 
     return result;
 }
 
-/// The hook-shaped struct `name` of `Script` is: what it touches and its Run. Null for a declaration that isn't one
-fn HookStruct(comptime Script: type, comptime name: []const u8) ?type {
-    const decl = @field(Script, name);
-    if (@TypeOf(decl) != type or @typeInfo(decl) != .@"struct" or !@hasDecl(decl, "Run")) return null;
-    if (@typeInfo(@TypeOf(decl.Run)) != .@"fn") return null;
-    return decl;
-}
-
-/// The Run of the hook `name` of `Script`, checking it is written the new way: a struct with Reads, Writes and Run
-fn HookRun(comptime Script: type, comptime script_name: []const u8, comptime name: []const u8) std.builtin.Type.Fn {
-    const H = HookStruct(Script, name) orelse @compileError(script_name ++ ": " ++ name ++
-        " has to be a struct with what it touches and its function: pub const " ++ name ++
-        " = struct { pub const Reads = &.{ ... }; pub const Writes = &.{ ... }; pub fn Run(self: *@This() of the script, engine_context: *EngineContext, owner: ...) ... };");
-    if (!@hasDecl(H, "Reads") or !@hasDecl(H, "Writes")) {
-        @compileError(script_name ++ ": " ++ name ++ " lists the components it touches, pub const Reads = &.{ ... }; and pub const Writes = &.{ ... }; (&.{} for none). They are locked while it runs, and a Debug build reports anything it touches but didn't list");
-    }
-    return @typeInfo(@TypeOf(H.Run)).@"fn";
+/// The function the hook `name` of `Script` is, or a compile error for a declaration by that name that isn't one
+fn HookFn(comptime Script: type, comptime script_name: []const u8, comptime name: []const u8) std.builtin.Type.Fn {
+    return switch (@typeInfo(@TypeOf(@field(Script, name)))) {
+        .@"fn" => |fn_info| fn_info,
+        else => @compileError(script_name ++ ": " ++ name ++ " has to be a function: pub fn " ++ name ++ "(self: *<the script>, engine_context: *EngineContext, owner: ...) ..."),
+    };
 }
 
 /// An object handle comes over the DLL boundary by pointer, the hook gets it as a value
@@ -251,18 +200,15 @@ fn OwnerOf(comptime Script: type, comptime script_name: []const u8) OwnerKind {
     //looking over every declaration and hook takes more compile-time steps than Zig allows by default
     @setEvalBranchQuota(100_000);
     if (@typeInfo(Script) != .@"struct") @compileError(script_name ++ ": a script is a struct file: its variables at the top, then its hooks");
-    if (@hasDecl(Script, "Reads") or @hasDecl(Script, "Writes")) {
-        @compileError(script_name ++ ": what a script touches is listed in each of its hooks now, pub const OnUpdate = struct { pub const Reads = ...; pub const Writes = ...; pub fn Run(...) ... }, not once for the whole script");
-    }
     CheckNoMisspeltHooks(Script, script_name);
 
     var owner: ?OwnerKind = null;
     var first_hook: []const u8 = "";
     for (std.enums.values(Hook)) |hook| {
         if (!@hasDecl(Script, @tagName(hook))) continue;
-        const fn_info = HookRun(Script, script_name, @tagName(hook));
+        const fn_info = HookFn(Script, script_name, @tagName(hook));
         if (fn_info.param_types.len < 3 or fn_info.param_types[2] == null) {
-            @compileError(script_name ++ ": " ++ @tagName(hook) ++ ".Run has to start (self: *<the script>, engine_context: *EngineContext, owner: <Entity, SceneLayer, Player or GameContext>, ...)");
+            @compileError(script_name ++ ": " ++ @tagName(hook) ++ " has to start (self: *<the script>, engine_context: *EngineContext, owner: <Entity, SceneLayer, Player or GameContext>, ...)");
         }
         const this_owner = OwnerKind.Of(fn_info.param_types[2].?);
         if (owner) |kind| {
@@ -275,9 +221,9 @@ fn OwnerOf(comptime Script: type, comptime script_name: []const u8) OwnerKind {
         CheckSignature(Script, script_name, hook, this_owner.Type(), fn_info);
     }
     for (HandlerNames(Script, script_name)) |name| {
-        const fn_info = HookRun(Script, script_name, name);
+        const fn_info = HookFn(Script, script_name, name);
         if (fn_info.param_types.len != 4 or fn_info.param_types[2] == null) {
-            @compileError(script_name ++ ": " ++ name ++ " handles a game event, so its Run has to be (self: *<the script>, engine_context: *EngineContext, owner: <Entity, SceneLayer, Player or GameContext>, event: *const <the event>) ScriptResult (or !ScriptResult)");
+            @compileError(script_name ++ ": " ++ name ++ " handles a game event, so it has to be (self: *<the script>, engine_context: *EngineContext, owner: <Entity, SceneLayer, Player or GameContext>, event: *const <the event>) ScriptResult (or !ScriptResult)");
         }
         const this_owner = OwnerKind.Of(fn_info.param_types[2].?);
         if (owner) |kind| {
@@ -288,14 +234,16 @@ fn OwnerOf(comptime Script: type, comptime script_name: []const u8) OwnerKind {
         }
         CheckHandlerSignature(Script, script_name, name, this_owner.Type(), fn_info);
     }
-    return owner orelse @compileError(script_name ++ ": has none of the hooks or game event handlers, so nothing would ever run it. Add one, e.g. pub const OnUpdate = struct { pub const Reads = &.{}; pub const Writes = &.{}; pub fn Run(self: *<the script>, engine_context: *EngineContext, owner: Entity) !ScriptResult { ... } };");
+    return owner orelse @compileError(script_name ++ ": has none of the hooks or game event handlers, so nothing would ever run it. Add one, e.g. pub fn OnUpdate(self: *<the script>, engine_context: *EngineContext, owner: Entity) !ScriptResult { ... }");
 }
 
-/// The game event the declaration `name` of the script handles: the event its Run's last parameter points at, null
-/// for one that isn't a handler. Only a Run taking the script's self first, so a helper struct isn't taken for one
+/// The game event the declaration `name` of the script handles: the event its last parameter points at, null for one
+/// that isn't a handler. Only a function taking the script's self first, so a helper isn't taken for one
 fn EventOf(comptime Script: type, comptime name: []const u8) ?type {
-    const H = HookStruct(Script, name) orelse return null;
-    const fn_info = @typeInfo(@TypeOf(H.Run)).@"fn";
+    const fn_info = switch (@typeInfo(@TypeOf(@field(Script, name)))) {
+        .@"fn" => |fn_info| fn_info,
+        else => return null,
+    };
     if (fn_info.param_types.len < 2 or fn_info.param_types[0] != *Script) return null;
     const last = fn_info.param_types[fn_info.param_types.len - 1] orelse return null;
     const pointer = switch (@typeInfo(last)) {
@@ -326,7 +274,7 @@ fn HandlerNames(comptime Script: type, comptime script_name: []const u8) []const
 
 fn CheckHandlerSignature(comptime Script: type, comptime script_name: []const u8, comptime name: []const u8, comptime Owner: type, comptime fn_info: std.builtin.Type.Fn) void {
     const Event = EventOf(Script, name).?;
-    const message = script_name ++ ": " ++ name ++ " handles " ++ GameEvents.NameOf(Event) ++ ", so its Run has to be (self: *<the script>, engine_context: *EngineContext, owner: " ++
+    const message = script_name ++ ": " ++ name ++ " handles " ++ GameEvents.NameOf(Event) ++ ", so it has to be (self: *<the script>, engine_context: *EngineContext, owner: " ++
         @typeName(Owner) ++ ", event: *const " ++ GameEvents.NameOf(Event) ++ ") ScriptResult (or !ScriptResult)";
     const expected = [_]type{ *Script, *EngineContext, Owner, *const Event };
     for (fn_info.param_types, expected) |param, want| {
@@ -346,7 +294,7 @@ fn CheckSignature(comptime Script: type, comptime script_name: []const u8, compt
     inline for (hook.Params()) |param| wanted = wanted ++ ", " ++ @typeName(param);
     wanted = wanted ++ ") ScriptResult (or !ScriptResult)";
 
-    const message = script_name ++ ": " ++ @tagName(hook) ++ ".Run has to be " ++ wanted;
+    const message = script_name ++ ": " ++ @tagName(hook) ++ " has to be " ++ wanted;
     if (fn_info.param_types.len != expected.len) @compileError(message);
     for (fn_info.param_types, expected) |param, want| {
         if (param != want) @compileError(message);
@@ -359,18 +307,13 @@ fn CheckSignature(comptime Script: type, comptime script_name: []const u8, compt
     if (result != ScriptResult) @compileError(message);
 }
 
-/// A hook-shaped struct named like a hook that isn't one (OnUpate) would never run, so it is an error. So is a hook
-/// still written as a plain function, the way hooks were before they listed what they touch
+/// A function named like a hook that isn't one (OnUpate) would never run, so it is an error
 fn CheckNoMisspeltHooks(comptime Script: type, comptime script_name: []const u8) void {
     //looking over every declaration and hook takes more compile-time steps than Zig allows by default
     @setEvalBranchQuota(100_000);
     for (@typeInfo(Script).@"struct".decl_names) |name| {
         if (name.len < 3 or !std.mem.startsWith(u8, name, "On") or !std.ascii.isUpper(name[2])) continue;
-        if (@typeInfo(@TypeOf(@field(Script, name))) == .@"fn") {
-            @compileError(script_name ++ ": " ++ name ++ " is a function, but a hook is a struct with what it touches and its function: pub const " ++ name ++
-                " = struct { pub const Reads = &.{ ... }; pub const Writes = &.{ ... }; pub fn Run(self: *<the script>, engine_context: *EngineContext, owner: ...) ... };");
-        }
-        if (HookStruct(Script, name) == null) continue;
+        if (@typeInfo(@TypeOf(@field(Script, name))) != .@"fn") continue;
         if (std.meta.stringToEnum(Hook, name) != null) continue;
         //a game event handler can be called anything
         if (EventOf(Script, name) != null) continue;

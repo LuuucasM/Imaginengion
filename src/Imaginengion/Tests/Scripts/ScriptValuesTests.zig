@@ -32,15 +32,9 @@ const Chaser = struct {
     mMode: enum { Chase, Wait } = .Chase,
     mOffset: Vec3(f32) = .{ .x = 0, .y = 1, .z = 0 },
 
-    pub const OnUpdate = struct {
-        //touches no components
-        pub const Reads = &.{};
-        pub const Writes = &.{};
-
-        pub fn Run(_: *Chaser, _: *EngineContext, _: Entity) ScriptABI.ScriptResult {
-            return .Continue;
-        }
-    };
+    pub fn OnUpdate(_: *Chaser, _: *EngineContext, _: Entity) ScriptABI.ScriptResult {
+        return .Continue;
+    }
 };
 const ChaserExports = ScriptExport.Exports(Chaser, "Chaser", &.{});
 
@@ -52,38 +46,20 @@ const ChaserEdited = struct {
     mOffset: f32 = 0.5,
     mJumps: u32 = 3,
 
-    pub const OnUpdate = struct {
-        //touches no components
-        pub const Reads = &.{};
-        pub const Writes = &.{};
-
-        pub fn Run(_: *ChaserEdited, _: *EngineContext, _: Entity) ScriptABI.ScriptResult {
-            return .Continue;
-        }
-    };
-    pub const OnCollisionBegin = struct {
-        //touches no components
-        pub const Reads = &.{};
-        pub const Writes = &.{};
-
-        pub fn Run(_: *ChaserEdited, _: *EngineContext, _: Entity, _: Entity, _: *const CollisionInfo) ScriptABI.ScriptResult {
-            return .Continue;
-        }
-    };
+    pub fn OnUpdate(_: *ChaserEdited, _: *EngineContext, _: Entity) ScriptABI.ScriptResult {
+        return .Continue;
+    }
+    pub fn OnCollisionBegin(_: *ChaserEdited, _: *EngineContext, _: Entity, _: Entity, _: *const CollisionInfo) ScriptABI.ScriptResult {
+        return .Continue;
+    }
 };
 const ChaserEditedExports = ScriptExport.Exports(ChaserEdited, "ChaserEdited", &.{});
 
 /// A scene script, to put on an entity by mistake
 const SceneRule = struct {
-    pub const OnSceneStart = struct {
-        //touches no components
-        pub const Reads = &.{};
-        pub const Writes = &.{};
-
-        pub fn Run(_: *SceneRule, _: *EngineContext, _: Scene) ScriptABI.ScriptResult {
-            return .Continue;
-        }
-    };
+    pub fn OnSceneStart(_: *SceneRule, _: *EngineContext, _: Scene) ScriptABI.ScriptResult {
+        return .Continue;
+    }
 };
 const SceneRuleExports = ScriptExport.Exports(SceneRule, "SceneRule", &.{});
 
@@ -313,15 +289,9 @@ const Picker = struct {
     mTeams: std.EnumSet(Team) = .initOne(.Blue),
     mHits: CollisionMask = .empty,
 
-    pub const OnUpdate = struct {
-        //touches no components
-        pub const Reads = &.{};
-        pub const Writes = &.{};
-
-        pub fn Run(_: *Picker, _: *EngineContext, _: Entity) ScriptABI.ScriptResult {
-            return .Continue;
-        }
-    };
+    pub fn OnUpdate(_: *Picker, _: *EngineContext, _: Entity) ScriptABI.ScriptResult {
+        return .Continue;
+    }
 };
 const PickerExports = ScriptExport.Exports(Picker, "Picker", &.{});
 
@@ -331,15 +301,9 @@ const PickerEdited = struct {
     mTeams: std.EnumSet(enum { Neutral, Green, Red }) = .empty,
     mHits: CollisionMask = .initOne(0),
 
-    pub const OnUpdate = struct {
-        //touches no components
-        pub const Reads = &.{};
-        pub const Writes = &.{};
-
-        pub fn Run(_: *PickerEdited, _: *EngineContext, _: Entity) ScriptABI.ScriptResult {
-            return .Continue;
-        }
-    };
+    pub fn OnUpdate(_: *PickerEdited, _: *EngineContext, _: Entity) ScriptABI.ScriptResult {
+        return .Continue;
+    }
 };
 const PickerEditedExports = ScriptExport.Exports(PickerEdited, "PickerEdited", &.{});
 

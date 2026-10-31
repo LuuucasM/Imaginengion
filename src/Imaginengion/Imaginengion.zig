@@ -42,7 +42,7 @@ test {
     _ = @import("Tests/UI/StyleSystemTests.zig");
     _ = @import("Tests/Scripts/EventScriptsTests.zig");
     _ = @import("Tests/Scripts/ScriptValuesTests.zig");
-    _ = @import("Tests/Scripts/ScriptAccessTests.zig");
+    _ = @import("Tests/Scripts/ScriptRunTests.zig");
     _ = @import("Tests/Scripts/GameEventsTests.zig");
     _ = @import("Tests/UI/WidgetsTests.zig");
     _ = @import("Tests/UI/NumberFieldSystemTests.zig");
@@ -67,7 +67,6 @@ test {
     _ = @import("Tests/EditorPanels/PlayPreviewTests.zig");
     _ = @import("Tests/EditorPanels/AssetHandlesPanelTests.zig");
     _ = @import("Tests/Core/WorldCopyTests.zig");
-    _ = @import("Tests/Core/WorldSystemsTests.zig");
     _ = @import("Tests/Core/WorldBVHTests.zig");
     _ = @import("Tests/Core/EngineStatsTests.zig");
     _ = @import("Tests/Core/ProjectTests.zig");
@@ -108,15 +107,6 @@ pub const ScriptABI = @import("Scripts/ScriptABI.zig");
 pub const ScriptExport = @import("Scripts/ScriptExport.zig");
 //game events: an event file's Phase is a GamePhase (see Scripts/GameEvents.zig)
 pub const GamePhase = @import("Scripts/GameEvents.zig").GamePhase;
-//what a hook touches in another kind of ECS than its owner's: IM.In(IM.GCECS, IM.GCComponents.AttribComponent)
-pub const In = @import("ECS/Systems.zig").In;
-//the kinds of ECS, for In
-pub const EECS = @import("ECSManagers/EManager.zig").ECSManagerT;
-pub const SECS = @import("ECSManagers/SManager.zig").ECSManagerT;
-pub const PECS = @import("ECSManagers/PManager.zig").ECSManagerT;
-pub const GCECS = @import("ECSManagers/GCManager.zig").ECSManagerT;
-pub const UIECS = @import("UI/UIManager.zig").ECSManagerT;
-pub const AudioECS = @import("AudioManager/AudioManager.zig").ECSManagerT;
 
 //Event Stuff -----------------------------------------------
 pub const KeyboardPressedEvent = @import("Events/WindowEventData.zig").KeyboardPressedEvent;

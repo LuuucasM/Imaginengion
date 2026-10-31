@@ -4,10 +4,7 @@
 //! the field's own OnChange runs, then what its component needs after an edit (dirty tags), and an inspector whose
 //! field decides what else is shown is asked to be built again (TakeRebuild).
 //! Showing a value never sends an event, so a widget never hears back what it was just given. Part of the UIManager.
-//! Not a system, unlike the UI's other parts: a binding reaches whatever field the inspector bound (any object's
-//! component, a UI element's, an audio bus), so what it touches is only known at run time, never as Reads/Writes lists
 const std = @import("std");
-const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
@@ -53,83 +50,89 @@ pub fn TakeRebuild(self: *BindingSystem, root: Entity) bool {
 }
 
 /// Once a frame, before the number fields show their values: every bound widget not being edited shows its field
-pub fn Update(_: *BindingSystem, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("BindingSystem::Update", @src());
-    defer zone.Deinit();
-    const ui_manager = &engine_context.mUIManager;
-    const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = FieldBindingComponent });
-    for (element_ids.items) |element_id| {
-        const element = UIElement{ .mID = element_id, .mManager = ui_manager };
-        const widget = element.GetOwner();
-        if (!widget.IsIDValid() or !widget.IsActive()) continue;
-        const binding = element.GetComponent(FieldBindingComponent).?.*;
-        //a Clear menu item only writes, and a Copy one only reads when clicked
-        if (binding.mClear != null or binding.mCopies) continue;
-        if (IsBeingEdited(engine_context, widget)) continue;
-        const field = FieldOf(binding) orelse continue;
-        try Show(engine_context, widget, Shown(binding, binding.mAccess.Read(field)));
+pub const Update = struct {
+    pub const Name = "BindingUpdate";
+
+    pub fn Run(engine_context: *EngineContext, _: *BindingSystem) !void {
+        const ui_manager = &engine_context.mUIManager;
+        const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = FieldBindingComponent });
+        for (element_ids.items) |element_id| {
+            const element = UIElement{ .mID = element_id, .mManager = ui_manager };
+            const widget = element.GetOwner();
+            if (!widget.IsIDValid() or !widget.IsActive()) continue;
+            const binding = element.GetComponent(FieldBindingComponent).?.*;
+            //a Clear menu item only writes, and a Copy one only reads when clicked
+            if (binding.mClear != null or binding.mCopies) continue;
+            if (IsBeingEdited(engine_context, widget)) continue;
+            const field = FieldOf(binding) orelse continue;
+            try Show(engine_context, widget, Shown(binding, binding.mAccess.Read(field)));
+        }
     }
-}
+};
 
 /// One of the frame's UI events: a bound widget's edit is written into its field
-pub fn OnUIEvent(self: *BindingSystem, engine_context: *EngineContext, event: EntityUIEvent) !void {
-    const zone = Tracy.ZoneInit("BindingSystem::OnUIEvent", @src());
-    defer zone.Deinit();
-    //one event per entity in the chain: the bound widget's own
-    const widget = switch (event.mEvent) {
-        .ValueChanged => event.mEntity,
-        .TextSubmitted => |e| if (event.mEntity.mID == e.mTarget.mID) event.mEntity else return,
-        else => return,
-    };
-    const binding = (UIManager.GetUIComponent(widget, FieldBindingComponent) orelse return).*;
-    const value = ValueOf(binding, widget) orelse return;
-    try self.Write(engine_context, binding, value);
-}
+pub const OnUIEvent = struct {
+    pub const Name = "BindingOnUIEvent";
+
+    pub fn Run(engine_context: *EngineContext, self: *BindingSystem, event: EntityUIEvent) !void {
+        //one event per entity in the chain: the bound widget's own
+        const widget = switch (event.mEvent) {
+            .ValueChanged => event.mEntity,
+            .TextSubmitted => |e| if (event.mEntity.mID == e.mTarget.mID) event.mEntity else return,
+            else => return,
+        };
+        const binding = (UIManager.GetUIComponent(widget, FieldBindingComponent) orelse return).*;
+        const value = ValueOf(binding, widget) orelse return;
+        try self.Write(engine_context, binding, value);
+    }
+};
 
 /// One of the frame's pointer events: a file dropped on an asset field that takes its kind becomes the field's asset, a
 /// hierarchy row dropped on a reference field that takes its kind becomes the field's object, a field's Clear
 /// clicked writes what it clears to, and a readout's Copy clicked puts its text on the clipboard
-pub fn OnPointerEvent(self: *BindingSystem, engine_context: *EngineContext, event: EntityPointerEvent) !void {
-    const dropped = switch (event.mEvent) {
-        .PointerDropped => |e| e,
-        .PointerClicked => |e| {
-            if (e.mButton != .BUTTON_LEFT) return;
-            const binding = (UIManager.GetUIComponent(event.mEntity, FieldBindingComponent) orelse return).*;
-            if (binding.mCopies) return try Copy(engine_context, binding);
-            const cleared = binding.mClear orelse return;
-            return try self.Write(engine_context, binding, cleared);
-        },
-        else => return,
-    };
-    const zone = Tracy.ZoneInit("BindingSystem::OnPointerEvent", @src());
-    defer zone.Deinit();
-    const binding = (UIManager.GetUIComponent(event.mEntity, FieldBindingComponent) orelse return).*;
-    if (binding.mTakes) |kind| {
-        const object_ref = dropped.mSource.GetComponent(ObjectRefComponent) orelse return;
-        if (std.meta.activeTag(object_ref.mObject) != kind) {
-            const kind_name = switch (kind) {
-                .entity => "an entity",
-                .scene_layer => "a scene",
-                .player => "a player",
-                .gamecontext => "a game context",
-            };
-            std.log.warn("Only {s} can go in this field", .{kind_name});
+pub const OnPointerEvent = struct {
+    pub const Name = "BindingOnPointerEvent";
+
+    pub fn Run(engine_context: *EngineContext, self: *BindingSystem, event: EntityPointerEvent) !void {
+        const dropped = switch (event.mEvent) {
+            .PointerDropped => |e| e,
+            .PointerClicked => |e| {
+                if (e.mButton != .BUTTON_LEFT) return;
+                const binding = (UIManager.GetUIComponent(event.mEntity, FieldBindingComponent) orelse return).*;
+                if (binding.mCopies) return try Copy(engine_context, binding);
+                const cleared = binding.mClear orelse return;
+                return try self.Write(engine_context, binding, cleared);
+            },
+            else => return,
+        };
+        const binding = (UIManager.GetUIComponent(event.mEntity, FieldBindingComponent) orelse return).*;
+        if (binding.mTakes) |kind| {
+            const object_ref = dropped.mSource.GetComponent(ObjectRefComponent) orelse return;
+            if (std.meta.activeTag(object_ref.mObject) != kind) {
+                const kind_name = switch (kind) {
+                    .entity => "an entity",
+                    .scene_layer => "a scene",
+                    .player => "a player",
+                    .gamecontext => "a game context",
+                };
+                std.log.warn("Only {s} can go in this field", .{kind_name});
+                return;
+            }
+            return try self.Write(engine_context, binding, .{ .Ref = object_ref.mObject });
+        }
+        if (binding.mAccepts.len == 0) return;
+        const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
+        const extension = std.fs.path.extension(file_ref.mRelPath.items);
+        for (binding.mAccepts) |accepted| {
+            if (std.ascii.eqlIgnoreCase(extension, accepted)) break;
+        } else {
+            std.log.warn("{s} can't go in this field, it takes {s} files", .{ file_ref.mRelPath.items, binding.mAccepts[0] });
             return;
         }
-        return try self.Write(engine_context, binding, .{ .Ref = object_ref.mObject });
+        const asset = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = file_ref.mRelPath.items, .path_type = file_ref.mPathType } });
+        try self.Write(engine_context, binding, .{ .Asset = asset });
     }
-    if (binding.mAccepts.len == 0) return;
-    const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
-    const extension = std.fs.path.extension(file_ref.mRelPath.items);
-    for (binding.mAccepts) |accepted| {
-        if (std.ascii.eqlIgnoreCase(extension, accepted)) break;
-    } else {
-        std.log.warn("{s} can't go in this field, it takes {s} files", .{ file_ref.mRelPath.items, binding.mAccepts[0] });
-        return;
-    }
-    const asset = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = file_ref.mRelPath.items, .path_type = file_ref.mPathType } });
-    try self.Write(engine_context, binding, .{ .Asset = asset });
-}
+};
 
 /// Writes a value into a binding's field, then what has to happen after an edit
 fn Write(self: *BindingSystem, engine_context: *EngineContext, binding: FieldBindingComponent, value: Inspector.Value) !void {

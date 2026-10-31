@@ -30,9 +30,6 @@ const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Ent
 const UIComponents = @import("../ECSComponents/UIComponents.zig");
 const ScrollComponent = UIComponents.ScrollComponent;
 const ScrollStateComponent = UIComponents.ScrollStateComponent;
-const ElementOwnerComponent = UIComponents.ElementOwnerComponent;
-const Systems = @import("../ECS/Systems.zig");
-const EECS = @import("../ECSManagers/EManager.zig").ECSManagerT;
 
 const ScrollSystem = @This();
 
@@ -49,8 +46,6 @@ pub const empty: ScrollSystem = .{};
 /// notches right (x) scroll right
 pub const OnWheel = struct {
     pub const Name = "ScrollOnWheel";
-    pub const Reads = &.{ ScrollComponent, Systems.In(EECS, EntityComponents.UIElementComponent) };
-    pub const Writes = &.{ScrollStateComponent};
 
     pub fn Run(engine_context: *EngineContext, _: *ScrollSystem, pointer: *const PointerSystem, notches_x: f32, notches_y: f32) !void {
         if (notches_y != 0) {
@@ -66,14 +61,6 @@ pub const OnWheel = struct {
 /// pointer
 pub const OnPointerEvent = struct {
     pub const Name = "ScrollOnPointerEvent";
-    pub const Reads = &.{
-        Systems.In(EECS, EntityComponents.UIElementComponent),
-        //the region's scale and size, which the drag is measured against
-        Systems.In(EECS, TransformComponent),
-        Systems.In(EECS, LayoutItemComponent),
-        Systems.In(EECS, EntityComponents.ShapeComponent),
-    };
-    pub const Writes = &.{ScrollStateComponent};
 
     pub fn Run(engine_context: *EngineContext, _: *ScrollSystem, event: EntityPointerEvent) !void {
         const drag = switch (event.mEvent) {
@@ -109,33 +96,11 @@ pub const OnPointerEvent = struct {
 
 /// Once a frame, after layout and before world transforms: every scrolling region in `worlds` (the ones whose UI is in
 /// use) whose children run past it gets a thumb along that edge, placed for how far it is scrolled, and one that no
-/// longer needs one loses it. A system run once over all of them, from the UI's ECS:
+/// longer needs one loses it. A system run once over all of them:
 ///
-///     try engine_context.mSystems.RunSystem(ScrollSystem.Update, engine_context, &ui.mECSManager, .{ &ui.mScrollSystem, worlds });
+///     try engine_context.mSystems.RunSystem(ScrollSystem.Update, engine_context, .{ &ui.mScrollSystem, worlds });
 pub const Update = struct {
     pub const Name = "ScrollUpdate";
-    pub const Reads = &.{
-        ScrollComponent,
-        ElementOwnerComponent,
-        //a region's size
-        Systems.In(EECS, LayoutItemComponent),
-        //whether layout places the thumb (Entity.SetTranslation)
-        Systems.In(EECS, EntityComponents.LayoutComponent),
-        Systems.In(EECS, EntityComponents.UIElementComponent),
-        //the scene a thumb is made in
-        Systems.In(EECS, EntityComponents.EntitySceneComponent),
-    };
-    pub const Writes = &.{
-        //where its thumbs are
-        ScrollStateComponent,
-        //a new thumb is styled (UIManager.Style)
-        UIComponents.StyleComponent,
-        //the thumb's quad, where it is, and its name when it is made
-        Systems.In(EECS, EntityComponents.ShapeComponent),
-        Systems.In(EECS, SurfaceComponent),
-        Systems.In(EECS, TransformComponent),
-        Systems.In(EECS, NameComponent),
-    };
 
     pub fn Run(engine_context: *EngineContext, _: *ScrollSystem, worlds: []const *WorldManager) !void {
         const ui_manager = &engine_context.mUIManager;

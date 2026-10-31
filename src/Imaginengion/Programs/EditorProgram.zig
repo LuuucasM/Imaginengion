@@ -237,12 +237,6 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process
     //EDITOR UI STUFF================================================
     //the theme and its fonts now, rather than in the middle of the first frame
     engine_context.mUIManager.LoadTheme(engine_context);
-    //the editor's own UI is always in use; the simulate world's joins it while the game is played
-    try engine_context.StartUsingWorld(&engine_context.mEditorWorld);
-    //the world being edited and the template being edited aren't played, but their UI is laid out every frame and the
-    //components panel previews their sounds
-    try engine_context.StartUsingWorld(&engine_context.mGameWorld);
-    try engine_context.StartUsingWorld(&engine_context.mTmplEditWorld);
 
     //editor UI keeps its pixel size when the window grows instead of scaling up: the editor world's
     //overlays all measure the screen in pixels
@@ -492,11 +486,11 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         try engine_context.mUIManager.UpdateBeforeLayout(engine_context);
         //after the style pass, which would put its fading colors back to the theme's
         try self.mSaveNotice.Update(engine_context);
-        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &engine_context.mGameWorld.mEManager.mECSManager, .{&engine_context.mGameWorld});
-        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
-        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &engine_context.mTmplEditWorld.mEManager.mECSManager, .{&engine_context.mTmplEditWorld});
+        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, .{&engine_context.mGameWorld});
+        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, .{&engine_context.mEditorWorld});
+        try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, .{&engine_context.mTmplEditWorld});
         if (self.mEditorState == .Play) {
-            try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, &engine_context.mSimulateWorld.mEManager.mECSManager, .{&engine_context.mSimulateWorld});
+            try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, .{&engine_context.mSimulateWorld});
         }
         //popups go against what opened them, scrollbars where their regions are scrolled and the caret where the laid
         //out text puts it
@@ -510,12 +504,12 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const world_transform_zone = Tracy.ZoneInit("World Transform Update Section", @src());
         defer world_transform_zone.Deinit();
-        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mGameWorld.mEManager.mECSManager, .{&engine_context.mGameWorld});
-        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{&engine_context.mEditorWorld});
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mGameWorld});
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mEditorWorld});
         //templates open for editing, so their previews show where things have been moved to
-        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mTmplEditWorld.mEManager.mECSManager, .{&engine_context.mTmplEditWorld});
+        try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mTmplEditWorld});
         if (self.mEditorState == .Play) {
-            try engine_context.mSystems.RunSystem(TransformSystem, engine_context, &engine_context.mSimulateWorld.mEManager.mECSManager, .{&engine_context.mSimulateWorld});
+            try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mSimulateWorld});
         }
     }
     //---------------End World Transform Update ------------
@@ -525,11 +519,11 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const refit_bvh_zone = Tracy.ZoneInit("Refit BVH", @src());
         defer refit_bvh_zone.Deinit();
-        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &engine_context.mGameWorld.mEManager.mECSManager, .{ &engine_context.mGameWorld, WorldBVH.ALL_ITEMS });
-        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &engine_context.mEditorWorld.mEManager.mECSManager, .{ &engine_context.mEditorWorld, WorldBVH.ALL_ITEMS });
-        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &engine_context.mTmplEditWorld.mEManager.mECSManager, .{ &engine_context.mTmplEditWorld, WorldBVH.ALL_ITEMS });
+        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ &engine_context.mGameWorld, WorldBVH.ALL_ITEMS });
+        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ &engine_context.mEditorWorld, WorldBVH.ALL_ITEMS });
+        try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ &engine_context.mTmplEditWorld, WorldBVH.ALL_ITEMS });
         if (self.mEditorState == .Play) {
-            try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, &engine_context.mSimulateWorld.mEManager.mECSManager, .{ &engine_context.mSimulateWorld, WorldBVH.ALL_ITEMS });
+            try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ &engine_context.mSimulateWorld, WorldBVH.ALL_ITEMS });
         }
     }
     //------------------END Refit BVH
@@ -1068,7 +1062,7 @@ pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineConte
     //scene by scene from the top of the stack. When the UI takes the key (a text input with the keyboard, the top
     //popup's Escape) it does at its own scene's turn: the scenes above hear it first and can keep it, the scenes below
     //never do. The editor's own UI is over everything in the window, so when it takes a key the game never hears it
-    const editor_taker: ?UIManager.KeyTaker = if (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui_manager.mECSManager, .{ ui_manager, e._InputCode })) |taker| (if (taker.World == &engine_context.mEditorWorld) taker else null) else null;
+    const editor_taker: ?UIManager.KeyTaker = if (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, .{ ui_manager, e._InputCode })) |taker| (if (taker.World == &engine_context.mEditorWorld) taker else null) else null;
     if (editor_taker != null) {
         if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Editor, engine_context, editor_taker.?.StackPos, .{&e}) == .Continue) {
             try ui_manager.OnKeyTaken(engine_context, editor_taker.?, e);
@@ -1081,7 +1075,7 @@ pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineConte
         _ = try ScriptsProcessor.RunScript(Player, PlayerOnInputPressedScript, .Editor, engine_context, .{&e});
     }
     if (self.mEditorState == .Play) {
-        if (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, &ui_manager.mECSManager, .{ ui_manager, e._InputCode })) |taker| {
+        if (try engine_context.mSystems.RunSystem(UIManager.FindKeyTaker, engine_context, .{ ui_manager, e._InputCode })) |taker| {
             if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Simulate, engine_context, taker.StackPos, .{&e}) == .Continue) {
                 try ui_manager.OnKeyTaken(engine_context, taker, e);
             }
@@ -1141,14 +1135,12 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
         engine_context.mPointerSystem.Reset();
         engine_context.mUIManager.Reset(engine_context);
         self.mPointerCamera = null;
-        engine_context.StopUsingWorld(&engine_context.mSimulateWorld);
         engine_context.mSimulateWorld.clearAndFree(engine_context, .All);
     } else {
         //only start when the run player can actually be drawn, otherwise play shows nothing
         if (self.mRunPlayer) |run_player| {
             if (run_player.GetRenderView() != null) {
                 try engine_context.mGameWorld.Copy(engine_context, &engine_context.mSimulateWorld);
-                try engine_context.StartUsingWorld(&engine_context.mSimulateWorld);
                 self.mActiveWorld = &engine_context.mSimulateWorld;
                 self.mActiveWorldType = .Simulate;
                 self.mEditorState = .Play;

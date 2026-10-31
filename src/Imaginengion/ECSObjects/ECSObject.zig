@@ -162,7 +162,7 @@ pub fn Core(comptime Self: type) type {
             }
         }
 
-        /// RemoveComponent made right away even while the component's type is locked. See
+        /// RemoveComponent made right away even during a run. See
         /// ECSManager.RemoveComponentSync for when that is safe.
         pub fn RemoveComponentSync(self: Self, engine_context: *EngineContext, comptime component_type: type) !void {
             _ValidateComponent(Self, component_type);
@@ -185,7 +185,7 @@ pub fn Core(comptime Self: type) type {
             return _GetComponent(self, component_type, false);
         }
 
-        /// GetComponent for changing it: a running system has to list `component_type` in its Writes
+        /// GetComponent for changing it
         pub fn GetComponentMut(self: Self, comptime component_type: type) ?*component_type {
             return _GetComponent(self, component_type, true);
         }
@@ -402,7 +402,7 @@ pub fn Core(comptime Self: type) type {
         }
 
         /// Takes this object down to its shell (its type's ShellList): removes every other saved component, its children
-        /// and scripts, and a scene's entities, right away unless they have to wait (see ECSManager.Lock).
+        /// and scripts, and a scene's entities, right away unless they have to wait (see ECSManager.mRunDepth).
         /// Components that are not saved (a scene's stack slot, an entity's scene, tags, ...) are left alone
         pub fn Strip(self: Self, engine_context: *EngineContext) !void {
             if (Self == AssetHandle) @compileError("an asset handle can not be stripped");

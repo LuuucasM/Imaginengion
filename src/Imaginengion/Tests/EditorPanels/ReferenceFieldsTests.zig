@@ -4,6 +4,7 @@
 //! box possessing a dropped entity through Player.Possess and letting go of it on Clear. Drops and clicks are sent the
 //! way the pointer system sends them. No window or renderer needed. Run with `zig build test-engine`.
 const std = @import("std");
+const BindingSystem = @import("../../UI/BindingSystem.zig");
 
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
@@ -46,8 +47,6 @@ const TestWorld = struct {
         try engine_context.mAssetManager.Init(engine_context);
         try engine_context.mUIManager.Init(engine_context);
         try engine_context.mEditorWorld.Init(engine_context);
-        //the editor's own UI is in use, which its input reaches
-        try engine_context.mEditorWorld.ConnectTo(engine_context, &engine_context.mUIManager.mECSManager);
         try engine_context.mGameWorld.Init(engine_context);
         self.mUIScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         self.mLevel = try engine_context.mGameWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
@@ -96,7 +95,7 @@ const TestWorld = struct {
     }
 
     fn ShowFields(self: *TestWorld) !void {
-        try self.mEngineContext.mUIManager.mBindingSystem.Update(self.mEngineContext);
+        try self.mEngineContext.mSystems.RunSystem(BindingSystem.Update, self.mEngineContext, .{&self.mEngineContext.mUIManager.mBindingSystem});
     }
 };
 
