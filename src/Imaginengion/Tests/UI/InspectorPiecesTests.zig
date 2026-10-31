@@ -15,6 +15,7 @@ const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
 const Quat = MathTypes.Quat;
 
+const PointerSystem = @import("../../Pointer/PointerSystem.zig");
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const TextComponent = EntityComponents.TextComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
@@ -225,9 +226,6 @@ test "a readout shows its field as it changes, a bit set is a checkbox a bit, an
 }
 
 test "an asset field shows its asset's name, and takes a dropped file of a kind it accepts" {
-    //the turned-down drop's warning is expected; kept off the build runner's output (see TmplTests)
-    std.testing.log_level = .err;
-    defer std.testing.log_level = .warn;
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
@@ -239,14 +237,15 @@ test "an asset field shows its asset's name, and takes a dropped file of a kind 
     try world.ShowFields();
     try std.testing.expectEqualStrings("None", UIManager.LabelOf(box).?.GetComponent(TextComponent).?.mText.items);
 
-    //something carrying a file, dropped on the box: a script is turned down, a picture taken
+    //something carrying a file: a script isn't taken, a picture dropped on the box is
+    const drop_target = box.GetComponent(EntityComponents.DropTargetComponent).?.*;
     const carried = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try carried.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "Mover.zig", .Prj));
-    try engine_context.mUIManager.OnPointerEvent(engine_context, .{ .mEntity = box, .mEvent = .{ .PointerDropped = .{ .mSource = carried, .mPosition = .{ .x = 0, .y = 0, .z = 0 } } } });
-    try std.testing.expect(world.mObject.GetComponent(SurfaceComponent).?.mTexture.mID == @import("../../ECSObjects/AssetHandle.zig").NullObject);
+    try std.testing.expect(!PointerSystem.Takes(drop_target, carried));
 
     const picture = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try picture.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "src/Imaginengion/EngineAssets/textures/White.png", .Eng));
+    try std.testing.expect(PointerSystem.Takes(drop_target, picture));
     try engine_context.mUIManager.OnPointerEvent(engine_context, .{ .mEntity = box, .mEvent = .{ .PointerDropped = .{ .mSource = picture, .mPosition = .{ .x = 0, .y = 0, .z = 0 } } } });
     const texture = world.mObject.GetComponent(SurfaceComponent).?.mTexture;
     try std.testing.expect(texture.mID != @import("../../ECSObjects/AssetHandle.zig").NullObject);

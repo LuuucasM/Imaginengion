@@ -110,3 +110,12 @@ pub const DropHoverTag = struct {
 
     pub fn Deinit(_: *DropHoverTag, _: *EngineContext) void {}
 };
+
+/// On every drop target (DropTargetComponent) that takes the drag source being carried, wherever the pointer is, for as
+/// long as it is carried: for a "can drop here" look. Never saved
+pub const DropReadyTag = struct {
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "DropReadyTag";
+
+    pub fn Deinit(_: *DropReadyTag, _: *EngineContext) void {}
+};

@@ -5,6 +5,8 @@
 //! written into a styled entity by something else stays until its state next changes. The colors follow the state the entity is in, read from
 //! its tags, highest first: disabled (it or anything it is inside has DisabledTag), pressed, hovered, focused, selected,
 //! and otherwise normal. A state the style has no color for takes the normal one.
+//! While a drag source it takes is carried, a styled drop target also shows the border of its theme's "DropTarget" style:
+//! the Normal color, or the Hovered one while the source is held over it.
 //! A styled quad or text with no texture of its own is filled plain, with a white texture, so its color is the theme's
 //! alone: left with none, the renderer would fill it with the engine's default texture. Whatever a style leaves out is
 //! left as the entity has it.
@@ -26,6 +28,9 @@ const PressedTag = EntityComponents.PressedTag;
 const HoveredTag = EntityComponents.HoveredTag;
 const FocusedTag = EntityComponents.FocusedTag;
 const SelectedTag = EntityComponents.SelectedTag;
+const DropHoverTag = EntityComponents.DropHoverTag;
+const DropReadyTag = EntityComponents.DropReadyTag;
+const DropTargetComponent = EntityComponents.DropTargetComponent;
 const StyleComponent = @import("../ECSComponents/UIComponents.zig").StyleComponent;
 const StyleDirtyTag = @import("../ECSComponents/UIComponents.zig").StyleDirtyTag;
 const DisabledTag = EntityComponents.DisabledTag;
@@ -37,9 +42,12 @@ const StyleSystem = @This();
 /// The state an entity is in, as far as its colors go
 pub const State = enum { Normal, Hovered, Pressed, Focused, Selected, Disabled };
 
-/// The tags an entity's state is read from (StateOf): adding or removing one has it styled again. DisabledTag has
-/// everything inside it styled again too
-pub const StateTags = [_]type{ PressedTag, HoveredTag, FocusedTag, SelectedTag, DisabledTag };
+/// The tags an entity's look is read from (StateOf, ApplyDropBorder): adding or removing one has it styled again.
+/// DisabledTag has everything inside it styled again too
+pub const StateTags = [_]type{ PressedTag, HoveredTag, FocusedTag, SelectedTag, DisabledTag, DropHoverTag, DropReadyTag };
+
+/// The style in a theme that says what a drop target's border looks like during a drag. A theme without one shows none
+const DROP_TARGET_STYLE = "DropTarget";
 
 /// Whether `component_type` is one of StateTags
 pub fn IsStateTag(comptime component_type: type) bool {
@@ -109,6 +117,7 @@ pub const Update = struct {
                 continue;
             };
             try Apply(engine_context, entity, style.*, plain_texture);
+            ApplyDropBorder(entity, style.*, style_theme);
             //by the end of this pass, so next frame it is no longer styled
             if (style_component.mOnce) try element.RemoveComponent(engine_context, StyleComponent);
         }
@@ -195,6 +204,21 @@ pub fn Apply(engine_context: *EngineContext, entity: Entity, style: ThemeAsset.S
         }
         if (resized) try entity.MarkLayoutDirty(engine_context);
     }
+}
+
+/// A drop target's border while what is carried can be dropped on it, and its own style's again once it can't
+fn ApplyDropBorder(entity: Entity, style: ThemeAsset.Style, theme: *const ThemeAsset) void {
+    if (!entity.HasComponent(DropTargetComponent)) return;
+    const drop_style = theme.GetStyle(DROP_TARGET_STYLE) orelse return;
+    const surface = entity.GetComponentMut(SurfaceComponent) orelse return;
+    const unit = ThemeUnit(entity);
+    if (!entity.HasComponent(DropReadyTag)) {
+        surface.mBorderWidth = (style.BorderWidth orelse 0) * unit;
+        return;
+    }
+    const hover_color = if (entity.HasComponent(DropHoverTag)) drop_style.Border.Hovered else null;
+    if (hover_color orelse drop_style.Border.Normal) |color| surface.mBorderColor = color;
+    surface.mBorderWidth = (drop_style.BorderWidth orelse 0) * unit;
 }
 
 /// How many of `entity`'s own units one of a theme's sizes is: ThemeAsset.GAME_LAYER_UNIT in a game scene, in world

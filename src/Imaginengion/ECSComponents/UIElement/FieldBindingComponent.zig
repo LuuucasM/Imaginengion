@@ -1,8 +1,6 @@
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Inspector = @import("../../UI/Inspector.zig");
-const ObjectRefComponent = @import("../Entity/ObjectRefComponent.zig");
-const std = @import("std");
 
 const FieldBindingComponent = @This();
 
@@ -33,10 +31,9 @@ mConvert: ?Inspector.Conversion = null,
 mRoot: Entity,
 /// Whether every edit of this field changes what is shown (e.g. a dropdown picking which fields come after it)
 mRebuilds: bool = false,
-/// For an asset field: the file extensions it takes when a file is dropped on it, e.g. ".png". A literal
-mAccepts: []const []const u8 = &.{},
-/// For a reference field: which kind of object it takes when a hierarchy row is dropped on it
-mTakes: ?std.meta.Tag(ObjectRefComponent.Ref) = null,
+/// For an asset or reference field: a file or object dropped on its widget (what its DropTargetComponent takes) is
+/// written into the field
+mWritesDrops: bool = false,
 /// For a field's Clear menu item: the value clicking it writes. Such a binding is never shown, it only writes
 mClear: ?Inspector.Value = null,
 /// For a readout's Copy menu item: clicking it puts the field's text on the clipboard. Such a binding is never shown

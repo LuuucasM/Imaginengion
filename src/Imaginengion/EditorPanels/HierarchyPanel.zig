@@ -155,8 +155,8 @@ pub fn HierarchyPanel(comptime T: type) type {
         pub fn Build(engine_context: *EngineContext, page: Entity, options: Widgets.Options) !Self {
             var self = try Make(engine_context, page, options, .World);
             try self.AddAreaMenu(engine_context);
-            //it takes files (one of its type is checked for when it is dropped)
-            _ = try self.mArea.AddComponent(engine_context, DropTargetComponent.Accepting(&.{FileRefComponent}));
+            //it takes files of its type
+            _ = try self.mArea.AddComponent(engine_context, DropTargetComponent.Files(&.{std.mem.span(Serializer.FileExtension(T))}));
             return self;
         }
 
@@ -350,11 +350,6 @@ pub fn HierarchyPanel(comptime T: type) type {
             if (!Same(on, self.mArea)) return;
             const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
             const rel_path = file_ref.mRelPath.items;
-            const is_kind = if (Serializer.ObjectKindOf(std.fs.path.extension(rel_path))) |kind| kind == KIND else false;
-            if (!is_kind) {
-                std.log.warn("Only a {s} file ({s}) can be dropped here, not {s}", .{ TypeName(), std.mem.span(Serializer.FileExtension(T)), rel_path });
-                return;
-            }
             const object: T = switch (T) {
                 Entity => blk: {
                     const scene: ?Scene = if (selected.*) |object| (if (object == .scene_layer and object.scene_layer.IsActive()) object.scene_layer else null) else null;
@@ -532,15 +527,6 @@ pub fn HierarchyPanel(comptime T: type) type {
             const stack_pos = world.mSManager.GetComponent(StackPosComponent, scene_id) orelse return 0;
             return stack_pos.mPosition;
         }
-
-        /// The kind of object file the panel takes
-        const KIND: Serializer.ObjectKind = switch (T) {
-            Entity => .Entity,
-            Scene => .Scene,
-            Player => .Player,
-            GameContext => .GameContext,
-            else => unreachable,
-        };
 
         fn TypeName() []const u8 {
             return switch (T) {

@@ -149,6 +149,13 @@
       "Border": { "Normal": [0.180, 0.239, 0.333, 0.60] },
       "BorderWidth": 1,
       "CornerRadius": 3
+    },
+    "DropTarget": {
+      "Border": {
+        "Normal": [0.247, 0.510, 0.710, 1.0],
+        "Hovered": [0.949, 0.784, 0.357, 1.0]
+      },
+      "BorderWidth": 2
     }
   }
 }

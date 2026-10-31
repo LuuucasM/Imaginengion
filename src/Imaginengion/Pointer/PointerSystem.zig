@@ -5,8 +5,9 @@
 //!     released, clicked, and a drag's start, moves and end
 //!   - drag and drop: a drag that starts on a drag source (DragSourceComponent) can be let go over a drop target
 //!     (DropTargetComponent) that takes it. What a source carries is its own components, and a target takes it if
-//!     it has one the target lists. The target gets DropHoverTag while it's held over it, and PointerDropped on
-//!     the drop
+//!     it has one the target lists, of the file type or object kind the target asks for. Every target that takes it
+//!     has DropReadyTag while it's carried, the one it's held over has DropHoverTag too, and that one gets
+//!     PointerDropped on the drop
 //!
 //! All of it goes to the entity under the pointer and to everything it is inside: its parent, and so on up (its
 //! chain). The pointer over a button's label is over the button, and inside the panel the button is in. A disabled
@@ -33,9 +34,12 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const HoveredTag = EntityComponents.HoveredTag;
 const PressedTag = EntityComponents.PressedTag;
 const DropHoverTag = EntityComponents.DropHoverTag;
+const DropReadyTag = EntityComponents.DropReadyTag;
 const DisabledTag = EntityComponents.DisabledTag;
 const DragSourceComponent = EntityComponents.DragSourceComponent;
 const DropTargetComponent = EntityComponents.DropTargetComponent;
+const FileRefComponent = EntityComponents.FileRefComponent;
+const ObjectRefComponent = EntityComponents.ObjectRefComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 
@@ -97,9 +101,12 @@ mReleased: std.EnumArray(MouseCodes, Chain) = .initFill(.empty),
 mWasDragged: std.EnumArray(MouseCodes, bool) = .initFill(false),
 /// The drop target with DropHoverTag: what the held drag source would be dropped on if let go now
 mDropTarget: ?Entity = null,
+/// The drop targets with DropReadyTag: everywhere the held drag source could be dropped
+mDropReady: Chain = .empty,
 
 pub fn Deinit(self: *PointerSystem, engine_allocator: std.mem.Allocator) void {
     self.mHovered.deinit(engine_allocator);
+    self.mDropReady.deinit(engine_allocator);
     for (&self.mHeld.values) |*held| held.mChain.deinit(engine_allocator);
     for (&self.mReleased.values) |*chain| chain.deinit(engine_allocator);
     self.* = .empty;
@@ -114,6 +121,7 @@ pub fn Reset(self: *PointerSystem) void {
     }
     for (&self.mReleased.values) |*chain| chain.clearRetainingCapacity();
     self.mDropTarget = null;
+    self.mDropReady.clearRetainingCapacity();
 }
 
 /// What the left button is carrying: the drag source of the drag in progress, null if there is none
@@ -143,10 +151,40 @@ pub fn Update(self: *PointerSystem, engine_context: *EngineContext, input: Input
     try self.UpdateDropTarget(engine_context);
 }
 
-/// Moves DropHoverTag to whatever the drag source would be dropped on now
+/// Moves DropHoverTag to whatever the drag source would be dropped on now, and DropReadyTag to everything it could be
 fn UpdateDropTarget(self: *PointerSystem, engine_context: *EngineContext) !void {
-    const new_target: ?Entity = if (self.Carrying()) |source| FindDropTarget(self.mHovered.items, source) else null;
+    const carrying = self.Carrying();
+    const new_target: ?Entity = if (carrying) |source| FindDropTarget(self.mHovered.items, source) else null;
     try self.SetDropTarget(engine_context, new_target);
+    try self.SetDropReady(engine_context, carrying);
+}
+
+/// Moves DropReadyTag to every enabled drop target in `carrying`'s world that takes it, off all of them for null.
+/// Worked out again each frame of a drag, since an inspector can be built again with new fields during one
+fn SetDropReady(self: *PointerSystem, engine_context: *EngineContext, carrying: ?Entity) !void {
+    if (carrying == null and self.mDropReady.items.len == 0) return;
+    const zone = Tracy.ZoneInit("PointerSystem::SetDropReady", @src());
+    defer zone.Deinit();
+
+    var ready: Chain = .empty;
+    if (carrying) |source| {
+        const frame_allocator = engine_context.FrameAllocator();
+        const targets = try source.mManager.mEManager.GetGroup(frame_allocator, .{ .Component = DropTargetComponent });
+        for (targets.items) |target_id| {
+            const target = Entity{ .mID = target_id, .mManager = source.mManager };
+            if (Same(target, source) or IsDisabled(target)) continue;
+            if (Takes(target.GetComponent(DropTargetComponent).?.*, source)) try ready.append(frame_allocator, target);
+        }
+    }
+
+    for (self.mDropReady.items) |entity| {
+        if (!entity.IsActive() or Contains(ready.items, entity)) continue;
+        if (entity.HasComponent(DropReadyTag)) try entity.RemoveComponentSync(engine_context, DropReadyTag);
+    }
+    for (ready.items) |entity| {
+        if (!entity.HasComponent(DropReadyTag)) _ = try entity.AddComponent(engine_context, DropReadyTag{});
+    }
+    try Assign(&self.mDropReady, engine_context.EngineAllocator(), ready.items);
 }
 
 fn SetDropTarget(self: *PointerSystem, engine_context: *EngineContext, new_target: ?Entity) !void {
@@ -171,11 +209,35 @@ fn FindDropTarget(chain: []const Entity, source: Entity) ?Entity {
     return null;
 }
 
-/// Whether the source has any of the components the target takes
-fn Takes(drop_target: DropTargetComponent, source: Entity) bool {
+/// Whether the source has any of the components the target takes, and a file or object it carries is of the type the
+/// target asks for
+pub fn Takes(drop_target: DropTargetComponent, source: Entity) bool {
+    if (!HasAccepted(drop_target, source)) return false;
+    if (drop_target.mExtensions.len > 0) {
+        if (source.GetComponent(FileRefComponent)) |file_ref| {
+            if (!HasExtension(drop_target.mExtensions, file_ref.mRelPath.items)) return false;
+        }
+    }
+    if (drop_target.mObjectKind) |kind| {
+        if (source.GetComponent(ObjectRefComponent)) |object_ref| {
+            if (std.meta.activeTag(object_ref.mObject) != kind) return false;
+        }
+    }
+    return true;
+}
+
+fn HasAccepted(drop_target: DropTargetComponent, source: Entity) bool {
     const ecs = &source.mManager.mEManager.mECSManager;
     for (drop_target.mAccepts) |component_ind| {
         if (ecs.HasComponentInd(component_ind, source.mID)) return true;
+    }
+    return false;
+}
+
+fn HasExtension(extensions: []const []const u8, path: []const u8) bool {
+    const extension = std.fs.path.extension(path);
+    for (extensions) |accepted| {
+        if (std.ascii.eqlIgnoreCase(extension, accepted)) return true;
     }
     return false;
 }
@@ -310,6 +372,7 @@ pub fn OnReleased(self: *PointerSystem, engine_context: *EngineContext, button: 
             }
         }
         try self.SetDropTarget(engine_context, null);
+        try self.SetDropReady(engine_context, null);
         held.mSource = null;
     }
 

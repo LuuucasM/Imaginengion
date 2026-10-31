@@ -35,7 +35,7 @@ const TransformComponent = EntityComponents.TransformComponent;
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const UIElementComponent = EntityComponents.UIElementComponent;
 const NameComponent = EntityComponents.NameComponent;
-const FileRefComponent = EntityComponents.FileRefComponent;
+const DropTargetComponent = EntityComponents.DropTargetComponent;
 const ObjectRefComponent = EntityComponents.ObjectRefComponent;
 const UIComponents = @import("../ECSComponents/UIComponents.zig");
 const FieldBindingComponent = UIComponents.FieldBindingComponent;
@@ -322,9 +322,9 @@ pub const Builder = struct {
             const thumbnail = try Widgets.Image(self.mEngineContext, .{ .Entity = row }, .uninit, .{ .x = THUMBNAIL_SIZE, .y = THUMBNAIL_SIZE });
             try self.Bind(thumbnail, field, AccessFor(AssetHandle), null, null, false);
         }
-        const shown = if (accepts.len > 0) try Widgets.DropBox(self.mEngineContext, .{ .Entity = row }, "", &.{FileRefComponent}) else try Widgets.Label(self.mEngineContext, .{ .Entity = row }, "");
+        const shown = if (accepts.len > 0) try Widgets.DropBox(self.mEngineContext, .{ .Entity = row }, "", DropTargetComponent.Files(accepts)) else try Widgets.Label(self.mEngineContext, .{ .Entity = row }, "");
         try self.Bind(shown, field, AccessFor(AssetHandle), options.OnChange, null, options.Rebuilds);
-        UIManager.GetUIComponentMut(shown, FieldBindingComponent).?.mAccepts = accepts;
+        UIManager.GetUIComponentMut(shown, FieldBindingComponent).?.mWritesDrops = accepts.len > 0;
         if (accepts.len > 0) try self.ClearMenu(shown, field, AccessFor(AssetHandle), .{ .Asset = .uninit }, options.OnChange);
     }
 
@@ -356,10 +356,10 @@ pub const Builder = struct {
     fn ObjectRefField(self: *Builder, comptime T: type, comptime kind: std.meta.Tag(ObjectRefComponent.Ref), field: *T, label: []const u8, access: *const Access, options: RefOptions) !Entity {
         const shown_name = NameOf(field.*);
         const row = try self.Row(label);
-        const box = try Widgets.DropBox(self.mEngineContext, .{ .Entity = row }, shown_name, &.{ObjectRefComponent});
+        const box = try Widgets.DropBox(self.mEngineContext, .{ .Entity = row }, shown_name, DropTargetComponent.Objects(kind));
         try self.Bind(box, field, access, null, null, false);
         if (options.Writes) {
-            UIManager.GetUIComponentMut(box, FieldBindingComponent).?.mTakes = kind;
+            UIManager.GetUIComponentMut(box, FieldBindingComponent).?.mWritesDrops = true;
             try self.ClearMenu(box, field, access, .{ .Ref = null }, null);
         }
         return box;

@@ -20,6 +20,9 @@ const HoveredTag = EntityComponents.HoveredTag;
 const PressedTag = EntityComponents.PressedTag;
 const FocusedTag = EntityComponents.FocusedTag;
 const SelectedTag = EntityComponents.SelectedTag;
+const DropHoverTag = EntityComponents.DropHoverTag;
+const DropReadyTag = EntityComponents.DropReadyTag;
+const DropTargetComponent = EntityComponents.DropTargetComponent;
 const LayoutDirtyTag = EntityComponents.LayoutDirtyTag;
 const StyleComponent = @import("../../ECSComponents/UIComponents.zig").StyleComponent;
 const StyleDirtyTag = @import("../../ECSComponents/UIComponents.zig").StyleDirtyTag;
@@ -34,7 +37,8 @@ const THEME =
     \\      "CornerRadius": 4,
     \\      "FontSize": 18
     \\    },
-    \\    "Plain": { "Background": { "Normal": [0.5, 0.5, 0.5, 1] } }
+    \\    "Plain": { "Background": { "Normal": [0.5, 0.5, 0.5, 1] } },
+    \\    "DropTarget": { "Border": { "Normal": [0, 0, 1, 1], "Hovered": [1, 1, 0, 1] }, "BorderWidth": 3 }
     \\} }
 ;
 
@@ -440,4 +444,59 @@ test "a style names a theme file of its own, and is taken out of it instead of t
     try ExpectColor(.{ 1, 0, 0, 1 }, entity.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
     //read in, and so watched for its file changing
     try std.testing.expect(!engine_context.mUIManager.mStyleSystem.ThemesReread(engine_context));
+}
+
+test "a drop target shows the theme's DropTarget border during a drag, then its own style's again" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const target = try world.Styled("Plain", .Shape);
+    _ = try target.AddComponent(engine_context, DropTargetComponent.Accepting(&.{ShapeComponent}));
+    try world.Update();
+    try std.testing.expectEqual(@as(f32, 0), target.GetComponent(SurfaceComponent).?.mBorderWidth);
+
+    _ = try target.AddComponent(engine_context, DropReadyTag{});
+    try world.Update();
+    try ExpectColor(.{ 0, 0, 1, 1 }, target.GetComponent(SurfaceComponent).?.mBorderColor);
+    try std.testing.expectEqual(@as(f32, 3), target.GetComponent(SurfaceComponent).?.mBorderWidth);
+
+    _ = try target.AddComponent(engine_context, DropHoverTag{});
+    try world.Update();
+    try ExpectColor(.{ 1, 1, 0, 1 }, target.GetComponent(SurfaceComponent).?.mBorderColor);
+
+    try target.RemoveComponentSync(engine_context, DropHoverTag);
+    try world.Update();
+    try ExpectColor(.{ 0, 0, 1, 1 }, target.GetComponent(SurfaceComponent).?.mBorderColor);
+
+    try target.RemoveComponentSync(engine_context, DropReadyTag);
+    try world.Update();
+    try std.testing.expectEqual(@as(f32, 0), target.GetComponent(SurfaceComponent).?.mBorderWidth);
+}
+
+test "a drop target whose own style has a border gets it back after a drag" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const target = try world.Styled("Button", .Shape);
+    _ = try target.AddComponent(engine_context, DropTargetComponent.Accepting(&.{ShapeComponent}));
+
+    _ = try target.AddComponent(engine_context, DropReadyTag{});
+    try world.Update();
+    try std.testing.expectEqual(@as(f32, 3), target.GetComponent(SurfaceComponent).?.mBorderWidth);
+
+    try target.RemoveComponentSync(engine_context, DropReadyTag);
+    try world.Update();
+    try std.testing.expectEqual(@as(f32, 2), target.GetComponent(SurfaceComponent).?.mBorderWidth);
+    try ExpectColor(.{ 1, 1, 1, 0.5 }, target.GetComponent(SurfaceComponent).?.mBorderColor);
+}
+
+test "the default theme has a DropTarget style with a border" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const contents = @embedFile("../../EngineAssets/themes/Default.imtheme");
+    const parsed = try std.json.parseFromSliceLeaky(std.json.Value, engine_context.FrameAllocator(), contents, .{});
+    const drop_style = parsed.object.get("Styles").?.object.get("DropTarget").?.object;
+    try std.testing.expect(drop_style.get("BorderWidth").?.integer > 0);
+    try std.testing.expect(drop_style.get("Border").?.object.get("Hovered") != null);
 }

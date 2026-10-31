@@ -12,6 +12,7 @@ const Scene = @import("../../ECSObjects/Scene.zig");
 const ContentBrowserPanel = @import("../../EditorPanels/ContentBrowserPanel.zig");
 const ScriptsPanel = @import("../../EditorPanels/ScriptsPanel.zig");
 const EnumAsset = @import("../../ECSComponents/Asset/EnumAsset.zig");
+const PointerSystem = @import("../../Pointer/PointerSystem.zig");
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const TextComponent = EntityComponents.TextComponent;
 const LayoutComponent = EntityComponents.LayoutComponent;
@@ -247,7 +248,7 @@ test "the Scripts panel takes each kind of script onto its kind of object, and n
     try std.testing.expectEqual(.player, ScriptsPanel.ScriptOwnerOf(.Player));
     try std.testing.expectEqual(.gamecontext, ScriptsPanel.ScriptOwnerOf(.GameContext));
 
-    //a texture dropped on it: left alone, nothing loaded
+    //a texture carried over it: not taken, so it never gets a drop
     const browser = try TestBrowser.Init();
     defer browser.Deinit();
     const engine_context = browser.mEngineContext;
@@ -255,11 +256,12 @@ test "the Scripts panel takes each kind of script onto its kind of object, and n
     _ = try page.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
     var scripts = try ScriptsPanel.Build(engine_context, page, .{ .StockScripts = false });
     defer scripts.Deinit(engine_context.EngineAllocator());
-    const entity = try browser.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
     const texture = try browser.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try texture.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "hero.png", .Prj));
+    const script = try browser.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try script.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "Mover.zig", .Prj));
 
-    try scripts.OnDrop(engine_context, scripts.mArea, .{ .mSource = texture, .mPosition = .{ .x = 0, .y = 0, .z = 0 } }, .{ .entity = entity });
-    var children = entity.GetIterator(.Script);
-    try std.testing.expect(children.next() == null);
+    const drop_target = scripts.mArea.GetComponent(EntityComponents.DropTargetComponent).?.*;
+    try std.testing.expect(!PointerSystem.Takes(drop_target, texture));
+    try std.testing.expect(PointerSystem.Takes(drop_target, script));
 }

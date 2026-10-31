@@ -106,29 +106,11 @@ pub const OnPointerEvent = struct {
             else => return,
         };
         const binding = (UIManager.GetUIComponent(event.mEntity, FieldBindingComponent) orelse return).*;
-        if (binding.mTakes) |kind| {
-            const object_ref = dropped.mSource.GetComponent(ObjectRefComponent) orelse return;
-            if (std.meta.activeTag(object_ref.mObject) != kind) {
-                const kind_name = switch (kind) {
-                    .entity => "an entity",
-                    .scene_layer => "a scene",
-                    .player => "a player",
-                    .gamecontext => "a game context",
-                };
-                std.log.warn("Only {s} can go in this field", .{kind_name});
-                return;
-            }
+        if (!binding.mWritesDrops) return;
+        if (dropped.mSource.GetComponent(ObjectRefComponent)) |object_ref| {
             return try self.Write(engine_context, binding, .{ .Ref = object_ref.mObject });
         }
-        if (binding.mAccepts.len == 0) return;
         const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
-        const extension = std.fs.path.extension(file_ref.mRelPath.items);
-        for (binding.mAccepts) |accepted| {
-            if (std.ascii.eqlIgnoreCase(extension, accepted)) break;
-        } else {
-            std.log.warn("{s} can't go in this field, it takes {s} files", .{ file_ref.mRelPath.items, binding.mAccepts[0] });
-            return;
-        }
         const asset = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = file_ref.mRelPath.items, .path_type = file_ref.mPathType } });
         try self.Write(engine_context, binding, .{ .Asset = asset });
     }

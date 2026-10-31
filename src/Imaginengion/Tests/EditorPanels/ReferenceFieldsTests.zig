@@ -16,6 +16,7 @@ const Inspector = @import("../../UI/Inspector.zig");
 const WidgetActions = @import("../../UI/WidgetActions.zig");
 const ComponentsPanel = @import("../../EditorPanels/ComponentsPanel.zig");
 
+const PointerSystem = @import("../../Pointer/PointerSystem.zig");
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const TextComponent = EntityComponents.TextComponent;
 const LayoutComponent = EntityComponents.LayoutComponent;
@@ -83,7 +84,9 @@ const TestWorld = struct {
         return row;
     }
 
+    /// `source` let go over `target`: the pointer system only drops on a target what it takes
     fn Drop(self: *TestWorld, source: Entity, target: Entity) !void {
+        if (!PointerSystem.Takes(target.GetComponent(EntityComponents.DropTargetComponent).?.*, source)) return;
         try self.mEngineContext.mUIManager.OnPointerEvent(self.mEngineContext, .{ .mEntity = target, .mEvent = .{ .PointerDropped = .{ .mSource = source, .mPosition = .{ .x = 0, .y = 0, .z = 0 } } } });
     }
 

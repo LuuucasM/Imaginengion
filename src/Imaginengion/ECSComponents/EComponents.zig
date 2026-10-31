@@ -24,6 +24,7 @@ pub const LayoutHiddenTag = @import("Entity/TagComponents.zig").LayoutHiddenTag;
 pub const HoveredTag = @import("Entity/TagComponents.zig").HoveredTag;
 pub const PressedTag = @import("Entity/TagComponents.zig").PressedTag;
 pub const DropHoverTag = @import("Entity/TagComponents.zig").DropHoverTag;
+pub const DropReadyTag = @import("Entity/TagComponents.zig").DropReadyTag;
 pub const SelectedTag = @import("Entity/TagComponents.zig").SelectedTag;
 pub const DisabledTag = @import("Entity/TagComponents.zig").DisabledTag;
 pub const DragSourceComponent = @import("Entity/DragSourceComponent.zig");
@@ -103,6 +104,7 @@ pub const ComponentsList = [_]type{
     HoveredTag,
     PressedTag,
     DropHoverTag,
+    DropReadyTag,
     SelectedTag,
     DisabledTag,
     DragSourceComponent,
@@ -265,6 +267,7 @@ pub const EComponents = enum(u16) {
     HoveredTag = ListInd(&ComponentsList, HoveredTag),
     PressedTag = ListInd(&ComponentsList, PressedTag),
     DropHoverTag = ListInd(&ComponentsList, DropHoverTag),
+    DropReadyTag = ListInd(&ComponentsList, DropReadyTag),
     SelectedTag = ListInd(&ComponentsList, SelectedTag),
     DisabledTag = ListInd(&ComponentsList, DisabledTag),
     DragSourceComponent = ListInd(&ComponentsList, DragSourceComponent),

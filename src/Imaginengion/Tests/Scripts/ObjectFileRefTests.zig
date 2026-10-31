@@ -20,8 +20,9 @@ const ScriptComponent = EntityComponents.ScriptComponent;
 const UUIDComponent = EntityComponents.UUIDComponent;
 const ObjectRefComponent = EntityComponents.ObjectRefComponent;
 const FileRefComponent = EntityComponents.FileRefComponent;
+const DropTargetComponent = EntityComponents.DropTargetComponent;
 const TextComponent = EntityComponents.TextComponent;
-const FieldBindingComponent = @import("../../ECSComponents/UIElement/FieldBindingComponent.zig");
+const PointerSystem = @import("../../Pointer/PointerSystem.zig");
 const ScriptABI = @import("../../Scripts/ScriptABI.zig");
 const ScriptExport = @import("../../Scripts/ScriptExport.zig");
 const ScriptValues = @import("../../Scripts/ScriptValues.zig");
@@ -185,7 +186,9 @@ const TestWorld = struct {
         try world.ProcessEvents(ECSEventData, .EndOfFrame, engine_context, &callback_list);
     }
 
+    /// `source` let go over `target`: the pointer system only drops on a target what it takes
     fn Drop(self: *TestWorld, source: Entity, target: Entity) !void {
+        if (!PointerSystem.Takes(target.GetComponent(DropTargetComponent).?.*, source)) return;
         try self.mEngineContext.mUIManager.OnPointerEvent(self.mEngineContext, .{ .mEntity = target, .mEvent = .{ .PointerDropped = .{ .mSource = source, .mPosition = .{ .x = 0, .y = 0, .z = 0 } } } });
     }
 
@@ -473,24 +476,24 @@ test "a new build keeps a file ref still in it with its reference, and gives bac
     try std.testing.expectEqual(@as(usize, 1), world.Refs(gone_file));
 }
 
-/// The first widget under `widget` whose field binding `wanted` says yes to
-fn FindBox(widget: Entity, comptime wanted: fn (FieldBindingComponent) bool) ?Entity {
+/// The first widget under `widget` whose drop target `wanted` says yes to
+fn FindBox(widget: Entity, comptime wanted: fn (DropTargetComponent) bool) ?Entity {
     var children = widget.GetIterator(.Child);
     while (children.next()) |child| {
-        if (UIManager.GetUIComponent(child, FieldBindingComponent)) |binding| {
-            if (wanted(binding.*)) return child;
+        if (child.GetComponent(DropTargetComponent)) |drop_target| {
+            if (wanted(drop_target.*)) return child;
         }
         if (FindBox(child, wanted)) |found| return found;
     }
     return null;
 }
 
-fn TakesFiles(binding: FieldBindingComponent) bool {
-    return binding.mAccepts.len > 0;
+fn TakesFiles(drop_target: DropTargetComponent) bool {
+    return drop_target.mExtensions.len > 0;
 }
 
-fn TakesObjects(binding: FieldBindingComponent) bool {
-    return binding.mTakes != null;
+fn TakesObjects(drop_target: DropTargetComponent) bool {
+    return drop_target.mObjectKind != null;
 }
 
 fn TextIn(box: Entity) []const u8 {

@@ -200,10 +200,10 @@ pub fn ScrollArea(engine_context: *EngineContext, parent: Parent) !Entity {
     return area;
 }
 
-/// A box showing a line of text, as wide as what it is in, that what drags one of `accepts` can be dropped on (a drop
-/// target for those components): a file from the Content Browser (FileRefComponent), an object's row from a hierarchy
-/// panel (ObjectRefComponent). An asset or reference field. Style "Field"
-pub fn DropBox(engine_context: *EngineContext, parent: Parent, text: []const u8, comptime accepts: []const type) !Entity {
+/// A box showing a line of text, as wide as what it is in, that what `drop_target` takes can be dropped on: a file from
+/// the Content Browser (DropTargetComponent.Files), an object's row from a hierarchy panel (DropTargetComponent.Objects).
+/// An asset or reference field. Style "Field"
+pub fn DropBox(engine_context: *EngineContext, parent: Parent, text: []const u8, drop_target: EntityComponents.DropTargetComponent) !Entity {
     const box = try NewEntity(engine_context, parent);
     try AddQuad(engine_context, box, .{}, .{});
     _ = try box.AddComponent(engine_context, LayoutComponent{
@@ -212,7 +212,7 @@ pub fn DropBox(engine_context: *EngineContext, parent: Parent, text: []const u8,
         .mCrossAlign = .Center,
     });
     _ = try box.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
-    _ = try box.AddComponent(engine_context, EntityComponents.DropTargetComponent.Accepting(accepts));
+    _ = try box.AddComponent(engine_context, drop_target);
     try UIManager.Style(engine_context, box, "Field");
     _ = try Label(engine_context, .{ .Entity = box }, text);
     return box;

@@ -20,6 +20,7 @@ const LayoutComponent = EntityComponents.LayoutComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const SelectedTag = EntityComponents.SelectedTag;
 const DisabledTag = EntityComponents.DisabledTag;
+const PointerSystem = @import("../../Pointer/PointerSystem.zig");
 const DragSourceComponent = EntityComponents.DragSourceComponent;
 const ObjectRefComponent = EntityComponents.ObjectRefComponent;
 const DropTargetComponent = EntityComponents.DropTargetComponent;
@@ -465,15 +466,15 @@ test "a ready-made checkbox shows a check mark only while it is checked" {
     try std.testing.expect(mark.GetComponent(LayoutItemComponent).?.mCollapsed);
 }
 
-test "a file dropped on the panel: another type's file ignored, an entity file needs a scene selected" {
-    //the turned-down drops' warnings are expected; kept off the build runner's output (see TmplTests)
+test "a file dropped on the panel: another type's file not taken, an entity file needs a scene selected" {
+    //the turned-down drop's warning is expected; kept off the build runner's output (see TmplTests)
     std.testing.log_level = .err;
     defer std.testing.log_level = .warn;
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     const game_world = &engine_context.mGameWorld;
-    const level = try game_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    _ = try game_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     var scenes = try world.Panel(Scene);
     defer scenes.Deinit(engine_context.EngineAllocator());
     var entities = try world.Panel(Entity);
@@ -488,15 +489,12 @@ test "a file dropped on the panel: another type's file ignored, an entity file n
     const goblin_file = try ui_scene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try goblin_file.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "goblin.imen", .Prj));
 
-    //an entity file on the Scenes panel: left alone
-    var selected: ?SelectedObject = .{ .scene_layer = level };
-    try scenes.OnDrop(engine_context, scenes.mArea, .{ .mSource = goblin_file, .mPosition = .{ .x = 0, .y = 0, .z = 0 } }, game_world, &selected);
-    try scenes.Update(engine_context, game_world, selected);
-    try std.testing.expectEqual(@as(usize, 1), scenes.mRows.items.len);
-    try std.testing.expectEqual(level.mID, selected.?.scene_layer.mID);
+    //an entity file is for the Entities panel, not the Scenes panel
+    try std.testing.expect(!PointerSystem.Takes(scenes.mArea.GetComponent(DropTargetComponent).?.*, goblin_file));
+    try std.testing.expect(PointerSystem.Takes(entities.mArea.GetComponent(DropTargetComponent).?.*, goblin_file));
 
     //on the Entities panel with no scene selected: nowhere to put it
-    selected = null;
+    var selected: ?SelectedObject = null;
     try entities.OnDrop(engine_context, entities.mArea, .{ .mSource = goblin_file, .mPosition = .{ .x = 0, .y = 0, .z = 0 } }, game_world, &selected);
     try entities.Update(engine_context, game_world, selected);
     try std.testing.expectEqual(@as(usize, 0), entities.mRows.items.len);

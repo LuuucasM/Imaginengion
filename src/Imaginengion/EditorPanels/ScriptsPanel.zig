@@ -55,11 +55,10 @@ pub fn Build(engine_context: *EngineContext, page: Entity, options: Widgets.Opti
     const zone = Tracy.ZoneInit("ScriptsPanel::Build", @src());
     defer zone.Deinit();
     const area = try Widgets.ScrollArea(engine_context, .{ .Entity = page });
-    //a background, so dropping on the empty part of the panel lands on it, and it takes files (a script is checked for
-    //when it is dropped)
+    //a background, so dropping on the empty part of the panel lands on it, and it takes script files
     _ = try area.AddComponent(engine_context, SurfaceComponent{});
     try UIManager.Style(engine_context, area, "Window");
-    _ = try area.AddComponent(engine_context, DropTargetComponent.Accepting(&.{FileRefComponent}));
+    _ = try area.AddComponent(engine_context, DropTargetComponent.Files(&.{".zig"}));
     return .{
         .mArea = area,
         .mTitle = try Widgets.Label(engine_context, .{ .Entity = area }, ""),
@@ -145,10 +144,6 @@ pub fn OnDrop(self: ScriptsPanel, engine_context: *EngineContext, on: Entity, dr
     if (!Same(on, self.mArea)) return;
     const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
     const rel_path = file_ref.mRelPath.items;
-    if (!std.mem.eql(u8, std.fs.path.extension(rel_path), ".zig")) {
-        std.log.warn("Only a script (.zig) can be dropped on the Scripts panel, not {s}", .{rel_path});
-        return;
-    }
     const object = selected orelse return;
     if (!IsActive(object)) return;
 

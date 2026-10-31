@@ -212,10 +212,6 @@ pub fn OnDrop(self: *const ComponentsPanel, on: Entity, dropped: PointerDroppedE
     const built = self.mBuiltFor orelse return;
     if (built != .player) return;
     const object_ref = dropped.mSource.GetComponent(ObjectRefComponent) orelse return;
-    if (object_ref.mObject != .entity) {
-        std.log.warn("A player can only possess an entity", .{});
-        return;
-    }
     if (!object_ref.mObject.entity.IsActive()) return;
     built.player.Possess(object_ref.mObject.entity);
 }

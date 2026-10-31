@@ -17,9 +17,12 @@ const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const HoveredTag = EntityComponents.HoveredTag;
 const PressedTag = EntityComponents.PressedTag;
 const DropHoverTag = EntityComponents.DropHoverTag;
+const DropReadyTag = EntityComponents.DropReadyTag;
 const DisabledTag = EntityComponents.DisabledTag;
 const DragSourceComponent = EntityComponents.DragSourceComponent;
 const DropTargetComponent = EntityComponents.DropTargetComponent;
+const FileRefComponent = EntityComponents.FileRefComponent;
+const ObjectRefComponent = EntityComponents.ObjectRefComponent;
 const ShapeComponent = EntityComponents.ShapeComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
@@ -503,4 +506,115 @@ test "a source deleted mid drag drops nothing" {
 
     try engine_context.mPointerSystem.OnReleased(engine_context, .BUTTON_LEFT);
     try ExpectSent(try world.TakeEvents(), .PointerDropped, &.{});
+}
+
+test "everything that takes what is carried is ready for the whole drag, wherever the pointer is" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const pointer = &engine_context.mPointerSystem;
+    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Accepting(&.{ShapeComponent}));
+    _ = try world.mMenu.AddComponent(engine_context, DropTargetComponent.Accepting(&.{TextComponent}));
+
+    //over neither of them
+    try PickUpPlay(world, null);
+    try std.testing.expect(world.mQuit.HasComponent(DropReadyTag));
+    try std.testing.expect(!world.mQuit.HasComponent(DropHoverTag));
+    try std.testing.expect(!world.mMenu.HasComponent(DropReadyTag));
+
+    try pointer.OnReleased(engine_context, .BUTTON_LEFT);
+    try std.testing.expect(!world.mQuit.HasComponent(DropReadyTag));
+}
+
+test "a target that turns up during a drag is ready, one that goes away is forgotten" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Accepting(&.{ShapeComponent}));
+
+    try PickUpPlay(world, null);
+    _ = try world.mMenu.AddComponent(engine_context, DropTargetComponent.Accepting(&.{ShapeComponent}));
+    try world.MoveTo(null, .{ .x = 1010, .y = 540 }, 1920, 1080);
+    try std.testing.expect(world.mMenu.HasComponent(DropReadyTag));
+
+    try world.mQuit.Delete(engine_context);
+    try world.EndFrame();
+    try world.MoveTo(null, .{ .x = 1020, .y = 540 }, 1920, 1080);
+    try engine_context.mPointerSystem.OnReleased(engine_context, .BUTTON_LEFT);
+    try std.testing.expect(!world.mMenu.HasComponent(DropReadyTag));
+}
+
+test "a disabled target isn't ready, nor is the source itself" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Accepting(&.{ShapeComponent}));
+    _ = try world.mQuit.AddComponent(engine_context, DisabledTag{});
+    _ = try world.mPlay.AddComponent(engine_context, DropTargetComponent.Accepting(&.{ShapeComponent}));
+
+    try PickUpPlay(world, null);
+    try std.testing.expect(!world.mQuit.HasComponent(DropReadyTag));
+    try std.testing.expect(!world.mPlay.HasComponent(DropReadyTag));
+}
+
+test "the source deleted mid drag takes ready off the targets" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Accepting(&.{ShapeComponent}));
+
+    try PickUpPlay(world, null);
+    try std.testing.expect(world.mQuit.HasComponent(DropReadyTag));
+    try world.mPlay.Delete(engine_context);
+    try world.EndFrame();
+    try world.MoveTo(null, .{ .x = 1010, .y = 540 }, 1920, 1080);
+    try std.testing.expect(!world.mQuit.HasComponent(DropReadyTag));
+}
+
+test "a target asking for file types takes only those files, whatever the letter case" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const target = DropTargetComponent.Files(&.{ ".png", ".jpg" });
+
+    const picture = try world.mMenu.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    _ = try picture.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "art/Hero.PNG", .Prj));
+    try std.testing.expect(PointerSystem.Takes(target, picture));
+
+    const script = try world.mMenu.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    _ = try script.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "Mover.zig", .Prj));
+    try std.testing.expect(!PointerSystem.Takes(target, script));
+
+    //not carrying a file at all
+    try std.testing.expect(!PointerSystem.Takes(target, world.mQuit));
+}
+
+test "a target asking for an object kind takes only that kind" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const row = try world.mMenu.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    _ = try row.AddComponent(engine_context, ObjectRefComponent{ .mObject = .{ .entity = world.mQuit } });
+
+    try std.testing.expect(PointerSystem.Takes(DropTargetComponent.Objects(.entity), row));
+    try std.testing.expect(!PointerSystem.Takes(DropTargetComponent.Objects(.player), row));
+    try std.testing.expect(!PointerSystem.Takes(DropTargetComponent.Files(&.{".png"}), row));
+}
+
+test "dragging a file past a field that doesn't take it lands on the panel around it that does" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Files(&.{".png"}));
+    _ = try world.mMenu.AddComponent(engine_context, DropTargetComponent.Files(&.{".zig"}));
+    _ = try world.mPlay.AddComponent(engine_context, DragSourceComponent{});
+    _ = try world.mPlay.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "Mover.zig", .Prj));
+
+    try world.MoveTo(world.mPlay, .{ .x = 960, .y = 540 }, 1920, 1080);
+    try engine_context.mPointerSystem.OnPressed(engine_context, .BUTTON_LEFT);
+    try world.MoveTo(world.mQuit, .{ .x = 1000, .y = 540 }, 1920, 1080);
+
+    try std.testing.expect(!world.mQuit.HasComponent(DropReadyTag));
+    try std.testing.expect(world.mMenu.HasComponent(DropReadyTag));
+    try std.testing.expect(world.mMenu.HasComponent(DropHoverTag));
 }

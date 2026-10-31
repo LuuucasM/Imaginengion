@@ -74,13 +74,13 @@ pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Opti
     const name_row = try NamedRow(engine_context, content, "Name");
     self.mName = UIManager.LabelOf(try Widgets.TextField(engine_context, .{ .Entity = name_row }, "")).?;
     const icon_row = try NamedRow(engine_context, content, "Window Icon");
-    self.mIcon = try AddFile(engine_context, icon_row);
+    self.mIcon = try AddFile(engine_context, icon_row, ICON_EXTENSION);
     self.mClearIcon = try Widgets.Button(engine_context, .{ .Entity = icon_row }, "Clear");
 
     _ = try Widgets.Separator(engine_context, .{ .Entity = content });
     _ = try Widgets.Label(engine_context, .{ .Entity = content }, "What the game starts from");
-    for (std.enums.values(Project.Entry)) |entry| {
-        self.mEntries.set(entry, try AddFile(engine_context, try NamedRow(engine_context, content, EntryName(entry))));
+    inline for (comptime std.enums.values(Project.Entry)) |entry| {
+        self.mEntries.set(entry, try AddFile(engine_context, try NamedRow(engine_context, content, EntryName(entry)), comptime std.mem.span(entry.FileExtension())));
     }
 
     try WidgetActions.CloseWindow(engine_context, self.mWindow);
@@ -96,10 +96,10 @@ fn NamedRow(engine_context: *EngineContext, parent: Entity, name: []const u8) !E
     return row;
 }
 
-/// A file setting's box a file can be dropped on and its Browse..., at the end of `row`
-fn AddFile(engine_context: *EngineContext, row: Entity) !FileRow {
+/// A file setting's box a file with `extension` can be dropped on and its Browse..., at the end of `row`
+fn AddFile(engine_context: *EngineContext, row: Entity, comptime extension: []const u8) !FileRow {
     return .{
-        .Box = try Widgets.DropBox(engine_context, .{ .Entity = row }, NOT_SET, &.{FileRefComponent}),
+        .Box = try Widgets.DropBox(engine_context, .{ .Entity = row }, NOT_SET, EntityComponents.DropTargetComponent.Files(&.{extension})),
         .Browse = try Widgets.Button(engine_context, .{ .Entity = row }, "Browse..."),
     };
 }
