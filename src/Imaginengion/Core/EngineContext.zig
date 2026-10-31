@@ -141,7 +141,6 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     try self.mRenderer.Init(self);
     try self.mAssetManager.Setup(self);
     try self.mAudioManager.Init(self);
-    try self.mInputManager.Init(self.EngineAllocator());
 
     try self.mGameWorld.Init(self);
     try self.mEditorWorld.Init(self);
@@ -192,7 +191,6 @@ pub fn DeInit(self: *EngineContext) void {
     self.mUIManager.Deinit(self);
     self.mPointerSystem.Deinit(self.EngineAllocator());
 
-    self.mInputManager.Deinit(self.EngineAllocator());
     self.mAudioManager.Deinit(self);
     self.mAssetManager.Deinit(self);
     self.mProject.Deinit(self);

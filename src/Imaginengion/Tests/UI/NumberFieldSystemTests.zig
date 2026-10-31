@@ -176,9 +176,7 @@ test "a size field moves by a share of itself, and Shift drags slower" {
     try std.testing.expectApproxEqAbs(@as(f32, 0.1), ValueOf(gap).float32, 0.0001);
 
     //Shift held: a tenth as far, for any field
-    const input = &engine_context.mInputManager;
-    defer input.Deinit(engine_context.EngineAllocator());
-    try input._KeyPressedSet.put(engine_context.EngineAllocator(), .LSHIFT, 0);
+    engine_context.mInputManager.SetKeyPressed(.LSHIFT);
     const offset = try world.Field(.{ .float32 = 0 }, .{ .mSpeed = 0.5 });
     try world.Drag(offset, &.{10});
     try std.testing.expectApproxEqAbs(@as(f32, 0.5), ValueOf(offset).float32, 0.0001);

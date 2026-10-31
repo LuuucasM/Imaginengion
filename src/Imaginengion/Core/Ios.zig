@@ -245,13 +245,13 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
             .processSetCurrentDir = std.Io.failingProcessSetCurrentDir,
             .processSetCurrentPath = std.Io.failingProcessSetCurrentPath,
             .processReplace = std.Io.failingProcessReplace,
-            .processReplacePath = std.Io.failingProcessReplacePath,
             .processSpawn = fns.ProcessSpawn,
-            .processSpawnPath = std.Io.failingProcessSpawnPath,
             .childWait = fns.ChildWait,
             .childKill = std.Io.unreachableChildKill,
 
             .progressParentFile = std.Io.failingProgressParentFile,
+            .inheritParentDir = std.Io.failingInheritParentDir,
+            .inheritParentFile = std.Io.failingInheritParentFile,
 
             .random = fns.Random,
             .randomSecure = std.Io.failingRandomSecure,

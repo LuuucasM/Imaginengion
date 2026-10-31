@@ -132,6 +132,12 @@ pub fn build(b: *std.Build) void {
         .optimize = .Debug,
         .root_source_file = b.path("src/Imaginengion/UnitTests.zig"),
     }) });
+    //Standalone tests link no Tracy library, so their zones always compile to nothing
+    var unit_test_options = b.addOptions();
+    unit_test_options.addOption(bool, "enable_tracy", false);
+    unit_test_options.addOption(u32, "tracy_callstack", 0);
+    unit_test_options.addOption(bool, "enable_nsight", false);
+    unit_tests.root_module.addOptions("debug_build_options", unit_test_options);
     const run_unit_tests = b.addRunArtifact(unit_tests);
 
     test_step.dependOn(&run_unit_tests.step);

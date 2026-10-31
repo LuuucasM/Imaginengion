@@ -98,7 +98,7 @@ pub fn BuildScript(b: *std.Build, module: *std.Build.Module, target: std.Build.R
 fn FindImports(b: *std.Build, script_step: *std.Build.Step, path: []const u8, project: []const u8) !?ScriptImports.Collected {
     const io = b.graph.io;
     const files = try ScriptImports.FindProjectFiles(b.allocator, io, project);
-    for (files.mFolders.items) |folder| b.dependOnDirectory(.{ .cwd_relative = folder });
+    for (files.mFolders.items) |folder| b.dependOnDirectoryContents(.{ .cwd_relative = folder });
 
     if (files.mDuplicate) |duplicate| {
         script_step.dependOn(&b.addFail(b.fmt(

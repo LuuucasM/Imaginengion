@@ -144,7 +144,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
                 if (self._Height < 1 or self._Width < 1) self.mIsMinimized = true else self.mIsMinimized = false;
             },
             sdl.SDL_EVENT_KEY_DOWN => {
-                try input_manager.SetKeyPressed(@enumFromInt(event.key.scancode));
+                input_manager.SetKeyPressed(@enumFromInt(event.key.scancode));
                 if (event.key.repeat) {
                     try engine_context.mSystemEventManager.Insert(
                         engine_context.EngineAllocator(),
@@ -168,7 +168,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
                 );
             },
             sdl.SDL_EVENT_MOUSE_BUTTON_DOWN => {
-                try input_manager.SetMousePressed(@enumFromInt(event.button.button), .{ .x = event.button.x, .y = event.button.y });
+                input_manager.SetMousePressed(@enumFromInt(event.button.button), .{ .x = event.button.x, .y = event.button.y });
                 try engine_context.mSystemEventManager.Insert(
                     engine_context.EngineAllocator(),
                     .InputEvent,

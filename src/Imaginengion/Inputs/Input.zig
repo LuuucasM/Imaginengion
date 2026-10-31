@@ -2,8 +2,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec2 = MathTypes.Vec2;
-const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
-const HashMap = std.AutoHashMapUnmanaged;
 const InputEnums = @import("InputEnums.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const InputManager = @This();
@@ -12,8 +10,17 @@ const InputManager = @This();
 /// rather than a drag, in window coordinates. A left drag rotates the editor camera, a left click selects.
 pub const CLICK_DRAG_THRESHOLD: f32 = 4.0;
 
-_KeyPressedSet: HashMap(InputEnums.ScanCodes, u1),
-_MousePressedSet: HashMap(InputEnums.MouseCodes, u1),
+/// Indexed by the scan code's value rather than std.EnumSet: ScanCodes has gaps, and EnumSet looks those enums up with
+/// a linear scan over every field
+const KeySet = std.StaticBitSet(@intFromEnum(InputEnums.ScanCodes.COUNT));
+//BUTTON_X2 is the highest button, so this has a bit for each button's value
+const MouseSet = std.StaticBitSet(@intFromEnum(InputEnums.MouseCodes.BUTTON_X2) + 1);
+
+_KeyPressedSet: KeySet,
+//which of the pressed keys the OS has started repeating. Only ever set for a key that is also in _KeyPressedSet
+_KeyRepeatedSet: KeySet,
+_MousePressedSet: MouseSet,
+_MouseRepeatedSet: MouseSet,
 _MousePosition: Vec2(f32),
 _MouseScrolled: Vec2(f32),
 _MousePositionDelta: Vec2(f32),
@@ -27,7 +34,9 @@ mKeyboardTaken: bool,
 
 pub const empty: InputManager = .{
     ._KeyPressedSet = .empty,
+    ._KeyRepeatedSet = .empty,
     ._MousePressedSet = .empty,
+    ._MouseRepeatedSet = .empty,
     ._MousePosition = .{ .x = 0.0, .y = 0.0 },
     ._MouseScrolled = .{ .x = 0.0, .y = 0.0 },
     ._MousePositionDelta = .{ .x = 0.0, .y = 0.0 },
@@ -36,74 +45,65 @@ pub const empty: InputManager = .{
     .mKeyboardTaken = false,
 };
 
-pub fn Init(self: *InputManager, engine_allocator: std.mem.Allocator) !void {
-    try self._KeyPressedSet.ensureTotalCapacity(engine_allocator, @typeInfo(InputEnums.ScanCodes).@"enum".field_names.len);
-    try self._MousePressedSet.ensureTotalCapacity(engine_allocator, @typeInfo(InputEnums.MouseCodes).@"enum".field_names.len);
-}
-
-pub fn Deinit(self: *InputManager, engine_allocator: std.mem.Allocator) void {
-    self._KeyPressedSet.deinit(engine_allocator);
-    self._MousePressedSet.deinit(engine_allocator);
-}
-
-pub fn IsKeyPressed(self: InputManager, key: InputEnums.ScanCodes) bool {
+pub fn IsKeyPressed(self: *const InputManager, key: InputEnums.ScanCodes) bool {
     if (self.mKeyboardTaken) return false;
-    return self._KeyPressedSet.contains(key);
+    return self._KeyPressedSet.isSet(@intFromEnum(key));
 }
 /// Whether the key is down even while a text input has the keyboard, for what is doing the typing (e.g. Ctrl for
 /// Ctrl+V)
-pub fn IsKeyPressedUnfiltered(self: InputManager, key: InputEnums.ScanCodes) bool {
-    return self._KeyPressedSet.contains(key);
+pub fn IsKeyPressedUnfiltered(self: *const InputManager, key: InputEnums.ScanCodes) bool {
+    return self._KeyPressedSet.isSet(@intFromEnum(key));
 }
-pub fn IsKeyRepeated(self: InputManager, key: InputEnums.ScanCodes) bool {
+pub fn IsKeyRepeated(self: *const InputManager, key: InputEnums.ScanCodes) bool {
     if (self.mKeyboardTaken) return false;
-    if (self._KeyPressedSet.get(key)) |value| {
-        return value == 1;
-    }
-    return false;
+    return self._KeyRepeatedSet.isSet(@intFromEnum(key));
 }
-pub fn IsMousePressed(self: InputManager, button: InputEnums.MouseCodes) bool {
-    return self._MousePressedSet.contains(button);
+pub fn IsMousePressed(self: *const InputManager, button: InputEnums.MouseCodes) bool {
+    return self._MousePressedSet.isSet(@intFromEnum(button));
 }
-pub fn IsMouseRepeated(self: InputManager, button: InputEnums.MouseCodes) bool {
-    if (self._MousePressedSet.get(button)) |value| {
-        return value == 1;
-    }
-    return false;
+pub fn IsMouseRepeated(self: *const InputManager, button: InputEnums.MouseCodes) bool {
+    return self._MouseRepeatedSet.isSet(@intFromEnum(button));
 }
-pub fn GetMousePosition(self: InputManager) Vec2(f32) {
+pub fn GetMousePosition(self: *const InputManager) Vec2(f32) {
     return self._MousePosition;
 }
-pub fn GetMousePositionDelta(self: InputManager) Vec2(f32) {
+pub fn GetMousePositionDelta(self: *const InputManager) Vec2(f32) {
     return self._MousePositionDelta;
 }
-pub fn GetMouseScrolled(self: InputManager) Vec2(f32) {
+pub fn GetMouseScrolled(self: *const InputManager) Vec2(f32) {
     return self._MouseScrolled;
 }
-pub fn GetMouseScrolledDelta(self: InputManager) Vec2(f32) {
+pub fn GetMouseScrolledDelta(self: *const InputManager) Vec2(f32) {
     return self._MouseScrolledDelta;
 }
 
-pub fn SetKeyPressed(self: *InputManager, key: InputEnums.ScanCodes) !void {
-    const gop = self._KeyPressedSet.getOrPutAssumeCapacity(key);
-    gop.value_ptr.* = if (gop.found_existing) 1 else 0;
+pub fn SetKeyPressed(self: *InputManager, key: InputEnums.ScanCodes) void {
+    const index = @intFromEnum(key);
+    //a press for a key that is already down is the OS repeating it
+    if (self._KeyPressedSet.isSet(index)) self._KeyRepeatedSet.set(index);
+    self._KeyPressedSet.set(index);
 }
 
 pub fn SetKeyReleased(self: *InputManager, key: InputEnums.ScanCodes) void {
-    _ = self._KeyPressedSet.remove(key);
+    const index = @intFromEnum(key);
+    self._KeyPressedSet.unset(index);
+    self._KeyRepeatedSet.unset(index);
 }
 
 /// `position` is where the button went down, in window coordinates.
-pub fn SetMousePressed(self: *InputManager, button: InputEnums.MouseCodes, position: Vec2(f32)) !void {
-    const gop = self._MousePressedSet.getOrPutAssumeCapacity(button);
-    gop.value_ptr.* = if (gop.found_existing) 1 else 0;
+pub fn SetMousePressed(self: *InputManager, button: InputEnums.MouseCodes, position: Vec2(f32)) void {
+    const index = @intFromEnum(button);
+    if (self._MousePressedSet.isSet(index)) self._MouseRepeatedSet.set(index);
+    self._MousePressedSet.set(index);
     self._MouseDownPositions.set(button, position);
 }
 
 /// `position` is where the button came up. Returns whether this press and release was a click: it went
 /// down and came up within CLICK_DRAG_THRESHOLD of the same spot, rather than dragging somewhere.
 pub fn SetMouseReleased(self: *InputManager, button: InputEnums.MouseCodes, position: Vec2(f32)) bool {
-    _ = self._MousePressedSet.remove(button);
+    const index = @intFromEnum(button);
+    self._MousePressedSet.unset(index);
+    self._MouseRepeatedSet.unset(index);
 
     const down_position = self._MouseDownPositions.get(button) orelse return false;
     self._MouseDownPositions.set(button, null);
