@@ -4,8 +4,9 @@
 //! another file with a variable (IM.SceneRef and its siblings), which is saved like any other reference.
 //! What comes out is a forest, not one tree: each object file gives a tree of objects, each script file what it declares,
 //! and the links between files join them. A file can be named by many others, and files can name each other in a circle.
-//! Passes read the forest and don't change it, see ForestChecks.zig.
-//! Only std: src/GameReport.zig, which the build compiles and runs, is built from this alone.
+//! Passes read the forest and don't change it, see ForestChecks.zig. build_script.zig's GameBuild is one: a game gets the
+//! files the forest needs and nothing else. A font is named but isn't needed itself: its atlas is what a game reads.
+//! Only std: build_script.zig runs this, and src/GameReport.zig, which the build compiles and runs, is built from it.
 const std = @import("std");
 const Ast = std.zig.Ast;
 const EngineFiles = @import("EngineFiles.zig");
@@ -124,6 +125,8 @@ pub const ScriptFile = struct {
     /// the names of its hooks and event handlers
     mFunctions: std.ArrayList([]const u8) = .empty,
     mSyntaxErrors: usize = 0,
+    /// whether its code names IM.Widgets, whose builders put stock scripts on what they make
+    mUsesWidgets: bool = false,
 
     pub fn GetVariable(self: *const ScriptFile, name: []const u8) ?*const Variable {
         for (self.mVariables.items) |*variable| {
@@ -146,6 +149,14 @@ pub const Result = struct {
     /// mObjectFiles' counts added up
     mObjectTotals: ObjectCounts = .initFill(.{}),
     mScriptFiles: std.EnumArray(FileRoot, ScriptFiles) = .initFill(.empty),
+    /// the scripts the game loads, so compiles into its exe. What a script only imports comes along with it
+    mLoadedScripts: std.EnumArray(FileRoot, FileSet) = .initFill(.empty),
+    /// the fonts named that the game gets as their atlas instead of the font itself, sorted. One whose atlas isn't all
+    /// there isn't one: it's in mMissing
+    mFonts: std.EnumArray(FileRoot, FileSet) = .initFill(.empty),
+    /// every file the walk read: what's above can only change when one of these does, or a folder gets a file added or
+    /// removed
+    mRead: std.ArrayList(FileId) = .empty,
     /// every link between files, those from one file together, sorted by that file
     mFileLinks: std.ArrayList(FileLink) = .empty,
     /// every saved object with a UUID, by that UUID
@@ -157,7 +168,7 @@ pub const Result = struct {
     mUnsetEntries: std.ArrayList([]const u8) = .empty,
 };
 
-/// What building a game copies but the game doesn't need, sorted
+/// What a game leaves out of the project's files and the engine's stock scripts because nothing uses them, sorted
 pub const NotNeeded = struct {
     mProject: std.ArrayList([]const u8) = .empty,
     mEngine: std.ArrayList([]const u8) = .empty,
@@ -178,6 +189,16 @@ const COMPONENT_LINKS = [_]struct { mComponent: []const u8, mField: []const u8, 
     .{ .mComponent = "SpawnPossComponent", .mField = "EntityRef", .mWants = .Entity },
     .{ .mComponent = "PopupRefComponent", .mField = "Popup", .mWants = .Entity },
 };
+
+/// Whether `path` is a font, which the editor makes an atlas from
+pub fn IsFontFile(path: []const u8) bool {
+    return HasExtension(std.fs.path.extension(path), &.{ ".ttf", ".otf" });
+}
+
+/// The .json of the atlas of the font at `path`, which sits next to it. Its .png is named the same way
+pub fn AtlasJsonOf(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
+    return try std.fmt.allocPrint(allocator, "{s}.json", .{path[0 .. path.len - std.fs.path.extension(path).len]});
+}
 
 /// A file at the top of a project's folder that's only for building it, and so never goes into its game
 pub fn IsBuildOnlyFile(name: []const u8) bool {
@@ -207,6 +228,7 @@ pub fn WalkProject(arena: std.mem.Allocator, io: std.Io, project_path: []const u
     std.mem.sort(ObjectFile, result.mObjectFiles.items, {}, ObjectFileLessThan);
     std.mem.sort(FileLink, result.mFileLinks.items, {}, FileLinkLessThan);
     for (&result.mScriptFiles.values) |*scripts| SortByName(scripts);
+    for (&result.mFonts.values) |*fonts| SortByName(fonts);
 
     //what a link points at can be in a file read after it, so links are found once every file has been read
     for (result.mObjectFiles.items) |*file| try AddSymbols(arena, result, file.mFile, &file.mObject);
@@ -231,11 +253,12 @@ const Walker = struct {
     mToRead: std.ArrayList(FileId) = .empty,
 
     fn AddProjectFile(self: *Walker, name: []const u8) !void {
+        const from: FileId = .{ .mRoot = .Prj, .mPath = name };
+        try self.mResult.mRead.append(self.mArena, from);
         const contents = try std.Io.Dir.cwd().readFileAlloc(self.mIo, try self.FullPath(.Prj, name), self.mArena, .unlimited);
         const project_file = try std.json.parseFromSliceLeaky(ProjectFile, self.mArena, contents, .{ .ignore_unknown_fields = true });
         try self.mResult.mProject.put(self.mArena, name, {});
 
-        const from: FileId = .{ .mRoot = .Prj, .mPath = name };
         inline for (.{ "EntryScene", "EntryPlayer", "EntryGameContext" }) |field| {
             const path = @field(project_file, field);
             if (path.len == 0) {
@@ -276,8 +299,10 @@ const Walker = struct {
             return;
         };
 
-        const set = if (root == .Prj) &self.mResult.mProject else &self.mResult.mEngine;
-        try set.put(self.mArena, normalized, {});
+        if (!IsFontFile(normalized)) {
+            const set = if (root == .Prj) &self.mResult.mProject else &self.mResult.mEngine;
+            try set.put(self.mArena, normalized, {});
+        }
         try self.mToRead.append(self.mArena, .{ .mRoot = root, .mPath = normalized });
     }
 
@@ -289,11 +314,16 @@ const Walker = struct {
     /// is. A file of any other kind names nothing
     fn Read(self: *Walker, file: FileId) !void {
         const extension = std.fs.path.extension(file.mPath);
-        if (HasExtension(extension, &.{ ".ttf", ".otf" })) {
+        if (IsFontFile(file.mPath)) {
             //its atlas: TextAsset opens these next to the font
             const base = file.mPath[0 .. file.mPath.len - extension.len];
-            try self.Add(file.mRoot, try std.fmt.allocPrint(self.mArena, "{s}.json", .{base}), file, "font atlas");
-            try self.Add(file.mRoot, try std.fmt.allocPrint(self.mArena, "{s}.png", .{base}), file, "font atlas");
+            const json = try AtlasJsonOf(self.mArena, file.mPath);
+            const png = try std.fmt.allocPrint(self.mArena, "{s}.png", .{base});
+            try self.Add(file.mRoot, json, file, "font atlas");
+            try self.Add(file.mRoot, png, file, "font atlas");
+
+            const needed = if (file.mRoot == .Prj) &self.mResult.mProject else &self.mResult.mEngine;
+            if (needed.contains(json) and needed.contains(png)) try self.mResult.mFonts.getPtr(file.mRoot).put(self.mArena, file.mPath, {});
         } else if (HasExtension(extension, &.{".zig"})) {
             try self.ReadCode(file);
         } else if (ObjectKindOf(extension)) |kind| {
@@ -309,12 +339,30 @@ const Walker = struct {
     }
 
     fn ReadCode(self: *Walker, file: FileId) !void {
+        try self.mResult.mRead.append(self.mArena, file);
         const source = std.Io.Dir.cwd().readFileAlloc(self.mIo, try self.FullPath(file.mRoot, file.mPath), self.mArena, .unlimited) catch |err| {
             return self.AddUnreadable(file.mPath, err);
         };
-        try self.mResult.mScriptFiles.getPtr(file.mRoot).put(self.mArena, file.mPath, try ParseScript(self.mArena, source));
+        const script = try ParseScript(self.mArena, source);
+        try self.mResult.mScriptFiles.getPtr(file.mRoot).put(self.mArena, file.mPath, script);
+        if (script.mUsesWidgets) try self.AddStockScripts(file);
         //an engine script is built with no project files to import
         if (file.mRoot == .Prj) try self.FollowImports(file, source);
+    }
+
+    /// Every stock script: which widget builders a file calls could be narrowed down to which scripts it needs, but that
+    /// would be a table to keep up with Widgets by hand
+    fn AddStockScripts(self: *Walker, file: FileId) !void {
+        const folder = EngineFiles.ASSETS_PATH ++ "/" ++ EngineFiles.STOCK_SCRIPTS_FOLDER;
+        var dir = try std.Io.Dir.cwd().openDir(self.mIo, try self.FullPath(.Eng, folder), .{ .iterate = true });
+        defer dir.close(self.mIo);
+        var iter = dir.iterate();
+        while (try iter.next(self.mIo)) |entry| {
+            if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".zig")) continue;
+            const path = try std.fmt.allocPrint(self.mArena, "{s}/{s}", .{ folder, entry.name });
+            try self.Add(.Eng, path, file, "uses Widgets");
+            try self.mResult.mLoadedScripts.getPtr(.Eng).put(self.mArena, path, {});
+        }
     }
 
     fn FollowImports(self: *Walker, file: FileId, source: []const u8) !void {
@@ -334,6 +382,7 @@ const Walker = struct {
 
     /// What's in `file`, null if that can't be read
     fn ReadJson(self: *Walker, file: FileId) !?std.json.Value {
+        try self.mResult.mRead.append(self.mArena, file);
         const contents = std.Io.Dir.cwd().readFileAlloc(self.mIo, try self.FullPath(file.mRoot, file.mPath), self.mArena, .unlimited) catch |err| {
             try self.AddUnreadable(file.mPath, err);
             return null;
@@ -404,6 +453,7 @@ const Walker = struct {
             try self.Add(script_file.mRoot, script_file.mPath, file, try std.fmt.allocPrint(self.mArena, "script on \"{s}\"", .{object.mName}));
 
             var use: ScriptUse = .{ .mFile = .{ .mRoot = script_file.mRoot, .mPath = try Normalize(self.mArena, script_file.mPath) } };
+            try self.mResult.mLoadedScripts.getPtr(use.mFile.mRoot).put(self.mArena, use.mFile.mPath, {});
             if (script.object.get("Values")) |values| {
                 if (values == .object) {
                     use.mValues = values.object;
@@ -434,6 +484,11 @@ fn ParseScript(arena: std.mem.Allocator, source: []const u8) !ScriptFile {
     const terminated = try arena.dupeSentinel(u8, source, 0);
     const tree = try Ast.parse(arena, terminated, .{ .mode = .zig });
     var script: ScriptFile = .{ .mSyntaxErrors = tree.errors.len };
+
+    //tokens, not text: a comment isn't one, so one that mentions Widgets doesn't count
+    for (tree.tokens.items(.tag), 0..) |tag, index| {
+        if (tag == .identifier and std.mem.eql(u8, tree.tokenSlice(@intCast(index)), "Widgets")) script.mUsesWidgets = true;
+    }
 
     var aliases: std.StringHashMapUnmanaged([]const u8) = .empty;
     for (tree.rootDecls()) |decl| {
@@ -519,7 +574,8 @@ pub fn FileRefOf(object: std.json.ObjectMap, default_root: ?FileRoot) ?FileId {
     return .{ .mRoot = root, .mPath = path.string };
 }
 
-fn Normalize(arena: std.mem.Allocator, path: []const u8) ![]const u8 {
+/// `path` with / between folders
+pub fn Normalize(arena: std.mem.Allocator, path: []const u8) ![]const u8 {
     const normalized = try arena.dupe(u8, path);
     std.mem.replaceScalar(u8, normalized, '\\', '/');
     return normalized;
@@ -647,7 +703,8 @@ fn IsSetting(file: FileId) bool {
     return file.mRoot == .Prj and std.mem.startsWith(u8, file.mPath, SETTINGS_FOLDER ++ "/");
 }
 
-/// What `result` doesn't have of what build_script.zig's GameBuild copies into a game
+/// What `result` doesn't have of the project's files, not counting what's only for building it or a font it gets as its
+/// atlas, and of the stock scripts
 pub fn FindNotNeeded(arena: std.mem.Allocator, io: std.Io, project_path: []const u8, engine_path: []const u8, result: *const Result) !NotNeeded {
     var not_needed: NotNeeded = .{};
 
@@ -666,15 +723,10 @@ pub fn FindNotNeeded(arena: std.mem.Allocator, io: std.Io, project_path: []const
                 if (at_top and IsBuildOnlyFile(entry.basename)) continue;
                 const path = try arena.dupe(u8, entry.path);
                 std.mem.replaceScalar(u8, path, '\\', '/');
-                if (!result.mProject.contains(path)) try not_needed.mProject.append(arena, path);
+                if (!result.mProject.contains(path) and !result.mFonts.getPtrConst(.Prj).contains(path)) try not_needed.mProject.append(arena, path);
             },
             else => {},
         }
-    }
-
-    for (EngineFiles.COPIED_ASSETS) |asset| {
-        const path = try std.fmt.allocPrint(arena, "{s}/{s}", .{ EngineFiles.ASSETS_PATH, asset });
-        if (!result.mEngine.contains(path)) try not_needed.mEngine.append(arena, path);
     }
 
     const stock_folder = EngineFiles.ASSETS_PATH ++ "/" ++ EngineFiles.STOCK_SCRIPTS_FOLDER;
@@ -703,6 +755,44 @@ fn PathLessThan(_: void, left: []const u8, right: []const u8) bool {
     return std.mem.lessThan(u8, left, right);
 }
 
+/// Deletes everything in `game_path`, a game's folder in zig-out, that isn't part of the game: installing only ever adds
+/// files, so what an earlier build needed would stay there. Returns how many files it deleted
+pub fn RemoveLeftovers(arena: std.mem.Allocator, io: std.Io, game_path: []const u8, game_name: []const u8, result: *const Result) !usize {
+    var game_files: FileSet = .empty;
+    try game_files.put(arena, "ImaginGame.exe", {});
+    try game_files.put(arena, try std.fmt.allocPrint(arena, "{s}.bat", .{game_name}), {});
+    for (result.mProject.keys()) |path| try game_files.put(arena, try std.fmt.allocPrint(arena, "{s}/{s}", .{ game_name, path }), {});
+    for (result.mEngine.keys()) |path| try game_files.put(arena, path, {});
+
+    var dir = try std.Io.Dir.cwd().openDir(io, game_path, .{ .iterate = true });
+    defer dir.close(io);
+
+    var leftovers: std.ArrayList([]const u8) = .empty;
+    var folders: std.ArrayList([]const u8) = .empty;
+    var walker = try dir.walkSelectively(arena);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        const path = try Normalize(arena, entry.path);
+        switch (entry.kind) {
+            .directory => {
+                try folders.append(arena, path);
+                try walker.enter(io, entry);
+            },
+            else => if (!game_files.contains(path)) try leftovers.append(arena, path),
+        }
+    }
+
+    for (leftovers.items) |path| try dir.deleteFile(io, path);
+    //a folder comes before what's in it, so from the end every folder has had its own folders tried. One with something in
+    //it is meant to fail
+    var index = folders.items.len;
+    while (index > 0) {
+        index -= 1;
+        dir.deleteDir(io, folders.items[index]) catch {};
+    }
+    return leftovers.items.len;
+}
+
 /// What `zig build game` prints about a game
 pub fn WriteReport(out: *std.Io.Writer, game_name: []const u8, result: *const Result, not_needed: *const NotNeeded) !void {
     try out.print("{s}: {d} files needed\n", .{ game_name, result.mProject.count() + result.mEngine.count() });
@@ -712,9 +802,21 @@ pub fn WriteReport(out: *std.Io.Writer, game_name: []const u8, result: *const Re
 
     const not_needed_count = not_needed.mProject.items.len + not_needed.mEngine.items.len;
     if (not_needed_count > 0) {
-        try out.print("Not needed, still copied ({d}):\n", .{not_needed_count});
+        try out.print("Left out ({d}):\n", .{not_needed_count});
         for (not_needed.mProject.items) |path| try out.print("  {s}\n", .{path});
         for (not_needed.mEngine.items) |path| try out.print("  (engine) {s}\n", .{EngineRelative(path)});
+    }
+
+    const font_count = result.mFonts.getPtrConst(.Prj).count() + result.mFonts.getPtrConst(.Eng).count();
+    if (font_count > 0) {
+        try out.print("Fonts, shipped as their atlas ({d}):\n", .{font_count});
+        for (std.enums.values(FileRoot)) |root| {
+            for (result.mFonts.getPtrConst(root).keys()) |path| {
+                try out.writeAll("  ");
+                try WriteFileId(out, .{ .mRoot = root, .mPath = path });
+                try out.writeAll("\n");
+            }
+        }
     }
 
     const problem_count = result.mMissing.items.len + result.mUnreadable.items.len + result.mUnsetEntries.items.len;

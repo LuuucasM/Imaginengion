@@ -7,8 +7,11 @@
 //! handles to so the asset manager watches them). If that build fails the script stops (mStopped) rather than keep
 //! running: its old build was made with the old file, and a game event is only understood the same way by every script
 //! when they are all built with the same version of it (see Scripts/GameEvents.zig)
+//! A packaged game has none of that: its scripts are compiled into its exe, where the ScriptInfo comes from instead, and
+//! nothing reloads them (see StaticScriptAsset)
 const std = @import("std");
 const builtin = @import("builtin");
+const game_build_options = @import("game_build_options");
 const ScriptAsset = @This();
 
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -21,7 +24,9 @@ const Hook = ScriptABI.Hook;
 
 pub const ScriptResult = ScriptABI.ScriptResult;
 
-const Lib = switch (builtin.os.tag) {
+const Lib = if (game_build_options.packaged_game)
+    @import("ScriptAssets/StaticScriptAsset.zig")
+else switch (builtin.os.tag) {
     .windows => @import("ScriptAssets/WindowsScriptAsset.zig"),
     else => @import("ScriptAssets/OtherScriptAsset.zig"),
 };
@@ -46,7 +51,7 @@ pub fn Init(self: *ScriptAsset, engine_context: *EngineContext, abs_path: []cons
     zone.Text(rel_path);
 
     try Lib.Build(engine_context, abs_path, rel_path);
-    self._Info = try self._Lib.Open(engine_context, abs_path, 0);
+    self._Info = try self._Lib.Open(engine_context, abs_path, rel_path, 0);
     try self.WatchDependencies(engine_context);
 }
 
@@ -72,7 +77,7 @@ pub fn Reload(self: *ScriptAsset, engine_context: *EngineContext, abs_path: []co
         else => return err,
     };
     var new_lib: Lib = .{};
-    const new_info = new_lib.Open(engine_context, abs_path, self.mGeneration + 1) catch |err| switch (err) {
+    const new_info = new_lib.Open(engine_context, abs_path, rel_path, self.mGeneration + 1) catch |err| switch (err) {
         error.AssetInitFailed => return self.Failed(rel_path, "load", for_import),
         else => return err,
     };

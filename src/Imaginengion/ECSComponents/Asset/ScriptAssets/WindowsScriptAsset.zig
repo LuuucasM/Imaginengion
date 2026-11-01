@@ -3,7 +3,6 @@
 //! the old build has to stay loaded while the next one is built, to keep running if that one doesn't
 const std = @import("std");
 const builtin = @import("builtin");
-const game_build_options = @import("game_build_options");
 const WindowsScriptAsset = @This();
 
 const EngineContext = @import("../../../Core/EngineContext.zig");
@@ -11,13 +10,11 @@ const Tracy = @import("../../../Core/Tracy.zig");
 const ScriptABI = @import("../../../Scripts/ScriptABI.zig");
 
 mLib: ?std.os.windows.HMODULE = null,
-/// the copy that is loaded, deleted once it is unloaded. Empty for a packaged game's, which isn't a copy
+/// the copy that is loaded, deleted once it is unloaded
 mLoadedPath: std.ArrayList(u8) = .empty,
 
-/// Builds the script at abs_path into zig-out/bin/<file name>.dll with the engine's own build (zig build script). A
-/// packaged game (-Dprebuilt-scripts) ships its scripts already built, so there it does nothing
+/// Builds the script at abs_path into zig-out/bin/<file name>.dll with the engine's own build (zig build script)
 pub fn Build(engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8) !void {
-    if (game_build_options.prebuilt_scripts) return;
     const zone = Tracy.ZoneInit("WindowsScriptAsset::Build", @src());
     defer zone.Deinit();
 
@@ -64,22 +61,19 @@ pub fn Build(engine_context: *EngineContext, abs_path: []const u8, rel_path: []c
 }
 
 /// Loads the last build of the script at abs_path, as copy number `generation`, and hands back what it exports
-pub fn Open(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path: []const u8, generation: u32) !*const ScriptABI.ScriptInfo {
+pub fn Open(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path: []const u8, _: []const u8, generation: u32) !*const ScriptABI.ScriptInfo {
     const frame_allocator = engine_context.FrameAllocator();
     const name = std.fs.path.basename(abs_path);
     const built_path = try std.fmt.allocPrint(frame_allocator, "zig-out/bin/{s}.dll", .{name});
 
-    var load_path = built_path;
-    if (!game_build_options.prebuilt_scripts) {
-        load_path = try std.fmt.allocPrint(frame_allocator, "zig-out/bin/{s}.{d}.dll", .{ name, generation });
-        const built_w = try std.unicode.utf8ToUtf16LeAllocZ(frame_allocator, built_path);
-        const copy_w = try std.unicode.utf8ToUtf16LeAllocZ(frame_allocator, load_path);
-        if (!CopyFileW(built_w.ptr, copy_w.ptr, .FALSE).toBool()) {
-            std.log.err("Failed to copy {s} to {s} to load it", .{ built_path, load_path });
-            return error.AssetInitFailed;
-        }
-        try self.mLoadedPath.appendSlice(engine_context.EngineAllocator(), load_path);
+    const load_path = try std.fmt.allocPrint(frame_allocator, "zig-out/bin/{s}.{d}.dll", .{ name, generation });
+    const built_w = try std.unicode.utf8ToUtf16LeAllocZ(frame_allocator, built_path);
+    const copy_w = try std.unicode.utf8ToUtf16LeAllocZ(frame_allocator, load_path);
+    if (!CopyFileW(built_w.ptr, copy_w.ptr, .FALSE).toBool()) {
+        std.log.err("Failed to copy {s} to {s} to load it", .{ built_path, load_path });
+        return error.AssetInitFailed;
     }
+    try self.mLoadedPath.appendSlice(engine_context.EngineAllocator(), load_path);
     errdefer self.Close(engine_context);
 
     const load_path_w = try std.unicode.utf8ToUtf16LeAllocZ(frame_allocator, load_path);

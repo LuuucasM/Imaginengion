@@ -41,13 +41,16 @@ pub fn build(b: *std.Build) void {
     engine_module_eng.addOptions("debug_build_options", debug_build_options);
     engine_module_script.addOptions("debug_build_options", debug_build_options);
 
-    //a game packaged to send to someone: its scripts are built ahead of time and shipped with it, since whoever
-    //plays it has no zig or engine source to build them with
-    const prebuilt_scripts = b.option(bool, "prebuilt-scripts", "load script DLLs built ahead of time instead of compiling them, for a packaged game") orelse false;
+    //a game packaged to send to someone, who has no zig or engine source: its scripts are compiled into its exe (the
+    //project's build gives the engine what StaticScriptAsset needs for that), and its fonts' atlases are made ahead of time
+    //and shipped instead of the fonts. Only the exe is packaged: the script module is never in one, and only checks scripts
+    const packaged_game = b.option(bool, "packaged-game", "build the engine for a game's exe: scripts compiled in, font atlases instead of fonts") orelse false;
     var game_build_options = b.addOptions();
-    game_build_options.addOption(bool, "prebuilt_scripts", prebuilt_scripts);
+    game_build_options.addOption(bool, "packaged_game", packaged_game);
     engine_module_eng.addOptions("game_build_options", game_build_options);
-    engine_module_script.addOptions("game_build_options", game_build_options);
+    var script_build_options = b.addOptions();
+    script_build_options.addOption(bool, "packaged_game", false);
+    engine_module_script.addOptions("game_build_options", script_build_options);
 
     var compute_build_options = b.addOptions();
     compute_build_options.addOption(bool, "compute_type", compute_type);

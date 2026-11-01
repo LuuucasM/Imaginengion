@@ -1,5 +1,5 @@
-//! The engine's own files a game uses: the ones the engine opens by itself with nothing naming them, and what building a
-//! game copies. Only constants, with no imports: the build reads this file too, and so does the engine.
+//! The engine's own files a game uses: the ones the engine opens by itself with nothing naming them, and where its stock
+//! scripts are. Only constants, with no imports: the build reads this file too, and so does the engine.
 
 pub const ASSETS_PATH = "src/Imaginengion/EngineAssets";
 
@@ -18,19 +18,5 @@ pub const ALWAYS_NEEDED = [_][]const u8{
     DEFAULT_SOUND,
 };
 
-/// What building a game copies, from ASSETS_PATH. Fixed for now: nothing yet looks at what a game uses
-pub const COPIED_ASSETS = [_][]const u8{
-    "fonts/default/static/ChironGoRoundTC-Bold.json",
-    "fonts/default/static/ChironGoRoundTC-Bold.png",
-    "fonts/default/static/ChironGoRoundTC-Bold.ttf",
-    "fonts/default/static/ChironGoRoundTC-Regular.json",
-    "fonts/default/static/ChironGoRoundTC-Regular.png",
-    "fonts/default/static/ChironGoRoundTC-Regular.ttf",
-    "sounds/DefaultSound.mp3",
-    "textures/DefaultTexture.png",
-    "textures/White.png",
-    "themes/Default.imtheme",
-};
-
-/// The stock UI scripts, from ASSETS_PATH. Building a game copies the folder and builds every script in it
+/// The stock UI scripts, from ASSETS_PATH (Widgets.StockScript)
 pub const STOCK_SCRIPTS_FOLDER = "scripts/UI";

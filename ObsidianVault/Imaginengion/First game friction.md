@@ -1,5 +1,0 @@
-- not having LSP working with the scripts
-	- this is an open issue right now on ZLS becauase of the build system changes but I know andrew mentioned in recent talks that he is working closely with ZLS to get it working again
-- trying to figure out how to handle different screen sizes and what it means for different components
-	- for stuff in game layers it seems if the screen is bigger you can see more and if its smaller you see less which makes sense but then for static games like pong its strange because if you full screen you see more of pong then if you make it smaller screen. could fix by putting the entire game in the overlay layer which lives in screen space but idk 
-- 

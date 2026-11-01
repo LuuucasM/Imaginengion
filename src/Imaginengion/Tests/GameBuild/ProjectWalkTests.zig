@@ -18,8 +18,9 @@ const TestGame = struct {
         var game: TestGame = .{ .mTmpDir = std.testing.tmpDir(.{}), .mArena = .init(std.testing.allocator) };
         errdefer game.Deinit();
 
-        for (EngineFiles.COPIED_ASSETS) |asset| {
-            try game.WriteFile(try game.Join("engine/" ++ EngineFiles.ASSETS_PATH, asset), "");
+        for (EngineFiles.ALWAYS_NEEDED) |path| try game.WriteFile(try game.Join("engine", path), "");
+        for ([_][]const u8{ "ChironGoRoundTC-Regular.json", "ChironGoRoundTC-Regular.png", "ChironGoRoundTC-Bold.ttf", "ChironGoRoundTC-Bold.json", "ChironGoRoundTC-Bold.png" }) |font_file| {
+            try game.WriteFile(try game.Join("engine/" ++ EngineFiles.ASSETS_PATH ++ "/fonts/default/static", font_file), "");
         }
         //a theme's font doesn't have to say where it's from
         try game.WriteFile("engine/" ++ EngineFiles.DEFAULT_THEME, "{\"Styles\":{\"Button\":{\"Font\":{\"Path\":\"" ++ THEME_FONT ++ "\"}}}}");
@@ -140,15 +141,14 @@ test "the walk follows the entries, what objects save at any depth, script varia
     for ([_][]const u8{
         "game.imprj",        "icon.png",          "ProjectSettings/Audio.json", "scenes/Main.imsc", "scenes/Next.imsc",
         "players/Main.impl", "gc/Main.imgc",      "gc/State.zig",               "textures/Ball.png", "music/Theme.mp3",
-        "fonts/Title.ttf",   "fonts/Title.json",  "fonts/Title.png",            "scripts/Play.zig", "events/Score.zig",
-        "events/Shared.zig",
+        "fonts/Title.json",  "fonts/Title.png",   "scripts/Play.zig",           "events/Score.zig", "events/Shared.zig",
     }) |path| {
         if (!result.mProject.contains(path)) {
             std.debug.print("not found: {s}\n", .{path});
             return error.TestExpectedFile;
         }
     }
-    try std.testing.expectEqual(16, result.mProject.count());
+    try std.testing.expectEqual(15, result.mProject.count());
 
     const not_needed = try game.FindNotNeeded(&result);
     try ExpectPaths(&.{ "notes.txt", "scripts/Old.zig", "textures/Unused.png" }, not_needed.mProject.items);
@@ -166,10 +166,14 @@ test "the engine's files every game needs are found, and what a theme names, and
 
     const result = try game.Walk();
     try std.testing.expectEqual(0, result.mMissing.items.len);
-    for (EngineFiles.ALWAYS_NEEDED) |path| try std.testing.expect(result.mEngine.contains(path));
-    //the theme's font and its atlas, which only the theme leads to
-    try std.testing.expect(result.mEngine.contains(THEME_FONT));
+    for (EngineFiles.ALWAYS_NEEDED) |path| {
+        try std.testing.expectEqual(!ProjectWalk.IsFontFile(path), result.mEngine.contains(path));
+    }
+    try std.testing.expect(result.mEngine.contains(EngineFiles.ASSETS_PATH ++ "/fonts/default/static/ChironGoRoundTC-Regular.json"));
+    //the theme's font's atlas, which only the theme leads to, without the font
+    try std.testing.expect(!result.mEngine.contains(THEME_FONT));
     try std.testing.expect(result.mEngine.contains(EngineFiles.ASSETS_PATH ++ "/fonts/default/static/ChironGoRoundTC-Bold.json"));
+    try std.testing.expect(result.mEngine.contains(EngineFiles.ASSETS_PATH ++ "/fonts/default/static/ChironGoRoundTC-Bold.png"));
     try std.testing.expect(result.mEngine.contains(STOCK_FOLDER ++ "/Choose.zig"));
 
     const not_needed = try game.FindNotNeeded(&result);
@@ -344,7 +348,7 @@ test "the counts and trees are per file and per type of object, and a file named
     try ProjectWalk.WriteReport(&out, "game", &result, &.{});
     const report = out.buffered();
     const start = std.mem.indexOf(u8, report, "Objects in").?;
-    const end = std.mem.indexOf(u8, report, "Missing").?;
+    const end = std.mem.indexOf(u8, report, "Fonts,").?;
     try std.testing.expectEqualStrings(
         \\Objects in 4 object files:
         \\  all of them
@@ -644,6 +648,153 @@ test "the whole forest and the checks are printed as the report shows them" {
     try std.testing.expectEqualStrings("Problems: none\n", out.buffered());
 }
 
+test "a font's atlas stands for it, and clearing a game's folder takes out a font an earlier build copied" {
+    var game = try TestGame.Init();
+    defer game.Deinit();
+    try std.testing.expect(ProjectWalk.IsFontFile("fonts/A.ttf") and ProjectWalk.IsFontFile("fonts/B.OTF"));
+    try std.testing.expect(!ProjectWalk.IsFontFile("fonts/A.json"));
+    try std.testing.expectEqualStrings("fonts/A.b.json", try ProjectWalk.AtlasJsonOf(game.mArena.allocator(), "fonts/A.b.ttf"));
+
+    try game.WriteEntries();
+    try game.Write("scenes/Main.imsc",
+        \\{"TextComponent": {"Font": {"Path": "fonts/A.ttf", "PathType": "Prj"}}}
+    );
+    try game.Write("fonts/A.ttf", "");
+    try game.Write("fonts/A.json", "");
+    try game.Write("fonts/A.png", "");
+
+    const result = try game.Walk();
+    try std.testing.expect(!result.mProject.contains("fonts/A.ttf"));
+    try std.testing.expect(result.mProject.contains("fonts/A.json") and result.mProject.contains("fonts/A.png"));
+    //it's still named, and read as far as what it leads to
+    try std.testing.expect(HasLink(&result, "scenes/Main.imsc", "fonts/A.ttf", "Text on \"\""));
+    try std.testing.expect(HasLink(&result, "fonts/A.ttf", "fonts/A.json", "font atlas"));
+
+    try ExpectPaths(&.{"fonts/A.ttf"}, result.mFonts.getPtrConst(.Prj).keys());
+    try std.testing.expect(result.mFonts.getPtrConst(.Eng).contains(EngineFiles.DEFAULT_FONT));
+    try std.testing.expect(result.mFonts.getPtrConst(.Eng).contains(THEME_FONT));
+
+    try game.WriteFile("out/game/fonts/A.ttf", "");
+    try game.WriteFile("out/game/fonts/A.json", "");
+    try std.testing.expectEqual(1, try ProjectWalk.RemoveLeftovers(game.mArena.allocator(), std.testing.io, try game.FullPath("out"), "game", &result));
+    try game.mTmpDir.dir.access(std.testing.io, "out/game/fonts/A.json", .{});
+}
+
+test "a font nothing names is left out with its atlas, and one with no atlas isn't shipped as one" {
+    var game = try TestGame.Init();
+    defer game.Deinit();
+    try game.WriteEntries();
+    try game.Write("scenes/Main.imsc",
+        \\{"TextComponent": {"Font": {"Path": "fonts/Half.ttf", "PathType": "Prj"}}}
+    );
+    //only half of its atlas
+    try game.Write("fonts/Half.ttf", "");
+    try game.Write("fonts/Half.json", "");
+    try game.Write("fonts/Unused.ttf", "");
+    try game.Write("fonts/Unused.json", "");
+    try game.Write("fonts/Unused.png", "");
+
+    const result = try game.Walk();
+    try ExpectPaths(&.{}, result.mFonts.getPtrConst(.Prj).keys());
+    try std.testing.expectEqual(1, result.mMissing.items.len);
+    try std.testing.expectEqualStrings("fonts/Half.png", result.mMissing.items[0].mPath);
+
+    const not_needed = try game.FindNotNeeded(&result);
+    try ExpectPaths(&.{ "fonts/Half.ttf", "fonts/Unused.json", "fonts/Unused.png", "fonts/Unused.ttf" }, not_needed.mProject.items);
+}
+
+test "only scripts on objects are compiled in, and using Widgets brings in every stock script" {
+    var game = try TestGame.Init();
+    defer game.Deinit();
+    try game.WriteEntries();
+    try game.Write("scenes/Main.imsc",
+        \\{"Scripts": [{"Script": {"Path": "scripts/Plain.zig", "PathType": "Prj"}}]}
+    );
+    //what's only imported is built into the script, and a comment naming Widgets isn't using it
+    try game.Write("scripts/Plain.zig", "const Event = @import(\"Event\");\n//const Widgets = IM.Widgets;");
+    try game.Write("scripts/Event.zig", "");
+
+    var result = try game.Walk();
+    try ExpectPaths(&.{"scripts/Plain.zig"}, result.mLoadedScripts.getPtrConst(.Prj).keys());
+    try ExpectPaths(&.{}, result.mLoadedScripts.getPtrConst(.Eng).keys());
+    try std.testing.expect(result.mProject.contains("scripts/Event.zig"));
+    try std.testing.expect(!result.mEngine.contains(STOCK_FOLDER ++ "/Choose.zig"));
+
+    try game.Write("scripts/Plain.zig", "const IM = @import(\"IM\");\nconst Row = IM.Widgets.SelectableRow;");
+
+    result = try game.Walk();
+    try std.testing.expect(result.mEngine.contains(STOCK_FOLDER ++ "/Choose.zig"));
+    try std.testing.expect(result.mEngine.contains(STOCK_FOLDER ++ "/Toggle.zig"));
+    try std.testing.expect(result.mLoadedScripts.getPtrConst(.Eng).contains(STOCK_FOLDER ++ "/Toggle.zig"));
+    try ExpectPaths(&.{}, (try game.FindNotNeeded(&result)).mEngine.items);
+}
+
+test "the walk says which files it read, so the build knows when to run it again" {
+    var game = try TestGame.Init();
+    defer game.Deinit();
+    try game.WriteEntries();
+    try game.Write("scenes/Main.imsc",
+        \\{"SurfaceComponent": {"Texture": {"Path": "ball.png", "PathType": "Prj"}},
+        \\ "Scripts": [{"Script": {"Path": "scripts/Plain.zig", "PathType": "Prj"}}]}
+    );
+    try game.Write("ball.png", "");
+    try game.Write("scripts/Plain.zig", "");
+
+    const result = try game.Walk();
+
+    var paths: std.ArrayList([]const u8) = .empty;
+    for (result.mRead.items) |file| try paths.append(game.mArena.allocator(), file.mPath);
+    for ([_][]const u8{ "game.imprj", "scenes/Main.imsc", "players/Main.impl", "gc/Main.imgc", "scripts/Plain.zig", EngineFiles.DEFAULT_THEME }) |wanted| {
+        var found = false;
+        for (paths.items) |path| {
+            if (std.mem.eql(u8, path, wanted)) found = true;
+        }
+        if (!found) {
+            std.debug.print("not read: {s}\n", .{wanted});
+            return error.TestExpectedFile;
+        }
+    }
+    //nothing in a texture changes what the walk finds
+    for (paths.items) |path| try std.testing.expect(!std.mem.eql(u8, path, "ball.png"));
+}
+
+test "clearing a game's folder keeps what the game needs, and deletes the rest with any folder it empties" {
+    var game = try TestGame.Init();
+    defer game.Deinit();
+    try game.WriteEntries();
+    try game.Write("scenes/Main.imsc",
+        \\{"Scripts": [{"Script": {"Path": "scripts/Plain.zig", "PathType": "Prj"}}]}
+    );
+    try game.Write("scripts/Plain.zig", "");
+
+    const result = try game.Walk();
+
+    const kept = [_][]const u8{
+        "out/ImaginGame.exe",
+        "out/game.bat",
+        "out/game/game.imprj",
+        "out/game/scenes/Main.imsc",
+        "out/game/scripts/Plain.zig",
+        "out/" ++ EngineFiles.DEFAULT_THEME,
+    };
+    const removed = [_][]const u8{
+        "out/game/notes.txt",
+        "out/game/scripts/Old.zig",
+        "out/game/old folder/deep/Old.png",
+        "out/zig-out/bin/Plain.zig.dll",
+        "out/" ++ STOCK_FOLDER ++ "/Toggle.zig",
+    };
+    for (kept) |path| try game.WriteFile(path, "");
+    for (removed) |path| try game.WriteFile(path, "");
+
+    const count = try ProjectWalk.RemoveLeftovers(game.mArena.allocator(), std.testing.io, try game.FullPath("out"), "game", &result);
+    try std.testing.expectEqual(removed.len, count);
+
+    for (kept) |path| try game.mTmpDir.dir.access(std.testing.io, path, .{});
+    for (removed) |path| try std.testing.expectError(error.FileNotFound, game.mTmpDir.dir.access(std.testing.io, path, .{}));
+    try std.testing.expectError(error.FileNotFound, game.mTmpDir.dir.access(std.testing.io, "out/game/old folder", .{}));
+}
+
 test "the report counts files by kind and lists what isn't needed and what's missing" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
@@ -654,6 +805,8 @@ test "the report counts files by kind and lists what isn't needed and what's mis
         try result.mProject.put(arena, path, {});
     }
     try result.mEngine.put(arena, EngineFiles.PLAIN_TEXTURE, {});
+    try result.mFonts.getPtr(.Prj).put(arena, "fonts/A.ttf", {});
+    try result.mFonts.getPtr(.Eng).put(arena, EngineFiles.DEFAULT_FONT, {});
 
     var not_needed: ProjectWalk.NotNeeded = .{};
     try not_needed.mProject.append(arena, "notes.txt");
@@ -666,9 +819,12 @@ test "the report counts files by kind and lists what isn't needed and what's mis
         \\game: 6 files needed
         \\  project 5: object files 2, scripts 1, other 2
         \\  engine 1: object files 0, scripts 0, other 1
-        \\Not needed, still copied (2):
+        \\Left out (2):
         \\  notes.txt
         \\  (engine) scripts/UI/Toggle.zig
+        \\Fonts, shipped as their atlas (2):
+        \\  fonts/A.ttf
+        \\  (engine) fonts/default/static/ChironGoRoundTC-Regular.ttf
         \\Missing: none
         \\
     , out.buffered());
@@ -684,6 +840,9 @@ test "the report counts files by kind and lists what isn't needed and what's mis
         \\game: 6 files needed
         \\  project 5: object files 2, scripts 1, other 2
         \\  engine 1: object files 0, scripts 0, other 1
+        \\Fonts, shipped as their atlas (2):
+        \\  fonts/A.ttf
+        \\  (engine) fonts/default/static/ChironGoRoundTC-Regular.ttf
         \\Missing (4):
         \\  EntryPlayer isn't set in the project file
         \\  b.png, named by scenes/Main.imsc

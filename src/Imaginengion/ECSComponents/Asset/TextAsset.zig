@@ -36,6 +36,8 @@ mEmsize: f32 = 0.0,
 mAtlasSize: Vec2(f32) = .{ .x = 0, .y = 0 },
 mAtlas: Texture2D = .{},
 
+/// `abs_path` is the font's, or in a packaged game its atlas .json's (AManager.PackagedPath): only the atlas's files are
+/// read, from next to it. The font itself is only needed to generate them
 pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, _: std.Io.File) !void {
     //builds the font atlas, which makes this one of the slowest asset loads
     const zone = Tracy.ZoneInit("TextAsset::Init", @src());

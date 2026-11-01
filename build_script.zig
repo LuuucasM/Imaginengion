@@ -97,14 +97,14 @@ pub fn BuildScript(b: *std.Build, module: *std.Build.Module, target: std.Build.R
 /// What a game project's build.zig calls (Project.WriteBuildFiles writes it), run from the project's folder:
 /// - `zig build check`: every .zig file in the project compiles. It's what ZLS knows the files' imports from, which it
 ///   only reads from a compile step in the build.zig above a file
-/// - `zig build game`, or just `zig build`: the game in zig-out/<name>/, a folder that runs with no zig or engine source
+/// - `zig build game`, or just `zig build`: the game in zig-out/<name>/, a folder that runs with no zig or engine source,
+///   holding only what ProjectWalk finds it needs. Anything else in that folder is deleted, so it's no place to keep files
 /// - `zig build rungame`: builds the game and runs it
 pub fn ProjectBuild(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    //a project's build is for playing unless asked for something else. Scripts and the game have to match (see
-    //WindowsScriptAsset.Build), which they do by all being built here
+    //a project's build is for playing unless asked for something else
     const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Build mode, fast if not given") orelse .fast;
-    const engine = b.dependency("GameEngine", .{ .target = target, .optimize = optimize, .@"prebuilt-scripts" = true });
+    const engine = b.dependency("GameEngine", .{ .target = target, .optimize = optimize, .@"packaged-game" = true });
 
     const check_step = b.step("check", "Check that the project's files compile");
     const game_step = b.step("game", "Build the game into zig-out/<name>/");
@@ -172,6 +172,7 @@ fn AddProjectSteps(b: *std.Build, engine: *std.Build.Dependency, check_step: *st
         game_step.dependOn(&b.addFail("no .imprj file at the top of the project's folder, so there's no game to build").step);
         return;
     };
+    const walk = WalkGame(b, game_step, engine, project, game_name) orelse return;
     const game: GameBuild = .{
         .mBuild = b,
         .mStep = game_step,
@@ -179,7 +180,9 @@ fn AddProjectSteps(b: *std.Build, engine: *std.Build.Dependency, check_step: *st
         .mTarget = target,
         .mOptimize = optimize,
         .mName = game_name,
+        .mWalk = walk,
     };
+    game.AddScripts(engine, project, &files);
 
     const exe = b.addExecutable(.{
         .name = "ImaginGame",
@@ -195,9 +198,8 @@ fn AddProjectSteps(b: *std.Build, engine: *std.Build.Dependency, check_step: *st
         .pdb_dir = .disabled,
     }).step);
 
-    for (names.items, modules.items) |name, module| game.AddScript(name, module);
-    try game.AddProjectFiles();
-    if (try game.AddEngineAssets(engine, engine_module, &files)) return;
+    game.AddProjectFiles();
+    game.AddEngineFiles(engine);
 
     //every path the game reads is from the folder it runs in, which is what this file is for
     const start_file = b.addWriteFiles().add("start.bat", b.fmt(
@@ -228,8 +230,32 @@ fn FindProjectFileName(b: *std.Build) !?[]const u8 {
     return null;
 }
 
-/// Fills zig-out/<name>/, laid out the way the game reads it from the folder it runs in: the same paths as in the
-/// engine's folder, and the project in a folder of its own
+/// Which files the game `game_name` needs. Null, with a failing step added to `game_step` saying why, for a project file
+/// that can't be read. The build is set to run this again when a file it read changes, or any project folder gets a file
+/// added or removed (AddProjectSteps does the project's folders)
+fn WalkGame(b: *std.Build, game_step: *std.Build.Step, engine: *std.Build.Dependency, project: []const u8, game_name: []const u8) ?ProjectWalk.Result {
+    const project_file = b.fmt("{s}.imprj", .{game_name});
+    b.dependOnFileContents(b.path(project_file));
+
+    const engine_path = engine.builder.root.root_dir.handle.realPathFileAlloc(b.graph.io, ".", b.allocator) catch |err| {
+        game_step.dependOn(&b.addFail(b.fmt("couldn't find the engine's folder: {s}", .{@errorName(err)})).step);
+        return null;
+    };
+    const walk = ProjectWalk.WalkProject(b.allocator, b.graph.io, project, engine_path, project_file) catch |err| {
+        game_step.dependOn(&b.addFail(b.fmt("couldn't read {s}: {s}", .{ project_file, @errorName(err) })).step);
+        return null;
+    };
+
+    for (walk.mRead.items) |file| {
+        const root = if (file.mRoot == .Prj) project else engine_path;
+        b.dependOnFileContents(.{ .cwd_relative = b.pathJoin(&.{ root, file.mPath }) });
+    }
+    b.dependOnDirectoryContents(engine.path(EngineFiles.ASSETS_PATH ++ "/" ++ EngineFiles.STOCK_SCRIPTS_FOLDER));
+    return walk;
+}
+
+/// Fills zig-out/<name>/ with what the game needs, laid out the way the game reads it from the folder it runs in: the same
+/// paths as in the engine's folder, and the project in a folder of its own
 const GameBuild = struct {
     mBuild: *std.Build,
     mStep: *std.Build.Step,
@@ -237,106 +263,100 @@ const GameBuild = struct {
     mTarget: std.Build.ResolvedTarget,
     mOptimize: std.builtin.OptimizeMode,
     mName: []const u8,
+    mWalk: ProjectWalk.Result,
 
-    /// `module`'s DLL, where WindowsScriptAsset.Open loads it from. A project also holds files that aren't scripts (its
-    /// events, its enums), which can't be told from a script until they're compiled: those come out with nothing in them
-    fn AddScript(self: GameBuild, name: []const u8, module: *std.Build.Module) void {
+    /// Compiles the scripts the game loads into its exe: the engine gets a table of them ("game_scripts", which
+    /// StaticScriptAsset reads) and they use the same engine module as the exe, so the game has one copy of the engine.
+    /// Modules can import each other in a circle, so the engine importing the table that imports the engine is fine
+    fn AddScripts(self: GameBuild, engine: *std.Build.Dependency, project: []const u8, files: *const ScriptImports.ProjectFiles) void {
         const b = self.mBuild;
-        const root_file = self.mRoots.add(b.fmt("{s}_game.zig", .{name}), b.fmt(
+        const engine_module = engine.module("ImaginEngionEngine");
+
+        //every project file is a module under its name, which any of them can import, the same as the check step. Only
+        //what the table reaches gets compiled
+        var by_path: std.StringHashMapUnmanaged(*std.Build.Module) = .empty;
+        var modules: std.ArrayList(*std.Build.Module) = .empty;
+        var iter = files.mByName.iterator();
+        while (iter.next()) |file| {
+            const rel_path = file.value_ptr.*[project.len + 1 ..];
+            const module = self.ScriptModule(engine_module, b.path(rel_path));
+            modules.append(b.allocator, module) catch @panic("OOM");
+            by_path.put(b.allocator, ProjectWalk.Normalize(b.allocator, rel_path) catch @panic("OOM"), module) catch @panic("OOM");
+        }
+        iter = files.mByName.iterator();
+        var index: usize = 0;
+        while (iter.next()) |file| : (index += 1) {
+            if (ScriptImports.IsNotProjectFile(file.key_ptr.*)) continue;
+            for (modules.items) |other| other.addImport(file.key_ptr.*, modules.items[index]);
+        }
+
+        //where each script is with its ScriptInfo, the same one `zig build script` exports from a DLL, so everything after
+        //finding it works the same as in the editor. One the walk found no file for is left out: it's reported as missing
+        var source: std.ArrayList(u8) = .empty;
+        var imports: std.ArrayList(std.Build.Module.Import) = .empty;
+        imports.append(b.allocator, .{ .name = "IM", .module = engine_module }) catch @panic("OOM");
+        source.appendSlice(b.allocator,
             \\const IM = @import("IM");
-            \\const file = @import("file");
-            \\fn GetInfo() callconv(.c) *const IM.ScriptABI.ScriptInfo {{
-            \\    return &IM.ScriptExport.Exports(file, "{s}", &.{{}}).info;
-            \\}}
-            \\comptime {{
-            \\    if (IM.ScriptExport.IsScript(file)) @export(&GetInfo, .{{ .name = IM.ScriptABI.INFO_SYMBOL }});
-            \\}}
+            \\const Script = struct { mPath: []const u8, mInfo: *const IM.ScriptABI.ScriptInfo };
+            \\pub const scripts = [_]Script{
             \\
-        , .{name}));
-        const dll = b.addLibrary(.{
-            .linkage = .dynamic,
-            .name = b.fmt("{s}.zig", .{name}),
-            .root_module = b.createModule(.{
-                .target = self.mTarget,
-                .optimize = self.mOptimize,
-                .root_source_file = root_file,
-                .imports = &.{
-                    .{ .name = "IM", .module = module.import_table.get("IM").? },
-                    .{ .name = "file", .module = module },
-                },
-            }),
-        });
-        self.mStep.dependOn(&b.addInstallArtifact(dll, .{
-            .dest_dir = .{ .override = .{ .custom = b.fmt("{s}/zig-out/bin", .{self.mName}) } },
-            .pdb_dir = .disabled,
-            .implib_dir = .disabled,
-        }).step);
+        ) catch @panic("OOM");
+        for (std.enums.values(ProjectWalk.FileRoot)) |root| {
+            for (self.mWalk.mLoadedScripts.getPtrConst(root).keys()) |path| {
+                const module = switch (root) {
+                    .Prj => by_path.get(path) orelse continue,
+                    .Eng => if (self.mWalk.mEngine.contains(path)) self.ScriptModule(engine_module, engine.path(path)) else continue,
+                };
+                //by number: a project's script can have the same name as a stock one
+                const import_name = b.fmt("script_{d}", .{imports.items.len});
+                imports.append(b.allocator, .{ .name = import_name, .module = module }) catch @panic("OOM");
+                source.print(b.allocator, "    .{{ .mPath = \"{f}\", .mInfo = &IM.ScriptExport.Exports(@import(\"{s}\"), \"{f}\", &.{{}}).info }},\n", .{
+                    std.zig.fmtString(path),
+                    import_name,
+                    std.zig.fmtString(std.fs.path.stem(path)),
+                }) catch @panic("OOM");
+            }
+        }
+        source.appendSlice(b.allocator, "};\n") catch @panic("OOM");
+
+        engine_module.addImport("game_scripts", b.createModule(.{
+            .target = self.mTarget,
+            .optimize = self.mOptimize,
+            .root_source_file = self.mRoots.add("game_scripts.zig", source.items),
+            .imports = imports.items,
+        }));
     }
 
-    /// Everything in the project's folder but what's only for building it. Script files go too: the engine still opens
-    /// the file when it loads a script's DLL
-    fn AddProjectFiles(self: GameBuild) !void {
+    fn ScriptModule(self: GameBuild, engine_module: *std.Build.Module, root: std.Build.LazyPath) *std.Build.Module {
+        return self.mBuild.createModule(.{
+            .target = self.mTarget,
+            .optimize = self.mOptimize,
+            .root_source_file = root,
+            .imports = &.{.{ .name = "IM", .module = engine_module }},
+        });
+    }
+
+    /// The project's files the game needs. Script files go too: the engine still opens a script's file when it loads it
+    fn AddProjectFiles(self: GameBuild) void {
         const b = self.mBuild;
         const destination: std.Build.InstallDir = .{ .custom = b.fmt("{s}/{s}", .{ self.mName, self.mName }) };
-        var dir = try b.root.root_dir.handle.openDir(b.graph.io, ".", .{ .iterate = true });
-        defer dir.close(b.graph.io);
-        var iter = dir.iterate();
-        while (try iter.next(b.graph.io)) |entry| {
-            const name = b.dupe(entry.name);
-            switch (entry.kind) {
-                .directory => {
-                    if (ScriptImports.SkipFolder(name)) continue;
-                    self.mStep.dependOn(&b.addInstallDirectory(.{
-                        .source_dir = b.path(name),
-                        .install_dir = destination,
-                        .install_subdir = name,
-                    }).step);
-                },
-                .file => {
-                    if (ProjectWalk.IsBuildOnlyFile(name)) continue;
-                    self.mStep.dependOn(&b.addInstallFileWithDir(b.path(name), destination, name).step);
-                },
-                else => {},
-            }
+        for (self.mWalk.mProject.keys()) |path| {
+            self.mStep.dependOn(&b.addInstallFileWithDir(b.path(path), destination, path).step);
         }
     }
 
-    /// EngineFiles.COPIED_ASSETS and the stock UI scripts with their DLLs. True, with a failing step added saying why, if a
-    /// project file has a stock script's name: a DLL is named after its file, so one would be written over the other
-    fn AddEngineAssets(self: GameBuild, engine: *std.Build.Dependency, engine_module: *std.Build.Module, project_files: *const ScriptImports.ProjectFiles) !bool {
+    /// The engine's files the game needs
+    fn AddEngineFiles(self: GameBuild, engine: *std.Build.Dependency) void {
         const b = self.mBuild;
-        const destination: std.Build.InstallDir = .{ .custom = b.fmt("{s}/{s}", .{ self.mName, EngineFiles.ASSETS_PATH }) };
-        for (EngineFiles.COPIED_ASSETS) |asset| {
-            self.mStep.dependOn(&b.addInstallFileWithDir(engine.path(b.fmt("{s}/{s}", .{ EngineFiles.ASSETS_PATH, asset })), destination, asset).step);
+        const destination: std.Build.InstallDir = .{ .custom = self.mName };
+        for (self.mWalk.mEngine.keys()) |path| {
+            self.mStep.dependOn(&b.addInstallFileWithDir(engine.path(path), destination, path).step);
         }
-        const stock_folder = EngineFiles.ASSETS_PATH ++ "/" ++ EngineFiles.STOCK_SCRIPTS_FOLDER;
-        self.mStep.dependOn(&b.addInstallDirectory(.{
-            .source_dir = engine.path(stock_folder),
-            .install_dir = destination,
-            .install_subdir = EngineFiles.STOCK_SCRIPTS_FOLDER,
-        }).step);
-
-        const stock_path = try engine.builder.root.root_dir.handle.realPathFileAlloc(b.graph.io, stock_folder, b.allocator);
-        const stock = try ScriptImports.FindProjectFiles(b.allocator, b.graph.io, stock_path);
-        var iter = stock.mByName.iterator();
-        while (iter.next()) |file| {
-            const name = file.key_ptr.*;
-            if (project_files.mByName.get(name)) |project_file| {
-                self.mStep.dependOn(&b.addFail(b.fmt("{s} has the same name as the engine's stock script {s}.zig, and a game needs both: rename it", .{ project_file, name })).step);
-                return true;
-            }
-            self.AddScript(name, b.createModule(.{
-                .target = self.mTarget,
-                .optimize = self.mOptimize,
-                .root_source_file = engine.path(b.fmt("{s}/{s}", .{ stock_folder, file.value_ptr.*[stock_path.len + 1 ..] })),
-                .imports = &.{.{ .name = "IM", .module = engine_module }},
-            }));
-        }
-        return false;
     }
 
-    /// Prints which of the game's files it needs (src/GameReport.zig) every time it's built, once everything added to the
-    /// step so far is done so it's the last thing shown. It's compiled for the machine building, whatever the game's for
+    /// Prints which of the game's files it needs and clears what earlier builds left (src/GameReport.zig) every time it's
+    /// built, once everything added to the step so far is done so it's the last thing shown. It's compiled for the machine
+    /// building, whatever the game's for
     fn AddReport(self: GameBuild, engine: *std.Build.Dependency, project: []const u8) void {
         const b = self.mBuild;
         const tool = b.addExecutable(.{
@@ -352,6 +372,7 @@ const GameBuild = struct {
         report.addArg(project);
         report.addDirectoryArg(engine.path("."));
         report.addArg(self.mName);
+        report.addDirectoryArg(b.graph.path(.install_prefix, self.mName));
         if (b.option(bool, "trees", "Also print every object file's objects after building the game") orelse false) report.addArg("trees");
 
         for (self.mStep.dependencies.items) |step| report.step.dependOn(step);

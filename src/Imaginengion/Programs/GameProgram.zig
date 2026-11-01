@@ -233,8 +233,6 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
     {
         const assets_zone = Tracy.ZoneInit("Assets Section", @src());
         defer assets_zone.Deinit();
-        //scripts whose files changed last frame, before OnUpdate clears what changed
-        try ScriptsProcessor.SyncScripts(engine_context, &.{game_world});
         try engine_context.mAssetManager.OnUpdate(engine_context);
     }
     //-------------End Assets Update ------------------

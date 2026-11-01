@@ -1,7 +1,9 @@
 const std = @import("std");
+const game_build_options = @import("game_build_options");
 
 const ECSManager = @import("../ECS/ECSManager.zig");
 const EngineFiles = @import("../GameBuild/EngineFiles.zig");
+const ProjectWalk = @import("../GameBuild/ProjectWalk.zig");
 const GroupQuery = ECSManager.GroupQuery;
 
 const EventManager = @import("../Events/EventManager.zig");
@@ -161,7 +163,7 @@ pub fn Setup(self: *AManager, engine_context: *EngineContext) !void {
     try self._internal.DefaultTexture2D.Init(engine_context, texture2d_abs_path, texture2d_rel_path, texture2d_file);
 
     //TEXT ================================
-    const text_rel_path = EngineFiles.DEFAULT_FONT;
+    const text_rel_path = try PackagedPath(frame_allocator, EngineFiles.DEFAULT_FONT);
     const text_abs_path = try self.GetAbsPath(frame_allocator, text_rel_path, .Eng);
     const text_file = try std.Io.Dir.openFileAbsolute(io, text_abs_path, .{});
     defer text_file.close(io);
@@ -184,13 +186,23 @@ pub fn Deinit(self: *AManager, engine_context: *EngineContext) void {
     self._internal.Deinit(engine_context);
 }
 
-pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, asset_source: AssetSource) !AssetHandle {
-    if (asset_source == .Default) {
+/// The file that stands for `rel_path` here: a packaged game has no font files, only the atlas made from each
+/// (ProjectWalk), so a font's atlas .json is what it opens, watches and hands TextAsset
+fn PackagedPath(allocator: std.mem.Allocator, rel_path: []const u8) ![]const u8 {
+    if (!game_build_options.packaged_game or !ProjectWalk.IsFontFile(rel_path)) return rel_path;
+    return try ProjectWalk.AtlasJsonOf(allocator, rel_path);
+}
+
+pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, requested_source: AssetSource) !AssetHandle {
+    if (requested_source == .Default) {
         return AssetHandle{
             .mID = AssetHandle.NullObject,
             .mManager = self,
         };
     }
+
+    var asset_source = requested_source;
+    if (asset_source == .File) asset_source.File.rel_path = try PackagedPath(engine_context.FrameAllocator(), asset_source.File.rel_path);
 
     const asset_hash = switch (asset_source) {
         .File => |f| blk: {

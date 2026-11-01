@@ -7,3 +7,5 @@
 - when a text is set to totally transparent alpha = 0, the rest of the overlay elements are skipped. so if I put a transpararent '0' in front of a blue background that '0' shape in the background is not rendered and can see straight through to the game scene layers even tho the blue background should be solid opaque
 - need a for each function in my ECS
 	- this would be a decent time since it feels like a for each function would be effectively the same as a system... a function + Read and Write definitions so once I have everything else I think this should be easily follow
+- hot reloading scripts seemed to not have worked when i added a new member variable to add sound to when hovering buttons so i had to close the editor, and reopened and then the drag target in the script appeared
+- make scripts a node tree so instead of automatically being open they are closed. this is for later when objects might have many many scripts
