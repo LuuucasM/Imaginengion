@@ -352,6 +352,7 @@ const GameBuild = struct {
         report.addArg(project);
         report.addDirectoryArg(engine.path("."));
         report.addArg(self.mName);
+        if (b.option(bool, "trees", "Also print every object file's objects after building the game") orelse false) report.addArg("trees");
 
         for (self.mStep.dependencies.items) |step| report.step.dependOn(step);
         self.mStep.dependOn(&report.step);
