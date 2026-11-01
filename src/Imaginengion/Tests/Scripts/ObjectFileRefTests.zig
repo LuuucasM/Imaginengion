@@ -313,8 +313,8 @@ test "file refs are saved by path and UUID, each part left out when unset, and r
     var out: std.Io.Writer.Allocating = .init(engine_allocator);
     defer out.deinit();
     var write_stream: std.json.Stringify = .{ .writer = &out.writer };
-    const instance = ScriptValues.InstanceOf(script.GetComponent(ScriptComponent).?).?;
-    try ScriptValues.Write(instance.mInfo, instance.mData, &write_stream);
+    const component = script.GetComponent(ScriptComponent).?;
+    try ScriptValues.Write(component, ScriptValues.InstanceOf(component).?, &write_stream);
 
     const parsed = try std.json.parseFromSlice(std.json.Value, engine_allocator, out.written(), .{});
     defer parsed.deinit();

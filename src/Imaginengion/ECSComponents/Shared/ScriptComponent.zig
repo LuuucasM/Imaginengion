@@ -12,6 +12,15 @@ mScriptAssetHandle: AssetHandle = .uninit,
 /// This script child's variables, kept by the script's DLL under this id (see ScriptAsset.NewInstance). Null until the
 /// script has loaded once; after that it stays, even while the script doesn't build (the last build keeps running)
 mInstance: ?u32 = null,
+/// The object each object variable wants, whether it is loaded or not (see ScriptValues). The variables themselves are in
+/// the script's DLL, and are only handles, which can't hold it
+mLinks: std.ArrayList(Link) = .empty,
+
+pub const Link = struct {
+    /// the variable's name, hashed: the name itself is in the script's DLL, which a new build replaces
+    mNameHash: u64,
+    mUUID: u64,
+};
 
 pub const Editable: bool = false;
 pub const Name: []const u8 = "ScriptComponent";
@@ -25,6 +34,43 @@ pub fn Deinit(self: *ScriptComponent, engine_context: *EngineContext) void {
     }
     self.mInstance = null;
     self.mScriptAssetHandle.ReleaseAsset();
+    self.mLinks.deinit(engine_context.EngineAllocator());
+}
+
+/// The UUID the variable called `name` wants, null if it wants none
+pub fn GetLink(self: *const ScriptComponent, name: []const u8) ?u64 {
+    const hash = std.hash.Fnv1a_64.hash(name);
+    for (self.mLinks.items) |link| {
+        if (link.mNameHash == hash) return link.mUUID;
+    }
+    return null;
+}
+
+pub fn SetLink(self: *ScriptComponent, engine_context: *EngineContext, name: []const u8, uuid: u64) !void {
+    const hash = std.hash.Fnv1a_64.hash(name);
+    for (self.mLinks.items) |*link| {
+        if (link.mNameHash == hash) {
+            link.mUUID = uuid;
+            return;
+        }
+    }
+    try self.mLinks.append(engine_context.EngineAllocator(), .{ .mNameHash = hash, .mUUID = uuid });
+}
+
+pub fn RemoveLink(self: *ScriptComponent, name: []const u8) void {
+    const hash = std.hash.Fnv1a_64.hash(name);
+    for (self.mLinks.items, 0..) |link, index| {
+        if (link.mNameHash == hash) {
+            _ = self.mLinks.swapRemove(index);
+            return;
+        }
+    }
+}
+
+/// Wants what `from` wants, instead of what it wanted
+pub fn CopyLinks(self: *ScriptComponent, engine_context: *EngineContext, from: *const ScriptComponent) !void {
+    self.mLinks.clearRetainingCapacity();
+    try self.mLinks.appendSlice(engine_context.EngineAllocator(), from.mLinks.items);
 }
 
 pub fn Clone(self: *const ScriptComponent, engine_context: *EngineContext) !ScriptComponent {
@@ -33,6 +79,10 @@ pub fn Clone(self: *const ScriptComponent, engine_context: *EngineContext) !Scri
     // the copy releases the script asset itself, so it needs its own reference
     new_component.mScriptAssetHandle.RetainAsset();
     errdefer new_component.mScriptAssetHandle.ReleaseAsset();
+
+    // and its own list of what its variables want
+    new_component.mLinks = try self.mLinks.clone(engine_context.EngineAllocator());
+    errdefer new_component.mLinks.deinit(engine_context.EngineAllocator());
 
     // and its own variables, starting as these are
     new_component.mInstance = null;
@@ -53,7 +103,7 @@ pub fn jsonStringify(self: *const ScriptComponent, jw: anytype) !void {
     try jw.write(self.mScriptAssetHandle);
     if (ScriptValues.InstanceOf(self)) |instance| {
         try jw.objectField("Values");
-        try ScriptValues.Write(instance.mInfo, instance.mData, jw);
+        try ScriptValues.Write(self, instance, jw);
     }
     try jw.endObject();
 }

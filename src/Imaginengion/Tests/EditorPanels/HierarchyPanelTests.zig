@@ -12,7 +12,9 @@ const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
 const UIManager = @import("../../UI/UIManager.zig");
 const HierarchyPanel = @import("../../EditorPanels/HierarchyPanel.zig").HierarchyPanel;
-const SelectedObject = @import("../../Programs/EditorProgram.zig").SelectedObject;
+const EditorProgram = @import("../../Programs/EditorProgram.zig");
+const SelectedObject = EditorProgram.SelectedObject;
+const EntityPointerEvent = @import("../../Events/PointerEventData.zig").EntityEvent;
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const TextComponent = EntityComponents.TextComponent;
@@ -185,6 +187,35 @@ test "a click selects, and the selected object's row is highlighted however it w
     try std.testing.expect(!villain_row.Header.HasComponent(SelectedTag));
     try entities.Update(engine_context, game_world, .{ .scene_layer = level });
     for (entities.mRows.items) |row| try std.testing.expect(!row.Header.HasComponent(SelectedTag));
+}
+
+test "a click a script kept, as a tree node's arrow does, doesn't select the row it is in" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+    const level = try game_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const hero = try level.CreateEntity(engine_context, Entity.DefaultConfig);
+
+    const editor_program = try std.heap.page_allocator.create(EditorProgram);
+    defer std.heap.page_allocator.destroy(editor_program);
+    editor_program.* = .{ .mActiveWorld = game_world, .mSelectedObj = .{ .scene_layer = level } };
+    editor_program.mEntityPanel = try world.Panel(Entity);
+    defer editor_program.mEntityPanel.Deinit(engine_context.EngineAllocator());
+    try editor_program.mEntityPanel.Update(engine_context, game_world, null);
+
+    const row = editor_program.mEntityPanel.mRows.items[0];
+    const header_click = EntityPointerEvent{ .mEntity = row.Header, .mEvent = .{ .PointerClicked = .{ .mButton = .BUTTON_LEFT, .mClicks = 1, .mPosition = .{ .x = 0, .y = 0, .z = 0 }, .mTarget = row.Label } } };
+
+    //the arrow's script had the click first, and kept it: the header's event for it selects nothing
+    editor_program.mEventScripts.After(header_click, .Handled);
+    _ = try EditorProgram.OnPointerEvent(editor_program, engine_context, &header_click);
+    try std.testing.expectEqual(level.mID, editor_program.mSelectedObj.?.scene_layer.mID);
+
+    //nothing kept it: the row selects its object as usual
+    editor_program.mEventScripts.Reset();
+    _ = try EditorProgram.OnPointerEvent(editor_program, engine_context, &header_click);
+    try std.testing.expectEqual(hero.mID, editor_program.mSelectedObj.?.entity.mID);
 }
 
 test "clicking a top level entity's stripe selects its scene, and a child row has no stripe" {
@@ -494,9 +525,7 @@ test "a file dropped on the panel: another type's file not taken, an entity file
     try std.testing.expect(PointerSystem.Takes(entities.mArea.GetComponent(DropTargetComponent).?.*, goblin_file));
 
     //on the Entities panel with no scene selected: nowhere to put it
-    var selected: ?SelectedObject = null;
-    try entities.OnDrop(engine_context, entities.mArea, .{ .mSource = goblin_file, .mPosition = .{ .x = 0, .y = 0, .z = 0 } }, game_world, &selected);
-    try entities.Update(engine_context, game_world, selected);
+    try entities.OnDrop(engine_context, entities.mArea, .{ .mSource = goblin_file, .mPosition = .{ .x = 0, .y = 0, .z = 0 } }, game_world, null);
+    try entities.Update(engine_context, game_world, null);
     try std.testing.expectEqual(@as(usize, 0), entities.mRows.items.len);
-    try std.testing.expect(selected == null);
 }

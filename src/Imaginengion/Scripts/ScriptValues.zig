@@ -3,8 +3,9 @@
 //! without knowing the script's type: shown in the editor, saved and loaded, copied with their object, pointed at the
 //! right world, and carried over to a new build of the script.
 //! An object variable (Entity, SceneLayer, Player, GameContext) is a handle into the same world as the script, saved as
-//! the object's UUID and found again once that is loaded, the way SpawnPossComponent's reference is. A file ref variable
-//! (IM.SceneRef, ...) adds the object's file, and holds a reference on its asset that follows the variable around
+//! the object's UUID. It keeps to ObjectLink, with what it wants kept on its script child (ScriptComponent.mLinks). A file
+//! ref variable (IM.SceneRef, ...) adds the object's file, and holds a reference on its asset that follows the variable
+//! around
 const std = @import("std");
 const ScriptABI = @import("ScriptABI.zig");
 const RemapObject = @import("ObjectFileRef.zig").RemapObject;
@@ -15,6 +16,7 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
+const ObjectLink = @import("../ECSObjects/ObjectLink.zig");
 const RefMap = @import("../ECSObjects/ECSObject.zig").RefMap;
 const Serializer = @import("../Serializer/Serializer.zig");
 const Inspector = @import("../UI/Inspector.zig");
@@ -22,7 +24,8 @@ const Widgets = @import("../UI/Widgets.zig");
 const MathTypes = @import("../Math/MathTypes.zig");
 const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
 const ScriptAsset = @import("../ECSComponents/Asset/ScriptAsset.zig");
-const UUIDComponent = @import("../ECSComponents/Shared/UUIDComponent.zig");
+const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
+const Tracy = @import("../Core/Tracy.zig");
 
 const ScriptInfo = ScriptABI.ScriptInfo;
 const FieldDesc = ScriptABI.FieldDesc;
@@ -88,6 +91,11 @@ pub fn Set(script: anytype, name: []const u8, value: anytype) !void {
                 file_ref.Release();
                 file_ref.* = value;
             },
+            //set by code, so it no longer wants what it was saved with
+            .Entity, .Scene, .Player, .GameContext => {
+                At(T, data, field).* = value;
+                script.GetComponentMut(ScriptComponent).?.RemoveLink(field.Name());
+            },
             else => At(T, data, field).* = value,
         }
         return;
@@ -100,9 +108,12 @@ fn At(comptime T: type, data: *anyopaque, field: FieldDesc) *T {
     return @ptrCast(@alignCast(@as([*]u8, @ptrCast(data)) + field.mOffset));
 }
 
-/// Writes the variables as a JSON object, by name. An object variable is written as its object's UUID, and left out
-/// when it points at nothing (or at something with no UUID, which could not be found again)
-pub fn Write(info: *const ScriptInfo, data: *anyopaque, jw: anytype) !void {
+/// Writes the variables of `component`'s `instance` as a JSON object, by name. An object variable is written as its
+/// object's UUID, or the one it is waiting for, and left out when it is empty (or points at something with no UUID, which
+/// could not be found again)
+pub fn Write(component: *const ScriptComponent, instance: Instance, jw: anytype) !void {
+    const info = instance.mInfo;
+    const data = instance.mData;
     try jw.beginObject();
     for (info.Fields()) |field| {
         switch (field.mKind) {
@@ -139,9 +150,7 @@ pub fn Write(info: *const ScriptInfo, data: *anyopaque, jw: anytype) !void {
             },
             inline .Entity, .Scene, .Player, .GameContext => |kind| {
                 const object = At(kind.ObjectType(), data, field).*;
-                if (object.mID == @TypeOf(object).NullObject or !object.IsActive()) continue;
-                const uuid = object.GetComponent(UUIDComponent) orelse continue;
-                try WriteField(jw, field, uuid.ID);
+                if (ObjectLink.WantedNow(object, component.GetLink(field.Name()))) |uuid| try WriteField(jw, field, uuid);
             },
             inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| {
                 const file_ref = At(kind.RefType(), data, field).*;
@@ -159,9 +168,9 @@ fn WriteField(jw: anytype, field: FieldDesc, value: anytype) !void {
 
 /// Sets the variables of `script` (a script child, any of the four object types) from `values`, a JSON object Write
 /// made. A variable that isn't in it, or is of another kind there (the script was changed since), keeps what it has.
-/// An object variable is set once its object is loaded, see ResolveRef
+/// An object variable waits for its object, see Relink. A file ref's object is set once it is loaded, see ResolveRef
 pub fn Read(engine_context: *EngineContext, script: anytype, values: std.json.Value) !void {
-    const component = script.GetComponent(ScriptComponent) orelse return;
+    const component = script.GetComponentMut(ScriptComponent) orelse return;
     const instance = InstanceOf(component) orelse return;
     if (values != .object) return;
     for (instance.mInfo.Fields(), 0..) |field, index| {
@@ -203,14 +212,10 @@ pub fn Read(engine_context: *EngineContext, script: anytype, values: std.json.Va
                 const n = Floats(4, value) orelse continue;
                 At(Vec4, data, field).* = .{ .x = n[0], .y = n[1], .z = n[2], .w = n[3] };
             },
-            .Entity, .Scene, .Player, .GameContext => {
+            inline .Entity, .Scene, .Player, .GameContext => |kind| {
                 const uuid = UUIDOf(value) orelse continue;
-                try engine_context.mSerializer.AddResolveReq(engine_context.EngineAllocator(), .{
-                    .Requester = Serializer.Requester.Init(script),
-                    .UUID = uuid,
-                    .Resolve = ResolveRef,
-                    .Field = @intCast(index),
-                });
+                try component.SetLink(engine_context, field.Name(), uuid);
+                At(kind.ObjectType(), data, field).* = ObjectLink.Waiting(kind.ObjectType(), script.mManager);
             },
             inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| {
                 if (value != .object) continue;
@@ -227,7 +232,50 @@ pub fn Read(engine_context: *EngineContext, script: anytype, values: std.json.Va
     }
 }
 
-/// Points variable number `field_index` of `requester`'s script at the object with UUID `uuid` in its world, false if
+/// Links every waiting object variable of every script in `world` whose object is loaded now, see ObjectLink.Relink
+pub fn Relink(engine_context: *EngineContext, world: *WorldManager) !void {
+    const zone = Tracy.ZoneInit("ScriptValues::Relink", @src());
+    defer zone.Deinit();
+
+    inline for (.{ Entity, Scene, Player, GameContext }) |ObjectType| {
+        const manager = world.GetManager(ObjectType);
+        const script_ids = try manager.GetGroup(engine_context.FrameAllocator(), GroupQuery{ .Component = ScriptComponent });
+        for (script_ids.items) |script_id| {
+            const component = manager.GetComponent(ScriptComponent, script_id) orelse continue;
+            if (component.mLinks.items.len == 0) continue;
+            const instance = InstanceOf(component) orelse continue;
+            for (instance.mInfo.Fields()) |field| {
+                switch (field.mKind) {
+                    inline .Entity, .Scene, .Player, .GameContext => |kind| {
+                        ObjectLink.Relink(At(kind.ObjectType(), instance.mData, field), component.GetLink(field.Name()));
+                    },
+                    else => {},
+                }
+            }
+        }
+    }
+}
+
+/// Makes what `script`'s object variables want match what they point at, after one is edited, see ObjectLink.WantedNow
+pub fn SyncLinks(engine_context: *EngineContext, script: anytype) !void {
+    const component = script.GetComponentMut(ScriptComponent) orelse return;
+    const instance = InstanceOf(component) orelse return;
+    for (instance.mInfo.Fields()) |field| {
+        switch (field.mKind) {
+            inline .Entity, .Scene, .Player, .GameContext => |kind| {
+                const object = At(kind.ObjectType(), instance.mData, field).*;
+                if (ObjectLink.WantedNow(object, component.GetLink(field.Name()))) |uuid| {
+                    try component.SetLink(engine_context, field.Name(), uuid);
+                } else {
+                    component.RemoveLink(field.Name());
+                }
+            },
+            else => {},
+        }
+    }
+}
+
+/// Points file ref number `field_index` of `requester`'s script at the object with UUID `uuid` in its world, false if
 /// that isn't loaded yet
 fn ResolveRef(requester: Serializer.Requester, uuid: u64, field_index: u32) bool {
     switch (requester) {
@@ -239,10 +287,6 @@ fn ResolveRef(requester: Serializer.Requester, uuid: u64, field_index: u32) bool
             if (field_index >= instance.mInfo.mFieldCount) return true;
             const field = instance.mInfo.mFields[field_index];
             switch (field.mKind) {
-                inline .Entity, .Scene, .Player, .GameContext => |kind| {
-                    const object = script.mManager.GetObjectByUUID(kind.ObjectType(), uuid) orelse return false;
-                    At(kind.ObjectType(), instance.mData, field).* = object;
-                },
                 inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| {
                     const Ref = kind.RefType();
                     At(Ref, instance.mData, field).mObject = script.mManager.GetObjectByUUID(Ref.Object, uuid) orelse return false;
@@ -256,7 +300,7 @@ fn ResolveRef(requester: Serializer.Requester, uuid: u64, field_index: u32) bool
 
 /// Gives the script child `to` the variables of `from`, which runs the same script: a copy of an object starting as
 /// its template is (ECSObject.Core._CopyObject). Its object variables still point where `from`'s do, see RemapRefs
-pub fn CopyValues(from: *const ScriptComponent, to: *const ScriptComponent) void {
+pub fn CopyValues(engine_context: *EngineContext, from: *const ScriptComponent, to: *ScriptComponent) !void {
     const source = InstanceOf(from) orelse return;
     const dest = InstanceOf(to) orelse return;
     if (source.mInfo != dest.mInfo) return;
@@ -264,6 +308,7 @@ pub fn CopyValues(from: *const ScriptComponent, to: *const ScriptComponent) void
     ReleaseRefs(dest);
     @memcpy(@as([*]u8, @ptrCast(dest.mData))[0..size], @as([*]const u8, @ptrCast(source.mData))[0..size]);
     RetainRefs(dest);
+    try to.CopyLinks(engine_context, from);
 }
 
 /// Takes a reference for every file ref in `instance`: for variables just copied from another instance byte for byte
@@ -388,7 +433,7 @@ pub fn BuildFields(engine_context: *EngineContext, parent: Entity, root: Entity,
         .mObject = Inspector.ObjectRef.Of(script),
         .mBase = @intFromPtr(copy.ptr),
         .mResolve = ResolveFor(@TypeOf(script)),
-        .mAfterEdit = &NothingAfterEdit,
+        .mAfterEdit = AfterEditFor(@TypeOf(script)),
         .mOptions = options,
     };
     for (info.Fields()) |field| {
@@ -447,9 +492,14 @@ fn ResolveFor(comptime object_type: type) *const fn (Inspector.ObjectRef) ?*anyo
     }.Resolve;
 }
 
-/// A script's variables only matter to the script, nothing else has to catch up when one is edited
-fn NothingAfterEdit(_: *EngineContext, _: Inspector.ObjectRef) anyerror!bool {
-    return false;
+/// A script's variables only matter to the script, all that has to catch up when one is edited is what it wants
+fn AfterEditFor(comptime object_type: type) *const fn (*EngineContext, Inspector.ObjectRef) anyerror!bool {
+    return &struct {
+        fn AfterEdit(engine_context: *EngineContext, object: Inspector.ObjectRef) anyerror!bool {
+            try SyncLinks(engine_context, @field(object, @tagName(ScriptABI.OwnerKind.Of(object_type))));
+            return false;
+        }
+    }.AfterEdit;
 }
 
 /// An enum variable `size` bytes big, as the index of its value (its values are numbered 0, 1, 2... in order)

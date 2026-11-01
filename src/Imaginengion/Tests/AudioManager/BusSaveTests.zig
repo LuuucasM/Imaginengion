@@ -201,6 +201,41 @@ test "an AudioComponent's bus is saved as its UUID and comes back once the buses
     try std.testing.expectEqual(loaded_audio_manager.GetMasterBus().mID, loaded_audio_manager.ResolveBus(loaded_master_component.mBus.mID));
 }
 
+test "an AudioComponent saved before its bus is loaded keeps it, and a bus deleted after is gone" {
+    const saved_engine = try TestEngine.Init();
+    defer saved_engine.Deinit();
+    const saved_context = saved_engine.mEngineContext;
+    const sfx = try NewBus(saved_engine, saved_engine.AudioManager().GetMasterBus(), "SFX", 0.5);
+    const sfx_uuid = sfx.GetUUID();
+
+    const scene = try saved_context.mEditorWorld.NewScene(saved_context, .GameLayer, Scene.DefaultConfig);
+    const on_sfx = try scene.CreateEntity(saved_context, Entity.DefaultConfig);
+    _ = try on_sfx.AddComponent(saved_context, AudioComponent{ .mBus = sfx });
+    const path = try saved_engine.FilePath("OnSfx.imen");
+    try TextSerializer.SerializeECSObject(saved_context, on_sfx, path);
+    const settings = try SaveAudioSettings(saved_engine);
+
+    //the scene first this time, with no buses yet
+    const loaded_engine = try TestEngine.Init();
+    defer loaded_engine.Deinit();
+    const loaded_context = loaded_engine.mEngineContext;
+    const loaded_scene = try loaded_context.mEditorWorld.NewScene(loaded_context, .GameLayer, Scene.DefaultConfig);
+    const loaded = try loaded_scene.CreateEntity(loaded_context, Entity.BlankConfig);
+    try TextSerializer.DeserializeECSObj(loaded_context, loaded, path);
+    try std.testing.expect(!loaded.GetComponent(AudioComponent).?.mBus.IsIDValid());
+
+    const frame_allocator = loaded_context.FrameAllocator();
+    const saved_again = try std.json.Stringify.valueAlloc(frame_allocator, loaded.GetComponent(AudioComponent).?.*, .{});
+    const bus_field = try std.fmt.allocPrint(frame_allocator, "\"Bus\":{d}", .{sfx_uuid});
+    try std.testing.expect(std.mem.indexOf(u8, saved_again, bus_field) != null);
+
+    try LoadAudioSettings(loaded_engine, settings);
+    loaded_context.mSerializer.ResolveUUIDs();
+    const component = loaded.GetComponent(AudioComponent).?;
+    try std.testing.expectEqual(sfx_uuid, component.mBus.GetUUID());
+    try std.testing.expectEqual(@as(?u64, null), component.mWaitingBusUUID);
+}
+
 test "a scene, player or game context's AudioComponent gets its bus back too" {
     const saved_engine = try TestEngine.Init();
     defer saved_engine.Deinit();

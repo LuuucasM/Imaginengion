@@ -1,10 +1,9 @@
 const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
+const ObjectLink = @import("../../ECSObjects/ObjectLink.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
-const Serializer = @import("../../Serializer/Serializer.zig");
 const RefMap = @import("../../ECSObjects/ECSObject.zig").RefMap;
-const UIManager = @import("../../UI/UIManager.zig");
 const Inspector = @import("../../UI/Inspector.zig");
 
 const PopupRefComponent = @This();
@@ -16,11 +15,23 @@ pub const Name: []const u8 = "PopupRefComponent";
 /// and OpenContextMenu scripts, see UI/WidgetActions.zig). Only data: what opening it means is the script's. Saved as the
 /// popup's UUID, so the popup needs one
 mPopup: Entity = .uninit,
+/// The UUID mPopup wants, see ObjectLink
+mWantedUUID: ?u64 = null,
 
 pub fn Deinit(_: *PopupRefComponent, _: *EngineContext) void {}
 
 pub fn UIRender(self: *PopupRefComponent, ui: *Inspector.Builder) !void {
-    _ = try ui.EntityRef(&self.mPopup, "Popup", .{});
+    _ = try ui.EntityRef(&self.mPopup, "Popup", .{ .OnChange = OnRefEdited });
+}
+
+fn OnRefEdited(component: *anyopaque) void {
+    const self: *PopupRefComponent = @ptrCast(@alignCast(component));
+    self.mWantedUUID = ObjectLink.WantedNow(self.mPopup, self.mWantedUUID);
+}
+
+/// See WorldManager.RelinkRefs
+pub fn Relink(self: *PopupRefComponent) void {
+    ObjectLink.Relink(&self.mPopup, self.mWantedUUID);
 }
 
 /// A copy of an opener in a template points at the copy of the popup the template's pointed at
@@ -30,10 +41,9 @@ pub fn RemapRefs(self: *PopupRefComponent, ref_map: *const RefMap) void {
 
 pub fn jsonStringify(self: *const PopupRefComponent, jw: anytype) !void {
     try jw.beginObject();
-    //entity references are saved as the entity's UUID and turned back into an entity once it is loaded
-    if (self.mPopup.IsActive()) {
+    if (ObjectLink.WantedNow(self.mPopup, self.mWantedUUID)) |popup_uuid| {
         try jw.objectField("Popup");
-        try jw.write(self.mPopup.GetUUID());
+        try jw.write(popup_uuid);
     }
     try jw.endObject();
 }
@@ -42,25 +52,9 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
     const FileData = struct { Popup: ?u64 = null };
     const file_data = try std.json.innerParse(FileData, frame_allocator, reader, options);
 
-    if (file_data.Popup) |popup_uuid| {
-        const engine_context = JsonUtils.EngineContextFromAllocator(frame_allocator);
-        const serializer = &engine_context.mSerializer;
-        //read as part of its entity's UIElementComponent, so the entity is what is being read
-        std.debug.assert(serializer.mCurrDeserialize.requester == .Entity);
-        try serializer.AddResolveReq(engine_context.EngineAllocator(), .{
-            .Requester = serializer.mCurrDeserialize.requester,
-            .UUID = popup_uuid,
-            .Resolve = ResolvePopup,
-        });
-    }
-    return .{};
-}
-
-fn ResolvePopup(requester: Serializer.Requester, popup_uuid: u64, _: u32) bool {
-    const owner = requester.Entity;
-    const popup = owner.mManager.GetObjectByUUID(Entity, popup_uuid) orelse return false;
-    //the component may have been removed since the request was made, nothing left to resolve
-    const popup_ref = UIManager.GetUIComponentMut(owner, PopupRefComponent) orelse return true;
-    popup_ref.mPopup = popup;
-    return true;
+    const popup_uuid = file_data.Popup orelse return .{};
+    //read as part of its entity's UIElementComponent, so the entity is what is being read
+    const requester = JsonUtils.EngineContextFromAllocator(frame_allocator).mSerializer.mCurrDeserialize.requester;
+    std.debug.assert(requester == .Entity);
+    return .{ .mPopup = ObjectLink.Waiting(Entity, requester.Entity.mManager), .mWantedUUID = popup_uuid };
 }

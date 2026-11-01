@@ -17,6 +17,11 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
 const ScriptValues = @import("../Scripts/ScriptValues.zig");
+const SpawnPossComponent = @import("../ECSComponents/SComponents.zig").SpawnPossComponent;
+const OverlayComponent = @import("../ECSComponents/PComponents.zig").OverlayComponent;
+const UIElementComponent = @import("../ECSComponents/EComponents.zig").UIElementComponent;
+const PopupRefComponent = @import("../ECSComponents/UIComponents.zig").PopupRefComponent;
+const UIManager = @import("../UI/UIManager.zig");
 const GameEvents = @import("../Scripts/GameEvents.zig");
 const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
 const ScriptResult = @import("../Scripts/ScriptABI.zig").ScriptResult;
@@ -134,6 +139,34 @@ pub fn SetSyncCallback(self: *WorldManager, ctx: anytype, comptime handler: anyt
     self.mSManager.SetSyncCallback(ctx, handler);
     self.mPhysicsManager.SetSyncCallback(ctx, handler);
     self.mEventManager.SetSyncCallback(ctx, handler);
+}
+
+/// Links every reference in this world that is waiting for an object that is loaded now, see ECSObjects/ObjectLink.zig.
+/// For after a file is read into it
+pub fn RelinkRefs(self: *WorldManager, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("WorldManager::RelinkRefs", @src());
+    defer zone.Deinit();
+
+    try ScriptValues.Relink(engine_context, self);
+    const frame_allocator = engine_context.FrameAllocator();
+
+    const scene_ids = try self.GetSceneGroup(frame_allocator, .{ .Component = SpawnPossComponent });
+    for (scene_ids.items) |scene_id| {
+        const scene = Scene{ .mID = scene_id, .mManager = self };
+        if (scene.GetComponentMut(SpawnPossComponent)) |spawn_poss| spawn_poss.Relink();
+    }
+
+    const player_ids = try self.GetPlayerGroup(frame_allocator, .{ .Component = OverlayComponent });
+    for (player_ids.items) |player_id| {
+        const player = Player{ .mID = player_id, .mManager = self };
+        if (player.GetComponentMut(OverlayComponent)) |overlay| overlay.Relink();
+    }
+
+    //a popup reference is on its entity's UI element, in the UIManager's ECS that every world shares
+    const entity_ids = try self.GetEntityGroup(frame_allocator, .{ .Component = UIElementComponent });
+    for (entity_ids.items) |entity_id| {
+        if (UIManager.GetUIComponentMut(self.GetEntity(entity_id), PopupRefComponent)) |popup_ref| popup_ref.Relink();
+    }
 }
 
 /// Asks to quit the game this world is playing, handled at the end of the frame (see WorldEventData.QuitGameEvent)

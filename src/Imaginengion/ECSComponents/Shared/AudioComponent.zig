@@ -31,6 +31,9 @@ mPitch: f32 = 1.0,
 mLoop: bool = false,
 /// The bus its voices play into. Uninit means Master, and so does a bus that has since been deleted
 mBus: Bus = .uninit,
+/// The UUID read for mBus while that bus isn't loaded, so saving before it is doesn't lose it. A bus deleted once it was
+/// loaded is gone: that plays into Master, and saves as Master
+mWaitingBusUUID: ?u64 = null,
 
 /// true: the voices this plays are attached. They read the settings above live and stop with the component (its
 /// entity destroyed, it removed, or StopVoices). For sounds that belong to something: an engine hum, dialogue.
@@ -153,6 +156,11 @@ pub fn jsonStringify(self: *const AudioComponent, jw: anytype) !void {
             try jw.objectField("Bus");
             try jw.write(uuid_component.ID);
         }
+    } else if (self.mBus.mID == Bus.NullObject) {
+        if (self.mWaitingBusUUID) |bus_uuid| {
+            try jw.objectField("Bus");
+            try jw.write(bus_uuid);
+        }
     }
 
     try jw.endObject();
@@ -189,6 +197,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
         .mPitch = file_data.Pitch,
         .mLoop = file_data.Loop,
         .mStopWithSource = file_data.StopWithSource,
+        .mWaitingBusUUID = file_data.Bus,
     };
 }
 
@@ -201,5 +210,6 @@ fn ResolveBusRef(requester: Serializer.Requester, bus_uuid: u64, _: u32) bool {
     //AddComponent pointed mBus at the AudioManager when the parsed component was added
     const bus = audio_component.mBus.mManager.GetBusByUUID(bus_uuid) orelse return false;
     audio_component.mBus = bus;
+    audio_component.mWaitingBusUUID = null;
     return true;
 }

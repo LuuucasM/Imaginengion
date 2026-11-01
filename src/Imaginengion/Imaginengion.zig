@@ -13,6 +13,7 @@ test {
     _ = @import("Tests/ECSObjects/TmplTests.zig");
     _ = @import("Tests/ECSObjects/LayerTagTests.zig");
     _ = @import("Tests/ECSObjects/OverlayTests.zig");
+    _ = @import("Tests/ECSObjects/ObjectLinkTests.zig");
     _ = @import("Tests/ECSObjects/GetWorldTests.zig");
     _ = @import("Tests/ECSObjects/LoadOrGetTests.zig");
     _ = @import("Tests/ECSObjects/ComponentAddedTests.zig");

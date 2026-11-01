@@ -133,10 +133,12 @@ pub const AssetOptions = struct {
 pub const RefOptions = struct {
     /// whether a drop and Clear write the field, or are left to whoever built the inspector
     Writes: bool = true,
+    OnChange: ?OnChange = null,
 };
 
 pub const SceneRefOptions = struct {
     Writes: bool = true,
+    OnChange: ?OnChange = null,
     /// only an overlay scene can go in it
     OverlayOnly: bool = false,
 };
@@ -340,7 +342,7 @@ pub const Builder = struct {
     /// down
     pub fn SceneRef(self: *Builder, field: *Scene, label: []const u8, options: SceneRefOptions) !Entity {
         const access = if (options.OverlayOnly) NameAccess(Scene, true) else NameAccess(Scene, false);
-        return try self.ObjectRefField(Scene, .scene_layer, field, label, access, .{ .Writes = options.Writes });
+        return try self.ObjectRefField(Scene, .scene_layer, field, label, access, .{ .Writes = options.Writes, .OnChange = options.OnChange });
     }
 
     /// A player field, the same way, taking a player's row from the Players panel
@@ -357,10 +359,10 @@ pub const Builder = struct {
         const shown_name = NameOf(field.*);
         const row = try self.Row(label);
         const box = try Widgets.DropBox(self.mEngineContext, .{ .Entity = row }, shown_name, DropTargetComponent.Objects(kind));
-        try self.Bind(box, field, access, null, null, false);
+        try self.Bind(box, field, access, options.OnChange, null, false);
         if (options.Writes) {
             UIManager.GetUIComponentMut(box, FieldBindingComponent).?.mWritesDrops = true;
-            try self.ClearMenu(box, field, access, .{ .Ref = null }, null);
+            try self.ClearMenu(box, field, access, .{ .Ref = null }, options.OnChange);
         }
         return box;
     }
@@ -889,9 +891,11 @@ fn NameAccess(comptime T: type, comptime overlay_only: bool) *const Access {
     }.access;
 }
 
-/// An entity's or scene's name: "None" for none, up to the first 0 if it was saved with one
+/// An entity's or scene's name: "None" for none, "Not loaded" for a handle whose object isn't there, up to the first 0 if
+/// it was saved with one
 fn NameOf(object: anytype) []const u8 {
-    if (object.mID == @TypeOf(object).NullObject or !object.IsActive()) return "None";
+    if (object.mID == @TypeOf(object).NullObject) return "None";
+    if (!object.IsActive()) return "Not loaded";
     const name = (object.GetComponent(NameComponent) orelse return @typeName(@TypeOf(object))).mName.items;
     return name[0 .. std.mem.indexOfScalar(u8, name, 0) orelse name.len];
 }

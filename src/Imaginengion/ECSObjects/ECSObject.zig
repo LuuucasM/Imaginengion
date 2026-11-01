@@ -552,7 +552,7 @@ pub fn Core(comptime Self: type) type {
                     const script = try AddScript(target, engine_context, script_handle);
                     //the copy starts with the template's variables, its object variables pointed at copies by _RemapRefs.
                     //Both looked up again now: adding the script can move the template's (a duplicate in the same world)
-                    ScriptValues.CopyValues(GetComponent(tmpl_script, ScriptComponent).?, GetComponent(script, ScriptComponent).?);
+                    try ScriptValues.CopyValues(engine_context, GetComponent(tmpl_script, ScriptComponent).?, GetComponentMut(script, ScriptComponent).?);
                 }
             }
 

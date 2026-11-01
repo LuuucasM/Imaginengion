@@ -21,6 +21,7 @@ const UntypedScriptTag = EntityComponents.UntypedScriptTag;
 const ScriptABI = @import("../../Scripts/ScriptABI.zig");
 const ScriptExport = @import("../../Scripts/ScriptExport.zig");
 const ScriptValues = @import("../../Scripts/ScriptValues.zig");
+const TextSerializer = @import("../../Serializer/TextSerializer.zig");
 const CollisionInfo = @import("../../Physics/Collisions.zig").CollisionInfo;
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const CollisionMask = @import("../../Physics/CollisionMask.zig");
@@ -195,8 +196,8 @@ test "a script's variables are saved by name and read back, an entity once it is
     var out: std.Io.Writer.Allocating = .init(engine_allocator);
     defer out.deinit();
     var write_stream: std.json.Stringify = .{ .writer = &out.writer };
-    const instance = ScriptValues.InstanceOf(script.GetComponent(ScriptComponent).?).?;
-    try ScriptValues.Write(instance.mInfo, instance.mData, &write_stream);
+    const component = script.GetComponent(ScriptComponent).?;
+    try ScriptValues.Write(component, ScriptValues.InstanceOf(component).?, &write_stream);
 
     const parsed = try std.json.parseFromSlice(std.json.Value, engine_allocator, out.written(), .{});
     defer parsed.deinit();
@@ -205,14 +206,231 @@ test "a script's variables are saved by name and read back, an entity once it is
     _, const loaded = try worlds.EntityWithScript(handle);
     try ScriptValues.Read(engine_context, loaded, parsed.value);
     //the entity is set once it is looked for
-    try std.testing.expectEqual(Entity.NullObject, ChaserOf(loaded).mTarget.mID);
-    engine_context.mSerializer.ResolveUUIDs();
+    try std.testing.expect(!ChaserOf(loaded).mTarget.IsActive());
+    try ScriptValues.Relink(engine_context, &engine_context.mGameWorld);
 
     const read = ChaserOf(loaded);
     try std.testing.expectEqual(ball.mID, read.mTarget.mID);
     try std.testing.expectEqual(@as(f32, 3.5), read.mSpeed);
     try std.testing.expectEqual(.Wait, read.mMode);
     try std.testing.expectEqual(@as(f32, 2), read.mOffset.z);
+}
+
+/// Saves `script`'s variables and hands back what mTarget was saved as, null if it was left out
+fn SavedTarget(script: Entity) !?u64 {
+    const allocator = std.testing.allocator;
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    defer out.deinit();
+    var write_stream: std.json.Stringify = .{ .writer = &out.writer };
+    const component = script.GetComponent(ScriptComponent).?;
+    try ScriptValues.Write(component, ScriptValues.InstanceOf(component).?, &write_stream);
+
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, out.written(), .{});
+    defer parsed.deinit();
+    const target = parsed.value.object.get("mTarget") orelse return null;
+    return switch (target) {
+        .integer => |n| @intCast(n),
+        .number_string => |text| try std.fmt.parseInt(u64, text, 10),
+        else => error.NotAUUID,
+    };
+}
+
+/// Reads mTarget back as if a file saved it pointing at `uuid`
+fn ReadTarget(engine_context: *EngineContext, script: Entity, uuid: u64) !void {
+    const allocator = std.testing.allocator;
+    const json = try std.fmt.allocPrint(allocator, "{{\"mTarget\":{d}}}", .{uuid});
+    defer allocator.free(json);
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, json, .{});
+    defer parsed.deinit();
+    try ScriptValues.Read(engine_context, script, parsed.value);
+}
+
+test "a variable whose object isn't loaded saves what it wants, however many times it is saved" {
+    const worlds = try TestWorlds.Init();
+    defer worlds.Deinit();
+    const engine_context = worlds.mEngineContext;
+
+    var handle = try worlds.ScriptAssetFor(&ChaserExports.info);
+    defer handle.ReleaseAsset();
+    _, const script = try worlds.EntityWithScript(handle);
+    try ReadTarget(engine_context, script, 123456);
+
+    try ScriptValues.Relink(engine_context, &engine_context.mGameWorld);
+    try std.testing.expect(!ChaserOf(script).mTarget.IsActive());
+    try std.testing.expectEqual(@as(?u64, 123456), try SavedTarget(script));
+    //editing another variable changes nothing about it
+    ChaserOf(script).mSpeed = 1;
+    try ScriptValues.SyncLinks(engine_context, script);
+    try std.testing.expectEqual(@as(?u64, 123456), try SavedTarget(script));
+}
+
+test "saving an object keeps what its script is waiting for, and reading that file in links it" {
+    const worlds = try TestWorlds.Init();
+    defer worlds.Deinit();
+    const engine_context = worlds.mEngineContext;
+    const frame_allocator = engine_context.FrameAllocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try std.fmt.allocPrint(frame_allocator, ".zig-cache/tmp/{s}/ball.imen", .{tmp.sub_path});
+
+    //the ball's file exists, but it isn't loaded
+    const ball = try worlds.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    const uuid = ball.GetUUID();
+    try TextSerializer.SerializeECSObject(engine_context, ball, path);
+    try ball.Delete(engine_context);
+
+    var handle = try worlds.ScriptAssetFor(&ChaserExports.info);
+    defer handle.ReleaseAsset();
+    const entity, const script = try worlds.EntityWithScript(handle);
+    try ReadTarget(engine_context, script, uuid);
+
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    var write_stream: std.json.Stringify = .{ .writer = &out.writer };
+    try TextSerializer.WriteObject(&write_stream, frame_allocator, entity);
+    const saved = try std.fmt.allocPrint(frame_allocator, "\"mTarget\":{d}", .{uuid});
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), saved) != null);
+
+    const loaded = try worlds.mScene.CreateEntity(engine_context, Entity.BlankConfig);
+    try TextSerializer.DeserializeECSObj(engine_context, loaded, path);
+    try std.testing.expectEqual(loaded.mID, ChaserOf(script).mTarget.mID);
+}
+
+test "a variable keeps what it wants when its object goes away, and links to the next one with that UUID" {
+    const worlds = try TestWorlds.Init();
+    defer worlds.Deinit();
+    const engine_context = worlds.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+
+    var handle = try worlds.ScriptAssetFor(&ChaserExports.info);
+    defer handle.ReleaseAsset();
+    const ball = try worlds.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    const uuid = ball.GetUUID();
+    _, const script = try worlds.EntityWithScript(handle);
+    try ReadTarget(engine_context, script, uuid);
+    try ScriptValues.Relink(engine_context, game_world);
+    try std.testing.expectEqual(ball.mID, ChaserOf(script).mTarget.mID);
+
+    try ball.Delete(engine_context);
+    try std.testing.expect(!ChaserOf(script).mTarget.IsActive());
+    try std.testing.expectEqual(@as(?u64, uuid), try SavedTarget(script));
+
+    //the same object loaded again is a new entity with the same UUID
+    const new_ball = try worlds.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    try game_world.mEManager.AddUUID(engine_context.EngineAllocator(), uuid, new_ball.mID);
+    try ScriptValues.Relink(engine_context, game_world);
+    try std.testing.expectEqual(new_ball.mID, ChaserOf(script).mTarget.mID);
+}
+
+test "relinking never replaces a live object or fills an emptied variable" {
+    const worlds = try TestWorlds.Init();
+    defer worlds.Deinit();
+    const engine_context = worlds.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+
+    var handle = try worlds.ScriptAssetFor(&ChaserExports.info);
+    defer handle.ReleaseAsset();
+    const ball = try worlds.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    const other = try worlds.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _, const script = try worlds.EntityWithScript(handle);
+    try ReadTarget(engine_context, script, ball.GetUUID());
+
+    //set by a script while it was still waiting
+    ChaserOf(script).mTarget = other;
+    try ScriptValues.Relink(engine_context, game_world);
+    try std.testing.expectEqual(other.mID, ChaserOf(script).mTarget.mID);
+    try std.testing.expectEqual(@as(?u64, other.GetUUID()), try SavedTarget(script));
+
+    //emptied by a script: it stays empty and saves as empty, even though it remembers what it wanted
+    ChaserOf(script).mTarget = .uninit;
+    try ScriptValues.Relink(engine_context, game_world);
+    try std.testing.expectEqual(Entity.NullObject, ChaserOf(script).mTarget.mID);
+    try std.testing.expectEqual(@as(?u64, null), try SavedTarget(script));
+}
+
+test "an edit makes a variable want what it points at, and Clear makes it want nothing" {
+    const worlds = try TestWorlds.Init();
+    defer worlds.Deinit();
+    const engine_context = worlds.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+
+    var handle = try worlds.ScriptAssetFor(&ChaserExports.info);
+    defer handle.ReleaseAsset();
+    const dropped = try worlds.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    const uuid = dropped.GetUUID();
+    _, const script = try worlds.EntityWithScript(handle);
+    try ReadTarget(engine_context, script, 123456);
+
+    //a row dropped on it, and then that object closed: it waits for that one, not the one it was saved with
+    ChaserOf(script).mTarget = dropped;
+    try ScriptValues.SyncLinks(engine_context, script);
+    try dropped.Delete(engine_context);
+    try std.testing.expectEqual(@as(?u64, uuid), try SavedTarget(script));
+
+    //its Clear
+    ChaserOf(script).mTarget = .uninit;
+    try ScriptValues.SyncLinks(engine_context, script);
+    try std.testing.expectEqual(@as(?u64, null), script.GetComponent(ScriptComponent).?.GetLink("mTarget"));
+
+    const new_ball = try worlds.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    try game_world.mEManager.AddUUID(engine_context.EngineAllocator(), uuid, new_ball.mID);
+    try ScriptValues.Relink(engine_context, game_world);
+    try std.testing.expectEqual(Entity.NullObject, ChaserOf(script).mTarget.mID);
+}
+
+test "a variable waiting in the world Play copies links in the copy, and the original keeps waiting" {
+    const worlds = try TestWorlds.Init();
+    defer worlds.Deinit();
+    const engine_context = worlds.mEngineContext;
+    const sim_world = &engine_context.mSimulateWorld;
+
+    var handle = try worlds.ScriptAssetFor(&ChaserExports.info);
+    defer handle.ReleaseAsset();
+    _, const script = try worlds.EntityWithScript(handle);
+    try ReadTarget(engine_context, script, 123456);
+
+    try engine_context.mGameWorld.Copy(engine_context, sim_world);
+    const sim_script = sim_world.GetEntity(script.mID);
+    try std.testing.expectEqual(sim_world, ChaserOf(sim_script).mTarget.mManager);
+
+    const sim_scene: Scene = .{ .mID = worlds.mScene.mID, .mManager = sim_world };
+    const loaded_in_play = try sim_scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    try sim_world.mEManager.AddUUID(engine_context.EngineAllocator(), 123456, loaded_in_play.mID);
+    try ScriptValues.Relink(engine_context, sim_world);
+
+    try std.testing.expectEqual(loaded_in_play.mID, ChaserOf(sim_script).mTarget.mID);
+    try std.testing.expect(!ChaserOf(script).mTarget.IsActive());
+    try std.testing.expectEqual(@as(?u64, 123456), try SavedTarget(script));
+}
+
+test "a duplicate of a script waits for the same object" {
+    const worlds = try TestWorlds.Init();
+    defer worlds.Deinit();
+    const engine_context = worlds.mEngineContext;
+
+    var handle = try worlds.ScriptAssetFor(&ChaserExports.info);
+    defer handle.ReleaseAsset();
+    const entity, const script = try worlds.EntityWithScript(handle);
+    try ReadTarget(engine_context, script, 123456);
+
+    const copy = try entity.Duplicate(engine_context);
+    var copy_scripts = copy.GetIterator(.Script);
+    try std.testing.expectEqual(@as(?u64, 123456), try SavedTarget(copy_scripts.next().?));
+}
+
+test "code setting a variable replaces what it wanted" {
+    const worlds = try TestWorlds.Init();
+    defer worlds.Deinit();
+    const engine_context = worlds.mEngineContext;
+
+    var handle = try worlds.ScriptAssetFor(&ChaserExports.info);
+    defer handle.ReleaseAsset();
+    const ball = try worlds.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _, const script = try worlds.EntityWithScript(handle);
+    try ReadTarget(engine_context, script, 123456);
+
+    try ScriptValues.Set(script, "mTarget", ball);
+    try std.testing.expectEqual(@as(?u64, null), script.GetComponent(ScriptComponent).?.GetLink("mTarget"));
 }
 
 test "Play's copy of the world gives each script its own variables, pointing into the copy" {
@@ -330,8 +548,8 @@ test "a bit set is saved as its set bits' numbers and an enum set as their names
     var out: std.Io.Writer.Allocating = .init(engine_allocator);
     defer out.deinit();
     var write_stream: std.json.Stringify = .{ .writer = &out.writer };
-    const instance = ScriptValues.InstanceOf(script.GetComponent(ScriptComponent).?).?;
-    try ScriptValues.Write(instance.mInfo, instance.mData, &write_stream);
+    const component = script.GetComponent(ScriptComponent).?;
+    try ScriptValues.Write(component, ScriptValues.InstanceOf(component).?, &write_stream);
     //a collision layer by its number, which renaming it in the editor doesn't change
     try std.testing.expectEqualStrings("{\"mLayers\":[1,5],\"mTeams\":[\"Red\",\"Neutral\"],\"mHits\":[4]}", out.written());
 

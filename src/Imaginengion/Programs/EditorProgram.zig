@@ -714,10 +714,10 @@ pub fn OnPointerEvent(editor_program: *anyopaque, engine_context: *EngineContext
     //e.g. a dragged scrollbar scrolls its region
     try engine_context.mUIManager.OnPointerEvent(engine_context, event.*);
     //a menu bar item or a panel's button picked: one event per entity in the chain, the item's own is the one with its
-    //action
+    //action. A script that kept the click keeps it from the panels too: a tree node's arrow doesn't select its row
     const entity = event.mEntity;
     switch (event.mEvent) {
-        .PointerClicked => |click| if (click.mButton == .BUTTON_LEFT) {
+        .PointerClicked => |click| if (click.mButton == .BUTTON_LEFT and self.mEventScripts.ShouldRun(event.*)) {
             if (self.mMenuBar.ActionOf(entity)) |action| try self.RunMenuAction(engine_context, action);
             if (self.mAudioBusesPanel.ActionOf(entity)) |action| try AudioBusesPanel.Run(engine_context, action);
             if (self.mProjectSettingsPanel.ActionOf(entity)) |action| try ProjectSettingsPanel.Run(engine_context, action);
@@ -753,10 +753,10 @@ pub fn OnPointerEvent(editor_program: *anyopaque, engine_context: *EngineContext
             self.mComponentsPanel.OnDrop(entity, dropped);
             try self.mProjectSettingsPanel.OnDrop(engine_context, entity, dropped);
             for (self.mTmplEditPanels.items) |panel| panel.OnDrop(entity, dropped);
-            try self.mScenePanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, &self.mSelectedObj);
-            try self.mEntityPanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, &self.mSelectedObj);
-            try self.mPlayerPanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, &self.mSelectedObj);
-            try self.mGameContextPanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, &self.mSelectedObj);
+            try self.mScenePanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, self.mSelectedObj);
+            try self.mEntityPanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, self.mSelectedObj);
+            try self.mPlayerPanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, self.mSelectedObj);
+            try self.mGameContextPanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, self.mSelectedObj);
         },
         else => {},
     }

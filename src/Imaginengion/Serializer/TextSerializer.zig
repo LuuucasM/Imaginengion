@@ -171,6 +171,9 @@ pub fn DeserializeECSObj(engine_context: *EngineContext, object: anytype, abs_pa
     try DeserializeObject(engine_context, &scanner, object);
 
     if (.end_of_document != try scanner.next()) return error.UnexpectedToken;
+
+    //what the file brought in, and what the file or the world already has that has been waiting for it
+    if (comptime @hasDecl(@TypeOf(object), "AddScript")) try object.mManager.RelinkRefs(engine_context);
 }
 
 /// Reads one object written by WriteObject from a stream the caller owns into object, which should be blank

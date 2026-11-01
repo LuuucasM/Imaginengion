@@ -12,8 +12,6 @@
 - re-design the asset system / general resource system
 	- i imagine some sort of resource manager where as the dev you set some sort of resource limits for both gpu and cpu, maybe it can even implement its own frame timing system, like just all of the system resources. and then as the dev you can adjust to use different system resources, and so other systems like the asset system and the texture system can request resources, and if theres not enough resouces then have to do some maybe streaming or swapping resources in and out of different layers of memory. can also do networking bandwidth as a resource. just anything that could potentially be a resource
 	- this wont be needed for a while tho until needed to set resource limits is needed which i probably wont be making games that need that for a long while lol
-- does alt + f4 work natively with every program or does it need to be implemented?
-- make it so u cant make scenes or anything until you have a project selected first
 - Add localization for Korean
 	- zig provides functions that allow you to store and read utf-8 strings (which is what i will need to support multiple languages)
 	- ill need to change literally everything to utf-8 including entity names, and anything that is displayed onto the screen

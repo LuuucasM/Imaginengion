@@ -344,24 +344,23 @@ pub fn HierarchyPanel(comptime T: type) type {
             }
         }
 
-        /// A drop on the panel: an object file of its type loaded into `world`, as Open Scene does, and selected. An
-        /// entity goes into the selected scene, as New Entity does
-        pub fn OnDrop(self: *const Self, engine_context: *EngineContext, on: Entity, dropped: PointerDroppedEvent, world: *WorldManager, selected: *?SelectedObject) !void {
+        /// A drop on the panel: an object file of its type loaded into `world`, as Open Scene does. An entity goes into
+        /// the selected scene, as New Entity does. The selection stays as it was, so more can be dropped into that scene
+        pub fn OnDrop(self: *const Self, engine_context: *EngineContext, on: Entity, dropped: PointerDroppedEvent, world: *WorldManager, selected: ?SelectedObject) !void {
             if (!Same(on, self.mArea)) return;
             const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
             const rel_path = file_ref.mRelPath.items;
-            const object: T = switch (T) {
-                Entity => blk: {
-                    const scene: ?Scene = if (selected.*) |object| (if (object == .scene_layer and object.scene_layer.IsActive()) object.scene_layer else null) else null;
+            switch (T) {
+                Entity => {
+                    const scene: ?Scene = if (selected) |object| (if (object == .scene_layer and object.scene_layer.IsActive()) object.scene_layer else null) else null;
                     if (scene == null) {
                         std.log.warn("Select a scene to load {s} into", .{rel_path});
                         return;
                     }
-                    break :blk try scene.?.LoadEntity(engine_context, rel_path, file_ref.mPathType);
+                    _ = try scene.?.LoadEntity(engine_context, rel_path, file_ref.mPathType);
                 },
-                else => try world.Load(T, engine_context, rel_path, file_ref.mPathType),
-            };
-            selected.* = ToSelected(object);
+                else => _ = try world.Load(T, engine_context, rel_path, file_ref.mPathType),
+            }
         }
 
         fn AddRowItem(self: *Self, engine_context: *EngineContext, text: []const u8, action: Action) !void {
