@@ -22,6 +22,7 @@ const Renderer = @import("../../Renderer/Renderer.zig");
 const SurfShadingData = Renderer.SurfShadingData;
 const MedShadingData = Renderer.MedShadingData;
 const SDFRayMarcher = @import("../../Renderer/SDFRayMarcher.zig");
+const Over = SDFRayMarcher.Over;
 const PassPlan = @import("../../Renderer/PassPlan.zig");
 const BVH = @import("../../Core/BVH.zig");
 const Aabb = @import("../../Math/Aabb.zig");
@@ -523,6 +524,22 @@ test "a quad and a glyph at the same depth: the quad is drawn, whichever comes f
 
 //==================================seeing through==================================
 
+test "drawing a color over another" {
+    const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
+    const half_blue = Vec4(f32){ .x = 0, .y = 0, .z = 1, .w = 0.5 };
+    const nothing = Vec4(f32){ .x = 0, .y = 0, .z = 0, .w = 0 };
+    //over something solid: half of each, and solid
+    try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 1 }, Over(half_red, BLUE));
+    //over nothing: itself, not darkened or thinned
+    try ExpectColor(half_red, Over(half_red, nothing));
+    //over something see-through: it counts for more than what is under it, and lets less through than either
+    try ExpectColor(.{ .x = 2.0 / 3.0, .y = 0, .z = 1.0 / 3.0, .w = 0.75 }, Over(half_red, half_blue));
+    //all the way see-through: only what is under it, whatever its color
+    try ExpectColor(half_blue, Over(.{ .x = 1, .y = 0, .z = 0, .w = 0 }, half_blue));
+    try ExpectColor(RED, Over(RED, BLUE));
+    try ExpectColor(nothing, Over(nothing, nothing));
+}
+
 test "a see-through quad blends with the quad behind it" {
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{ ColorShading(half_red), ColorShading(BLUE) };
@@ -530,15 +547,15 @@ test "a see-through quad blends with the quad behind it" {
         MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, TRANSPARENT, NO_MASK),
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, NO_MASK),
     };
-    //half of each, and the alpha half way from the front's 0.5 to the back's 1
-    try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 0.75 }, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+    //half of each, and as solid as the quad behind
+    try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 1 }, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 test "a see-through quad with nothing behind it blends with the default color" {
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{ColorShading(half_red)};
     const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, TRANSPARENT, NO_MASK)};
-    try ExpectColor(half_red.Lerp(DEFAULT_COLOR, 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+    try ExpectColor(Over(half_red, DEFAULT_COLOR), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 test "a stack of see-through quads blends every layer, back to front" {
@@ -550,8 +567,8 @@ test "a stack of see-through quads blends every layer, back to front" {
         MakeQuad(.{ .x = 0, .y = 0, .z = 2 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, TRANSPARENT, NO_MASK),
         MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, TRANSPARENT, NO_MASK),
     };
-    const middle = half_green.Lerp(BLUE, 0.5);
-    try ExpectColor(half_red.Lerp(middle, 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+    const middle = Over(half_green, BLUE);
+    try ExpectColor(Over(half_red, middle), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 test "the ray past a see-through quad goes through the edge's own medium, not one picked by the quad's shading" {
@@ -565,7 +582,7 @@ test "the ray past a see-through quad goes through the edge's own medium, not on
         MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, TRANSPARENT, NO_MASK),
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
     };
-    try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 0.75 }, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings, .Mediums = &mediums }, RayAt(0, 0)));
+    try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 1 }, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings, .Mediums = &mediums }, RayAt(0, 0)));
 }
 
 test "a quad without the see-through flag hides what is behind it, even with a see-through color" {
@@ -576,7 +593,7 @@ test "a quad without the see-through flag hides what is behind it, even with a s
         MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, NO_MASK),
     };
-    try ExpectColor(half_red.Lerp(DEFAULT_COLOR, 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+    try ExpectColor(Over(half_red, DEFAULT_COLOR), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 //==================================solids==================================
@@ -612,7 +629,7 @@ test "a see-through box is drawn where the ray goes in and again where it comes 
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{ ColorShading(half_red), ColorShading(BLUE) };
     //the far side over the blue behind, then the near side over that: once each, the way out never hit again
-    const expected = half_red.Lerp(half_red.Lerp(BLUE, 0.5), 0.5);
+    const expected = Over(half_red, Over(half_red, BLUE));
     const turned = Quat(f32).FromAxisAngle(.{ .x = 0, .y = 1, .z = 0 }, 0.5).MulQuat(Quat(f32).FromAxisAngle(.{ .x = 1, .y = 0, .z = 0 }, 0.35));
     for ([_]Quat(f32){ IDENTITY, turned }) |rotation| {
         const shapes = [_]TestShape{
@@ -630,7 +647,7 @@ test "a see-through sphere is drawn where the ray goes in and again where it com
         MakeSphere(.{ .x = 0, .y = 0, .z = 0 }, 1, 0, TRANSPARENT),
         MakeQuad(.{ .x = 0, .y = 0, .z = -3 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, NO_MASK),
     };
-    try ExpectColor(half_red.Lerp(half_red.Lerp(BLUE, 0.5), 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0.3, 0.2)));
+    try ExpectColor(Over(half_red, Over(half_red, BLUE)), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0.3, 0.2)));
 }
 
 test "a see-through quad inside a see-through box is seen between the box's two sides" {
@@ -642,8 +659,8 @@ test "a see-through quad inside a see-through box is seen between the box's two 
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 0.5, .y = 0.5 }, 1, TRANSPARENT, NO_MASK),
         MakeQuad(.{ .x = 0, .y = 0, .z = -3 }, IDENTITY, .{ .x = 2, .y = 2 }, 2, 0, NO_MASK),
     };
-    const far_side = half_red.Lerp(BLUE, 0.5);
-    try ExpectColor(half_red.Lerp(half_green.Lerp(far_side, 0.5), 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+    const far_side = Over(half_red, BLUE);
+    try ExpectColor(Over(half_red, Over(half_green, far_side)), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 test "a ray starting inside a see-through solid sees its far side, and an opaque one's far side hides the rest" {
@@ -655,7 +672,7 @@ test "a ray starting inside a see-through solid sees its far side, and an opaque
         MakeSphere(.{ .x = 0, .y = 0, .z = 0 }, 1, 0, TRANSPARENT),
         MakeQuad(.{ .x = 0, .y = 0, .z = -3 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, NO_MASK),
     };
-    try ExpectColor(half_red.Lerp(BLUE, 0.5), try Trace(.{ .Shapes = &see_through, .Shadings = &shadings }, from_inside));
+    try ExpectColor(Over(half_red, BLUE), try Trace(.{ .Shapes = &see_through, .Shadings = &shadings }, from_inside));
 
     const opaque_box = [_]TestShape{
         MakeBox(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1, .z = 1 }, 2, 0),
@@ -685,7 +702,7 @@ test "a see-through box's far edges show through its fill" {
     const shadings = [_]SurfShadingData{ ColorShading(half_red), ColorShading(BLUE) };
     const shapes = [_]TestShape{WithBand(MakeBox(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1, .z = 1 }, 0, TRANSPARENT), 1, 0.1)};
     const ray = Ray{ .Origin = .{ .x = 0, .y = 0, .z = 10 }, .Dir = (Vec3(f32){ .x = 0.95, .y = 0, .z = -11 }).Dir() };
-    try ExpectColor(half_red.Lerp(BLUE, 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, ray));
+    try ExpectColor(Over(half_red, BLUE), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, ray));
 }
 
 test "a sphere's band is round its outline, as the ray sees it" {
@@ -827,7 +844,7 @@ test "a masked merge is cut by its mask, and a see-through one shows what is beh
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, NO_MASK),
     };
     const see_through_scene = TestScene{ .Shapes = &see_through_shapes, .Programs = see_through, .Shadings = &shadings };
-    try ExpectColor(half_red.Lerp(BLUE, 0.5), try Trace(see_through_scene, RayAt(0.5, 0.5)));
+    try ExpectColor(Over(half_red, BLUE), try Trace(see_through_scene, RayAt(0.5, 0.5)));
 }
 
 test "a glyph is drawn where its letter covers it, and the ray goes through its gaps" {
@@ -897,7 +914,7 @@ test "glyphs of the same letter share one atlas entry, and each is painted with 
 }
 
 test "see-through text blends with what is behind it" {
-    //half see-through red text, flagged the way StyleSystem flags a text color with alpha below 1, over a blue quad
+    //half see-through red text, flagged the way a color with alpha below 1 is (TexOptions.IsSeeThrough), over a blue quad
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{
         ColorShading(BLUE),
@@ -908,7 +925,7 @@ test "see-through text blends with what is behind it" {
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
         MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 2, TRANSPARENT),
     };
-    try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 0.75 }, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(-0.25, 0)));
+    try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 1 }, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(-0.25, 0)));
 }
 
 test "a ray through the gaps of several overlapping glyphs at the same depth reaches what is behind them" {
@@ -1207,7 +1224,7 @@ fn StackColor(colors: []const Vec4(f32), behind: Vec4(f32)) Vec4(f32) {
     var i = colors.len;
     while (i > 0) {
         i -= 1;
-        color = colors[i].Lerp(color, 1.0 - colors[i].w);
+        color = Over(colors[i], color);
     }
     return color;
 }

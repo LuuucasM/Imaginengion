@@ -1,6 +1,5 @@
 - some way to handle multi lingual stuff like keeping strings saved in a separate file and loading them in not sure best way to do it
 - make animation system
-- add a way to export the game into its standalone
 - add a copy component button beside the delete component button which lets you copy the values of one component so u can "paste" it into a different entities component
 	- this is copying the values not fully duplicating a component
 	- although now that im thinking about it its kind of the same thing but im not sure

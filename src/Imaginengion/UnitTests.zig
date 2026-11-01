@@ -23,4 +23,5 @@ test {
     _ = @import("Tests/UI/LayoutTests.zig");
     _ = @import("Tests/UI/TextEditTests.zig");
     _ = @import("Tests/Scripts/ScriptImportsTests.zig");
+    _ = @import("Tests/GameBuild/ProjectWalkTests.zig");
 }

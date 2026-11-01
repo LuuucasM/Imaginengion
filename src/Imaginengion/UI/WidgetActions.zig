@@ -301,7 +301,6 @@ pub fn UpdateSwatch(color_field: Entity) void {
         if (!child.HasComponent(ShapeComponent)) continue;
         const surface = child.GetComponentMut(SurfaceComponent) orelse continue;
         surface.mTexOptions.mColor = color;
-        surface.mTexOptions.mIsTransparent = color.w < 1;
         return;
     }
 }

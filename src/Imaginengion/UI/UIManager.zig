@@ -22,6 +22,7 @@
 //!   - EndFrame at the end of the frame, and Reset when the world being played is thrown away
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
+const EngineFiles = @import("../GameBuild/EngineFiles.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
@@ -86,10 +87,10 @@ mPlainTexture: AssetHandle = .uninit,
 mStyledTheme: ?AssetHandle.Type = null,
 
 /// The editor's theme until another is picked
-pub const DEFAULT_THEME_PATH = "src/Imaginengion/EngineAssets/themes/Default.imtheme";
+pub const DEFAULT_THEME_PATH = EngineFiles.DEFAULT_THEME;
 /// What styled quads and text with no texture of their own fill with (see StyleSystem): plain white, so their color is
 /// the theme's alone
-pub const PLAIN_TEXTURE_PATH = "src/Imaginengion/EngineAssets/textures/White.png";
+pub const PLAIN_TEXTURE_PATH = EngineFiles.PLAIN_TEXTURE;
 
 /// Sets up UI land, and makes its ECS known to the systems layer
 pub fn Init(self: *UIManager, engine_context: *EngineContext) !void {

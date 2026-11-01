@@ -398,6 +398,39 @@ test "a mask taken off after the tree was built stops cutting what is under it, 
     try std.testing.expect(covered.Game > 50);
 }
 
+/// The color at the middle of the screen of a quad of color `front` in front of an opaque red one, with the see-through
+/// flag off on both
+fn FadedOverRed(front: Vec4(f32)) !Vec4(f32) {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    for ([_]f32{ -6, -5 }, [_]Vec4(f32){ .{ .x = 1, .y = 0, .z = 0, .w = 1 }, front }) |z, color| {
+        const entity = try level.CreateEntity(engine_context, Entity.DefaultConfig);
+        try entity.SetTranslation(engine_context, .{ .x = 0, .y = 0, .z = z });
+        _ = try entity.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 50, .y = 50 } }));
+        var surface = SurfaceComponent{};
+        surface.mTexOptions.mColor = color;
+        _ = try entity.AddComponent(engine_context, surface);
+    }
+    try engine_context.mEditorWorld.BuildBVH(engine_context);
+
+    var stats: RenderStats = .{};
+    var renderer: Renderer = .{};
+    defer FreeCPU(&renderer, engine_context.EngineAllocator());
+    try engine_context.mSystems.RunSystem(Renderer.Fill, engine_context, .{ &renderer, &engine_context.mEditorWorld, Renderer.ViewScenes{ .Overlays = &.{} }, VIEW, &stats });
+    return TracePass(&renderer, &renderer.mR2D.mGameData, ViewPushConstants(), GAME_BACKGROUND, .{ .x = WIDTH / 2, .y = HEIGHT / 2 }, .BVH);
+}
+
+test "a surface faded by its color shows what is behind it, not the background, without the see-through flag" {
+    //all the way faded: only what is behind
+    const gone = try FadedOverRed(.{ .x = 0, .y = 0, .z = 1, .w = 0 });
+    try std.testing.expect(Same(.{ .x = 1, .y = 0, .z = 0, .w = 1 }, gone));
+    //half faded: half and half of the two quads, none of the background, and as solid as the quad behind
+    const half = try FadedOverRed(.{ .x = 0, .y = 0, .z = 1, .w = 0.5 });
+    try std.testing.expect(Same(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 1 }, half));
+}
+
 test "a tree item's surface is put at its place before the build, so a tie at the same depth goes the same way however the tree is built" {
     const world = try TestWorld.Init();
     defer world.Deinit();

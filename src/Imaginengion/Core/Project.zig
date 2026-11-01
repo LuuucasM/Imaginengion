@@ -5,6 +5,7 @@ const Serializer = @import("../Serializer/Serializer.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
+const ProjectWalk = @import("../GameBuild/ProjectWalk.zig");
 const Project = @This();
 
 //the project that is open, if any: its folder, its project file, and the settings the engine keeps per project.
@@ -17,7 +18,7 @@ const Project = @This();
 //            ...
 
 pub const FILE_EXTENSION = ".imprj";
-pub const SETTINGS_FOLDER = "ProjectSettings";
+pub const SETTINGS_FOLDER = ProjectWalk.SETTINGS_FOLDER;
 
 /// The engine level systems that keep settings per project, by their EngineContext field. Each one's type declares:
 ///     pub const ProjectSettingsName: []const u8, so its file is ProjectSettings/<ProjectSettingsName>.json

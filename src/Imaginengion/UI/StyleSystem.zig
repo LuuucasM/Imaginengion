@@ -145,12 +145,6 @@ pub fn FillPlain(texture: *AssetHandle, tex_options: *Texture2D.TexOptions, plai
     tex_options.mTextureUV1 = .{ .x = 0.5, .y = 0.5 };
 }
 
-/// A surface's color, which is see-through for the renderer when it is at all
-fn SetColor(surface: *SurfaceComponent, color: Vec4(f32)) void {
-    surface.mTexOptions.mColor = color;
-    surface.mTexOptions.mIsTransparent = color.w < 1;
-}
-
 /// The state `entity` is in, from its tags
 pub fn StateOf(entity: Entity) State {
     if (PointerSystem.IsDisabled(entity)) return .Disabled;
@@ -173,7 +167,7 @@ pub fn Apply(engine_context: *EngineContext, entity: Entity, style: ThemeAsset.S
 
     if (entity.GetComponentMut(ShapeComponent)) |shape| {
         if (surface) |surf| {
-            if (ColorFor(style.Background, state)) |color| SetColor(surf, color);
+            if (ColorFor(style.Background, state)) |color| surf.mTexOptions.mColor = color;
             if (ColorFor(style.Border, state)) |color| surf.mBorderColor = color;
             if (style.BorderWidth) |width| surf.mBorderWidth = width * unit;
         }
@@ -185,7 +179,7 @@ pub fn Apply(engine_context: *EngineContext, entity: Entity, style: ThemeAsset.S
 
     if (entity.GetComponentMut(TextComponent)) |text| {
         if (surface) |surf| {
-            if (ColorFor(style.Text, state)) |color| SetColor(surf, color);
+            if (ColorFor(style.Text, state)) |color| surf.mTexOptions.mColor = color;
         }
         //a different font or size is a different size of text, which layout has to fit again
         var resized = false;

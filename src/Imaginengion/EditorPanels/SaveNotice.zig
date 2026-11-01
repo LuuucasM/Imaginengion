@@ -78,6 +78,5 @@ fn SetShown(self: SaveNotice, engine_context: *EngineContext, shown: bool) !void
 fn SetAlpha(entity: Entity, alpha: f32) void {
     const surface = entity.GetComponentMut(SurfaceComponent).?;
     surface.mTexOptions.mColor.w = alpha;
-    surface.mTexOptions.mIsTransparent = alpha < 1;
     surface.mBorderColor.w = alpha;
 }

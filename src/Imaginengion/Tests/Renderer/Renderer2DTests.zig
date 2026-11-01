@@ -27,8 +27,18 @@ test "a quad with anything to see is still drawn" {
     try std.testing.expect(!Renderer2D.QuadDrawsNothing(Surface(1, false, 0, 1)));
 }
 
-test "a quad that isn't see-through is drawn even with an invisible fill, since it hides what is behind it" {
-    try std.testing.expect(!Renderer2D.QuadDrawsNothing(Surface(0, false, 0, 1)));
+test "an invisible fill draws nothing without the texture's see-through flag too" {
+    try std.testing.expect(Renderer2D.QuadDrawsNothing(Surface(0, false, 0, 1)));
+}
+
+test "a surface is see-through by its color alone, or by its flag when only its texture can be" {
+    //the scoreboard's text: flag off, color faded out
+    try std.testing.expect(Surface(0, false, 0, 1).mTexOptions.IsSeeThrough());
+    try std.testing.expect(Surface(0.5, false, 0, 1).mTexOptions.IsSeeThrough());
+    //an opaque color over a texture with holes
+    try std.testing.expect(Surface(1, true, 0, 1).mTexOptions.IsSeeThrough());
+    //neither: the ray can stop here
+    try std.testing.expect(!Surface(1, false, 0, 1).mTexOptions.IsSeeThrough());
 }
 
 //==================================colliders, when the editor shows them==================================

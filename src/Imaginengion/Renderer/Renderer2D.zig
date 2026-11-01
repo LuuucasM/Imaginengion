@@ -374,13 +374,11 @@ pub fn GetMergeCount(self: Renderer2D, pipeline_kind: PipelineType) usize {
     };
 }
 
-/// Whether a quad painted with `surface` draws nothing at all: see-through, with a fill and a border (if it has one)
-/// both fully see-through. Its texture doesn't matter, since the fill color tints it (SDFRayMarcher.SurfaceColor). Such
-/// a quad is only there to be clicked, like a menu row's button until it is hovered, and picking tests its box on the
-/// CPU, so it is left out of the shapes. A quad that isn't see-through hides what is behind it whatever its alpha, so
-/// it is still drawn
+/// Whether a quad painted with `surface` draws nothing at all: a fill and a border (if it has one) both fully
+/// see-through. Its texture doesn't matter, since the fill color tints it (SDFRayMarcher.SurfaceColor). Such a quad is
+/// only there to be clicked, like a menu row's button until it is hovered, and picking tests its box on the CPU, so it
+/// is left out of the shapes
 pub fn QuadDrawsNothing(surface: SurfaceComponent) bool {
-    if (!surface.mTexOptions.mIsTransparent) return false;
     if (surface.mTexOptions.mColor.w > 0) return false;
     return surface.mBorderWidth <= 0 or surface.mBorderColor.w <= 0;
 }
@@ -418,7 +416,7 @@ pub fn DrawQuad(
         );
 
     var shading_flag: u32 = 0;
-    if (surface.mTexOptions.mIsTransparent) shading_flag |= ShapeData.FLAG_TRANSPARENT;
+    if (surface.mTexOptions.IsSeeThrough()) shading_flag |= ShapeData.FLAG_TRANSPARENT;
 
     //the border is a solid color: its own surface, which the marcher draws untextured
     var border_shading_handle = shading_handle;
@@ -503,7 +501,7 @@ pub fn DrawMerge(
             const painter_surface = painter_entity.GetComponent(SurfaceComponent).?;
             const painter_texture = try painter_surface.mTexture.GetAsset(engine_context, Texture2D);
             known.value_ptr.* = @intCast(try shading_buff.AddSurface(engine_allocator, &painter_surface.mTexOptions, painter_texture));
-            if (painter_surface.mTexOptions.mIsTransparent) shading_flag |= ShapeData.FLAG_TRANSPARENT;
+            if (painter_surface.mTexOptions.IsSeeThrough()) shading_flag |= ShapeData.FLAG_TRANSPARENT;
         }
         part.Shading = known.value_ptr.*;
     }
@@ -672,7 +670,7 @@ pub const TextFill = struct {
         const shading = try shading_buff.AddSurface(engine_context.EngineAllocator(), &surface.mTexOptions, texture_asset);
         return .{
             .Shading = @intCast(shading),
-            .Flags = if (surface.mTexOptions.mIsTransparent) ShapeData.FLAG_TRANSPARENT else 0,
+            .Flags = if (surface.mTexOptions.IsSeeThrough()) ShapeData.FLAG_TRANSPARENT else 0,
             .Font = font,
         };
     }

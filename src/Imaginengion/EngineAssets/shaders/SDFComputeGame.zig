@@ -85,7 +85,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
     const march_color = marcher.GenerateColor(SDFShared.imageSampleExplicitLod, TexturesArray);
 
     //the overlay over the game. The heatmap draws how much work this pixel's ray did over a dimmed copy of that
-    const picture = SDFShared.Over(sample, march_color);
+    const picture = @import("IM").Over(sample, march_color);
     const final_color = if (shader_variant.heatmap)
         @import("IM").HeatOver(@import("IM").HeatColor(marcher.mCounters.OfIndex(CameraUBO.mHeatMetric), CameraUBO.mHeatRedAt), picture)
     else

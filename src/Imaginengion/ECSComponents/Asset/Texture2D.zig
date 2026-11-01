@@ -16,7 +16,13 @@ pub const TexOptions = struct {
     mTextureUV0: Vec2(f32),
     mTextureUV1: Vec2(f32),
     mColor: Vec4(f32),
+    //the texture has see-through pixels, which the CPU can't tell without reading it. A see-through color needs no flag (IsSeeThrough)
     mIsTransparent: bool,
+
+    /// Whether what is behind a surface painted with these can show through it
+    pub fn IsSeeThrough(self: TexOptions) bool {
+        return self.mIsTransparent or self.mColor.w < 1;
+    }
 
     pub const default: TexOptions = .{
         .mTilingFactor = 1.0,

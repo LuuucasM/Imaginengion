@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const ECSManager = @import("../ECS/ECSManager.zig");
+const EngineFiles = @import("../GameBuild/EngineFiles.zig");
 const GroupQuery = ECSManager.GroupQuery;
 
 const EventManager = @import("../Events/EventManager.zig");
@@ -153,21 +154,21 @@ pub fn Setup(self: *AManager, engine_context: *EngineContext) !void {
     _ = try self._internal.DefaultFileMetaData.mRelPath.appendSlice(engine_context.EngineAllocator(), "default");
 
     //TEXTURE 2D =========================
-    const texture2d_rel_path = "src/Imaginengion/EngineAssets/textures/DefaultTexture.png";
+    const texture2d_rel_path = EngineFiles.DEFAULT_TEXTURE;
     const texture2d_abs_path = try self.GetAbsPath(frame_allocator, texture2d_rel_path, .Eng);
     const texture2d_file = try std.Io.Dir.openFileAbsolute(io, texture2d_abs_path, .{});
     defer texture2d_file.close(io);
     try self._internal.DefaultTexture2D.Init(engine_context, texture2d_abs_path, texture2d_rel_path, texture2d_file);
 
     //TEXT ================================
-    const text_rel_path = "src/Imaginengion/EngineAssets/fonts/default/static/ChironGoRoundTC-Regular.ttf";
+    const text_rel_path = EngineFiles.DEFAULT_FONT;
     const text_abs_path = try self.GetAbsPath(frame_allocator, text_rel_path, .Eng);
     const text_file = try std.Io.Dir.openFileAbsolute(io, text_abs_path, .{});
     defer text_file.close(io);
     try self._internal.DefaultTextAsset.Init(engine_context, text_abs_path, text_rel_path, text_file);
 
     //AUDIO =================================
-    const audio_rel_path = "src/Imaginengion/EngineAssets/sounds/DefaultSound.mp3";
+    const audio_rel_path = EngineFiles.DEFAULT_SOUND;
     const audio_abs_path = try self.GetAbsPath(frame_allocator, audio_rel_path, .Eng);
     const audio_file = try std.Io.Dir.openFileAbsolute(io, audio_abs_path, .{});
     defer audio_file.close(io);

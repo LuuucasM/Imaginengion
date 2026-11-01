@@ -331,6 +331,15 @@ pub const HeatMetric = enum(u32) {
     }
 };
 
+/// `top` drawn over `bottom`: as much of the bottom shows as the top lets through. Neither color is multiplied by its
+/// alpha, and neither is the result
+pub fn Over(top: Vec4(f32), bottom: Vec4(f32)) Vec4(f32) {
+    const out_a = top.w + bottom.w * (1.0 - top.w);
+    if (out_a <= 0) return .{ .x = 0, .y = 0, .z = 0, .w = 0 };
+    const out_rgb = top.ToVec3().MulScalar(top.w).AddVec(bottom.ToVec3().MulScalar(bottom.w * (1.0 - top.w))).DivScalar(out_a);
+    return .{ .x = out_rgb.x, .y = out_rgb.y, .z = out_rgb.z, .w = out_a };
+}
+
 /// The heatmap's color for `count` of a metric that is fully red at `red_at`: black for none, then blue, green, yellow
 /// and red at a quarter, half, three quarters and all of `red_at`, and red past it. Opaque, so it hides what's below
 pub fn HeatColor(count: u32, red_at: f32) Vec4(f32) {
@@ -1053,9 +1062,8 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             }
 
             const color = self.SurfaceColor(curr_node, sample_sampler, textures_array);
-            const alpha = color.w;
 
-            self.mNodes[node_ind].AccumColor = color.Lerp(child_accum, 1.0 - alpha);
+            self.mNodes[node_ind].AccumColor = Over(color, child_accum);
             self.Tree(Vec4(f32));
         }
 

@@ -2,6 +2,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const MakeEngineLib = @import("MakeEngineLib.zig").MakeEngineLib;
 const ScriptImports = @import("src/Imaginengion/Scripts/ScriptImports.zig");
+const EngineFiles = @import("src/Imaginengion/GameBuild/EngineFiles.zig");
+const ProjectWalk = @import("src/Imaginengion/GameBuild/ProjectWalk.zig");
 
 /// `zig build script -Dscript_path=<file> -Dscript_name=<name> [-Dproject_path=<folder>]`: builds one script into
 /// zig-out/bin/<name>.dll. The script file is only its variables, hooks and event handlers; the DLL's root is generated
@@ -204,6 +206,8 @@ fn AddProjectSteps(b: *std.Build, engine: *std.Build.Dependency, check_step: *st
     ));
     game_step.dependOn(&b.addInstallFileWithDir(start_file, .{ .custom = game_name }, b.fmt("{s}.bat", .{game_name})).step);
 
+    game.AddReport(engine, project);
+
     const run = b.addRunArtifact(exe);
     run.setCwd(b.graph.path(.install_prefix, game_name));
     run.addArg(b.fmt("{s}/{s}.imprj", .{ game_name, game_name }));
@@ -223,23 +227,6 @@ fn FindProjectFileName(b: *std.Build) !?[]const u8 {
     }
     return null;
 }
-
-/// The engine files a game can need when it runs: the default theme, what it points at, what an asset falls back on.
-/// Fixed for now: nothing yet looks at what a game uses
-const ENGINE_ASSETS = [_][]const u8{
-    "fonts/default/static/ChironGoRoundTC-Bold.json",
-    "fonts/default/static/ChironGoRoundTC-Bold.png",
-    "fonts/default/static/ChironGoRoundTC-Bold.ttf",
-    "fonts/default/static/ChironGoRoundTC-Regular.json",
-    "fonts/default/static/ChironGoRoundTC-Regular.png",
-    "fonts/default/static/ChironGoRoundTC-Regular.ttf",
-    "sounds/DefaultSound.mp3",
-    "textures/DefaultTexture.png",
-    "textures/White.png",
-    "themes/Default.imtheme",
-};
-const ENGINE_ASSETS_PATH = "src/Imaginengion/EngineAssets";
-const STOCK_SCRIPTS_FOLDER = "scripts/UI";
 
 /// Fills zig-out/<name>/, laid out the way the game reads it from the folder it runs in: the same paths as in the
 /// engine's folder, and the project in a folder of its own
@@ -306,7 +293,7 @@ const GameBuild = struct {
                     }).step);
                 },
                 .file => {
-                    if (name[0] == '.' or std.mem.eql(u8, name, "build.zig") or std.mem.eql(u8, name, "build.zig.zon")) continue;
+                    if (ProjectWalk.IsBuildOnlyFile(name)) continue;
                     self.mStep.dependOn(&b.addInstallFileWithDir(b.path(name), destination, name).step);
                 },
                 else => {},
@@ -314,21 +301,21 @@ const GameBuild = struct {
         }
     }
 
-    /// ENGINE_ASSETS and the stock UI scripts with their DLLs. True, with a failing step added saying why, if a project
-    /// file has a stock script's name: a DLL is named after its file, so one would be written over the other
+    /// EngineFiles.COPIED_ASSETS and the stock UI scripts with their DLLs. True, with a failing step added saying why, if a
+    /// project file has a stock script's name: a DLL is named after its file, so one would be written over the other
     fn AddEngineAssets(self: GameBuild, engine: *std.Build.Dependency, engine_module: *std.Build.Module, project_files: *const ScriptImports.ProjectFiles) !bool {
         const b = self.mBuild;
-        const destination: std.Build.InstallDir = .{ .custom = b.fmt("{s}/{s}", .{ self.mName, ENGINE_ASSETS_PATH }) };
-        for (ENGINE_ASSETS) |asset| {
-            self.mStep.dependOn(&b.addInstallFileWithDir(engine.path(b.fmt("{s}/{s}", .{ ENGINE_ASSETS_PATH, asset })), destination, asset).step);
+        const destination: std.Build.InstallDir = .{ .custom = b.fmt("{s}/{s}", .{ self.mName, EngineFiles.ASSETS_PATH }) };
+        for (EngineFiles.COPIED_ASSETS) |asset| {
+            self.mStep.dependOn(&b.addInstallFileWithDir(engine.path(b.fmt("{s}/{s}", .{ EngineFiles.ASSETS_PATH, asset })), destination, asset).step);
         }
+        const stock_folder = EngineFiles.ASSETS_PATH ++ "/" ++ EngineFiles.STOCK_SCRIPTS_FOLDER;
         self.mStep.dependOn(&b.addInstallDirectory(.{
-            .source_dir = engine.path(ENGINE_ASSETS_PATH ++ "/" ++ STOCK_SCRIPTS_FOLDER),
+            .source_dir = engine.path(stock_folder),
             .install_dir = destination,
-            .install_subdir = STOCK_SCRIPTS_FOLDER,
+            .install_subdir = EngineFiles.STOCK_SCRIPTS_FOLDER,
         }).step);
 
-        const stock_folder = ENGINE_ASSETS_PATH ++ "/" ++ STOCK_SCRIPTS_FOLDER;
         const stock_path = try engine.builder.root.root_dir.handle.realPathFileAlloc(b.graph.io, stock_folder, b.allocator);
         const stock = try ScriptImports.FindProjectFiles(b.allocator, b.graph.io, stock_path);
         var iter = stock.mByName.iterator();
@@ -346,6 +333,28 @@ const GameBuild = struct {
             }));
         }
         return false;
+    }
+
+    /// Prints which of the game's files it needs (src/GameReport.zig) every time it's built, once everything added to the
+    /// step so far is done so it's the last thing shown. It's compiled for the machine building, whatever the game's for
+    fn AddReport(self: GameBuild, engine: *std.Build.Dependency, project: []const u8) void {
+        const b = self.mBuild;
+        const tool = b.addExecutable(.{
+            .name = "GameReport",
+            .root_module = b.createModule(.{
+                .target = b.graph.host,
+                .optimize = .Debug,
+                .root_source_file = engine.path("src/GameReport.zig"),
+            }),
+        });
+        const report = b.addRunArtifact(tool);
+        report.stdio = .inherit;
+        report.addArg(project);
+        report.addDirectoryArg(engine.path("."));
+        report.addArg(self.mName);
+
+        for (self.mStep.dependencies.items) |step| report.step.dependOn(step);
+        self.mStep.dependOn(&report.step);
     }
 };
 
