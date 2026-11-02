@@ -154,6 +154,9 @@ pub const Result = struct {
     /// the fonts named that the game gets as their atlas instead of the font itself, sorted. One whose atlas isn't all
     /// there isn't one: it's in mMissing
     mFonts: std.EnumArray(FileRoot, FileSet) = .initFill(.empty),
+    /// the .zig files named, sorted. A game never ships these, which is why they aren't in mProject or mEngine: scripts and
+    /// what they import are compiled into it, and it only knows an enum by name
+    mCode: std.EnumArray(FileRoot, FileSet) = .initFill(.empty),
     /// every file the walk read: what's above can only change when one of these does, or a folder gets a file added or
     /// removed
     mRead: std.ArrayList(FileId) = .empty,
@@ -195,6 +198,11 @@ pub fn IsFontFile(path: []const u8) bool {
     return HasExtension(std.fs.path.extension(path), &.{ ".ttf", ".otf" });
 }
 
+/// Whether `path` is code, which a game doesn't ship
+pub fn IsCodeFile(path: []const u8) bool {
+    return HasExtension(std.fs.path.extension(path), &.{".zig"});
+}
+
 /// The .json of the atlas of the font at `path`, which sits next to it. Its .png is named the same way
 pub fn AtlasJsonOf(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
     return try std.fmt.allocPrint(allocator, "{s}.json", .{path[0 .. path.len - std.fs.path.extension(path).len]});
@@ -229,6 +237,7 @@ pub fn WalkProject(arena: std.mem.Allocator, io: std.Io, project_path: []const u
     std.mem.sort(FileLink, result.mFileLinks.items, {}, FileLinkLessThan);
     for (&result.mScriptFiles.values) |*scripts| SortByName(scripts);
     for (&result.mFonts.values) |*fonts| SortByName(fonts);
+    for (&result.mCode.values) |*code| SortByName(code);
 
     //what a link points at can be in a file read after it, so links are found once every file has been read
     for (result.mObjectFiles.items) |*file| try AddSymbols(arena, result, file.mFile, &file.mObject);
@@ -299,7 +308,9 @@ const Walker = struct {
             return;
         };
 
-        if (!IsFontFile(normalized)) {
+        if (IsCodeFile(normalized)) {
+            try self.mResult.mCode.getPtr(root).put(self.mArena, normalized, {});
+        } else if (!IsFontFile(normalized)) {
             const set = if (root == .Prj) &self.mResult.mProject else &self.mResult.mEngine;
             try set.put(self.mArena, normalized, {});
         }
@@ -723,7 +734,7 @@ pub fn FindNotNeeded(arena: std.mem.Allocator, io: std.Io, project_path: []const
                 if (at_top and IsBuildOnlyFile(entry.basename)) continue;
                 const path = try arena.dupe(u8, entry.path);
                 std.mem.replaceScalar(u8, path, '\\', '/');
-                if (!result.mProject.contains(path) and !result.mFonts.getPtrConst(.Prj).contains(path)) try not_needed.mProject.append(arena, path);
+                if (!result.mProject.contains(path) and !result.mFonts.getPtrConst(.Prj).contains(path) and !result.mCode.getPtrConst(.Prj).contains(path)) try not_needed.mProject.append(arena, path);
             },
             else => {},
         }
@@ -740,7 +751,7 @@ pub fn FindNotNeeded(arena: std.mem.Allocator, io: std.Io, project_path: []const
             .file => {
                 const path = try std.fmt.allocPrint(arena, "{s}/{s}", .{ stock_folder, entry.path });
                 std.mem.replaceScalar(u8, path, '\\', '/');
-                if (!result.mEngine.contains(path)) try not_needed.mEngine.append(arena, path);
+                if (!result.mCode.getPtrConst(.Eng).contains(path)) try not_needed.mEngine.append(arena, path);
             },
             else => {},
         }
@@ -807,17 +818,8 @@ pub fn WriteReport(out: *std.Io.Writer, game_name: []const u8, result: *const Re
         for (not_needed.mEngine.items) |path| try out.print("  (engine) {s}\n", .{EngineRelative(path)});
     }
 
-    const font_count = result.mFonts.getPtrConst(.Prj).count() + result.mFonts.getPtrConst(.Eng).count();
-    if (font_count > 0) {
-        try out.print("Fonts, shipped as their atlas ({d}):\n", .{font_count});
-        for (std.enums.values(FileRoot)) |root| {
-            for (result.mFonts.getPtrConst(root).keys()) |path| {
-                try out.writeAll("  ");
-                try WriteFileId(out, .{ .mRoot = root, .mPath = path });
-                try out.writeAll("\n");
-            }
-        }
-    }
+    try WriteFileSets(out, "Fonts, shipped as their atlas", &result.mFonts);
+    try WriteFileSets(out, "Code, not shipped", &result.mCode);
 
     const problem_count = result.mMissing.items.len + result.mUnreadable.items.len + result.mUnsetEntries.items.len;
     if (problem_count == 0) {
@@ -833,22 +835,32 @@ pub fn WriteReport(out: *std.Io.Writer, game_name: []const u8, result: *const Re
     for (result.mUnreadable.items) |unreadable| try out.print("  {s} can't be read: {s}\n", .{ unreadable.mPath, unreadable.mReason });
 }
 
+/// A part of the report listing the files of `sets`, if it has any
+fn WriteFileSets(out: *std.Io.Writer, title: []const u8, sets: *const std.EnumArray(FileRoot, FileSet)) !void {
+    const count = sets.getPtrConst(.Prj).count() + sets.getPtrConst(.Eng).count();
+    if (count == 0) return;
+    try out.print("{s} ({d}):\n", .{ title, count });
+    for (std.enums.values(FileRoot)) |root| {
+        for (sets.getPtrConst(root).keys()) |path| {
+            try out.writeAll("  ");
+            try WriteFileId(out, .{ .mRoot = root, .mPath = path });
+            try out.writeAll("\n");
+        }
+    }
+}
+
 /// One line of the report: how many of `paths` there are, by kind of file
 fn WriteCounts(out: *std.Io.Writer, label: []const u8, paths: []const []const u8) !void {
     var object_files: usize = 0;
-    var scripts: usize = 0;
     var other: usize = 0;
     for (paths) |path| {
-        const extension = std.fs.path.extension(path);
-        if (ObjectKindOf(extension) != null) {
+        if (ObjectKindOf(std.fs.path.extension(path)) != null) {
             object_files += 1;
-        } else if (HasExtension(extension, &.{".zig"})) {
-            scripts += 1;
         } else {
             other += 1;
         }
     }
-    try out.print("  {s} {d}: object files {d}, scripts {d}, other {d}\n", .{ label, paths.len, object_files, scripts, other });
+    try out.print("  {s} {d}: object files {d}, other {d}\n", .{ label, paths.len, object_files, other });
 }
 
 /// The objects saved in all the object files together, then in each one

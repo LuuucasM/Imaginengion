@@ -193,6 +193,12 @@ fn PackagedPath(allocator: std.mem.Allocator, rel_path: []const u8) ![]const u8 
     return try ProjectWalk.AtlasJsonOf(allocator, rel_path);
 }
 
+/// Whether `rel_path` is a file that isn't there to open or watch because this is a packaged game, which has no code: its
+/// scripts are compiled in (StaticScriptAsset) and it only knows an enum by name (EnumAsset). The asset still has its path
+fn HasNoFile(rel_path: []const u8) bool {
+    return game_build_options.packaged_game and ProjectWalk.IsCodeFile(rel_path);
+}
+
 pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, requested_source: AssetSource) !AssetHandle {
     if (requested_source == .Default) {
         return AssetHandle{
@@ -291,8 +297,10 @@ pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_
 
             const abs_path = try self.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath.items, file_data.mPathType);
 
-            const asset_file = try self.OpenFile(engine_context, file_data.mRelPath.items, file_data.mPathType);
-            defer self.CloseFile(engine_context.Io(), asset_file);
+            //a script compiled in has no file, and StaticScriptAsset doesn't read one
+            const compiled_in = game_build_options.packaged_game and asset_type == AssetComponents.ScriptAsset;
+            const asset_file: std.Io.File = if (compiled_in) undefined else try self.OpenFile(engine_context, file_data.mRelPath.items, file_data.mPathType);
+            defer if (!compiled_in) self.CloseFile(engine_context.Io(), asset_file);
 
             var asset_component = asset_type{};
             asset_component.Init(engine_context, abs_path, file_data.mRelPath.items, asset_file) catch |err| {
@@ -334,6 +342,7 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
     Tracy.Plot("Assets/Pending Delete", .{ .color = 0x9E9E9E }, self.mECSManager.NumWithComponent(PendingDelete));
     for (group.items) |asset_id| {
         const file_data = self.mECSManager.GetComponentMut(FileMetaData, asset_id).?;
+        if (HasNoFile(file_data.mRelPath.items)) continue;
 
         //stat first: it costs no handle (see StatTimeAndSize), and it is what tells us the file still exists
         const stat = self.OpenFileStats(engine_context, file_data.mRelPath.items, file_data.mPathType) catch |err| {
@@ -553,6 +562,7 @@ fn CreateAssetFile(self: *AManager, engine_context: *EngineContext, file_source:
     };
     _ = try file_meta_data.mRelPath.print(engine_allocator, "{s}", .{file_source.rel_path});
     const new_file_data = try self.mECSManager.AddComponentSync(engine_context, new_asset_id, file_meta_data);
+    if (HasNoFile(file_source.rel_path)) return new_asset_id;
 
     const file = try self.OpenFile(engine_context, file_source.rel_path, file_source.path_type);
     defer self.CloseFile(engine_context.Io(), file);

@@ -140,15 +140,17 @@ test "the walk follows the entries, what objects save at any depth, script varia
 
     for ([_][]const u8{
         "game.imprj",        "icon.png",          "ProjectSettings/Audio.json", "scenes/Main.imsc", "scenes/Next.imsc",
-        "players/Main.impl", "gc/Main.imgc",      "gc/State.zig",               "textures/Ball.png", "music/Theme.mp3",
-        "fonts/Title.json",  "fonts/Title.png",   "scripts/Play.zig",           "events/Score.zig", "events/Shared.zig",
+        "players/Main.impl", "gc/Main.imgc",      "textures/Ball.png",          "music/Theme.mp3",  "fonts/Title.json",
+        "fonts/Title.png",
     }) |path| {
         if (!result.mProject.contains(path)) {
             std.debug.print("not found: {s}\n", .{path});
             return error.TestExpectedFile;
         }
     }
-    try std.testing.expectEqual(15, result.mProject.count());
+    try std.testing.expectEqual(11, result.mProject.count());
+    //a script, what it imports and an enum a component names are all code, which a game doesn't ship
+    try ExpectPaths(&.{ "events/Score.zig", "events/Shared.zig", "gc/State.zig", "scripts/Play.zig" }, result.mCode.getPtrConst(.Prj).keys());
 
     const not_needed = try game.FindNotNeeded(&result);
     try ExpectPaths(&.{ "notes.txt", "scripts/Old.zig", "textures/Unused.png" }, not_needed.mProject.items);
@@ -174,7 +176,8 @@ test "the engine's files every game needs are found, and what a theme names, and
     try std.testing.expect(!result.mEngine.contains(THEME_FONT));
     try std.testing.expect(result.mEngine.contains(EngineFiles.ASSETS_PATH ++ "/fonts/default/static/ChironGoRoundTC-Bold.json"));
     try std.testing.expect(result.mEngine.contains(EngineFiles.ASSETS_PATH ++ "/fonts/default/static/ChironGoRoundTC-Bold.png"));
-    try std.testing.expect(result.mEngine.contains(STOCK_FOLDER ++ "/Choose.zig"));
+    try std.testing.expect(result.mCode.getPtrConst(.Eng).contains(STOCK_FOLDER ++ "/Choose.zig"));
+    try std.testing.expect(!result.mEngine.contains(STOCK_FOLDER ++ "/Choose.zig"));
 
     const not_needed = try game.FindNotNeeded(&result);
     try ExpectPaths(&.{STOCK_FOLDER ++ "/Toggle.zig"}, not_needed.mEngine.items);
@@ -717,14 +720,14 @@ test "only scripts on objects are compiled in, and using Widgets brings in every
     var result = try game.Walk();
     try ExpectPaths(&.{"scripts/Plain.zig"}, result.mLoadedScripts.getPtrConst(.Prj).keys());
     try ExpectPaths(&.{}, result.mLoadedScripts.getPtrConst(.Eng).keys());
-    try std.testing.expect(result.mProject.contains("scripts/Event.zig"));
-    try std.testing.expect(!result.mEngine.contains(STOCK_FOLDER ++ "/Choose.zig"));
+    try std.testing.expect(result.mCode.getPtrConst(.Prj).contains("scripts/Event.zig"));
+    try std.testing.expect(!result.mCode.getPtrConst(.Eng).contains(STOCK_FOLDER ++ "/Choose.zig"));
 
     try game.Write("scripts/Plain.zig", "const IM = @import(\"IM\");\nconst Row = IM.Widgets.SelectableRow;");
 
     result = try game.Walk();
-    try std.testing.expect(result.mEngine.contains(STOCK_FOLDER ++ "/Choose.zig"));
-    try std.testing.expect(result.mEngine.contains(STOCK_FOLDER ++ "/Toggle.zig"));
+    try std.testing.expect(result.mCode.getPtrConst(.Eng).contains(STOCK_FOLDER ++ "/Choose.zig"));
+    try std.testing.expect(result.mCode.getPtrConst(.Eng).contains(STOCK_FOLDER ++ "/Toggle.zig"));
     try std.testing.expect(result.mLoadedScripts.getPtrConst(.Eng).contains(STOCK_FOLDER ++ "/Toggle.zig"));
     try ExpectPaths(&.{}, (try game.FindNotNeeded(&result)).mEngine.items);
 }
@@ -774,11 +777,11 @@ test "clearing a game's folder keeps what the game needs, and deletes the rest w
         "out/game.bat",
         "out/game/game.imprj",
         "out/game/scenes/Main.imsc",
-        "out/game/scripts/Plain.zig",
         "out/" ++ EngineFiles.DEFAULT_THEME,
     };
     const removed = [_][]const u8{
         "out/game/notes.txt",
+        "out/game/scripts/Plain.zig",
         "out/game/scripts/Old.zig",
         "out/game/old folder/deep/Old.png",
         "out/zig-out/bin/Plain.zig.dll",
@@ -801,12 +804,14 @@ test "the report counts files by kind and lists what isn't needed and what's mis
     const arena = arena_state.allocator();
 
     var result: ProjectWalk.Result = .{};
-    for ([_][]const u8{ "game.imprj", "scenes/Main.imsc", "players/Main.impl", "scripts/Play.zig", "a.png" }) |path| {
+    for ([_][]const u8{ "game.imprj", "scenes/Main.imsc", "players/Main.impl", "a.png" }) |path| {
         try result.mProject.put(arena, path, {});
     }
     try result.mEngine.put(arena, EngineFiles.PLAIN_TEXTURE, {});
     try result.mFonts.getPtr(.Prj).put(arena, "fonts/A.ttf", {});
     try result.mFonts.getPtr(.Eng).put(arena, EngineFiles.DEFAULT_FONT, {});
+    try result.mCode.getPtr(.Prj).put(arena, "scripts/Play.zig", {});
+    try result.mCode.getPtr(.Eng).put(arena, STOCK_FOLDER ++ "/Choose.zig", {});
 
     var not_needed: ProjectWalk.NotNeeded = .{};
     try not_needed.mProject.append(arena, "notes.txt");
@@ -816,15 +821,18 @@ test "the report counts files by kind and lists what isn't needed and what's mis
     var out: std.Io.Writer = .fixed(&buffer);
     try ProjectWalk.WriteReport(&out, "game", &result, &not_needed);
     try std.testing.expectEqualStrings(
-        \\game: 6 files needed
-        \\  project 5: object files 2, scripts 1, other 2
-        \\  engine 1: object files 0, scripts 0, other 1
+        \\game: 5 files needed
+        \\  project 4: object files 2, other 2
+        \\  engine 1: object files 0, other 1
         \\Left out (2):
         \\  notes.txt
         \\  (engine) scripts/UI/Toggle.zig
         \\Fonts, shipped as their atlas (2):
         \\  fonts/A.ttf
         \\  (engine) fonts/default/static/ChironGoRoundTC-Regular.ttf
+        \\Code, not shipped (2):
+        \\  scripts/Play.zig
+        \\  (engine) scripts/UI/Choose.zig
         \\Missing: none
         \\
     , out.buffered());
@@ -837,12 +845,15 @@ test "the report counts files by kind and lists what isn't needed and what's mis
     out = .fixed(&buffer);
     try ProjectWalk.WriteReport(&out, "game", &result, &.{});
     try std.testing.expectEqualStrings(
-        \\game: 6 files needed
-        \\  project 5: object files 2, scripts 1, other 2
-        \\  engine 1: object files 0, scripts 0, other 1
+        \\game: 5 files needed
+        \\  project 4: object files 2, other 2
+        \\  engine 1: object files 0, other 1
         \\Fonts, shipped as their atlas (2):
         \\  fonts/A.ttf
         \\  (engine) fonts/default/static/ChironGoRoundTC-Regular.ttf
+        \\Code, not shipped (2):
+        \\  scripts/Play.zig
+        \\  (engine) scripts/UI/Choose.zig
         \\Missing (4):
         \\  EntryPlayer isn't set in the project file
         \\  b.png, named by scenes/Main.imsc

@@ -305,7 +305,7 @@ const GameBuild = struct {
             for (self.mWalk.mLoadedScripts.getPtrConst(root).keys()) |path| {
                 const module = switch (root) {
                     .Prj => by_path.get(path) orelse continue,
-                    .Eng => if (self.mWalk.mEngine.contains(path)) self.ScriptModule(engine_module, engine.path(path)) else continue,
+                    .Eng => if (self.mWalk.mCode.getPtrConst(.Eng).contains(path)) self.ScriptModule(engine_module, engine.path(path)) else continue,
                 };
                 //by number: a project's script can have the same name as a stock one
                 const import_name = b.fmt("script_{d}", .{imports.items.len});
@@ -336,7 +336,7 @@ const GameBuild = struct {
         });
     }
 
-    /// The project's files the game needs. Script files go too: the engine still opens a script's file when it loads it
+    /// The project's files the game needs
     fn AddProjectFiles(self: GameBuild) void {
         const b = self.mBuild;
         const destination: std.Build.InstallDir = .{ .custom = b.fmt("{s}/{s}", .{ self.mName, self.mName }) };
