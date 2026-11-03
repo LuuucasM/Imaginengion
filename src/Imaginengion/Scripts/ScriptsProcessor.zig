@@ -114,6 +114,7 @@ fn RunScriptsFrom(
     args: anytype,
 ) !ScriptResult {
     _ValidateScriptType(ObjectType, script_type);
+    if (comptime !ScriptAsset.HookIsUsed(ObjectType, script_type.Hook)) return .Continue;
     const S = ScriptLoop(ObjectType, script_type, world_name, @TypeOf(args));
     return engine_context.mSystems.RunSystem(S, engine_context, .{ world_manager, above, args });
 }
@@ -283,6 +284,7 @@ pub fn OnPhysicsEvent(_: *anyopaque, engine_context: *EngineContext, event: *con
 /// info is a pointer to the script type's info (CollisionInfo, PreSolveInfo), so a script can write back into it
 fn RunCollisionScripts(comptime script_type: type, engine_context: *EngineContext, owner: Entity, other: Entity, info: anytype) !void {
     _ValidateScriptType(Entity, script_type);
+    if (comptime !ScriptAsset.HookIsUsed(Entity, script_type.Hook)) return;
     if (!owner.IsActive()) return;
 
     const args = .{ &other, info };
@@ -379,6 +381,7 @@ pub const EventScripts = struct {
 /// object's, e.g. the start scripts of a scene that has just loaded
 pub fn RunOwnScripts(comptime ObjectType: type, comptime script_type: type, engine_context: *EngineContext, owner: ObjectType, args: anytype) !ScriptResult {
     _ValidateScriptType(ObjectType, script_type);
+    if (comptime !ScriptAsset.HookIsUsed(ObjectType, script_type.Hook)) return .Continue;
     const S = OwnScriptsLoop(ObjectType, script_type, @TypeOf(args));
     return engine_context.mSystems.RunSystem(S, engine_context, .{ owner, args });
 }

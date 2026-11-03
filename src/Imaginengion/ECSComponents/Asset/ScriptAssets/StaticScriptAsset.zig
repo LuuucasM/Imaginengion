@@ -22,3 +22,11 @@ pub fn Open(_: *StaticScriptAsset, engine_context: *EngineContext, _: []const u8
 }
 
 pub fn Close(_: *StaticScriptAsset, _: *EngineContext) void {}
+
+/// Whether any script compiled into the game has `hook` on objects of kind `owner`
+pub fn HookIsUsed(comptime owner: ScriptABI.OwnerKind, comptime hook: ScriptABI.Hook) bool {
+    for (game_scripts.scripts) |script| {
+        if (script.mInfo.mOwner == owner and script.mInfo.HasHook(hook)) return true;
+    }
+    return false;
+}

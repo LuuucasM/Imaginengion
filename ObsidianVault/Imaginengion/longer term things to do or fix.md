@@ -16,6 +16,14 @@
 	- ill need to change literally everything to utf-8 including entity names, and anything that is displayed onto the screen
 - add in reinforcement learning to the ECS for sorting components lists
 - abstract away the ECS so I can start working on comparing my ECS with others to do research on heuristic functions when dealing with sorting component buckets
+- need a way to measure game builds.
+	- maybe we can do release safe and be able to present debug information on the screen
+	- I could start this now but ideally i could get all the information from doing time testing and stuff which isnt in the engine yet but there is no way to measure the effects of different optimizations on the final output build of a game right now because we cant measure anything. dont even have vsync off and an fps counter yet
+- serializing too and from binary system not made yet
+- build multilingual language support for the engine
+	- i dont really know how modern languges handle multi language support so do research on that first
+	- first I have to move strings out of being coded directly into the engine and into some sort of external file..? is that how you do multi lingual support?
+	- right now i am compiling korean and english into one mega atlas but its probably more efficent for the editor at least to make separate atlases and then idk for the final build if you put them all together or split them. but if you support like 10 languages the atlas would be mega huge so probably you still keep them separated
 - [https://20_games_challenge.gitlab.io/](https://20_games_challenge.gitlab.io/ "https://20_games_challenge.gitlab.io/")
 	- go through the games on this list and make them :)
 	- im sure i will see lots of issues and have to fix lots of things while doing this it sounds like so much fun

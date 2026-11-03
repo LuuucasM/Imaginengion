@@ -193,8 +193,8 @@ fn PackagedPath(allocator: std.mem.Allocator, rel_path: []const u8) ![]const u8 
     return try ProjectWalk.AtlasJsonOf(allocator, rel_path);
 }
 
-/// Whether `rel_path` is a file that isn't there to open or watch because this is a packaged game, which has no code: its
-/// scripts are compiled in (StaticScriptAsset) and it only knows an enum by name (EnumAsset). The asset still has its path
+/// Whether `rel_path` is a file that isn't there to open because this is a packaged game, which has no code: its scripts
+/// are compiled in (StaticScriptAsset) and it only knows an enum by name (EnumAsset). The asset still has its path
 fn HasNoFile(rel_path: []const u8) bool {
     return game_build_options.packaged_game and ProjectWalk.IsCodeFile(rel_path);
 }
@@ -342,7 +342,6 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
     Tracy.Plot("Assets/Pending Delete", .{ .color = 0x9E9E9E }, self.mECSManager.NumWithComponent(PendingDelete));
     for (group.items) |asset_id| {
         const file_data = self.mECSManager.GetComponentMut(FileMetaData, asset_id).?;
-        if (HasNoFile(file_data.mRelPath.items)) continue;
 
         //stat first: it costs no handle (see StatTimeAndSize), and it is what tells us the file still exists
         const stat = self.OpenFileStats(engine_context, file_data.mRelPath.items, file_data.mPathType) catch |err| {
@@ -566,6 +565,8 @@ fn CreateAssetFile(self: *AManager, engine_context: *EngineContext, file_source:
 
     const file = try self.OpenFile(engine_context, file_source.rel_path, file_source.path_type);
     defer self.CloseFile(engine_context.Io(), file);
+    //nothing watches a packaged game's files (GameProgram never calls OnUpdate), so it only has to be there
+    if (game_build_options.packaged_game) return new_asset_id;
     const fstats = try file.stat(engine_context.Io());
 
     try new_file_data.UpdateMetaData(engine_context, file, .{ .mtime = fstats.mtime, .size = fstats.size });

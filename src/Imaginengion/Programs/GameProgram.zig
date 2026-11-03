@@ -229,14 +229,6 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
     }
     //-------------Game Logic End----------------
 
-    //-------------Assets update Begin---------------
-    {
-        const assets_zone = Tracy.ZoneInit("Assets Section", @src());
-        defer assets_zone.Deinit();
-        try engine_context.mAssetManager.OnUpdate(engine_context);
-    }
-    //-------------End Assets Update ------------------
-
     //--------------Layout Update --------------
     {
         const layout_zone = Tracy.ZoneInit("Layout Update Section", @src());

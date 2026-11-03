@@ -33,6 +33,13 @@ else switch (builtin.os.tag) {
 
 pub const Name: []const u8 = "ScriptAsset";
 
+/// Whether a script could run `hook` on an object of type ObjectType: a packaged game knows at compile time, since all its
+/// scripts are compiled in. Anywhere else a script can turn up at any time
+pub fn HookIsUsed(comptime ObjectType: type, comptime hook: Hook) bool {
+    if (!game_build_options.packaged_game) return true;
+    return Lib.HookIsUsed(ScriptABI.OwnerKind.Of(ObjectType), hook);
+}
+
 _Lib: Lib = .{},
 _Info: ?*const ScriptInfo = null,
 /// which instance ids are in use, so a new one gets a free id and a reload knows which to carry over
