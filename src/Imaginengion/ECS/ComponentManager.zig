@@ -199,6 +199,13 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             self.GetComponent(SkipFieldComponent, entity_id).?.mSkipField.ChangeToUnskipped(component_ind);
         }
 
+        /// Puts the tag in this slot on the entity: a tag has no value, so none is needed
+        pub fn AddTagInd(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize) !void {
+            std.debug.assert(self.IsTag(component_ind));
+            var no_value: u8 = 0;
+            try self.AddStaged(engine_allocator, entity_id, component_ind, &no_value);
+        }
+
         /// Whether the component in this slot is zero sized
         pub fn IsTag(self: Self, component_ind: usize) bool {
             return self.mComponentsArrays.items[component_ind].mIsTag;

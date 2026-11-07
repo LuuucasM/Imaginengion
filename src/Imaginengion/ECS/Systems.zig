@@ -107,18 +107,28 @@ pub fn RunSystem(self: *Systems, comptime S: type, engine_context: *EngineContex
 }
 
 /// Calls `func` with `args` (a tuple) inside a transaction, and hands back what it returns. What it changes in a
-/// component of a registered ECS is kept apart until it returns (see Transaction), then put in when `keep(result)` says so,
-/// and dropped otherwise, as if it never happened: the script runner keeps a hook's changes unless the hook failed.
-/// Inside a transaction already, `func` is part of that one, and what it changed goes or stays with it.
+/// registered ECS is kept apart or written down until it returns (see Transaction): component values, adds, removals,
+/// destroys, objects made and tags. Then it is kept when `keep(result)` says so, and dropped otherwise, as if it never
+/// happened: the script runner keeps a hook's changes unless the hook failed.
+/// A transaction is also a run, so structural changes wait in it the same way, and land after it when it is the
+/// outermost run (a failure landing them is logged). Inside a transaction already, `func` is part of that one, and what
+/// it changed goes or stays with it.
 pub fn RunTransaction(self: *Systems, engine_context: *EngineContext, comptime func: anytype, args: anytype, comptime keep: anytype) ReturnOf(func) {
     if (self.mOpenTransaction != null) return @call(.auto, func, args);
 
+    self.mRunDepth += 1;
     self.mTransaction.Open(engine_context);
     self.mOpenTransaction = &self.mTransaction;
     const result = @call(.auto, func, args);
     self.mOpenTransaction = null;
 
+    // still inside the run: what keeping or dropping sets off waits like anything else in it
     if (keep(result)) self.mTransaction.Commit(engine_context) else self.mTransaction.Discard(engine_context);
+
+    self.mRunDepth -= 1;
+    if (self.mRunDepth == 0) {
+        if (self._Land(engine_context)) |err| std.log.err("What a transaction changed could not all be made: {s}", .{@errorName(err)});
+    }
     return result;
 }
 

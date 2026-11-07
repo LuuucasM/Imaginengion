@@ -174,16 +174,22 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return new_entity_id;
         }
 
-        // returns an active id that has only its SkipFieldComponent, reusing a destroyed id when there is one
+        // returns an active id that has only its SkipFieldComponent, reusing a destroyed id when there is one. An open
+        // transaction writes it down, to destroy it if it is dropped
         fn _CreateID(self: *Self, engine_allocator: std.mem.Allocator) !entity_t {
-            if (self.mComponentManager.ReuseFreeEntity()) |reused_id| return reused_id;
+            const transaction = self._OpenTransaction();
+            if (transaction) |open| try open.ReserveCreated();
 
-            const new_entity_id = self.mNextID;
-            std.debug.assert(!self.IsActiveEntity(new_entity_id));
+            const new_entity_id = self.mComponentManager.ReuseFreeEntity() orelse blk: {
+                const next_id = self.mNextID;
+                std.debug.assert(!self.IsActiveEntity(next_id));
 
-            try self.mComponentManager.CreateNewEntity(engine_allocator, new_entity_id);
-            self.mNextID += 1; // only consume the id once it has actually been created
+                try self.mComponentManager.CreateNewEntity(engine_allocator, next_id);
+                self.mNextID += 1; // only consume the id once it has actually been created
+                break :blk next_id;
+            };
 
+            if (transaction) |open| open.AddCreated(.{ .mECS = self, .mEntityID = new_entity_id, .mUndo = _DestroyCreated });
             return new_entity_id;
         }
 
@@ -192,7 +198,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
             std.debug.assert(self.IsActiveEntity(entity_id));
             if (self._Queues()) {
-                try self.mECSEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .DestroyEntity = .{ .mEntityID = entity_id } });
+                try self._Enqueue(engine_context.EngineAllocator(), .{ .DestroyEntity = .{ .mEntityID = entity_id } });
                 return;
             }
             try self._DestroyNow(engine_context, entity_id);
@@ -277,7 +283,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             errdefer self.mComponentManager.DeinitStaged(engine_context, component_ind, staged_component);
             if (self.mComponentManager.IsTag(component_ind) or !self._Queues()) {
                 self._CheckStorageChange(component_ind, "Adding");
+                const transaction = try self._ReserveTagChange(component_ind);
                 try self.mComponentManager.AddStaged(engine_context.EngineAllocator(), new_entity_id, component_ind, staged_component);
+                self._NoteTagChange(transaction, new_entity_id, component_ind, true);
             } else {
                 try self._QueueStagedAdd(engine_context.EngineAllocator(), new_entity_id, component_ind, staged_component);
             }
@@ -574,6 +582,103 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return self.mECSEventManager.mEventsArray.get(.EndOfFrame).items.len > 0;
         }
 
+        // queues a removal or a destroy, written down by an open transaction first
+        fn _Enqueue(self: *Self, engine_allocator: std.mem.Allocator, event: ECSEventDataT.EventT) !void {
+            try self._NoteQueue();
+            try self.mECSEventManager.Insert(engine_allocator, .EndOfFrame, event);
+        }
+
+        // an open transaction writes down where the queue stands, before it first queues into this ECS
+        fn _NoteQueue(self: *Self) !void {
+            const transaction = self._OpenTransaction() orelse return;
+            try transaction.NoteQueue(.{
+                .mECS = self,
+                .mMark = self.mECSEventManager.mEventsArray.get(.EndOfFrame).items.len,
+                .mDropFrom = _DropQueuedFrom,
+            });
+        }
+
+        //---------------what a dropped transaction undoes (see Transaction.Discard)---------------
+        // undoing can't fail outright, so what fails along the way is logged and the rest is still undone
+
+        // destroys an object a dropped transaction made, and everything under it, right away
+        fn _DestroyCreated(erased: *anyopaque, engine_context: *EngineContext, entity_id: u64) void {
+            const self: *Self = @ptrCast(@alignCast(erased));
+            const id: entity_t = @intCast(entity_id);
+            // gone already when its parent, made in the same transaction, went first
+            if (!self.IsActiveEntity(id)) return;
+            self._DestroyNow(engine_context, id) catch |err| std.log.err(debug_name ++ ": destroying an object a dropped transaction made: {s}", .{@errorName(err)});
+        }
+
+        // cuts the queue back to `mark`, newest first. A staged add on a live object goes through the removal hook,
+        // which undoes what adding it set off, and is deinitialized; one on an object already destroyed is only
+        // deinitialized. Removals and destroys are simply never made. What the removal hook queues meanwhile stays queued
+        fn _DropQueuedFrom(erased: *anyopaque, engine_context: *EngineContext, mark: usize) void {
+            const self: *Self = @ptrCast(@alignCast(erased));
+            const queue = self.mECSEventManager.mEventsArray.getPtr(.EndOfFrame);
+            const end = queue.items.len;
+            std.debug.assert(mark <= end);
+
+            var event_ind = end;
+            while (event_ind > mark) {
+                event_ind -= 1;
+                // indexed each time: the removal hook can queue more, which can move the queue
+                switch (queue.items[event_ind]) {
+                    .AddComponent => |add| self._DropStagedAdd(engine_context, add.mEntityID, add.mComponentInd, add.mData),
+                    else => {},
+                }
+            }
+
+            // what was queued while undoing goes where the dropped changes were
+            const queued_since = queue.items.len - end;
+            std.mem.copyForwards(ECSEventDataT.EventT, queue.items[mark .. mark + queued_since], queue.items[end..]);
+            queue.shrinkRetainingCapacity(mark + queued_since);
+            if (queue.items.len == 0 and self.mStaged.count() == 0) self._ResetStagingArena(engine_context.EngineAllocator());
+        }
+
+        fn _DropStagedAdd(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize, staged: *anyopaque) void {
+            const key = StagedKey{ .mEntityID = entity_id, .mComponentInd = component_ind };
+            // taken back off already (RemoveComponentSync), and deinitialized then
+            if (self.mStaged.get(key) != staged) return;
+            if (self.IsActiveEntity(entity_id)) {
+                self._CallRemovalHook(engine_context, .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } }) catch |err| {
+                    std.log.err(debug_name ++ ": undoing an add a dropped transaction staged: {s}", .{@errorName(err)});
+                };
+            }
+            _ = self.mStaged.remove(key);
+            self.mComponentManager.DeinitStaged(engine_context, component_ind, staged);
+        }
+
+        // an open transaction makes room to write down a tag about to go on or come off (_NoteTagChange). Null for
+        // anything that isn't a tag, or with no transaction open
+        fn _ReserveTagChange(self: *Self, component_ind: usize) !?*Transaction {
+            if (!self.mComponentManager.IsTag(component_ind)) return null;
+            const transaction = self._OpenTransaction() orelse return null;
+            try transaction.ReserveTagChange();
+            return transaction;
+        }
+
+        // writes down a tag that has just gone on or come off, after _ReserveTagChange
+        fn _NoteTagChange(self: *Self, transaction: ?*Transaction, entity_id: entity_t, component_ind: usize, added: bool) void {
+            const open = transaction orelse return;
+            open.AddTagChange(.{ .mECS = self, .mEntityID = entity_id, .mComponentInd = component_ind, .mAdded = added, .mUndo = _UndoTagChange });
+        }
+
+        // takes back a tag a dropped transaction put on, through the removal hook like any removal, or puts back one it
+        // took off. Putting one back doesn't set off what adding it does: what a tag sets off only marks things to be
+        // worked out again, which taking it off already did
+        fn _UndoTagChange(erased: *anyopaque, engine_context: *EngineContext, entity_id: u64, component_ind: usize, added: bool) void {
+            const self: *Self = @ptrCast(@alignCast(erased));
+            const id: entity_t = @intCast(entity_id);
+            if (!self.IsActiveEntity(id)) return;
+            const has = self.mComponentManager.HasComponentInd(component_ind, id);
+            if (added and has) {
+                self._RemoveNow(engine_context, id, component_ind) catch |err| std.log.err(debug_name ++ ": taking off a tag a dropped transaction put on: {s}", .{@errorName(err)});
+            } else if (!added and !has) {
+                self.mComponentManager.AddTagInd(engine_context.EngineAllocator(), id, component_ind) catch |err| std.log.err(debug_name ++ ": putting back a tag a dropped transaction took off: {s}", .{@errorName(err)});
+            }
+        }
+
         /// Adds the component now, unless it has to wait (see mRunDepth). Then it is staged instead: its storage only
         /// takes it when the queue drains, so no component already in that array moves during a run. Until then
         /// GetComponent, HasComponent, GetGroup and NumWithComponent find the staged copy, which is also what this
@@ -609,6 +714,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
 
         // lists a component already in the staging arena under its entity and queues its add
         fn _QueueStagedAdd(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize, staged_component: *anyopaque) !void {
+            try self._NoteQueue();
             const key = StagedKey{ .mEntityID = entity_id, .mComponentInd = component_ind };
             try self.mStaged.put(engine_allocator, key, staged_component);
             errdefer _ = self.mStaged.remove(key);
@@ -643,7 +749,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             std.debug.assert(self._GetStaged(entity_id, ComponentInd(component_t)) == null);
 
             self._CheckStorageChange(ComponentInd(component_t), "Adding");
+            const transaction = try self._ReserveTagChange(ComponentInd(component_t));
             const component_ptr = try self.mComponentManager.AddComponent(engine_context.EngineAllocator(), entity_id, new_component);
+            self._NoteTagChange(transaction, entity_id, ComponentInd(component_t), true);
 
             _ = try self.mECSEventManager.Dispatch(engine_context, .{ .AddComponent = .{
                 .mEntityID = entity_id,
@@ -662,7 +770,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             std.debug.assert(components_types.len + BuiltinComponentCount > component_ind);
             std.debug.assert(component_ind != SkipFieldComponent.Ind); // entity lifetime goes through DestroyEntity
             if (self.mComponentManager.IsTag(component_ind) or !self._Queues()) return try self._RemoveNow(engine_context, entity_id, component_ind);
-            try self.mECSEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
+            try self._Enqueue(engine_context.EngineAllocator(), .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
         }
 
         /// RemoveComponent made right away even during a run. Only where nothing holds a pointer into that
@@ -690,7 +798,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                 // the hook may have taken it off itself
                 if (self.mComponentManager.HasComponentInd(component_ind, entity_id)) {
                     self._CheckStorageChange(component_ind, "Removing");
+                    const transaction = try self._ReserveTagChange(component_ind);
                     self.mComponentManager.RemoveComponent(engine_context, entity_id, component_ind);
+                    self._NoteTagChange(transaction, entity_id, component_ind, false);
                 }
                 return;
             }

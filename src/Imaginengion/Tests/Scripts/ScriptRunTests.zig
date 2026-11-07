@@ -83,6 +83,8 @@ const TestWorld = struct {
             .async_limit = .nothing,
         });
         try engine_context.mAssetManager.Init(engine_context);
+        //a UI element added by a script is adopted by it (Manager.OnComponentAdded)
+        try engine_context.mUIManager.Init(engine_context);
         try engine_context.mGameWorld.Init(engine_context);
         self.mScene = try engine_context.mGameWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
         return self;
@@ -100,6 +102,7 @@ const TestWorld = struct {
         asset_manager.mUUIDToWorldID.deinit(engine_allocator);
         asset_manager.mEventManager.Deinit(engine_allocator);
         asset_manager.mCWDPath.deinit(engine_allocator);
+        engine_context.mUIManager.Deinit(engine_context);
 
         _ = engine_context._Internal.EngineGPA.deinit();
         std.heap.page_allocator.destroy(engine_context);
@@ -206,4 +209,82 @@ test "what a hook changes stays when it carries on or handles what it ran for" {
 test "what a hook changes is dropped when it fails or hits an error, as if it never ran" {
     try std.testing.expectEqual(@as(f32, 0), try MoverEndsAt(.Failed));
     try std.testing.expectEqual(@as(f32, 0), try MoverEndsAt(.Error));
+}
+
+/// What the failing scripts below made, for the tests to look for afterwards
+var gFailedSpawn: Entity = .uninit;
+var gFailedSpawnUUID: u64 = 0;
+
+/// Makes a new entity in its owner's scene, then fails
+const SpawnsThenFails = struct {
+    pub fn OnUpdate(_: *SpawnsThenFails, engine_context: *EngineContext, owner: Entity) !ScriptABI.ScriptResult {
+        const scene = owner.GetComponent(EntityComponents.EntitySceneComponent).?.mScene;
+        gFailedSpawn = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+        gFailedSpawnUUID = gFailedSpawn.GetComponent(EntityComponents.UUIDComponent).?.ID;
+        return .Failed;
+    }
+};
+const SpawnsThenFailsExports = ScriptExport.Exports(SpawnsThenFails, "SpawnsThenFails", &.{});
+
+test "an object a failed hook made is gone after, out of the UUID map and its scene" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+
+    var handle = try world.ScriptAssetFor(&SpawnsThenFailsExports.info);
+    defer handle.ReleaseAsset();
+    const entity = try world.EntityWithScript(handle);
+
+    try world.RunUpdateScripts();
+
+    try std.testing.expect(!gFailedSpawn.IsActive());
+    try std.testing.expect(world.mEngineContext.mGameWorld.mEManager.GetWorldID(gFailedSpawnUUID) == null);
+    const in_scene = try world.mScene.GetEntityGroup(world.mEngineContext.FrameAllocator(), .{ .Component = EntityComponents.EntitySceneComponent });
+    try std.testing.expectEqualSlices(Entity.Type, &.{entity.mID}, in_scene.items);
+}
+
+/// Deletes the object it is on, then fails
+const DeletesThenFails = struct {
+    pub fn OnUpdate(_: *DeletesThenFails, engine_context: *EngineContext, owner: Entity) !ScriptABI.ScriptResult {
+        try owner.Delete(engine_context);
+        return .Failed;
+    }
+};
+const DeletesThenFailsExports = ScriptExport.Exports(DeletesThenFails, "DeletesThenFails", &.{});
+
+test "an object a failed hook deleted is still there after the scripts are done" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+
+    var handle = try world.ScriptAssetFor(&DeletesThenFailsExports.info);
+    defer handle.ReleaseAsset();
+    const entity = try world.EntityWithScript(handle);
+
+    try world.RunUpdateScripts();
+
+    try std.testing.expect(entity.IsActive());
+}
+
+/// Gives the object it is on a UI element, which makes one in the UI manager, then fails
+const AddsUIThenFails = struct {
+    pub fn OnUpdate(_: *AddsUIThenFails, engine_context: *EngineContext, owner: Entity) !ScriptABI.ScriptResult {
+        _ = try owner.AddComponent(engine_context, EntityComponents.UIElementComponent{});
+        return .Failed;
+    }
+};
+const AddsUIThenFailsExports = ScriptExport.Exports(AddsUIThenFails, "AddsUIThenFails", &.{});
+
+test "a component a failed hook added is gone after, and so is what adding it made elsewhere" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const ui_ecs = &world.mEngineContext.mUIManager.mECSManager;
+
+    var handle = try world.ScriptAssetFor(&AddsUIThenFailsExports.info);
+    defer handle.ReleaseAsset();
+    const entity = try world.EntityWithScript(handle);
+    const elements_before = (try ui_ecs.GetAllEntities(world.mEngineContext.FrameAllocator())).items.len;
+
+    try world.RunUpdateScripts();
+
+    try std.testing.expect(!entity.HasComponent(EntityComponents.UIElementComponent));
+    try std.testing.expectEqual(elements_before, (try ui_ecs.GetAllEntities(world.mEngineContext.FrameAllocator())).items.len);
 }

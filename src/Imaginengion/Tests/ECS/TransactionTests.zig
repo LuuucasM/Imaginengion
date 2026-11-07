@@ -26,7 +26,14 @@ const Label = struct {
     }
 };
 
-const BodyECS = ECS.ECSManager(u32, &[_]type{ Position, Label }, "TransactionBodyECS");
+/// A tag: put on and taken off right away, even in a run
+const Frozen = struct {
+    pub const Name: []const u8 = "Frozen";
+    pub const Ind: usize = ECS.BuiltinComponentCount + 2;
+    pub fn Deinit(_: *Frozen, _: *EngineContext) void {}
+};
+
+const BodyECS = ECS.ECSManager(u32, &[_]type{ Position, Label, Frozen }, "TransactionBodyECS");
 
 /// One registered ECS, the layer, and the minimal EngineContext they need. Deinit fails the test on a leak
 const TestLayer = struct {
@@ -156,14 +163,14 @@ test "a component that owns memory is deep copied: kept or dropped, nothing leak
     try std.testing.expectEqualStrings("dropped", layer.mBodies.GetComponent(Label, dropped).?.mText.items);
 }
 
-/// Changes the label, then takes it off the entity before the transaction ends (outside a run, so right away)
+/// Changes the label, then takes it off the entity. A transaction is a run, so the removal waits for it to end
 fn AppendsThenRemoves(bodies: *BodyECS, engine_context: *EngineContext, id: u32) bool {
     _ = Appends(bodies, engine_context, id, true);
     bodies.RemoveComponent(engine_context, id, Label.Ind) catch unreachable;
     return true;
 }
 
-test "a copy of a component gone by the time it is kept is freed, not put back" {
+test "a component changed then removed in a kept transaction is put in, then removed when the transaction lands" {
     const layer = try TestLayer.Init();
     defer layer.Deinit() catch unreachable;
     const engine_context = layer.mEngineContext;
@@ -213,4 +220,172 @@ test "a transaction that is used again starts empty" {
     try std.testing.expectEqual(@as(f32, 10), layer.X(ids[0]));
     try std.testing.expectEqual(@as(f32, 1), layer.X(ids[1]));
     try std.testing.expectEqual(@as(f32, 1), layer.X(ids[2]));
+}
+
+//----------------structural changes----------------
+
+/// Makes a body with a position, a label and a child, and hands back `keep`
+fn MakesBody(bodies: *BodyECS, engine_context: *EngineContext, made: *u32, child: *u32, keep: bool) bool {
+    made.* = bodies.CreateEntity(engine_context.EngineAllocator()) catch unreachable;
+    _ = bodies.AddComponent(engine_context, made.*, Position{ .x = 2 }) catch unreachable;
+    var label = Label{};
+    label.mText.appendSlice(engine_context.EngineAllocator(), "new") catch unreachable;
+    _ = bodies.AddComponent(engine_context, made.*, label) catch unreachable;
+    child.* = bodies.AddChild(engine_context, made.*, .Entity) catch unreachable;
+    _ = bodies.AddComponent(engine_context, child.*, Position{ .x = 3 }) catch unreachable;
+    return keep;
+}
+
+test "an object made in a kept transaction lands with what was added to it" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const engine_context = layer.mEngineContext;
+    var made: u32 = undefined;
+    var child: u32 = undefined;
+
+    _ = layer.mSystems.RunTransaction(engine_context, MakesBody, .{ &layer.mBodies, engine_context, &made, &child, true }, Keep);
+
+    try std.testing.expect(layer.mBodies.IsActiveEntity(made));
+    try std.testing.expect(layer.mBodies.IsActiveEntity(child));
+    try std.testing.expectEqual(@as(f32, 2), layer.X(made));
+    try std.testing.expectEqualStrings("new", layer.mBodies.GetComponent(Label, made).?.mText.items);
+    try std.testing.expectEqual(@as(usize, 2), layer.mBodies.mComponentManager.NumWithComponent(Position));
+}
+
+test "an object made in a dropped transaction is destroyed, children and staged components too, and nothing leaks" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const engine_context = layer.mEngineContext;
+    const existing = try layer.NewBody(1);
+    var made: u32 = undefined;
+    var child: u32 = undefined;
+
+    _ = layer.mSystems.RunTransaction(engine_context, MakesBody, .{ &layer.mBodies, engine_context, &made, &child, false }, Keep);
+
+    try std.testing.expect(!layer.mBodies.IsActiveEntity(made));
+    try std.testing.expect(!layer.mBodies.IsActiveEntity(child));
+    try std.testing.expect(layer.mBodies.IsActiveEntity(existing));
+    try std.testing.expectEqual(@as(usize, 1), layer.mBodies.NumWithComponent(Position));
+    try std.testing.expectEqual(@as(usize, 0), layer.mBodies.NumWithComponent(Label));
+}
+
+/// What ChangesExisting does to three bodies that were there before
+const Existing = struct {
+    mAddTo: u32,
+    mRemoveFrom: u32,
+    mDestroy: u32,
+};
+
+/// Adds a label to one body, takes the position off another, destroys a third, and hands back `keep`
+fn ChangesExisting(bodies: *BodyECS, engine_context: *EngineContext, existing: Existing, keep: bool) bool {
+    var label = Label{};
+    label.mText.appendSlice(engine_context.EngineAllocator(), "added") catch unreachable;
+    _ = bodies.AddComponent(engine_context, existing.mAddTo, label) catch unreachable;
+    bodies.RemoveComponent(engine_context, existing.mRemoveFrom, Position.Ind) catch unreachable;
+    bodies.DestroyEntity(engine_context, existing.mDestroy) catch unreachable;
+    return keep;
+}
+
+test "adds, removals and destroys on objects that were there before land when kept, and never happen when dropped" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const engine_context = layer.mEngineContext;
+    const kept = Existing{ .mAddTo = try layer.NewBody(1), .mRemoveFrom = try layer.NewBody(1), .mDestroy = try layer.NewBody(1) };
+    const dropped = Existing{ .mAddTo = try layer.NewBody(1), .mRemoveFrom = try layer.NewBody(1), .mDestroy = try layer.NewBody(1) };
+
+    _ = layer.mSystems.RunTransaction(engine_context, ChangesExisting, .{ &layer.mBodies, engine_context, kept, true }, Keep);
+    _ = layer.mSystems.RunTransaction(engine_context, ChangesExisting, .{ &layer.mBodies, engine_context, dropped, false }, Keep);
+
+    try std.testing.expectEqualStrings("added", layer.mBodies.GetComponent(Label, kept.mAddTo).?.mText.items);
+    try std.testing.expect(!layer.mBodies.HasComponent(Position, kept.mRemoveFrom));
+    try std.testing.expect(!layer.mBodies.IsActiveEntity(kept.mDestroy));
+
+    try std.testing.expect(!layer.mBodies.HasComponent(Label, dropped.mAddTo));
+    try std.testing.expect(layer.mBodies.HasComponent(Position, dropped.mRemoveFrom));
+    try std.testing.expect(layer.mBodies.IsActiveEntity(dropped.mDestroy));
+}
+
+/// Takes the tag off one body, puts it on another, puts it on and takes it off a third, and hands back `keep`
+fn MovesTags(bodies: *BodyECS, engine_context: *EngineContext, frozen: u32, thawed: u32, flicker: u32, keep: bool) bool {
+    bodies.RemoveComponent(engine_context, frozen, Frozen.Ind) catch unreachable;
+    _ = bodies.AddComponent(engine_context, thawed, Frozen{}) catch unreachable;
+    _ = bodies.AddComponent(engine_context, flicker, Frozen{}) catch unreachable;
+    bodies.RemoveComponent(engine_context, flicker, Frozen.Ind) catch unreachable;
+    return keep;
+}
+
+test "tags put on or taken off in a dropped transaction are put back as they were" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const engine_context = layer.mEngineContext;
+    const frozen = try layer.NewBody(1);
+    _ = try layer.mBodies.AddComponent(engine_context, frozen, Frozen{});
+    const thawed = try layer.NewBody(1);
+    const flicker = try layer.NewBody(1);
+
+    _ = layer.mSystems.RunTransaction(engine_context, MovesTags, .{ &layer.mBodies, engine_context, frozen, thawed, flicker, false }, Keep);
+
+    try std.testing.expect(layer.mBodies.HasComponent(Frozen, frozen));
+    try std.testing.expect(!layer.mBodies.HasComponent(Frozen, thawed));
+    try std.testing.expect(!layer.mBodies.HasComponent(Frozen, flicker));
+
+    _ = layer.mSystems.RunTransaction(engine_context, MovesTags, .{ &layer.mBodies, engine_context, frozen, thawed, flicker, true }, Keep);
+
+    try std.testing.expect(!layer.mBodies.HasComponent(Frozen, frozen));
+    try std.testing.expect(layer.mBodies.HasComponent(Frozen, thawed));
+    try std.testing.expect(!layer.mBodies.HasComponent(Frozen, flicker));
+}
+
+/// Gives the parent a new child, and hands back `keep`
+fn AddsChild(bodies: *BodyECS, engine_context: *EngineContext, parent: u32, keep: bool) bool {
+    _ = bodies.AddChild(engine_context, parent, .Entity) catch unreachable;
+    return keep;
+}
+
+test "a child made in a dropped transaction leaves its parent's list as it was" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const engine_context = layer.mEngineContext;
+    const childless = try layer.NewBody(1);
+    const parent = try layer.NewBody(1);
+    const first_child = try layer.mBodies.AddChild(engine_context, parent, .Entity);
+
+    _ = layer.mSystems.RunTransaction(engine_context, AddsChild, .{ &layer.mBodies, engine_context, childless, false }, Keep);
+    _ = layer.mSystems.RunTransaction(engine_context, AddsChild, .{ &layer.mBodies, engine_context, parent, false }, Keep);
+
+    try std.testing.expect(!layer.mBodies.HasComponent(BodyECS.ParentComponent, childless));
+    const only = layer.mBodies.GetComponent(BodyECS.ChildComponent, first_child).?;
+    try std.testing.expectEqual(first_child, only.mNext);
+    try std.testing.expectEqual(first_child, only.mPrev);
+    try std.testing.expectEqual(first_child, layer.mBodies.GetComponent(BodyECS.ParentComponent, parent).?.mFirstEntity);
+}
+
+/// Destroys a body, and says not to keep it
+fn DestroysAndDrops(bodies: *BodyECS, engine_context: *EngineContext, id: u32) bool {
+    bodies.DestroyEntity(engine_context, id) catch unreachable;
+    return false;
+}
+
+/// Destroys one body in the run, then another in a transaction inside the run that is dropped
+const QueuesThenDrops = struct {
+    pub const Name = "QueuesThenDrops";
+
+    pub fn Run(engine_context: *EngineContext, systems: *Systems, bodies: *BodyECS, before: u32, inside: u32) !void {
+        try bodies.DestroyEntity(engine_context, before);
+        _ = systems.RunTransaction(engine_context, DestroysAndDrops, .{ bodies, engine_context, inside }, Keep);
+    }
+};
+
+test "a transaction dropped inside a run only drops its own changes, not what the run queued before it" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const engine_context = layer.mEngineContext;
+    const before = try layer.NewBody(1);
+    const inside = try layer.NewBody(1);
+
+    try layer.mSystems.RunSystem(QueuesThenDrops, engine_context, .{ &layer.mSystems, &layer.mBodies, before, inside });
+
+    try std.testing.expect(!layer.mBodies.IsActiveEntity(before));
+    try std.testing.expect(layer.mBodies.IsActiveEntity(inside));
+    try std.testing.expectEqual(@as(u32, 0), layer.mSystems.mRunDepth);
 }
