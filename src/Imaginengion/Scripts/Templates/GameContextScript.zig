@@ -6,7 +6,7 @@ const Script = @This();
 //Variables: shown in the Scripts panel and saved, one set per game context the script is on. Each needs a default
 //mPlayerScore: u32 = 0,
 
-//Hooks: take the // off any you want. Return .Continue to let the next script have its turn, .Handled to stop it here, .Warning when something didn't go as planned. An error (try) is logged and hands back .Error
+//Hooks: take the // off any you want. Return .Continue to let the next script have its turn, .Handled to stop it here, .Failed when what it was for couldn't happen. An error (try) is logged and hands back .Error. After .Failed or .Error, what the hook changed is dropped
 
 //once, when the game starts
 pub fn OnGameStart(self: *Script, engine_context: *IM.EngineContext, owner: IM.GameContext) !IM.ScriptResult {

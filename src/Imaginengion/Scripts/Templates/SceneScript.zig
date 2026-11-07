@@ -6,7 +6,7 @@ const Script = @This();
 //Variables: shown in the Scripts panel and saved, one set per scene the script is on. Each needs a default
 //mBall: IM.Entity = .uninit,
 
-//Hooks: take the // off any you want. Return .Continue to let the next script have its turn, .Handled to stop it here, .Warning when something didn't go as planned. An error (try) is logged and hands back .Error
+//Hooks: take the // off any you want. Return .Continue to let the next script have its turn, .Handled to stop it here, .Failed when what it was for couldn't happen. An error (try) is logged and hands back .Error. After .Failed or .Error, what the hook changed is dropped
 
 //when the scene starts
 pub fn OnSceneStart(self: *Script, engine_context: *IM.EngineContext, owner: IM.SceneLayer) !IM.ScriptResult {

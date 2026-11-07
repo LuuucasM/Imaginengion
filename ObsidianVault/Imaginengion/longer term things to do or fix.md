@@ -24,6 +24,8 @@
 	- i dont really know how modern languges handle multi language support so do research on that first
 	- first I have to move strings out of being coded directly into the engine and into some sort of external file..? is that how you do multi lingual support?
 	- right now i am compiling korean and english into one mega atlas but its probably more efficent for the editor at least to make separate atlases and then idk for the final build if you put them all together or split them. but if you support like 10 languages the atlas would be mega huge so probably you still keep them separated
+- right now UUIDs are given to everything thats made but it should really only be used for entities who are serialized and referenced by other objects. it would be cool to just add UUIDs on serialization or something but theres some issues
+	- the ordering on entities being serialized, ones that are referenced by others need to be serialized first, or they get reserialized. references could be from entity to entity, scene to entity, player to scene, etc which really complicates things since they are not all saved at the same time (this is probably the biggest issue)
 - [https://20_games_challenge.gitlab.io/](https://20_games_challenge.gitlab.io/ "https://20_games_challenge.gitlab.io/")
 	- go through the games on this list and make them :)
 	- im sure i will see lots of issues and have to fix lots of things while doing this it sounds like so much fun

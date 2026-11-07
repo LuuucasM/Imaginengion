@@ -229,6 +229,11 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return internal_array.GetComponent(entityID);
         }
 
+        /// The array `component_type` lives in, behind its erased pointer: what a transaction's copy names it by
+        pub fn ArrayOf(self: Self, comptime component_type: type) *anyopaque {
+            return self.mComponentsArrays.items[ComponentInd(component_type)].mPtr;
+        }
+
         /// Every `component_type` in this manager, in dense order. Adding or removing one of that
         /// type moves them, so the slice is only good until then.
         pub fn GetComponentSlice(self: Self, comptime component_type: type) []component_type {

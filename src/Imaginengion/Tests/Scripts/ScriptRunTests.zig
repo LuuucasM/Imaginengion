@@ -55,6 +55,19 @@ const SelfDeleter = struct {
 };
 const SelfDeleterExports = ScriptExport.Exports(SelfDeleter, "SelfDeleter", &.{});
 
+/// What Mover hands back after moving its owner
+var gMoverResult: ScriptABI.ScriptResult = .Continue;
+
+/// Moves its owner to x = 7, then hands back gMoverResult. A hook's error becomes .Error before the runner sees it
+/// (ScriptExport.Finish), which logs it, so .Error is handed back as it is here to keep the test's log clean
+const Mover = struct {
+    pub fn OnUpdate(_: *Mover, engine_context: *EngineContext, owner: Entity) !ScriptABI.ScriptResult {
+        try owner.SetTranslation(engine_context, .{ .x = 7, .y = 0, .z = 0 });
+        return gMoverResult;
+    }
+};
+const MoverExports = ScriptExport.Exports(Mover, "Mover", &.{});
+
 const TestWorld = struct {
     mEngineContext: *EngineContext,
     mScene: Scene = .uninit,
@@ -167,4 +180,30 @@ test "a scene's group holds its entities, not the script children on them" {
     //a script child has a transform too, but no scene
     const with_transforms = try world.mScene.GetEntityGroup(world.mEngineContext.FrameAllocator(), .{ .Component = TransformComponent });
     try std.testing.expectEqualSlices(Entity.Type, &.{entity.mID}, with_transforms.items);
+}
+
+/// Runs Mover once on a new entity at x = 0, handing back `result`, and gives the x it is at after
+fn MoverEndsAt(result: ScriptABI.ScriptResult) !f32 {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    gMoverResult = result;
+    defer gMoverResult = .Continue;
+
+    var handle = try world.ScriptAssetFor(&MoverExports.info);
+    defer handle.ReleaseAsset();
+    const entity = try world.EntityWithScript(handle);
+
+    try world.RunUpdateScripts();
+
+    return entity.GetComponent(TransformComponent).?.GetTranslation().x;
+}
+
+test "what a hook changes stays when it carries on or handles what it ran for" {
+    try std.testing.expectEqual(@as(f32, 7), try MoverEndsAt(.Continue));
+    try std.testing.expectEqual(@as(f32, 7), try MoverEndsAt(.Handled));
+}
+
+test "what a hook changes is dropped when it fails or hits an error, as if it never ran" {
+    try std.testing.expectEqual(@as(f32, 0), try MoverEndsAt(.Failed));
+    try std.testing.expectEqual(@as(f32, 0), try MoverEndsAt(.Error));
 }

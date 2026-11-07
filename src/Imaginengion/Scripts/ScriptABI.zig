@@ -24,11 +24,12 @@ pub const ScriptResult = enum(u8) {
     Handled = 0,
     /// on to the next: the object's other scripts with this hook, the scenes below for a key, the parents for a click
     Continue = 1,
-    /// the script ran but something didn't go as planned (not an error): a script hands this back itself. For now it
-    /// goes on to the next one the same as .Continue
-    Warning = 2,
-    /// something went wrong in the script: a hook that returns an error hands this back. For now it goes on to the
-    /// next one the same as .Continue
+    /// what the script was for couldn't happen, which games run into all the time and isn't an error (taking an item
+    /// the inventory doesn't have): a script hands this back itself. What the hook changed is dropped, as if it never
+    /// ran, and the next one in line gets its turn the same as .Continue
+    Failed = 2,
+    /// something went wrong in the script: a hook that returns an error hands this back, and it is logged. What the hook
+    /// changed is dropped the same as .Failed, and the next one in line gets its turn
     Error = 3,
 };
 

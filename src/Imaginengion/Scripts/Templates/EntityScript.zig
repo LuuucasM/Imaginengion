@@ -7,7 +7,7 @@ const Script = @This();
 //mSpeed: f32 = 5.0,
 //mTarget: IM.Entity = .uninit,
 
-//Hooks: take the // off any you want. Return .Continue to let the next script have its turn, .Handled to stop it here, .Warning when something didn't go as planned. An error (try) is logged and hands back .Error
+//Hooks: take the // off any you want. Return .Continue to let the next script have its turn, .Handled to stop it here, .Failed when what it was for couldn't happen. An error (try) is logged and hands back .Error. After .Failed or .Error, what the hook changed is dropped
 
 //every frame
 pub fn OnUpdate(self: *Script, engine_context: *IM.EngineContext, owner: IM.Entity) !IM.ScriptResult {

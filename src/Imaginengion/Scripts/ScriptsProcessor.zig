@@ -185,7 +185,23 @@ fn RunHook(comptime ObjectType: type, comptime script_type: type, engine_context
     defer script_zone.Deinit();
     if (Tracy.enable_tracy) script_zone.Name(script_component.mScriptAssetHandle.GetFileMetaData().mRelPath.items);
 
-    return script_asset.RunHook(ObjectType, script_type.Hook, .{ engine_context, owner, instance } ++ args);
+    const hook_args = .{ engine_context, owner, instance } ++ args;
+    const HookArgs = @TypeOf(hook_args);
+    const Call = struct {
+        fn Run(asset: *const ScriptAsset, call_args: HookArgs) ScriptResult {
+            return asset.RunHook(ObjectType, script_type.Hook, call_args);
+        }
+    };
+    return engine_context.mSystems.RunTransaction(engine_context, Call.Run, .{ script_asset, hook_args }, KeepsChanges);
+}
+
+/// Whether what a hook or handler changed stays (see Systems.RunTransaction): not when it couldn't do what it was for
+/// (.Failed) or hit an error (.Error), when it goes as if the hook never ran
+fn KeepsChanges(result: ScriptResult) bool {
+    return switch (result) {
+        .Handled, .Continue => true,
+        .Failed, .Error => false,
+    };
 }
 
 /// Runs the OnCollisionBegin scripts of both entities in a collision that has just begun. Meant for
@@ -448,7 +464,12 @@ fn RunHandler(comptime ObjectType: type, engine_context: *EngineContext, script_
     defer script_zone.Deinit();
     if (Tracy.enable_tracy) script_zone.Name(script_component.mScriptAssetHandle.GetFileMetaData().mRelPath.items);
 
-    return ScriptAsset.RunHandler(ObjectType, handler, engine_context, owner, instance, event);
+    const Call = struct {
+        fn Run(context: *EngineContext, handler_ptr: *const ScriptABI.EventHandler, handler_owner: *const ObjectType, handler_instance: *anyopaque, handler_event: *const anyopaque) ScriptResult {
+            return ScriptAsset.RunHandler(ObjectType, handler_ptr, context, handler_owner, handler_instance, handler_event);
+        }
+    };
+    return engine_context.mSystems.RunTransaction(engine_context, Call.Run, .{ engine_context, handler, owner, instance, event }, KeepsChanges);
 }
 
 /// Catches the scripts in `worlds` up with the files that changed last frame (AManager.FileChanged): each script whose

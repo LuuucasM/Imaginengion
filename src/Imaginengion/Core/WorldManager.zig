@@ -116,8 +116,12 @@ pub fn Init(self: *WorldManager, engine_context: *EngineContext) !void {
     const systems = &engine_context.mSystems;
     inline for (self._ECSs()) |ecs| {
         try systems.Register(engine_allocator, ecs);
-        //templates load into the asset world on demand, in the middle of a run, and are read straight back
-        if (self == &engine_context.mAssetWorld) ecs.SetRunDepth(null);
+        //templates load into the asset world on demand, in the middle of a run, and are read straight back. Nor is a
+        //template loaded during a hook part of the hook's transaction: the hook failing mustn't undo the load
+        if (self == &engine_context.mAssetWorld) {
+            ecs.SetRunDepth(null);
+            ecs.SetTransaction(null);
+        }
     }
 }
 

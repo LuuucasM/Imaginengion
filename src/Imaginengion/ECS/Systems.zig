@@ -13,6 +13,7 @@ const Systems = @This();
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Tracy = @import("../Core/Tracy.zig");
+const Transaction = @import("Transaction.zig");
 
 mNodes: std.ArrayList(Node) = .empty,
 /// How many runs are going on now. Every registered ECS points at this, so the layer must stay where it is while anything
@@ -21,6 +22,10 @@ mRunDepth: u32 = 0,
 /// The last run has ended and what the ECSs held is landing. What that sets off can run a system, which leaves its own
 /// changes to this same landing
 mLanding: bool = false,
+/// The one transaction there is (RunTransaction), kept between uses for its memory
+mTransaction: Transaction = .empty,
+/// mTransaction while it is open, null otherwise. Every registered ECS points at this, see ECSManager.mTransaction
+mOpenTransaction: ?*Transaction = null,
 
 pub const empty: Systems = .{};
 
@@ -33,8 +38,10 @@ const Node = struct {
 };
 
 pub fn Deinit(self: *Systems, engine_allocator: std.mem.Allocator) void {
+    std.debug.assert(self.mOpenTransaction == null);
     self.mNodes.deinit(engine_allocator);
     self.mNodes = .empty;
+    self.mTransaction.Deinit(engine_allocator);
 }
 
 /// Makes `ecs` (a pointer to an ECSManager) hold its changes while a run goes on
@@ -48,6 +55,7 @@ pub fn Register(self: *Systems, engine_allocator: std.mem.Allocator, ecs: anytyp
         }
     }.Land });
     ecs.SetRunDepth(&self.mRunDepth);
+    ecs.SetTransaction(&self.mOpenTransaction);
 }
 
 /// Forgets `ecs`. Once the last one is gone the layer lets go of its memory too, so what registers in its Init and
@@ -56,6 +64,7 @@ pub fn Unregister(self: *Systems, engine_allocator: std.mem.Allocator, ecs: anyt
     for (self.mNodes.items, 0..) |node, node_ind| {
         if (node.mECS != @as(*anyopaque, ecs)) continue;
         ecs.SetRunDepth(null);
+        ecs.SetTransaction(null);
         _ = self.mNodes.swapRemove(node_ind);
         if (self.mNodes.items.len == 0) self.Deinit(engine_allocator);
         return;
@@ -95,6 +104,27 @@ pub fn RunSystem(self: *Systems, comptime S: type, engine_context: *EngineContex
         if (landing_err) |land_err| return land_err;
         return result;
     }
+}
+
+/// Calls `func` with `args` (a tuple) inside a transaction, and hands back what it returns. What it changes in a
+/// component of a registered ECS is kept apart until it returns (see Transaction), then put in when `keep(result)` says so,
+/// and dropped otherwise, as if it never happened: the script runner keeps a hook's changes unless the hook failed.
+/// Inside a transaction already, `func` is part of that one, and what it changed goes or stays with it.
+pub fn RunTransaction(self: *Systems, engine_context: *EngineContext, comptime func: anytype, args: anytype, comptime keep: anytype) ReturnOf(func) {
+    if (self.mOpenTransaction != null) return @call(.auto, func, args);
+
+    self.mTransaction.Open(engine_context);
+    self.mOpenTransaction = &self.mTransaction;
+    const result = @call(.auto, func, args);
+    self.mOpenTransaction = null;
+
+    if (keep(result)) self.mTransaction.Commit(engine_context) else self.mTransaction.Discard(engine_context);
+    return result;
+}
+
+/// What `func` returns
+pub fn ReturnOf(comptime func: anytype) type {
+    return @typeInfo(@TypeOf(func)).@"fn".return_type.?;
 }
 
 // the last run has ended: every ECS makes the changes it held. What that sets off can queue more in an ECS already

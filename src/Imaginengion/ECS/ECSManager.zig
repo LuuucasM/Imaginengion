@@ -1,5 +1,7 @@
 const std = @import("std");
 const ComponentManager = @import("ComponentManager.zig").ComponentManager;
+const InternalComponentArray = @import("InternalComponentArray.zig").InternalComponentArray;
+const Transaction = @import("Transaction.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
@@ -52,6 +54,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             .mStaged = .empty,
             .mRemovalHook = null,
             .mRunDepth = null,
+            .mTransaction = null,
         };
 
         /// Told about each removal and destroy just before it happens, made right away or drained from the queue,
@@ -87,6 +90,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         /// asked for. Tags are the exception, with no storage to move, and so are parents and children, linked as they are
         /// asked for: both are always made right away.
         mRunDepth: ?*const u32,
+        /// The systems layer's open transaction (Systems.RunTransaction), shared by every ECS it knows, null for one it
+        /// doesn't. While one is open, component values are read and changed through it, see Transaction
+        mTransaction: ?*const ?*Transaction,
 
         pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
             _ValidateCompList(components_types);
@@ -324,9 +330,13 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return self.mComponentManager.GetComponentSlice(component_type);
         }
 
-        /// GetComponentSlice for changing them
+        /// GetComponentSlice for changing them. Not while a transaction is open: a change made straight to storage
+        /// couldn't be taken back, and safe builds panic
         pub fn GetComponentSliceMut(self: Self, comptime component_type: type) []component_type {
             _ValidateType(component_type);
+            if (std.debug.runtime_safety and (comptime _Copies(component_type)) and self._OpenTransaction() != null) {
+                std.debug.panic("GetComponentSliceMut({s}) inside a transaction: a change to the slice couldn't be taken back", .{@typeName(component_type)});
+            }
             return self.mComponentManager.GetComponentSlice(component_type);
         }
 
@@ -495,6 +505,24 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         /// Points this ECS at the systems layer's count of runs going on (null to stop), see mRunDepth
         pub fn SetRunDepth(self: *Self, run_depth: ?*const u32) void {
             self.mRunDepth = run_depth;
+        }
+
+        /// Points this ECS at the systems layer's open transaction (null to stop), see mTransaction
+        pub fn SetTransaction(self: *Self, transaction: ?*const ?*Transaction) void {
+            self.mTransaction = transaction;
+        }
+
+        // the transaction open now, if there is one
+        fn _OpenTransaction(self: Self) ?*Transaction {
+            const transaction = self.mTransaction orelse return null;
+            return transaction.*;
+        }
+
+        // whether a transaction copies this type before it is changed. Tags have no value, and parents, children and the
+        // skip field are hierarchy and entity bookkeeping, changed right away like the links they are part of
+        fn _Copies(comptime component_type: type) bool {
+            if (@sizeOf(component_type) == 0) return false;
+            return component_type != ParentComponent and component_type != ChildComponent and component_type != SkipFieldComponent;
         }
 
         // whether a run of the systems layer is going on, and this ECS is holding its changes for it
@@ -691,18 +719,43 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                 self._GetStaged(entity_id, component_ind) != null;
         }
 
-        /// The staged copy for a component that is still staged (see AddComponent)
+        /// The staged copy for a component that is still staged (see AddComponent), and an open transaction's copy for one
+        /// it has changed (see mTransaction)
         pub fn GetComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*const component_type {
             _ValidateType(component_type);
             std.debug.assert(self.IsActiveEntity(entity_id));
+            if (comptime _Copies(component_type)) {
+                if (self._OpenTransaction()) |transaction| {
+                    if (transaction.Find(self._TransactionKey(component_type, entity_id))) |copy| return @ptrCast(@alignCast(copy));
+                }
+            }
             return self._FindComponent(component_type, entity_id);
         }
 
-        /// GetComponent for changing it
+        /// GetComponent for changing it. While a transaction is open, the change is made to its copy (see mTransaction),
+        /// which this makes the first time. Failing to make it is out of memory, which panics like any other.
         pub fn GetComponentMut(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
             _ValidateType(component_type);
             std.debug.assert(self.IsActiveEntity(entity_id));
+            if (comptime _Copies(component_type)) {
+                if (self._OpenTransaction()) |transaction| return self._CopyInto(transaction, component_type, entity_id);
+            }
             return self._FindComponent(component_type, entity_id);
+        }
+
+        // the transaction's copy of the component, made now if it hasn't been. A component staged during the run isn't
+        // copied: it isn't in storage yet, and is handed out as it is
+        fn _CopyInto(self: Self, transaction: *Transaction, comptime component_type: type, entity_id: entity_t) ?*component_type {
+            const key = self._TransactionKey(component_type, entity_id);
+            if (transaction.Find(key)) |copy| return @ptrCast(@alignCast(copy));
+            const component = self.mComponentManager.GetComponent(component_type, entity_id) orelse return self._FindComponent(component_type, entity_id);
+            return transaction.Copy(key, component_type, component, InternalComponentArray(entity_t, component_type).CommitCopy) catch |err| {
+                std.debug.panic("Copying {s} into a transaction: {s}", .{ @typeName(component_type), @errorName(err) });
+            };
+        }
+
+        fn _TransactionKey(self: Self, comptime component_type: type, entity_id: entity_t) Transaction.Key {
+            return .{ .mArray = self.mComponentManager.ArrayOf(component_type), .mEntityID = entity_id };
         }
 
         // the component on the entity, or its staged copy
