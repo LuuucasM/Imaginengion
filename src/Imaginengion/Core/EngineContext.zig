@@ -41,6 +41,8 @@ const JobGroup = @import("JobGroup.zig");
 const InternalData = struct {
     EngineGPA: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
     FrameArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+    /// The job pool's threads' own frame arenas (Allocators.FrameArenaOf), emptied with FrameArena
+    ThreadFrameArenas: @import("Allocators.zig").ThreadFrameArenas = .{},
 
     // Stored rather than taken straight from MakeAllocatorVTable inside EngineAllocator/FrameAllocator,
     // because a script DLL compiles its own copy of those functions: taking the address there would give
@@ -149,6 +151,7 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     self._Internal.ThreadPool = std.Io.Threaded.init(self._Internal.EngineGPA.allocator(), .{
         .concurrent_limit = .nothing,
     });
+    self._Internal.ThreadFrameArenas.mMainThread = std.Thread.getCurrentId();
     const cores = std.Thread.getCpuCount() catch 1;
     self.mJobPool = .{ .mIo = self._Internal.ThreadPool.io(), .mWorkers = cores -| 1 };
 
@@ -226,6 +229,7 @@ pub fn DeInit(self: *EngineContext) void {
     self.mTransactions.Deinit(self.EngineAllocator());
     self.mJobPool = .{};
     self._Internal.ThreadPool.deinit();
+    self._Internal.ThreadFrameArenas.Deinit();
 
     //anything still live in the Engine pool here is a real leak and is left for Tracy to show as one
     _ = self._Internal.EngineGPA.deinit();

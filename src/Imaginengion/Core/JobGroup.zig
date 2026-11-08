@@ -110,7 +110,10 @@ pub fn GroupAsync(userdata: ?*anyopaque, group: *std.Io.Group, context: []const 
 pub fn GroupAwait(userdata: ?*anyopaque, group: *std.Io.Group, token: *anyopaque) std.Io.Cancelable!void {
     const engine_context: *EngineContext = @ptrCast(@alignCast(userdata.?));
     const self: *JobGroup = @ptrCast(@alignCast(token));
-    self.RunAll(engine_context.mJobPool);
+    //inside an open transaction (a refit from a serial hook's cast): its tasks read through it, and it writes down what
+    //they read, which isn't safe from several threads, so they all run here
+    const pool: Pool = if (engine_context.mTransactions.Current() != null) .{} else engine_context.mJobPool;
+    self.RunAll(pool);
     self.Free(engine_context.EngineAllocator(), group);
 }
 

@@ -53,6 +53,7 @@ const TestLayer = struct {
         threads.* = std.Io.Threaded.init(std.heap.page_allocator, .{ .async_limit = .limited(workers), .concurrent_limit = .nothing });
         self.mThreads = threads;
         self.mEngineContext.mJobPool = .{ .mIo = threads.io(), .mWorkers = workers };
+        self.mEngineContext._Internal.ThreadFrameArenas.mMainThread = std.Thread.getCurrentId();
         return self;
     }
 
@@ -74,6 +75,7 @@ const TestLayer = struct {
             self.mEngineContext.mJobPool = .{};
             threads.deinit();
             std.heap.page_allocator.destroy(threads);
+            self.mEngineContext._Internal.ThreadFrameArenas.Deinit();
         }
         self.mSystems.Unregister(engine_context.EngineAllocator(), &self.mBodies);
         self.mTransactions.Unregister(engine_context.EngineAllocator(), &self.mBodies);
@@ -830,7 +832,7 @@ test "a batch's hooks find their own transactions through the per-thread lookup,
     try std.testing.expectEqual(@as(u32, 0), layer.mSystems.mRunDepth);
 }
 
-test "a batch's hook takes frame memory from its own transaction's arena, never the engine's shared one" {
+test "with no job pool, a batch's hooks take frame memory from the engine's frame arena, on the one thread there is" {
     const layer = try TestLayer.Init();
     defer layer.Deinit() catch unreachable;
     const engine_context = layer.mEngineContext;
@@ -839,11 +841,7 @@ test "a batch's hook takes frame memory from its own transaction's arena, never 
 
     try RunBatchOf(layer, &hooks);
 
-    try std.testing.expectEqual(shared_before, engine_context._Internal.FrameArena.queryCapacity());
-    for (layer.mTransactions.mBatchPool.items[0..2]) |transaction| try std.testing.expect(transaction.mFrameArena.queryCapacity() >= 4096);
-    //emptied with the engine's at the end of the frame, keeping the memory
-    layer.mTransactions.ResetFrameArenas();
-    try std.testing.expect(layer.mTransactions.mBatchPool.items[0].mFrameArena.queryCapacity() >= 4096);
+    try std.testing.expect(engine_context._Internal.FrameArena.queryCapacity() >= shared_before + 4096);
 }
 
 //----------------the same batches on several threads----------------
@@ -904,12 +902,9 @@ test "on several threads, write after write, reservations by hooks that abort, a
     try std.testing.expectEqual(@as(f32, 2), layer.X(e));
 }
 
-test "on several threads, each hook has its own transaction and frame arena, and runs it starts leave the depth alone" {
+test "on several threads, each hook has its own transaction, and runs it starts leave the depth alone" {
     const layer = try TestLayer.InitThreaded(4);
     defer layer.Deinit() catch unreachable;
-    const engine_context = layer.mEngineContext;
-    const shared_before = engine_context._Internal.FrameArena.queryCapacity();
-
     var hooks = [_]BatchHook{ .{ .mKind = .Probes }, .{ .mKind = .Probes }, .{ .mKind = .FrameAllocates }, .{ .mKind = .FrameAllocates } };
     try RunBatchOf(layer, &hooks);
 
@@ -918,7 +913,6 @@ test "on several threads, each hook has its own transaction and frame arena, and
         try std.testing.expect(hook.mProbe.mOwnTransaction);
         try std.testing.expectEqual(hook.mProbe.mDepthInHook, hook.mProbe.mDepthInSystem);
     }
-    try std.testing.expectEqual(shared_before, engine_context._Internal.FrameArena.queryCapacity());
     try std.testing.expect(!layer.mTransactions.mParallel);
 }
 

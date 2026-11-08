@@ -2,6 +2,7 @@
 //! await, on the pool's workers and the waiting thread together. Run with `zig build test-engine`.
 const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
+const Allocators = @import("../../Core/Allocators.zig");
 
 /// A context with a job pool of `workers` threads (none for 0), and the pool to tear down
 const TestJobs = struct {
@@ -17,6 +18,7 @@ const TestJobs = struct {
             threads.* = std.Io.Threaded.init(std.heap.page_allocator, .{ .async_limit = .limited(workers), .concurrent_limit = .nothing });
             self.mThreads = threads;
             engine_context.mJobPool = .{ .mIo = threads.io(), .mWorkers = workers };
+            engine_context._Internal.ThreadFrameArenas.mMainThread = std.Thread.getCurrentId();
         }
         return self;
     }
@@ -26,6 +28,7 @@ const TestJobs = struct {
             threads.deinit();
             std.heap.page_allocator.destroy(threads);
         }
+        self.mEngineContext._Internal.ThreadFrameArenas.Deinit();
         const leak_check = self.mEngineContext._Internal.EngineGPA.deinit();
         std.heap.page_allocator.destroy(self.mEngineContext);
         try std.testing.expect(leak_check == .ok);
@@ -81,4 +84,39 @@ test "the thread waiting on a job group works through it too, side by side with 
     try std.testing.expect(threads[0] != threads[1]);
     const this_thread = std.Thread.getCurrentId();
     try std.testing.expect(threads[0] == this_thread or threads[1] == this_thread);
+}
+
+/// Meets, then takes some frame memory and writes down which arena it came from
+fn MeetsAndAllocates(engine_context: *EngineContext, thread: *std.Thread.Id, met: *bool, arena: **std.heap.ArenaAllocator) void {
+    Meets(thread, met);
+    _ = engine_context.FrameAllocator().alloc(u8, 4096) catch unreachable;
+    arena.* = Allocators.FrameArenaOf(engine_context);
+}
+
+test "a task on a worker thread takes frame memory from that thread's own arena, the waiting thread from the engine's" {
+    const jobs = try TestJobs.Init(1);
+    defer jobs.Deinit() catch unreachable;
+    const engine_context = jobs.mEngineContext;
+    const io = engine_context.Io();
+    gArrived = .init(0);
+    var threads: [2]std.Thread.Id = undefined;
+    var met = [_]bool{ false, false };
+    var arenas: [2]*std.heap.ArenaAllocator = undefined;
+
+    var group: std.Io.Group = .init;
+    for (0..2) |index| group.async(io, MeetsAndAllocates, .{ engine_context, &threads[index], &met[index], &arenas[index] });
+    try group.await(io);
+
+    try std.testing.expect(met[0] and met[1]);
+    const this_thread = std.Thread.getCurrentId();
+    for (threads, arenas) |thread, arena| {
+        if (thread == this_thread) {
+            try std.testing.expect(arena == &engine_context._Internal.FrameArena);
+        } else {
+            try std.testing.expect(arena != &engine_context._Internal.FrameArena);
+            try std.testing.expect(arena.queryCapacity() >= 4096);
+        }
+    }
+    //emptied with the engine's at the end of the frame, keeping the memory
+    engine_context._Internal.ThreadFrameArenas.Reset();
 }

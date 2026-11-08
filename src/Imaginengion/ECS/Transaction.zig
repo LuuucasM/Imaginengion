@@ -71,10 +71,6 @@ mNames: std.AutoHashMapUnmanaged(*anyopaque, []const u8) = .empty,
 /// While measuring, something couldn't be written down (out of memory): it can't be checked for conflicts
 mMeasureLost: bool = false,
 
-/// What the frame allocator hands out to a batch's hook running on a worker thread (Transactions.WorkerFrameArena):
-/// the engine's one frame arena isn't safe to share between threads. It lives as long as frame allocations do, emptied
-/// with the engine's at the end of the frame (Transactions.ResetFrameArenas), not when the transaction ends
-mFrameArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
 
 pub const empty: Transaction = .{};
 
@@ -245,7 +241,6 @@ pub fn Deinit(self: *Transaction, engine_allocator: std.mem.Allocator) void {
     self.mTypeReads.deinit(engine_allocator);
     self.mTypeWrites.deinit(engine_allocator);
     self.mNames.deinit(engine_allocator);
-    self.mFrameArena.deinit();
     self.* = .empty;
 }
 

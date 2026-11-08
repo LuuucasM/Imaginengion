@@ -81,21 +81,6 @@ pub fn Current(self: *const Transactions) ?*Transaction {
     return self.mCurrentFn();
 }
 
-/// The frame arena the frame allocator uses on the calling thread when it is running a hook of a batch's parallel
-/// execution phase (its transaction's own, Transaction.mFrameArena), null on any other: the engine's frame arena is
-/// one, and isn't safe to share between threads
-pub fn WorkerFrameArena(self: *const Transactions) ?*std.heap.ArenaAllocator {
-    if (!self.mParallel) return null;
-    const transaction = self.mCurrentFn() orelse return null;
-    return &transaction.mFrameArena;
-}
-
-/// Empties the batch transactions' frame arenas, keeping their memory: with the engine's frame arena, at the end of the
-/// frame, when everything frame-allocated goes
-pub fn ResetFrameArenas(self: *Transactions) void {
-    for (self.mBatchPool.items) |transaction| _ = transaction.mFrameArena.reset(.retain_capacity);
-}
-
 /// Refuses something a hook speculating in a batch mustn't do on the calling thread (Transaction.RefuseSpeculative):
 /// the error to refuse with, and the hook runs again on its own. Null when it can go ahead
 pub fn RefuseSpeculative(self: *const Transactions) ?error{RunSerially} {

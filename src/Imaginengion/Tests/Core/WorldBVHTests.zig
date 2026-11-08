@@ -499,3 +499,49 @@ test "a text's click box is the whole text area, the same box picking tests, and
     const moved = WorldBVH.BoxBounds(ShapeGeometry.TextBox(TestFont, transform, text, &TEST_FONT, null));
     try std.testing.expectEqual(moved, tree.mBVHItems.items[text_ind.?].Bounds);
 }
+
+test "a refit places its items on the job pool, one task each, and comes out the same as one on this thread" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const editor_world = &engine_context.mEditorWorld;
+    const level = try editor_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //quads in a grid, enough that every thread of the pool takes some
+    const count = 2000;
+    const quads = try std.testing.allocator.alloc(Entity, count);
+    defer std.testing.allocator.free(quads);
+    for (quads, 0..) |*quad, i| quad.* = try AddQuad(engine_context, level, .{ .x = @floatFromInt(i % 64), .y = @floatFromInt(i / 64), .z = 0 });
+    const bvh = try world.Build();
+    const tree = &bvh.mGame;
+
+    //a few moved, then every box worked out on this thread to compare against
+    const moved = [_]Entity{ quads[5], quads[1031], quads[count - 1] };
+    for (moved, 0..) |quad, i| try quad.SetTranslation(engine_context, .{ .x = -50 - @as(f32, @floatFromInt(i)) * 10, .y = 200, .z = 3 });
+    try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{editor_world});
+    try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ editor_world, WorldBVH.ALL_ITEMS });
+    const serial = try std.testing.allocator.dupe(@TypeOf(tree.mBVHItems.items[0]), tree.mBVHItems.items);
+    defer std.testing.allocator.free(serial);
+
+    //the same refit on a pool of 3 workers besides this thread
+    const threads = try std.heap.page_allocator.create(std.Io.Threaded);
+    threads.* = std.Io.Threaded.init(std.heap.page_allocator, .{ .async_limit = .limited(3), .concurrent_limit = .nothing });
+    defer {
+        engine_context.mJobPool = .{};
+        threads.deinit();
+        std.heap.page_allocator.destroy(threads);
+        engine_context._Internal.ThreadFrameArenas.Deinit();
+    }
+    engine_context.mJobPool = .{ .mIo = threads.io(), .mWorkers = 3 };
+    engine_context._Internal.ThreadFrameArenas.mMainThread = std.Thread.getCurrentId();
+    //back where they were, so the refit has something to put right
+    for (tree.mBVHItems.items) |*item| item.Bounds = .{ .Min = .{ .x = 0, .y = 0, .z = 0 }, .Max = .{ .x = 0, .y = 0, .z = 0 } };
+    try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ editor_world, WorldBVH.ALL_ITEMS });
+
+    for (serial, tree.mBVHItems.items) |expected, actual| {
+        try ExpectNear(expected.Bounds.Min, actual.Bounds.Min);
+        try ExpectNear(expected.Bounds.Max, actual.Bounds.Max);
+    }
+    try ExpectTreeHoldsItems(tree);
+    try std.testing.expect(tree.mBVHItems.items[IndexOf(tree, moved[2])].Bounds.Contains(.{ .x = -70, .y = 200, .z = 3 }));
+}

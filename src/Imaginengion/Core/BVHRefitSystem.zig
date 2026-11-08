@@ -6,6 +6,8 @@
 //! what places it keeps its box.
 //!
 //!     try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ world, WorldBVH.ALL_ITEMS });
+const std = @import("std");
+const Tracy = @import("Tracy.zig");
 const EngineContext = @import("EngineContext.zig");
 const WorldManager = @import("WorldManager.zig");
 const WorldBVH = @import("WorldBVH.zig");
@@ -22,14 +24,28 @@ pub const Name = "BVHRefit";
 
 pub fn Run(engine_context: *EngineContext, world: *WorldManager, mask: u4) void {
     engine_context.mTransactions.CheckMainThread("Refitting the BVH");
+    const zone = Tracy.ZoneInit("BVHRefit::Run", @src());
+    defer zone.Deinit();
     const bvh = &world.mBVH;
-    for ([_]*WorldBVH.LayerTree{ &bvh.mGame, &bvh.mOverlay }) |tree| {
-        for (tree.mItems.items, tree.mBVHItems.items) |item, *bvh_item| {
-            if (bvh_item.Mask & mask == 0) continue;
-            if (ItemBounds(engine_context, world, item)) |bounds| bvh_item.Bounds = bounds;
-        }
-        BVH.Refit(tree.mBVHItems.items, tree.mNodes.items);
+    const trees = [_]*WorldBVH.LayerTree{ &bvh.mGame, &bvh.mOverlay };
+
+    //every item of every tree is a task of its own on the job Io. Each only reads its item's entity and writes its own
+    //item's box, so they run side by side with nothing to protect. Then each tree's boxes from them
+    const io = engine_context.Io();
+    var group: std.Io.Group = .init;
+    for (trees) |tree| {
+        zone.Value(tree.mItems.items.len);
+        for (0..tree.mItems.items.len) |index| group.async(io, PlaceItem, .{ engine_context, world, tree, mask, index });
     }
+    group.await(io) catch |err| std.debug.panic("Placing the BVH's items was {s}", .{@errorName(err)});
+    for (trees) |tree| BVH.Refit(tree.mBVHItems.items, tree.mNodes.items);
+}
+
+/// Places the tree's item `index` again: one task of Run
+fn PlaceItem(engine_context: *EngineContext, world: *WorldManager, tree: *WorldBVH.LayerTree, mask: u4, index: usize) void {
+    const bvh_item = &tree.mBVHItems.items[index];
+    if (bvh_item.Mask & mask == 0) return;
+    if (ItemBounds(engine_context, world, tree.mItems.items[index])) |bounds| bvh_item.Bounds = bounds;
 }
 
 /// Where `item` is now, or null if its entity has lost what places it
