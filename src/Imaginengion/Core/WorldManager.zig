@@ -195,8 +195,33 @@ pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
 pub fn Emit(self: *WorldManager, engine_context: *EngineContext, event: anytype) !void {
     const T = @TypeOf(event);
     comptime GameEvents.Check(T);
+    //sent from a hook, it waits for the hook to be kept: one that fails never sent it. The hook is kept straight after it
+    //runs, so an event for the phase being handled still goes in this same pass
+    if (engine_context.mSystems.OpenTransaction()) |transaction| {
+        try transaction.OnCommit(HeldEvent{
+            .mWorld = self,
+            .mPhase = GameEvents.PhaseOf(T),
+            .mId = GameEvents.IdOf(T),
+            .mBytes = try transaction.Dupe(std.mem.asBytes(&event)),
+        }, HeldEvent.Send);
+        return;
+    }
     try self.mGameEventManager.Insert(engine_context.EngineAllocator(), GameEvents.PhaseOf(T), GameEvents.IdOf(T), std.mem.asBytes(&event));
 }
+
+/// A game event sent inside a transaction, waiting for it to be kept (Emit)
+const HeldEvent = struct {
+    mWorld: *WorldManager,
+    mPhase: GameEvents.GamePhase,
+    mId: u64,
+    mBytes: []const u8,
+
+    fn Send(engine_context: *EngineContext, self: *HeldEvent) void {
+        self.mWorld.mGameEventManager.Insert(engine_context.EngineAllocator(), self.mPhase, self.mId, self.mBytes) catch |err| {
+            std.log.err("A game event a kept transaction sent was lost: {s}", .{@errorName(err)});
+        };
+    }
+};
 
 /// Sends the game event `event` in this world right now, whatever its phase: every script in it with a handler for it
 /// has run by the time this returns, and .Handled comes back if one kept it from the rest. Handlers run inside the

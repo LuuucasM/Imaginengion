@@ -124,6 +124,8 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
                 .Threaded => engine_context._Internal.ThreadedIO.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
+            //a file made can't be taken back: a hook that fails after this is kept
+            engine_context.mSystems.MarkIrrevocable("a file was created");
             return try inner_io.vtable.dirCreateFile(inner_io.userdata, dir, sub_path, options);
         }
         fn DirRead(context: ?*anyopaque, dir_reader: *std.Io.Dir.Reader, buffer: []std.Io.Dir.Entry) std.Io.Dir.Reader.Error!usize {
@@ -140,6 +142,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
                 .Threaded => engine_context._Internal.ThreadedIO.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
+            engine_context.mSystems.MarkIrrevocable("a file was written");
             return try inner_io.vtable.fileWritePositional(inner_io.userdata, file, header, data, splat, offset);
         }
         fn Operate(context: ?*anyopaque, operation: std.Io.Operation) std.Io.Cancelable!std.Io.Operation.Result {
@@ -148,6 +151,8 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
                 .Threaded => engine_context._Internal.ThreadedIO.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
+            //anything but a read sends or writes something that can't be taken back
+            if (operation != .file_read_streaming) engine_context.mSystems.MarkIrrevocable("a file or the network was written to");
             return try inner_io.vtable.operate(inner_io.userdata, operation);
         }
     };

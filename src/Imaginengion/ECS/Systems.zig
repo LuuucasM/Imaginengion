@@ -122,14 +122,34 @@ pub fn RunTransaction(self: *Systems, engine_context: *EngineContext, comptime f
     const result = @call(.auto, func, args);
     self.mOpenTransaction = null;
 
-    // still inside the run: what keeping or dropping sets off waits like anything else in it
-    if (keep(result)) self.mTransaction.Commit(engine_context) else self.mTransaction.Discard(engine_context);
+    // still inside the run: what keeping or dropping sets off waits like anything else in it. One that did something
+    // that can't be taken back is kept whatever happened, rather than coming out half undone
+    if (keep(result)) {
+        self.mTransaction.Commit(engine_context);
+    } else if (self.mTransaction.mIrrevocable) |reason| {
+        std.log.warn("A failed transaction was kept, since it did something that can't be taken back: {s}", .{reason});
+        self.mTransaction.Commit(engine_context);
+    } else {
+        self.mTransaction.Discard(engine_context);
+    }
 
     self.mRunDepth -= 1;
     if (self.mRunDepth == 0) {
         if (self._Land(engine_context)) |err| std.log.err("What a transaction changed could not all be made: {s}", .{@errorName(err)});
     }
     return result;
+}
+
+/// The transaction open now, null outside one: for code outside the ECSs to hold its changes back in
+/// (Transaction.OnCommit, OnDiscard)
+pub fn OpenTransaction(self: *const Systems) ?*Transaction {
+    return self.mOpenTransaction;
+}
+
+/// Says that what the caller is about to do can't be taken back, so an open transaction is kept even if its code fails
+/// (Transaction.MarkIrrevocable). Nothing outside a transaction
+pub fn MarkIrrevocable(self: *const Systems, reason: []const u8) void {
+    if (self.mOpenTransaction) |transaction| transaction.MarkIrrevocable(reason);
 }
 
 /// What `func` returns

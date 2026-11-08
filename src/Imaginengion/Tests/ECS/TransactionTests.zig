@@ -389,3 +389,45 @@ test "a transaction dropped inside a run only drops its own changes, not what th
     try std.testing.expect(layer.mBodies.IsActiveEntity(inside));
     try std.testing.expectEqual(@as(u32, 0), layer.mSystems.mRunDepth);
 }
+
+//----------------actions and what can't be taken back----------------
+
+/// Writes down which actions ran, in order
+const Ran = struct {
+    mOrder: [4]u8 = undefined,
+    mCount: usize = 0,
+
+    const Note = struct {
+        mRan: *Ran,
+        mMark: u8,
+
+        fn Run(_: *EngineContext, self: *Note) void {
+            self.mRan.mOrder[self.mRan.mCount] = self.mMark;
+            self.mRan.mCount += 1;
+        }
+    };
+};
+
+/// Asks for two actions on commit and two on discard, and hands back `keep`
+fn AsksForActions(systems: *Systems, ran: *Ran, keep: bool) bool {
+    const transaction = systems.OpenTransaction().?;
+    transaction.OnCommit(Ran.Note{ .mRan = ran, .mMark = 'a' }, Ran.Note.Run) catch unreachable;
+    transaction.OnDiscard(Ran.Note{ .mRan = ran, .mMark = '1' }, Ran.Note.Run) catch unreachable;
+    transaction.OnCommit(Ran.Note{ .mRan = ran, .mMark = 'b' }, Ran.Note.Run) catch unreachable;
+    transaction.OnDiscard(Ran.Note{ .mRan = ran, .mMark = '2' }, Ran.Note.Run) catch unreachable;
+    return keep;
+}
+
+test "a kept transaction runs its on-commit actions in order, a dropped one its on-discard actions newest first" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const engine_context = layer.mEngineContext;
+
+    var kept: Ran = .{};
+    _ = layer.mSystems.RunTransaction(engine_context, AsksForActions, .{ &layer.mSystems, &kept, true }, Keep);
+    try std.testing.expectEqualStrings("ab", kept.mOrder[0..kept.mCount]);
+
+    var dropped: Ran = .{};
+    _ = layer.mSystems.RunTransaction(engine_context, AsksForActions, .{ &layer.mSystems, &dropped, false }, Keep);
+    try std.testing.expectEqualStrings("21", dropped.mOrder[0..dropped.mCount]);
+}

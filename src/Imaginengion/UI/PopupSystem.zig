@@ -96,6 +96,8 @@ pub fn OpenerOf(self: *const PopupSystem, popup: Entity) ?Entity {
 pub fn Open(self: *PopupSystem, engine_context: *EngineContext, popup: Entity, at: At) !void {
     const zone = Tracy.ZoneInit("PopupSystem::Open", @src());
     defer zone.Deinit();
+    //the open list isn't part of a transaction: a hook that fails after this is kept, not left half undone
+    engine_context.mSystems.MarkIrrevocable("a popup was opened");
     std.debug.assert(UIManager.HasUIComponent(popup, PopupComponent));
 
     if (self.IndexOf(popup)) |index| {
@@ -322,6 +324,7 @@ fn RectSize(opener: Entity) Vec2(f32) {
 
 /// Closes every popup from `index` up, the top one first
 fn CloseAbove(self: *PopupSystem, engine_context: *EngineContext, index: usize) !void {
+    if (self.mOpen.items.len > index) engine_context.mSystems.MarkIrrevocable("a popup was closed");
     while (self.mOpen.items.len > index) {
         const open = self.mOpen.pop().?;
         const popup = open.mPopup;

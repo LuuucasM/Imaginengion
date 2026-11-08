@@ -26,6 +26,7 @@ const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
 const ScriptAsset = @import("../ECSComponents/Asset/ScriptAsset.zig");
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const Tracy = @import("../Core/Tracy.zig");
+const Transaction = @import("../ECS/Transaction.zig");
 
 const ScriptInfo = ScriptABI.ScriptInfo;
 const FieldDesc = ScriptABI.FieldDesc;
@@ -310,6 +311,33 @@ pub fn CopyValues(engine_context: *EngineContext, from: *const ScriptComponent, 
     RetainRefs(dest);
     try to.CopyLinks(engine_context, from);
 }
+
+/// Has `instance`'s variables put back as they are now if `transaction` is dropped: run before a hook, so one that fails
+/// leaves its script's variables as it found them. File refs are left as they end up: a script never assigns one, and
+/// one that loaded its object meanwhile keeps the reference it took
+pub fn KeepForDiscard(transaction: *Transaction, instance: Instance) !void {
+    const size = instance.mInfo.mDataSize;
+    if (size == 0) return;
+    const saved = try transaction.Dupe(@as([*]const u8, @ptrCast(instance.mData))[0..size]);
+    try transaction.OnDiscard(SavedValues{ .mInstance = instance, .mBytes = saved }, SavedValues.PutBack);
+}
+
+/// An instance's variables as they were before a hook (KeepForDiscard)
+const SavedValues = struct {
+    mInstance: Instance,
+    mBytes: []const u8,
+
+    fn PutBack(_: *EngineContext, self: *SavedValues) void {
+        const data: [*]u8 = @ptrCast(self.mInstance.mData);
+        for (self.mInstance.mInfo.Fields()) |field| {
+            switch (field.mKind) {
+                .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => continue,
+                else => {},
+            }
+            @memcpy(data[field.mOffset..][0..field.mSize], self.mBytes[field.mOffset..][0..field.mSize]);
+        }
+    }
+};
 
 /// Takes a reference for every file ref in `instance`: for variables just copied from another instance byte for byte
 pub fn RetainRefs(instance: Instance) void {

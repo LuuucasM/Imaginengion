@@ -288,3 +288,159 @@ test "a component a failed hook added is gone after, and so is what adding it ma
     try std.testing.expect(!entity.HasComponent(EntityComponents.UIElementComponent));
     try std.testing.expectEqual(elements_before, (try ui_ecs.GetAllEntities(world.mEngineContext.FrameAllocator())).items.len);
 }
+
+//----------------what a failed hook changed outside the ECSs----------------
+
+const GameEvents = @import("../../Scripts/GameEvents.zig");
+const PreSolveInfo = @import("../../Physics/Collisions.zig").PreSolveInfo;
+
+/// What Counter hands back, and the count it saw after counting
+var gCounterResult: ScriptABI.ScriptResult = .Continue;
+var gCounted: u32 = 0;
+
+/// Counts in a script variable each time it runs
+const Counter = struct {
+    mCount: u32 = 0,
+
+    pub fn OnUpdate(self: *Counter, _: *EngineContext, _: Entity) !ScriptABI.ScriptResult {
+        self.mCount += 1;
+        gCounted = self.mCount;
+        return gCounterResult;
+    }
+};
+const CounterExports = ScriptExport.Exports(Counter, "Counter", &.{});
+
+test "a failed hook's script variables are put back as it found them" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    defer gCounterResult = .Continue;
+
+    var handle = try world.ScriptAssetFor(&CounterExports.info);
+    defer handle.ReleaseAsset();
+    _ = try world.EntityWithScript(handle);
+
+    gCounterResult = .Failed;
+    try world.RunUpdateScripts();
+    gCounterResult = .Continue;
+    try world.RunUpdateScripts();
+    try world.RunUpdateScripts();
+
+    //the failed run's count was put back, so the two kept runs counted from 0
+    try std.testing.expectEqual(@as(u32, 2), gCounted);
+}
+
+/// What SwitchesContactOff hands back after switching the contact off
+var gContactResult: ScriptABI.ScriptResult = .Continue;
+
+/// Lets the other one pass through
+const SwitchesContactOff = struct {
+    pub fn OnPreSolve(_: *SwitchesContactOff, _: *EngineContext, _: Entity, _: Entity, info: *PreSolveInfo) !ScriptABI.ScriptResult {
+        info.mEnabled = false;
+        return gContactResult;
+    }
+};
+const SwitchesContactOffExports = ScriptExport.Exports(SwitchesContactOff, "SwitchesContactOff", &.{});
+
+/// Hands a contact between a new entity running SwitchesContactOff and another to the pre-solve scripts, with the script
+/// handing back `result`, and gives whether the contact is still on after
+fn ContactStaysOn(result: ScriptABI.ScriptResult) !bool {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    gContactResult = result;
+    defer gContactResult = .Continue;
+
+    var handle = try world.ScriptAssetFor(&SwitchesContactOffExports.info);
+    defer handle.ReleaseAsset();
+    const ball = try world.EntityWithScript(handle);
+    _ = try ball.AddComponent(world.mEngineContext, EntityComponents.OnPreSolveScript{});
+    const wall = try world.mScene.CreateEntity(world.mEngineContext, Entity.DefaultConfig);
+
+    var enabled = true;
+    try ScriptsProcessor.RunPreSolveScripts(world.mEngineContext, .{
+        .mOrigin = ball,
+        .mTarget = wall,
+        .mOriginCollider = ball,
+        .mTargetCollider = wall,
+        .mNormal = .{ .x = 1, .y = 0, .z = 0 },
+        .mSeparation = -0.1,
+        .mEnabled = &enabled,
+    });
+    return enabled;
+}
+
+test "what a failed hook was handed to change is put back: a pre-solve script switching a contact off" {
+    try std.testing.expect(!try ContactStaysOn(.Continue));
+    try std.testing.expect(try ContactStaysOn(.Failed));
+}
+
+/// A game event sent by Sender
+const Pinged = struct {
+    pub const Phase: GameEvents.GamePhase = .AfterUpdate;
+    mFrom: u32 = 7,
+};
+
+/// What Sender hands back after sending
+var gSenderResult: ScriptABI.ScriptResult = .Continue;
+
+/// Sends a game event and a UI event about the object it is on
+const Sender = struct {
+    pub fn OnUpdate(_: *Sender, engine_context: *EngineContext, owner: Entity) !ScriptABI.ScriptResult {
+        try owner.GetWorld().Emit(engine_context, Pinged{});
+        try engine_context.mUIManager.Send(engine_context, owner, .{ .FocusGained = .{ .mTarget = owner } });
+        return gSenderResult;
+    }
+};
+const SenderExports = ScriptExport.Exports(Sender, "Sender", &.{});
+
+/// How many game events and UI events are waiting after Sender runs once, handing back `result`
+fn EventsSentWith(result: ScriptABI.ScriptResult) !struct { usize, usize } {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    gSenderResult = result;
+    defer gSenderResult = .Continue;
+    const engine_context = world.mEngineContext;
+
+    var handle = try world.ScriptAssetFor(&SenderExports.info);
+    defer handle.ReleaseAsset();
+    _ = try world.EntityWithScript(handle);
+    const ui_before = engine_context.mUIManager.mEventManager.mEventsArray.get(.UI).items.len;
+
+    try world.RunUpdateScripts();
+
+    const game_events = engine_context.mGameWorld.mGameEventManager.GetQueue(GameEvents.PhaseOf(Pinged)).mEntries.items.len;
+    const ui_events = engine_context.mUIManager.mEventManager.mEventsArray.get(.UI).items.len - ui_before;
+    return .{ game_events, ui_events };
+}
+
+test "events a kept hook sends arrive, and events a failed hook sends never do" {
+    const kept = try EventsSentWith(.Continue);
+    try std.testing.expectEqual(@as(usize, 1), kept[0]);
+    try std.testing.expectEqual(@as(usize, 1), kept[1]);
+
+    const failed = try EventsSentWith(.Failed);
+    try std.testing.expectEqual(@as(usize, 0), failed[0]);
+    try std.testing.expectEqual(@as(usize, 0), failed[1]);
+}
+
+/// Moves its owner, does something that can't be taken back, then fails
+const IrrevocableThenFails = struct {
+    pub fn OnUpdate(_: *IrrevocableThenFails, engine_context: *EngineContext, owner: Entity) !ScriptABI.ScriptResult {
+        try owner.SetTranslation(engine_context, .{ .x = 7, .y = 0, .z = 0 });
+        engine_context.mSystems.MarkIrrevocable("the test said so");
+        return .Failed;
+    }
+};
+const IrrevocableThenFailsExports = ScriptExport.Exports(IrrevocableThenFails, "IrrevocableThenFails", &.{});
+
+test "a failed hook that did something that can't be taken back is kept whole" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+
+    var handle = try world.ScriptAssetFor(&IrrevocableThenFailsExports.info);
+    defer handle.ReleaseAsset();
+    const entity = try world.EntityWithScript(handle);
+
+    try world.RunUpdateScripts();
+
+    try std.testing.expectEqual(@as(f32, 7), entity.GetComponent(TransformComponent).?.GetTranslation().x);
+}

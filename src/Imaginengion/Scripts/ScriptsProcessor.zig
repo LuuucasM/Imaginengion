@@ -187,12 +187,48 @@ fn RunHook(comptime ObjectType: type, comptime script_type: type, engine_context
 
     const hook_args = .{ engine_context, owner, instance } ++ args;
     const HookArgs = @TypeOf(hook_args);
+    const Args = @TypeOf(args);
     const Call = struct {
-        fn Run(asset: *const ScriptAsset, call_args: HookArgs) ScriptResult {
+        fn Run(context: *EngineContext, asset: *const ScriptAsset, call_args: HookArgs, own_args: Args) ScriptResult {
+            if (!KeepForDiscard(context, .{ .mInfo = asset.GetInfo(), .mData = call_args[2] }, own_args)) return .Error;
             return asset.RunHook(ObjectType, script_type.Hook, call_args);
         }
     };
-    return engine_context.mSystems.RunTransaction(engine_context, Call.Run, .{ script_asset, hook_args }, KeepsChanges);
+    return engine_context.mSystems.RunTransaction(engine_context, Call.Run, .{ engine_context, script_asset, hook_args, args }, KeepsChanges);
+}
+
+/// Has what a hook can change outside the ECSs put back if its transaction is dropped: its script's variables, and
+/// what each pointer it is handed to change points at (OnPreSolve's PreSolveInfo). False, logged, when there was no
+/// room to keep them, and then the hook mustn't run
+fn KeepForDiscard(engine_context: *EngineContext, instance: ScriptValues.Instance, args: anytype) bool {
+    const transaction = engine_context.mSystems.OpenTransaction() orelse return true;
+    ScriptValues.KeepForDiscard(transaction, instance) catch |err| {
+        std.log.err("A hook was skipped: its script's variables couldn't be kept to put back if it failed: {s}", .{@errorName(err)});
+        return false;
+    };
+    inline for (args) |arg| {
+        const info = @typeInfo(@TypeOf(arg));
+        if (comptime info == .pointer and info.pointer.size == .one and !info.pointer.attrs.@"const") {
+            const Saved = SavedArg(info.pointer.child);
+            transaction.OnDiscard(Saved{ .mTarget = arg, .mValue = arg.* }, Saved.PutBack) catch |err| {
+                std.log.err("A hook was skipped: what it was handed couldn't be kept to put back if it failed: {s}", .{@errorName(err)});
+                return false;
+            };
+        }
+    }
+    return true;
+}
+
+/// What a pointer handed to a hook pointed at before it ran (KeepForDiscard)
+fn SavedArg(comptime T: type) type {
+    return struct {
+        mTarget: *T,
+        mValue: T,
+
+        fn PutBack(_: *EngineContext, self: *@This()) void {
+            self.mTarget.* = self.mValue;
+        }
+    };
 }
 
 /// Whether what a hook or handler changed stays (see Systems.RunTransaction): not when it couldn't do what it was for
@@ -465,11 +501,12 @@ fn RunHandler(comptime ObjectType: type, engine_context: *EngineContext, script_
     if (Tracy.enable_tracy) script_zone.Name(script_component.mScriptAssetHandle.GetFileMetaData().mRelPath.items);
 
     const Call = struct {
-        fn Run(context: *EngineContext, handler_ptr: *const ScriptABI.EventHandler, handler_owner: *const ObjectType, handler_instance: *anyopaque, handler_event: *const anyopaque) ScriptResult {
+        fn Run(context: *EngineContext, asset: *const ScriptAsset, handler_ptr: *const ScriptABI.EventHandler, handler_owner: *const ObjectType, handler_instance: *anyopaque, handler_event: *const anyopaque) ScriptResult {
+            if (!KeepForDiscard(context, .{ .mInfo = asset.GetInfo(), .mData = handler_instance }, .{})) return .Error;
             return ScriptAsset.RunHandler(ObjectType, handler_ptr, context, handler_owner, handler_instance, handler_event);
         }
     };
-    return engine_context.mSystems.RunTransaction(engine_context, Call.Run, .{ engine_context, handler, owner, instance, event }, KeepsChanges);
+    return engine_context.mSystems.RunTransaction(engine_context, Call.Run, .{ engine_context, script_asset, handler, owner, instance, event }, KeepsChanges);
 }
 
 /// Catches the scripts in `worlds` up with the files that changed last frame (AManager.FileChanged): each script whose

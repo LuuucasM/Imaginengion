@@ -405,8 +405,26 @@ pub fn HasUIComponent(entity: Entity, comptime component_type: type) bool {
 
 /// Queues `event` for `entity`'s UI event scripts, and whatever else hears the UI's events
 pub fn Send(self: *UIManager, engine_context: *EngineContext, entity: Entity, event: UIEventData.UIEvent) !void {
+    //sent from a hook, it waits for the hook to be kept: one that fails never sent it
+    if (engine_context.mSystems.OpenTransaction()) |transaction| {
+        try transaction.OnCommit(HeldUIEvent{ .mManager = self, .mEntity = entity, .mEvent = event }, HeldUIEvent.Send);
+        return;
+    }
     try self.mEventManager.Insert(engine_context.EngineAllocator(), .UI, .{ .Entity = .{ .mEntity = entity, .mEvent = event } });
 }
+
+/// A UI event sent inside a transaction, waiting for it to be kept (Send)
+const HeldUIEvent = struct {
+    mManager: *UIManager,
+    mEntity: Entity,
+    mEvent: UIEventData.UIEvent,
+
+    fn Send(engine_context: *EngineContext, self: *HeldUIEvent) void {
+        self.mManager.mEventManager.Insert(engine_context.EngineAllocator(), .UI, .{ .Entity = .{ .mEntity = self.mEntity, .mEvent = self.mEvent } }) catch |err| {
+            std.log.err("A UI event a kept transaction sent was lost: {s}", .{@errorName(err)});
+        };
+    }
+};
 
 /// One `kind` of UI event, about `target`, to it and to everything it is inside. For the events that are only a
 /// target (ValueChanged, TextChanged, ...)

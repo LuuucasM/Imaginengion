@@ -10,9 +10,13 @@
 //!     to there.
 //!   - Objects made (CreateEntity, CreateScript, AddChild): written down, and destroyed by Discard.
 //!   - Tags put on or taken off, which happen right away: written down, and reversed by Discard.
+//!   - Anything else: code outside the ECSs says what to do at commit (OnCommit, e.g. send an event it held back) or at
+//!     discard (OnDiscard, e.g. put a script's variables back).
+//!   - What can't be taken back at all (a file written, a popup's state): the code doing it marks the transaction
+//!     (MarkIrrevocable), and a marked transaction is kept even when its code fails, rather than coming out half undone.
 //!
-//! Not held here yet: anything outside the ECSs, a staged component taken back off with RemoveComponentSync (gone for
-//! good), and a component staged during the run, which is handed out as it is rather than copied.
+//! Not held here: a staged component taken back off with RemoveComponentSync (gone for good), and a component staged
+//! during the run, which is handed out as it is rather than copied.
 const Transaction = @This();
 
 const std = @import("std");
@@ -33,8 +37,20 @@ mQueueMarks: std.ArrayList(QueueMark) = .empty,
 mCreated: std.ArrayList(Undo) = .empty,
 /// The tags put on or taken off in this transaction, oldest first
 mTagChanges: std.ArrayList(TagChange) = .empty,
+/// What to do if the transaction is kept, in order
+mOnCommit: std.ArrayList(Action) = .empty,
+/// What to do if the transaction is dropped, newest first
+mOnDiscard: std.ArrayList(Action) = .empty,
+/// Why the transaction can't be dropped, null while it still can (MarkIrrevocable)
+mIrrevocable: ?[]const u8 = null,
 
 pub const empty: Transaction = .{};
+
+/// Something to do when the transaction ends, with its data in the transaction's arena (OnCommit, OnDiscard)
+pub const Action = struct {
+    mData: *anyopaque,
+    mRun: *const fn (engine_context: *EngineContext, data: *anyopaque) void,
+};
 
 /// What a copy is a copy of: one component array (a type in one ECS), and the entity in it
 pub const Key = struct {
@@ -84,6 +100,8 @@ pub fn Deinit(self: *Transaction, engine_allocator: std.mem.Allocator) void {
     self.mQueueMarks.deinit(engine_allocator);
     self.mCreated.deinit(engine_allocator);
     self.mTagChanges.deinit(engine_allocator);
+    self.mOnCommit.deinit(engine_allocator);
+    self.mOnDiscard.deinit(engine_allocator);
     self.* = .empty;
 }
 
@@ -158,25 +176,80 @@ pub fn AddTagChange(self: *Transaction, change: TagChange) void {
     self.mTagChanges.appendAssumeCapacity(change);
 }
 
-/// Keeps everything: puts every copy in place of its component, in the order they were made, leaves what was queued to
-/// land with the run, and empties the transaction
+/// Runs `run(engine_context, &data)` if the transaction is kept, after the copies are in, in the order these were asked
+/// for: for something code outside the ECSs holds back until then (an event it sends). `data` is copied into the
+/// transaction's arena; a slice in it has to be too (Dupe)
+pub fn OnCommit(self: *Transaction, data: anytype, comptime run: fn (*EngineContext, *@TypeOf(data)) void) !void {
+    try self._AddAction(&self.mOnCommit, data, run);
+}
+
+/// Runs `run(engine_context, &data)` if the transaction is dropped, before anything else is undone, newest first: for
+/// putting back something code outside the ECSs changed (a script's variables). `data` is copied as for OnCommit
+pub fn OnDiscard(self: *Transaction, data: anytype, comptime run: fn (*EngineContext, *@TypeOf(data)) void) !void {
+    try self._AddAction(&self.mOnDiscard, data, run);
+}
+
+/// A copy of `bytes` in the transaction's arena, good until the transaction ends: for an action's data with a slice in it
+pub fn Dupe(self: *Transaction, bytes: []const u8) ![]u8 {
+    var arena = self.mArena.promote(self.mEngineContext.?.EngineAllocator());
+    defer self.mArena = arena.state;
+    return try arena.allocator().dupe(u8, bytes);
+}
+
+/// Says the transaction has done something that can't be taken back, so it is kept even if its code fails: it never
+/// comes out half undone. `reason` is for the log line saying so, and has to outlive the transaction (a string literal).
+/// The first reason given is the one kept
+pub fn MarkIrrevocable(self: *Transaction, reason: []const u8) void {
+    if (self.mIrrevocable == null) self.mIrrevocable = reason;
+}
+
+fn _AddAction(self: *Transaction, list: *std.ArrayList(Action), data: anytype, comptime run: fn (*EngineContext, *@TypeOf(data)) void) !void {
+    const T = @TypeOf(data);
+    const engine_allocator = self.mEngineContext.?.EngineAllocator();
+    try list.ensureUnusedCapacity(engine_allocator, 1);
+
+    var arena = self.mArena.promote(engine_allocator);
+    defer self.mArena = arena.state;
+    const stored = try arena.allocator().create(T);
+    stored.* = data;
+
+    list.appendAssumeCapacity(.{ .mData = stored, .mRun = struct {
+        fn Run(engine_context: *EngineContext, erased: *anyopaque) void {
+            run(engine_context, @ptrCast(@alignCast(erased)));
+        }
+    }.Run });
+}
+
+/// Keeps everything: puts every copy in place of its component, in the order they were made, runs what was to happen
+/// on commit, leaves what was queued to land with the run, and empties the transaction
 pub fn Commit(self: *Transaction, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("Transaction::Commit", @src());
     defer zone.Deinit();
     zone.Value(self.mEntries.items.len);
     for (self.mEntries.items) |entry| entry.mCommit(entry.mKey.mArray, engine_context, entry.mKey.mEntityID, entry.mCopy);
+    for (self.mOnCommit.items) |action| action.mRun(engine_context, action.mData);
     self._Reset(engine_context.EngineAllocator());
 }
 
 /// Drops everything, leaving the ECSs as they were before the transaction, and empties it. The order matters:
-///   1. objects made are destroyed, newest first, while what was staged on them can still be read by the removal hook
-///   2. queued changes are cut back, newest ECS first, a staged add on a live object going through the removal hook
-///   3. tag changes are reversed, newest first, skipping objects destroyed in 1
-///   4. the copies are deinitialized
+///   1. what was to happen on discard runs, newest first
+///   2. objects made are destroyed, newest first, while what was staged on them can still be read by the removal hook
+///   3. queued changes are cut back, newest ECS first, a staged add on a live object going through the removal hook
+///   4. tag changes are reversed, newest first, skipping objects destroyed in 2
+///   5. the copies are deinitialized
+/// What was to happen on commit never does. Not for a transaction marked irrevocable, which can only be kept
 pub fn Discard(self: *Transaction, engine_context: *EngineContext) void {
+    std.debug.assert(self.mIrrevocable == null);
     const zone = Tracy.ZoneInit("Transaction::Discard", @src());
     defer zone.Deinit();
     zone.Value(self.mEntries.items.len);
+
+    var action_ind = self.mOnDiscard.items.len;
+    while (action_ind > 0) {
+        action_ind -= 1;
+        const action = self.mOnDiscard.items[action_ind];
+        action.mRun(engine_context, action.mData);
+    }
 
     var created_ind = self.mCreated.items.len;
     while (created_ind > 0) {
@@ -205,7 +278,8 @@ pub fn Discard(self: *Transaction, engine_context: *EngineContext) void {
 
 fn _IsEmpty(self: *const Transaction) bool {
     return self.mEntries.items.len == 0 and self.mQueueMarks.items.len == 0 and self.mCreated.items.len == 0 and
-        self.mTagChanges.items.len == 0;
+        self.mTagChanges.items.len == 0 and self.mOnCommit.items.len == 0 and self.mOnDiscard.items.len == 0 and
+        self.mIrrevocable == null;
 }
 
 fn _Reset(self: *Transaction, engine_allocator: std.mem.Allocator) void {
@@ -218,4 +292,7 @@ fn _Reset(self: *Transaction, engine_allocator: std.mem.Allocator) void {
     self.mQueueMarks.clearRetainingCapacity();
     self.mCreated.clearRetainingCapacity();
     self.mTagChanges.clearRetainingCapacity();
+    self.mOnCommit.clearRetainingCapacity();
+    self.mOnDiscard.clearRetainingCapacity();
+    self.mIrrevocable = null;
 }
