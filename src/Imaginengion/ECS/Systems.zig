@@ -14,6 +14,7 @@ const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const Transaction = @import("Transaction.zig");
+const ConflictReport = @import("ConflictReport.zig");
 
 mNodes: std.ArrayList(Node) = .empty,
 /// How many runs are going on now. Every registered ECS points at this, so the layer must stay where it is while anything
@@ -26,6 +27,8 @@ mLanding: bool = false,
 mTransaction: Transaction = .empty,
 /// mTransaction while it is open, null otherwise. Every registered ECS points at this, see ECSManager.mTransaction
 mOpenTransaction: ?*Transaction = null,
+/// What hooks would have conflicted if each run's hooks had run in parallel, while measuring (mConflicts.mOn)
+mConflicts: ConflictReport = .empty,
 
 pub const empty: Systems = .{};
 
@@ -42,6 +45,7 @@ pub fn Deinit(self: *Systems, engine_allocator: std.mem.Allocator) void {
     self.mNodes.deinit(engine_allocator);
     self.mNodes = .empty;
     self.mTransaction.Deinit(engine_allocator);
+    self.mConflicts.Deinit(engine_allocator);
 }
 
 /// Makes `ecs` (a pointer to an ECSManager) hold its changes while a run goes on
@@ -89,7 +93,9 @@ pub fn RunSystem(self: *Systems, comptime S: type, engine_context: *EngineContex
     defer zone.Deinit();
 
     self.mRunDepth += 1;
+    const measured = self.mConflicts.PushBatch(engine_context.EngineAllocator(), S.Name);
     const result = @call(.auto, S.Run, .{engine_context} ++ args);
+    if (measured) self.mConflicts.PopBatch(engine_context.EngineAllocator());
     self.mRunDepth -= 1;
     const landing_err = if (self.mRunDepth == 0) self._Land(engine_context) else null;
 
@@ -117,14 +123,16 @@ pub fn RunTransaction(self: *Systems, engine_context: *EngineContext, comptime f
     if (self.mOpenTransaction != null) return @call(.auto, func, args);
 
     self.mRunDepth += 1;
-    self.mTransaction.Open(engine_context);
+    self.mTransaction.Open(engine_context, self.mConflicts.InBatch());
     self.mOpenTransaction = &self.mTransaction;
     const result = @call(.auto, func, args);
     self.mOpenTransaction = null;
 
     // still inside the run: what keeping or dropping sets off waits like anything else in it. One that did something
     // that can't be taken back is kept whatever happened, rather than coming out half undone
-    if (keep(result)) {
+    const kept = keep(result);
+    if (self.mTransaction.mMeasuring) self.mConflicts.Check(engine_context.EngineAllocator(), &self.mTransaction, kept or self.mTransaction.mIrrevocable != null);
+    if (kept) {
         self.mTransaction.Commit(engine_context);
     } else if (self.mTransaction.mIrrevocable) |reason| {
         std.log.warn("A failed transaction was kept, since it did something that can't be taken back: {s}", .{reason});

@@ -14,6 +14,8 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
 const BVH = @import("../Core/BVH.zig");
+const ConflictReport = @import("../ECS/ConflictReport.zig");
+const SelectedTag = @import("../ECSComponents/EComponents.zig").SelectedTag;
 
 const StatsPanel = @This();
 
@@ -24,6 +26,9 @@ const SIZE = @import("../Math/MathTypes.zig").Vec2(f32){ .x = 420, .y = 380 };
 /// How often its lines are refreshed. A line that changes is laid out and drawn again, and the loop time changes every
 /// pass of the loop, so refreshing every pass would cost more than most of what it shows
 pub const REFRESH_SECONDS: f32 = 0.25;
+
+/// How many systems the Conflicts section shows, those with the most hooks
+const CONFLICT_LINES = 8;
 
 /// One world's section: a line for each stat
 const WorldLines = struct {
@@ -45,6 +50,11 @@ mWindow: Entity = .uninit,
 mLoopTime: Entity = .uninit,
 mLoopRate: Entity = .uninit,
 mFPS: Entity = .uninit,
+/// The Conflicts section: the Measure checkbox's box (checked is SelectedTag on it), a total, and a line for each of
+/// the systems with the most hooks, see ConflictReport
+mMeasureBox: Entity = .uninit,
+mConflictTotal: Entity = .uninit,
+mConflictLines: [CONFLICT_LINES]Entity = undefined,
 mGame: WorldLines = undefined,
 mEditor: WorldLines = undefined,
 mSimulate: WorldLines = undefined,
@@ -66,6 +76,7 @@ pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Opti
     self.mGame = try World(engine_context, window.Content, "Game World", options);
     self.mEditor = try World(engine_context, window.Content, "Editor World", options);
     self.mSimulate = try World(engine_context, window.Content, "Simulate World", options);
+    try self.BuildConflicts(engine_context, window.Content, options);
 
     try WidgetActions.CloseWindow(engine_context, self.mWindow);
     return self;
@@ -93,6 +104,7 @@ pub fn Update(self: *StatsPanel, engine_context: *EngineContext, stats: *const E
         self.mSinceRefresh = REFRESH_SECONDS;
         return;
     }
+    try self.SyncMeasuring(engine_context);
     self.mSinceRefresh += engine_context.mDT;
     if (self.mSinceRefresh < REFRESH_SECONDS) return;
     self.mSinceRefresh = 0;
@@ -105,6 +117,97 @@ pub fn Update(self: *StatsPanel, engine_context: *EngineContext, stats: *const E
     try SetWorld(engine_context, self.mGame, stats.LastGameWorldStats);
     try SetWorld(engine_context, self.mEditor, stats.LastEditorWorldStats);
     try SetWorld(engine_context, self.mSimulate, stats.LastSimulateWorldStats);
+    try self.SetConflicts(engine_context, &engine_context.mSystems.mConflicts);
+}
+
+/// The Conflicts section: whether hooks would conflict if each system run's hooks ran in parallel (ConflictReport),
+/// with the checkbox that turns measuring on
+fn BuildConflicts(self: *StatsPanel, engine_context: *EngineContext, content: Entity, options: Widgets.Options) !void {
+    const section = try Widgets.CollapsingHeader(engine_context, .{ .Entity = content }, "Conflicts (if hooks ran in parallel)", false, options);
+    const lines: Widgets.Parent = .{ .Entity = section.Content.? };
+    const measure_row = try Widgets.Checkbox(engine_context, lines, "Measure (ticking it starts fresh counts)", options);
+    var row_children = measure_row.GetIterator(.Child);
+    self.mMeasureBox = row_children.next().?;
+    self.mConflictTotal = try Widgets.Label(engine_context, lines, "");
+    for (&self.mConflictLines) |*line| line.* = try Widgets.Label(engine_context, lines, "");
+}
+
+/// Measuring follows the checkbox, and starts from nothing each time it is ticked
+fn SyncMeasuring(self: *StatsPanel, engine_context: *EngineContext) !void {
+    const conflicts = &engine_context.mSystems.mConflicts;
+    const ticked = self.mMeasureBox.HasComponent(SelectedTag);
+    if (ticked == conflicts.mOn) return;
+    if (ticked) conflicts.Clear(engine_context.EngineAllocator());
+    conflicts.mOn = ticked;
+}
+
+/// The total and a line for each of the systems with the most hooks: how many of its hooks would conflict, how many
+/// would run on their own, and the type most of its conflicts were on
+fn SetConflicts(self: *StatsPanel, engine_context: *EngineContext, conflicts: *const ConflictReport) !void {
+    const frame_allocator = engine_context.FrameAllocator();
+    var hooks: u64 = 0;
+    var conflicting: u64 = 0;
+    var serial: u64 = 0;
+    for (conflicts.mSystems.values()) |counts| {
+        hooks += counts.mHooks;
+        conflicting += counts.mConflicts;
+        serial += counts.mSerial;
+    }
+    if (hooks == 0) {
+        try SetLine(engine_context, self.mConflictTotal, "{s}", .{if (conflicts.mOn) "Measuring: no hooks have run yet" else "Not measuring"});
+    } else {
+        const percent = 100 * @as(f64, @floatFromInt(conflicting)) / @as(f64, @floatFromInt(hooks));
+        try SetLine(engine_context, self.mConflictTotal, "{d} of {d} hooks would conflict ({d:.1}%), {d} would run on their own", .{ conflicting, hooks, percent, serial });
+    }
+
+    //the systems with the most hooks first
+    const order = try frame_allocator.alloc(usize, conflicts.mSystems.count());
+    for (order, 0..) |*index, i| index.* = i;
+    const values = conflicts.mSystems.values();
+    std.mem.sort(usize, order, values, struct {
+        fn MoreHooks(all: []const ConflictReport.Counts, a: usize, b: usize) bool {
+            return all[a].mHooks > all[b].mHooks;
+        }
+    }.MoreHooks);
+
+    for (self.mConflictLines, 0..) |line, line_ind| {
+        if (line_ind >= order.len) {
+            try SetLine(engine_context, line, "", .{});
+            continue;
+        }
+        const name = conflicts.mSystems.keys()[order[line_ind]];
+        const counts = values[order[line_ind]];
+        try SetLine(engine_context, line, "{s}: {d} of {d} would conflict, {d} on their own, {d} runs{s}{s}", .{
+            ShortName(name),
+            counts.mConflicts,
+            counts.mHooks,
+            counts.mSerial,
+            counts.mBatches,
+            if (counts.mTypes.count() > 0) ", mostly on " else "",
+            MostCounted(counts),
+        });
+    }
+}
+
+/// A system's or type's name without what is in front of its last '.' or "::"
+fn ShortName(name: []const u8) []const u8 {
+    const after_colons = if (std.mem.lastIndexOf(u8, name, "::")) |at| name[at + 2 ..] else name;
+    // a type name's dots, but not those inside the brackets of a script loop's name
+    if (std.mem.indexOfScalar(u8, after_colons, '(') != null) return after_colons;
+    return if (std.mem.lastIndexOfScalar(u8, after_colons, '.')) |at| after_colons[at + 1 ..] else after_colons;
+}
+
+/// The type most of a system's conflicts were on, "" if none
+fn MostCounted(counts: ConflictReport.Counts) []const u8 {
+    var best: []const u8 = "";
+    var best_count: u64 = 0;
+    for (counts.mTypes.keys(), counts.mTypes.values()) |type_name, count| {
+        if (count > best_count) {
+            best = ShortName(type_name);
+            best_count = count;
+        }
+    }
+    return best;
 }
 
 /// A world's folded section, and its lines

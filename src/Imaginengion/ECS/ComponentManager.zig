@@ -236,6 +236,11 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return internal_array.GetComponent(entityID);
         }
 
+        /// ArrayOf for a component known only by its slot
+        pub fn ArrayOfInd(self: Self, component_ind: usize) *anyopaque {
+            return self.mComponentsArrays.items[component_ind].mPtr;
+        }
+
         /// The array `component_type` lives in, behind its erased pointer: what a transaction's copy names it by
         pub fn ArrayOf(self: Self, comptime component_type: type) *anyopaque {
             return self.mComponentsArrays.items[ComponentInd(component_type)].mPtr;

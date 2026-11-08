@@ -1,6 +1,7 @@
 const std = @import("std");
 const InternalComponentArray = @import("InternalComponentArray.zig").InternalComponentArray;
 const EngineContext = @import("../Core/EngineContext.zig");
+const Transaction = @import("Transaction.zig");
 
 pub fn ComponentArray(entity_t: type) type {
     const VTab = struct {
@@ -15,6 +16,7 @@ pub fn ComponentArray(entity_t: type) type {
         AddStaged: *const fn (*anyopaque, std.mem.Allocator, entity_t, *anyopaque) anyerror!void,
         DeinitStaged: *const fn (*EngineContext, *anyopaque) void,
         CloneStaged: *const fn (*EngineContext, std.mem.Allocator, *const anyopaque) anyerror!*anyopaque,
+        CommitCopy: *const fn (*anyopaque, *EngineContext, u64, *anyopaque) void,
     };
     return struct {
         const Self = @This();
@@ -91,6 +93,7 @@ pub fn ComponentArray(entity_t: type) type {
                     .AddStaged = impl.AddStaged,
                     .DeinitStaged = impl.DeinitStaged,
                     .CloneStaged = impl.CloneStaged,
+                    .CommitCopy = internal_type.CommitCopy,
                 },
             };
         }
@@ -134,6 +137,12 @@ pub fn ComponentArray(entity_t: type) type {
         /// array's component type.
         pub fn DeinitStaged(self: Self, engine_context: *EngineContext, staged: *anyopaque) void {
             self.mVtable.DeinitStaged(engine_context, staged);
+        }
+        /// How a transaction copies this array's components in, puts them back and drops them (Transaction.Copy).
+        /// Pointers into the engine's own code, made when the ECS was: a script DLL's copy of the ECS code goes through
+        /// these rather than compiling every component type's Clone and Deinit itself
+        pub fn CopyFns(self: Self) Transaction.CopyFns {
+            return .{ .mClone = self.mVtable.CloneStaged, .mCommit = self.mVtable.CommitCopy, .mDiscard = self.mVtable.DeinitStaged };
         }
         /// A copy of a staged component in `arena`, cloned if the type has a Clone. `source` has to point at a value
         /// of this array's component type.

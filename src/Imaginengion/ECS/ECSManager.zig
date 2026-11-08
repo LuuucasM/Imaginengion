@@ -1,6 +1,5 @@
 const std = @import("std");
 const ComponentManager = @import("ComponentManager.zig").ComponentManager;
-const InternalComponentArray = @import("InternalComponentArray.zig").InternalComponentArray;
 const Transaction = @import("Transaction.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -321,6 +320,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         /// How many entities currently have `component_type`, without building a group.
         pub fn NumWithComponent(self: Self, comptime component_type: type) usize {
             _ValidateType(component_type);
+            if (self._Measuring()) |transaction| self._NoteTypeRead(transaction, component_type, .Membership);
             var count = self.mComponentManager.NumWithComponent(component_type);
             if (self.mStaged.count() > 0) {
                 var staged_keys = self.mStaged.keyIterator();
@@ -335,6 +335,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         /// ids. Only good until a component of that type is added or removed.
         pub fn GetComponentSlice(self: Self, comptime component_type: type) []const component_type {
             _ValidateType(component_type);
+            if (self._Measuring()) |transaction| self._NoteTypeRead(transaction, component_type, .Values);
             return self.mComponentManager.GetComponentSlice(component_type);
         }
 
@@ -345,12 +346,14 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             if (std.debug.runtime_safety and (comptime _Copies(component_type)) and self._OpenTransaction() != null) {
                 std.debug.panic("GetComponentSliceMut({s}) inside a transaction: a change to the slice couldn't be taken back", .{@typeName(component_type)});
             }
+            if (self._Measuring()) |transaction| self._NoteTypeRead(transaction, component_type, .Values);
             return self.mComponentManager.GetComponentSlice(component_type);
         }
 
         //for getting groups of entities
         pub fn GetGroup(self: Self, allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(entity_t) {
             _ValidateGroupQuery(query);
+            if (self._Measuring()) |transaction| self._NoteQueryReads(transaction, query);
             const zone = Tracy.ZoneInit(debug_name ++ "::GetGroup", @src());
             defer zone.Deinit();
 
@@ -521,6 +524,36 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         }
 
         // the transaction open now, if there is one
+        // the open transaction, if it is writing down what it reads and writes for the conflict report (Systems.mConflicts)
+        fn _Measuring(self: Self) ?*Transaction {
+            const transaction = self._OpenTransaction() orelse return null;
+            return if (transaction.mMeasuring) transaction else null;
+        }
+
+        fn _KeyInd(self: Self, component_ind: usize, entity_id: entity_t) Transaction.Key {
+            return .{ .mArray = self.mComponentManager.ArrayOfInd(component_ind), .mEntityID = entity_id };
+        }
+
+        fn _NoteRead(self: Self, transaction: *Transaction, component_ind: usize, entity_id: entity_t) void {
+            transaction.NoteRead(self._KeyInd(component_ind, entity_id), ComponentNames[component_ind]);
+        }
+
+        fn _NoteTypeRead(self: Self, transaction: *Transaction, comptime component_type: type, access: Transaction.TypeAccess) void {
+            transaction.NoteTypeRead(self.mComponentManager.ArrayOf(component_type), access, ComponentNames[ComponentInd(component_type)]);
+        }
+
+        // which entities have each type a query looks at
+        fn _NoteQueryReads(self: Self, transaction: *Transaction, comptime query: GroupQuery) void {
+            switch (query) {
+                .Component => |component_type| self._NoteTypeRead(transaction, component_type, .Membership),
+                .And, .Or => |queries| inline for (queries) |sub_query| self._NoteQueryReads(transaction, sub_query),
+                .Not => |not| {
+                    self._NoteQueryReads(transaction, not.mFirst.*);
+                    self._NoteQueryReads(transaction, not.mSecond.*);
+                },
+            }
+        }
+
         fn _OpenTransaction(self: Self) ?*Transaction {
             const transaction = self.mTransaction orelse return null;
             return transaction.*;
@@ -661,6 +694,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         // writes down a tag that has just gone on or come off, after _ReserveTagChange
         fn _NoteTagChange(self: *Self, transaction: ?*Transaction, entity_id: entity_t, component_ind: usize, added: bool) void {
             const open = transaction orelse return;
+            if (open.mMeasuring) open.NotePresenceWrite(self._KeyInd(component_ind, entity_id), ComponentNames[component_ind]);
             open.AddTagChange(.{ .mECS = self, .mEntityID = entity_id, .mComponentInd = component_ind, .mAdded = added, .mUndo = _UndoTagChange });
         }
 
@@ -715,6 +749,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         // lists a component already in the staging arena under its entity and queues its add
         fn _QueueStagedAdd(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize, staged_component: *anyopaque) !void {
             try self._NoteQueue();
+            if (self._Measuring()) |transaction| transaction.NotePresenceWrite(self._KeyInd(component_ind, entity_id), ComponentNames[component_ind]);
             const key = StagedKey{ .mEntityID = entity_id, .mComponentInd = component_ind };
             try self.mStaged.put(engine_allocator, key, staged_component);
             errdefer _ = self.mStaged.remove(key);
@@ -818,6 +853,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         pub fn HasComponent(self: Self, comptime ComponentType: type, entity_id: entity_t) bool {
             _ValidateType(ComponentType);
             std.debug.assert(self.IsActiveEntity(entity_id));
+            if (self._Measuring()) |transaction| self._NoteRead(transaction, ComponentInd(ComponentType), entity_id);
             return self.mComponentManager.HasComponent(ComponentType, entity_id) or
                 self._GetStaged(entity_id, ComponentInd(ComponentType)) != null;
         }
@@ -825,6 +861,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         /// HasComponent for a component known only by its slot (ComponentInd) at runtime
         pub fn HasComponentInd(self: Self, component_ind: usize, entity_id: entity_t) bool {
             std.debug.assert(self.IsActiveEntity(entity_id));
+            if (self._Measuring()) |transaction| self._NoteRead(transaction, component_ind, entity_id);
             return self.mComponentManager.HasComponentInd(component_ind, entity_id) or
                 self._GetStaged(entity_id, component_ind) != null;
         }
@@ -834,6 +871,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         pub fn GetComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*const component_type {
             _ValidateType(component_type);
             std.debug.assert(self.IsActiveEntity(entity_id));
+            if (self._Measuring()) |transaction| self._NoteRead(transaction, ComponentInd(component_type), entity_id);
             if (comptime _Copies(component_type)) {
                 if (self._OpenTransaction()) |transaction| {
                     if (transaction.Find(self._TransactionKey(component_type, entity_id))) |copy| return @ptrCast(@alignCast(copy));
@@ -847,6 +885,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         pub fn GetComponentMut(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
             _ValidateType(component_type);
             std.debug.assert(self.IsActiveEntity(entity_id));
+            //handed out to change counts as changed, whether or not it is: the copy is made either way
+            if (self._Measuring()) |transaction| {
+                self._NoteRead(transaction, ComponentInd(component_type), entity_id);
+                transaction.NoteValueWrite(self._KeyInd(ComponentInd(component_type), entity_id), ComponentNames[ComponentInd(component_type)]);
+            }
             if (comptime _Copies(component_type)) {
                 if (self._OpenTransaction()) |transaction| return self._CopyInto(transaction, component_type, entity_id);
             }
@@ -859,9 +902,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             const key = self._TransactionKey(component_type, entity_id);
             if (transaction.Find(key)) |copy| return @ptrCast(@alignCast(copy));
             const component = self.mComponentManager.GetComponent(component_type, entity_id) orelse return self._FindComponent(component_type, entity_id);
-            return transaction.Copy(key, component_type, component, InternalComponentArray(entity_t, component_type).CommitCopy) catch |err| {
+            const fns = self.mComponentManager.mComponentsArrays.items[ComponentInd(component_type)].CopyFns();
+            const copy = transaction.Copy(key, component, fns) catch |err| {
                 std.debug.panic("Copying {s} into a transaction: {s}", .{ @typeName(component_type), @errorName(err) });
             };
+            return @ptrCast(@alignCast(copy));
         }
 
         fn _TransactionKey(self: Self, comptime component_type: type, entity_id: entity_t) Transaction.Key {

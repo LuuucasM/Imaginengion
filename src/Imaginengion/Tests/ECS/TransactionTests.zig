@@ -431,3 +431,111 @@ test "a kept transaction runs its on-commit actions in order, a dropped one its 
     _ = layer.mSystems.RunTransaction(engine_context, AsksForActions, .{ &layer.mSystems, &dropped, false }, Keep);
     try std.testing.expectEqualStrings("21", dropped.mOrder[0..dropped.mCount]);
 }
+
+//----------------the conflict report (what would conflict if a batch ran in parallel)----------------
+
+const ConflictReport = @import("../../ECS/ConflictReport.zig");
+
+/// What a stand-in hook does
+const HookKind = enum { WritesPosition, ReadsPosition, AddsLabel, GroupsLabels, MakesBody };
+
+const Hook = struct {
+    mKind: HookKind,
+    mID: u32 = 0,
+    mKeep: bool = true,
+};
+
+fn RunsHook(bodies: *BodyECS, engine_context: *EngineContext, hook: Hook) bool {
+    switch (hook.mKind) {
+        .WritesPosition => bodies.GetComponentMut(Position, hook.mID).?.x = 9,
+        .ReadsPosition => _ = bodies.GetComponent(Position, hook.mID).?.x,
+        .AddsLabel => _ = bodies.AddComponent(engine_context, hook.mID, Label{}) catch unreachable,
+        .GroupsLabels => {
+            var group = bodies.GetGroup(engine_context.EngineAllocator(), .{ .Component = Label }) catch unreachable;
+            group.deinit(engine_context.EngineAllocator());
+        },
+        .MakesBody => _ = bodies.CreateEntity(engine_context.EngineAllocator()) catch unreachable,
+    }
+    return hook.mKeep;
+}
+
+/// Runs each hook in a transaction of its own, one after another: a batch, the way a script loop runs its hooks
+const TestBatch = struct {
+    pub const Name = "TestBatch";
+
+    pub fn Run(engine_context: *EngineContext, systems: *Systems, bodies: *BodyECS, hooks: []const Hook) void {
+        for (hooks) |hook| _ = systems.RunTransaction(engine_context, RunsHook, .{ bodies, engine_context, hook }, Keep);
+    }
+};
+
+/// Runs `hooks` as one batch with measuring on, and hands back what the report says about it
+fn Measured(layer: *TestLayer, hooks: []const Hook) !ConflictReport.Counts {
+    const conflicts = &layer.mSystems.mConflicts;
+    conflicts.Clear(layer.mEngineContext.EngineAllocator());
+    conflicts.mOn = true;
+    defer conflicts.mOn = false;
+    try layer.mSystems.RunSystem(TestBatch, layer.mEngineContext, .{ &layer.mSystems, &layer.mBodies, hooks });
+    return conflicts.mSystems.get(TestBatch.Name) orelse .{};
+}
+
+test "a hook reading what an earlier hook in its batch changed would conflict, on that type" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const id = try layer.NewBody(1);
+
+    const counts = try Measured(layer, &.{ .{ .mKind = .WritesPosition, .mID = id }, .{ .mKind = .ReadsPosition, .mID = id } });
+
+    try std.testing.expectEqual(@as(u64, 1), counts.mBatches);
+    try std.testing.expectEqual(@as(u64, 2), counts.mHooks);
+    try std.testing.expectEqual(@as(u64, 1), counts.mConflicts);
+    try std.testing.expectEqual(@as(usize, 1), counts.mTypes.count());
+    try std.testing.expect(std.mem.endsWith(u8, counts.mTypes.keys()[0], "Position"));
+}
+
+test "hooks touching different entities, or reading before the write, would not conflict" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const a = try layer.NewBody(1);
+    const b = try layer.NewBody(1);
+
+    const apart = try Measured(layer, &.{ .{ .mKind = .WritesPosition, .mID = a }, .{ .mKind = .ReadsPosition, .mID = b } });
+    try std.testing.expectEqual(@as(u64, 0), apart.mConflicts);
+
+    const read_first = try Measured(layer, &.{ .{ .mKind = .ReadsPosition, .mID = a }, .{ .mKind = .WritesPosition, .mID = a } });
+    try std.testing.expectEqual(@as(u64, 0), read_first.mConflicts);
+}
+
+test "a query after an add of the type it looks at would conflict" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const id = try layer.NewBody(1);
+
+    const counts = try Measured(layer, &.{ .{ .mKind = .AddsLabel, .mID = id }, .{ .mKind = .GroupsLabels } });
+
+    try std.testing.expectEqual(@as(u64, 1), counts.mConflicts);
+}
+
+test "a failed hook's writes don't count, and a hook that makes an object would run on its own" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const id = try layer.NewBody(1);
+
+    const failed = try Measured(layer, &.{ .{ .mKind = .WritesPosition, .mID = id, .mKeep = false }, .{ .mKind = .ReadsPosition, .mID = id } });
+    try std.testing.expectEqual(@as(u64, 0), failed.mConflicts);
+
+    const made = try Measured(layer, &.{ .{ .mKind = .MakesBody }, .{ .mKind = .ReadsPosition, .mID = id } });
+    try std.testing.expectEqual(@as(u64, 1), made.mSerial);
+    try std.testing.expectEqual(@as(u64, 0), made.mConflicts);
+}
+
+test "with measuring off nothing is written down" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const id = try layer.NewBody(1);
+
+    const hooks = [_]Hook{ .{ .mKind = .WritesPosition, .mID = id }, .{ .mKind = .ReadsPosition, .mID = id } };
+    try layer.mSystems.RunSystem(TestBatch, layer.mEngineContext, .{ &layer.mSystems, &layer.mBodies, hooks[0..] });
+
+    try std.testing.expectEqual(@as(usize, 0), layer.mSystems.mConflicts.mSystems.count());
+    try std.testing.expectEqual(@as(usize, 0), layer.mSystems.mTransaction.mReads.count());
+}

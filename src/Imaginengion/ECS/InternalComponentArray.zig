@@ -111,7 +111,7 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
             _ = try self.AddComponent(engine_allocator, entity_id, staged_component.*);
         }
         /// Puts a transaction's copy of the entity's component (Transaction.Copy) in its place, the old one deinitialized.
-        /// One the entity no longer has takes the copy with it. A Transaction.CommitFn
+        /// One the entity no longer has takes the copy with it. Transaction.CopyFns.mCommit, through ComponentArray
         pub fn CommitCopy(erased: *anyopaque, engine_context: *EngineContext, entity_id: u64, copy: *anyopaque) void {
             const self: *Self = @ptrCast(@alignCast(erased));
             const typed_copy: *component_type = @ptrCast(@alignCast(copy));

@@ -44,7 +44,33 @@ mOnDiscard: std.ArrayList(Action) = .empty,
 /// Why the transaction can't be dropped, null while it still can (MarkIrrevocable)
 mIrrevocable: ?[]const u8 = null,
 
+/// Whether this transaction writes down what it reads and writes, for the conflict report (Systems.mMeasuring). Set by Open
+mMeasuring: bool = false,
+/// While measuring: each component it read or wrote, by entity (a value, or whether it is there at all)
+mReads: std.AutoHashMapUnmanaged(Key, void) = .empty,
+mWrites: std.AutoHashMapUnmanaged(Key, void) = .empty,
+/// While measuring: each type it read or wrote as a whole (which entities have it, or every value)
+mTypeReads: std.AutoHashMapUnmanaged(TypeKey, void) = .empty,
+mTypeWrites: std.AutoHashMapUnmanaged(TypeKey, void) = .empty,
+/// While measuring: each array's component type name, for the report. Good until the transaction ends
+mNames: std.AutoHashMapUnmanaged(*anyopaque, []const u8) = .empty,
+/// While measuring, something couldn't be written down (out of memory): the report doesn't count this one
+mMeasureLost: bool = false,
+
 pub const empty: Transaction = .{};
+
+/// A whole component array (a type in one ECS) read or written as one, for the conflict report
+pub const TypeKey = struct {
+    mArray: *anyopaque,
+    mAccess: TypeAccess,
+};
+
+pub const TypeAccess = enum {
+    /// which entities have the type: GetGroup and NumWithComponent read it, adds and tags change it
+    Membership,
+    /// every value of the type: GetComponentSlice reads it, any change to a value changes it
+    Values,
+};
 
 /// Something to do when the transaction ends, with its data in the transaction's arena (OnCommit, OnDiscard)
 pub const Action = struct {
@@ -58,15 +84,22 @@ pub const Key = struct {
     mEntityID: u64,
 };
 
-/// Puts a copy in place of the component in `array`, or deinitializes the copy if the component is gone by then.
-/// Filled in for the copy's type by the array it came from (InternalComponentArray.CommitCopy)
-pub const CommitFn = *const fn (array: *anyopaque, engine_context: *EngineContext, entity_id: u64, copy: *anyopaque) void;
+/// How a component of one type is copied in, put back and dropped: the component array's own functions
+/// (ComponentArray.CopyFns), filled in by the engine when the ECS was made. Never the component type's functions
+/// themselves, which a script DLL's copy of this code would have to compile, C calls in their Deinit and all
+pub const CopyFns = struct {
+    /// A copy of the component in the arena given, deep for a type with a Clone
+    mClone: *const fn (engine_context: *EngineContext, arena: std.mem.Allocator, source: *const anyopaque) anyerror!*anyopaque,
+    /// Puts a copy in place of the component in `array`, or deinitializes the copy if the component is gone by then
+    mCommit: *const fn (array: *anyopaque, engine_context: *EngineContext, entity_id: u64, copy: *anyopaque) void,
+    /// Deinitializes a copy that won't be put back
+    mDiscard: *const fn (engine_context: *EngineContext, copy: *anyopaque) void,
+};
 
 const Entry = struct {
     mKey: Key,
     mCopy: *anyopaque,
-    mCommit: CommitFn,
-    mDiscard: *const fn (engine_context: *EngineContext, copy: *anyopaque) void,
+    mFns: CopyFns,
 };
 
 /// Where one ECS's queue stood before this transaction queued into it, and what cuts it back to there
@@ -102,6 +135,11 @@ pub fn Deinit(self: *Transaction, engine_allocator: std.mem.Allocator) void {
     self.mTagChanges.deinit(engine_allocator);
     self.mOnCommit.deinit(engine_allocator);
     self.mOnDiscard.deinit(engine_allocator);
+    self.mReads.deinit(engine_allocator);
+    self.mWrites.deinit(engine_allocator);
+    self.mTypeReads.deinit(engine_allocator);
+    self.mTypeWrites.deinit(engine_allocator);
+    self.mNames.deinit(engine_allocator);
     self.* = .empty;
 }
 
@@ -113,14 +151,55 @@ pub fn Find(self: *const Transaction, key: Key) ?*anyopaque {
     return self.mEntries.items[entry_ind].mCopy;
 }
 
-/// Starts the transaction, which has to be empty
-pub fn Open(self: *Transaction, engine_context: *EngineContext) void {
+/// Starts the transaction, which has to be empty. `measuring`: whether it writes down what it reads and writes
+pub fn Open(self: *Transaction, engine_context: *EngineContext, measuring: bool) void {
     std.debug.assert(self._IsEmpty());
     self.mEngineContext = engine_context;
+    self.mMeasuring = measuring;
+}
+
+//----------------what it reads and writes, while measuring (the ECSs call these, see Systems.mMeasuring)----------------
+
+/// A component of one entity read, its value or whether it is there. `name` is its type's, for the report
+pub fn NoteRead(self: *Transaction, key: Key, name: []const u8) void {
+    self._Note(&self.mReads, key, key.mArray, name);
+}
+
+/// A component's value changed (or handed out to change)
+pub fn NoteValueWrite(self: *Transaction, key: Key, name: []const u8) void {
+    self._Note(&self.mWrites, key, key.mArray, name);
+    self._Note(&self.mTypeWrites, TypeKey{ .mArray = key.mArray, .mAccess = .Values }, key.mArray, name);
+}
+
+/// A component put on or taken off an entity in a way the rest of the run sees at once (a staged add, a tag)
+pub fn NotePresenceWrite(self: *Transaction, key: Key, name: []const u8) void {
+    self._Note(&self.mWrites, key, key.mArray, name);
+    self._Note(&self.mTypeWrites, TypeKey{ .mArray = key.mArray, .mAccess = .Membership }, key.mArray, name);
+}
+
+/// A whole type read as one
+pub fn NoteTypeRead(self: *Transaction, array: *anyopaque, access: TypeAccess, name: []const u8) void {
+    self._Note(&self.mTypeReads, TypeKey{ .mArray = array, .mAccess = access }, array, name);
+}
+
+fn _Note(self: *Transaction, set: anytype, key: anytype, array: *anyopaque, name: []const u8) void {
+    const engine_allocator = self.mEngineContext.?.EngineAllocator();
+    set.put(engine_allocator, key, {}) catch {
+        self.mMeasureLost = true;
+        return;
+    };
+    self.mNames.put(engine_allocator, array, name) catch {
+        self.mMeasureLost = true;
+    };
+}
+
+/// The type name written down for `array`, for the report
+pub fn NameOf(self: *const Transaction, array: *anyopaque) []const u8 {
+    return self.mNames.get(array) orelse "?";
 }
 
 /// Copies `source`, the component `key` names, into the transaction and hands back the copy. There mustn't be one already
-pub fn Copy(self: *Transaction, key: Key, comptime T: type, source: *const T, commit: CommitFn) !*T {
+pub fn Copy(self: *Transaction, key: Key, source: *const anyopaque, fns: CopyFns) !*anyopaque {
     std.debug.assert(!self.mLookup.contains(key));
     const engine_context = self.mEngineContext.?;
     const engine_allocator = engine_context.EngineAllocator();
@@ -129,22 +208,11 @@ pub fn Copy(self: *Transaction, key: Key, comptime T: type, source: *const T, co
 
     var arena = self.mArena.promote(engine_allocator);
     defer self.mArena = arena.state;
-    const copy = try arena.allocator().create(T);
     // a component that owns memory copies itself, so the copy can change it without touching the original's
-    copy.* = if (@hasDecl(T, "Clone")) try source.Clone(engine_context) else source.*;
+    const copy = try fns.mClone(engine_context, arena.allocator(), source);
 
     self.mLookup.putAssumeCapacity(key, self.mEntries.items.len);
-    self.mEntries.appendAssumeCapacity(.{
-        .mKey = key,
-        .mCopy = copy,
-        .mCommit = commit,
-        .mDiscard = struct {
-            fn Discard(context: *EngineContext, erased: *anyopaque) void {
-                const typed: *T = @ptrCast(@alignCast(erased));
-                typed.Deinit(context);
-            }
-        }.Discard,
-    });
+    self.mEntries.appendAssumeCapacity(.{ .mKey = key, .mCopy = copy, .mFns = fns });
     return copy;
 }
 
@@ -226,7 +294,7 @@ pub fn Commit(self: *Transaction, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("Transaction::Commit", @src());
     defer zone.Deinit();
     zone.Value(self.mEntries.items.len);
-    for (self.mEntries.items) |entry| entry.mCommit(entry.mKey.mArray, engine_context, entry.mKey.mEntityID, entry.mCopy);
+    for (self.mEntries.items) |entry| entry.mFns.mCommit(entry.mKey.mArray, engine_context, entry.mKey.mEntityID, entry.mCopy);
     for (self.mOnCommit.items) |action| action.mRun(engine_context, action.mData);
     self._Reset(engine_context.EngineAllocator());
 }
@@ -272,7 +340,7 @@ pub fn Discard(self: *Transaction, engine_context: *EngineContext) void {
         change.mUndo(change.mECS, engine_context, change.mEntityID, change.mComponentInd, change.mAdded);
     }
 
-    for (self.mEntries.items) |entry| entry.mDiscard(engine_context, entry.mCopy);
+    for (self.mEntries.items) |entry| entry.mFns.mDiscard(engine_context, entry.mCopy);
     self._Reset(engine_context.EngineAllocator());
 }
 
@@ -295,4 +363,11 @@ fn _Reset(self: *Transaction, engine_allocator: std.mem.Allocator) void {
     self.mOnCommit.clearRetainingCapacity();
     self.mOnDiscard.clearRetainingCapacity();
     self.mIrrevocable = null;
+    self.mMeasuring = false;
+    self.mMeasureLost = false;
+    self.mReads.clearRetainingCapacity();
+    self.mWrites.clearRetainingCapacity();
+    self.mTypeReads.clearRetainingCapacity();
+    self.mTypeWrites.clearRetainingCapacity();
+    self.mNames.clearRetainingCapacity();
 }

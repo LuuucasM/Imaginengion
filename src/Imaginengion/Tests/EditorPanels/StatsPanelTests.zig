@@ -12,6 +12,7 @@ const EditorShell = @import("../../Programs/EditorShell.zig");
 const UIManager = @import("../../UI/UIManager.zig");
 const UIComponents = @import("../../ECSComponents/UIComponents.zig");
 const TextComponent = @import("../../ECSComponents/EComponents.zig").TextComponent;
+const SelectedTag = @import("../../ECSComponents/EComponents.zig").SelectedTag;
 
 fn TextOf(label: Entity) []const u8 {
     return label.GetComponent(TextComponent).?.mText.items;
@@ -88,4 +89,47 @@ test "the stats window starts closed, opens and closes, and shows the loop, the 
     const shown_before = try engine_context.FrameAllocator().dupe(u8, TextOf(panel.mLoopTime));
     try panel.Update(engine_context, &engine_context.mEngineStats);
     try std.testing.expect(!std.mem.eql(u8, shown_before, TextOf(panel.mLoopTime)));
+}
+
+test "ticking Measure turns conflict measuring on from fresh counts, and the section shows what it found" {
+    const engine_context = try std.heap.page_allocator.create(EngineContext);
+    defer std.heap.page_allocator.destroy(engine_context);
+    engine_context.* = .{};
+    try engine_context.mUIManager.Init(engine_context);
+    try engine_context.mEditorWorld.Init(engine_context);
+    defer {
+        engine_context.mEditorWorld.Deinit(engine_context);
+        engine_context.mUIManager.Deinit(engine_context);
+        _ = engine_context._Internal.EngineGPA.deinit();
+    }
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const conflicts = &engine_context.mSystems.mConflicts;
+
+    var panel = try StatsPanel.Build(engine_context, scene, .{ .StockScripts = false });
+    try panel.Toggle(engine_context);
+    try panel.Update(engine_context, &engine_context.mEngineStats);
+    try std.testing.expect(!conflicts.mOn);
+    try std.testing.expectEqualStrings("Not measuring", TextOf(panel.mConflictTotal));
+
+    //what the stock Toggle script does when the box is clicked
+    _ = try panel.mMeasureBox.AddComponent(engine_context, SelectedTag{});
+    try panel.Update(engine_context, &engine_context.mEngineStats);
+    try std.testing.expect(conflicts.mOn);
+
+    //a batch found by measuring: 4 hooks of a loop, 1 of which would conflict, on a transform
+    {
+        const allocator = engine_context.EngineAllocator();
+        const entry = try conflicts.mSystems.getOrPut(allocator, "ScriptsProcessor::RunScript(Entity, OnUpdateScript, Game)");
+        entry.key_ptr.* = try allocator.dupe(u8, entry.key_ptr.*);
+        entry.value_ptr.* = .{ .mBatches = 2, .mHooks = 4, .mConflicts = 1 };
+        try entry.value_ptr.mTypes.put(allocator, try allocator.dupe(u8, "ECSComponents.Shared.TransformComponent"), 1);
+    }
+    engine_context.mDT = StatsPanel.REFRESH_SECONDS;
+    try panel.Update(engine_context, &engine_context.mEngineStats);
+    try std.testing.expectEqualStrings("1 of 4 hooks would conflict (25.0%), 0 would run on their own", TextOf(panel.mConflictTotal));
+    try std.testing.expectEqualStrings("RunScript(Entity, OnUpdateScript, Game): 1 of 4 would conflict, 0 on their own, 2 runs, mostly on TransformComponent", TextOf(panel.mConflictLines[0]));
+
+    try panel.mMeasureBox.RemoveComponentSync(engine_context, SelectedTag);
+    try panel.Update(engine_context, &engine_context.mEngineStats);
+    try std.testing.expect(!conflicts.mOn);
 }

@@ -444,3 +444,46 @@ test "a failed hook that did something that can't be taken back is kept whole" {
 
     try std.testing.expectEqual(@as(f32, 7), entity.GetComponent(TransformComponent).?.GetTranslation().x);
 }
+
+//----------------the conflict report----------------
+
+/// The entity both ScoreBumpers change
+var gScoreboard: Entity = .uninit;
+
+/// Changes the scoreboard's AttribComponent, the way two Pong scripts would both change the game state
+const ScoreBumper = struct {
+    pub fn OnUpdate(_: *ScoreBumper, _: *EngineContext, _: Entity) !ScriptABI.ScriptResult {
+        const attrib = gScoreboard.GetComponentMut(EntityComponents.AttribComponent).?;
+        attrib.mData = .default;
+        return .Continue;
+    }
+};
+const ScoreBumperExports = ScriptExport.Exports(ScoreBumper, "ScoreBumper", &.{});
+
+test "two scripts in one loop changing the same component are reported as a conflict, under that loop and type" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const conflicts = &engine_context.mSystems.mConflicts;
+
+    gScoreboard = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try gScoreboard.AddComponent(engine_context, EntityComponents.AttribComponent{});
+    var handle = try world.ScriptAssetFor(&ScoreBumperExports.info);
+    defer handle.ReleaseAsset();
+    _ = try world.EntityWithScript(handle);
+    _ = try world.EntityWithScript(handle);
+
+    conflicts.mOn = true;
+    try world.RunUpdateScripts();
+    conflicts.mOn = false;
+
+    var found = false;
+    for (conflicts.mSystems.keys(), conflicts.mSystems.values()) |name, counts| {
+        if (std.mem.indexOf(u8, name, "RunScript") == null) continue;
+        found = true;
+        try std.testing.expectEqual(@as(u64, 2), counts.mHooks);
+        try std.testing.expectEqual(@as(u64, 1), counts.mConflicts);
+        try std.testing.expect(std.mem.endsWith(u8, counts.mTypes.keys()[0], "AttribComponent"));
+    }
+    try std.testing.expect(found);
+}
