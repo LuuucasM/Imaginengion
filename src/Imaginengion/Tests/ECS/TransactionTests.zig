@@ -1,10 +1,11 @@
-//! Transactions in the systems layer (ECS/Transaction.zig, Systems.RunTransaction): what code changes in a component
+//! The transactions layer (ECS/Transaction.zig, Transactions.RunTransaction): what code changes in a component
 //! inside one is kept apart until it returns, then put in or dropped as if it never happened. Run with
 //! `zig build test-engine`.
 const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ECS = @import("../../ECS/ECSManager.zig");
 const Systems = @import("../../ECS/Systems.zig");
+const Transactions = @import("../../ECS/Transactions.zig");
 
 const Position = struct {
     pub const Name: []const u8 = "Position";
@@ -35,25 +36,30 @@ const Frozen = struct {
 
 const BodyECS = ECS.ECSManager(u32, &[_]type{ Position, Label, Frozen }, "TransactionBodyECS");
 
-/// One registered ECS, the layer, and the minimal EngineContext they need. Deinit fails the test on a leak
+/// One registered ECS, and the minimal EngineContext it needs: the systems and transactions layers are the context's
+/// own, as they are in the engine. Deinit fails the test on a leak
 const TestLayer = struct {
     mEngineContext: *EngineContext,
-    mSystems: Systems = .empty,
+    mSystems: *Systems,
+    mTransactions: *Transactions,
     mBodies: BodyECS = .empty,
 
     fn Init() !*TestLayer {
         const self = try std.heap.page_allocator.create(TestLayer);
-        self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
-        self.mEngineContext.* = .{};
-        const engine_allocator = self.mEngineContext.EngineAllocator();
+        const engine_context = try std.heap.page_allocator.create(EngineContext);
+        engine_context.* = .{};
+        self.* = .{ .mEngineContext = engine_context, .mSystems = &engine_context.mSystems, .mTransactions = &engine_context.mTransactions };
+        const engine_allocator = engine_context.EngineAllocator();
         try self.mBodies.Init(engine_allocator);
         try self.mSystems.Register(engine_allocator, &self.mBodies);
+        self.mTransactions.Register(&self.mBodies);
         return self;
     }
 
     fn Deinit(self: *TestLayer) !void {
         const engine_context = self.mEngineContext;
         self.mSystems.Unregister(engine_context.EngineAllocator(), &self.mBodies);
+        self.mTransactions.Unregister(engine_context.EngineAllocator(), &self.mBodies);
         self.mBodies.Deinit(engine_context);
         const leak_check = engine_context._Internal.EngineGPA.deinit();
         std.heap.page_allocator.destroy(engine_context);
@@ -109,13 +115,13 @@ test "a change made in a transaction is put in when it is kept, and the code see
     const id = try layer.NewBody(1);
     var seen: Seen = .{};
 
-    _ = layer.mSystems.RunTransaction(layer.mEngineContext, MovesTo5, .{ &layer.mBodies, id, &seen, true }, Keep);
+    _ = layer.mTransactions.RunTransaction(layer.mEngineContext, MovesTo5, .{ &layer.mBodies, id, &seen, true }, Keep);
 
     try std.testing.expectEqual(@as(f32, 5), seen.mOwnChange);
     try std.testing.expectEqual(@as(f32, 1), seen.mStorageDuring);
     try std.testing.expect(seen.mSameCopy);
     try std.testing.expectEqual(@as(f32, 5), layer.X(id));
-    try std.testing.expect(layer.mSystems.mOpenTransaction == null);
+    try std.testing.expect(layer.mTransactions.mOpenTransaction == null);
 }
 
 test "a change made in a transaction that isn't kept is dropped" {
@@ -124,7 +130,7 @@ test "a change made in a transaction that isn't kept is dropped" {
     const id = try layer.NewBody(1);
     var seen: Seen = .{};
 
-    _ = layer.mSystems.RunTransaction(layer.mEngineContext, MovesTo5, .{ &layer.mBodies, id, &seen, false }, Keep);
+    _ = layer.mTransactions.RunTransaction(layer.mEngineContext, MovesTo5, .{ &layer.mBodies, id, &seen, false }, Keep);
 
     try std.testing.expectEqual(@as(f32, 5), seen.mOwnChange);
     try std.testing.expectEqual(@as(f32, 1), layer.X(id));
@@ -156,8 +162,8 @@ test "a component that owns memory is deep copied: kept or dropped, nothing leak
     const kept = try layer.NewLabel("kept");
     const dropped = try layer.NewLabel("dropped");
 
-    _ = layer.mSystems.RunTransaction(engine_context, Appends, .{ &layer.mBodies, engine_context, kept, true }, Keep);
-    _ = layer.mSystems.RunTransaction(engine_context, Appends, .{ &layer.mBodies, engine_context, dropped, false }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, Appends, .{ &layer.mBodies, engine_context, kept, true }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, Appends, .{ &layer.mBodies, engine_context, dropped, false }, Keep);
 
     try std.testing.expectEqualStrings("kept and more, enough to grow the list", layer.mBodies.GetComponent(Label, kept).?.mText.items);
     try std.testing.expectEqualStrings("dropped", layer.mBodies.GetComponent(Label, dropped).?.mText.items);
@@ -176,15 +182,15 @@ test "a component changed then removed in a kept transaction is put in, then rem
     const engine_context = layer.mEngineContext;
     const id = try layer.NewLabel("going");
 
-    _ = layer.mSystems.RunTransaction(engine_context, AppendsThenRemoves, .{ &layer.mBodies, engine_context, id }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, AppendsThenRemoves, .{ &layer.mBodies, engine_context, id }, Keep);
 
     try std.testing.expect(!layer.mBodies.HasComponent(Label, id));
 }
 
 /// Moves the body to 5 inside a transaction of its own that says not to keep it, then hands back `keep`
-fn MovesInsideAnother(systems: *Systems, engine_context: *EngineContext, bodies: *BodyECS, id: u32, keep: bool) bool {
+fn MovesInsideAnother(transactions: *Transactions, engine_context: *EngineContext, bodies: *BodyECS, id: u32, keep: bool) bool {
     var seen: Seen = .{};
-    _ = systems.RunTransaction(engine_context, MovesTo5, .{ bodies, id, &seen, false }, Keep);
+    _ = transactions.RunTransaction(engine_context, MovesTo5, .{ bodies, id, &seen, false }, Keep);
     return keep;
 }
 
@@ -195,8 +201,8 @@ test "a transaction inside another is part of it, and goes or stays with it" {
     const kept = try layer.NewBody(1);
     const dropped = try layer.NewBody(1);
 
-    _ = layer.mSystems.RunTransaction(engine_context, MovesInsideAnother, .{ &layer.mSystems, engine_context, &layer.mBodies, kept, true }, Keep);
-    _ = layer.mSystems.RunTransaction(engine_context, MovesInsideAnother, .{ &layer.mSystems, engine_context, &layer.mBodies, dropped, false }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, MovesInsideAnother, .{ layer.mTransactions, engine_context, &layer.mBodies, kept, true }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, MovesInsideAnother, .{ layer.mTransactions, engine_context, &layer.mBodies, dropped, false }, Keep);
 
     try std.testing.expectEqual(@as(f32, 5), layer.X(kept));
     try std.testing.expectEqual(@as(f32, 1), layer.X(dropped));
@@ -214,8 +220,8 @@ test "a transaction that is used again starts empty" {
     const engine_context = layer.mEngineContext;
     const ids = [_]u32{ try layer.NewBody(1), try layer.NewBody(1), try layer.NewBody(1) };
 
-    _ = layer.mSystems.RunTransaction(engine_context, MovesAll, .{ &layer.mBodies, ids[0..], false }, Keep);
-    _ = layer.mSystems.RunTransaction(engine_context, MovesAll, .{ &layer.mBodies, ids[0..1], true }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, MovesAll, .{ &layer.mBodies, ids[0..], false }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, MovesAll, .{ &layer.mBodies, ids[0..1], true }, Keep);
 
     try std.testing.expectEqual(@as(f32, 10), layer.X(ids[0]));
     try std.testing.expectEqual(@as(f32, 1), layer.X(ids[1]));
@@ -243,7 +249,7 @@ test "an object made in a kept transaction lands with what was added to it" {
     var made: u32 = undefined;
     var child: u32 = undefined;
 
-    _ = layer.mSystems.RunTransaction(engine_context, MakesBody, .{ &layer.mBodies, engine_context, &made, &child, true }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, MakesBody, .{ &layer.mBodies, engine_context, &made, &child, true }, Keep);
 
     try std.testing.expect(layer.mBodies.IsActiveEntity(made));
     try std.testing.expect(layer.mBodies.IsActiveEntity(child));
@@ -260,7 +266,7 @@ test "an object made in a dropped transaction is destroyed, children and staged 
     var made: u32 = undefined;
     var child: u32 = undefined;
 
-    _ = layer.mSystems.RunTransaction(engine_context, MakesBody, .{ &layer.mBodies, engine_context, &made, &child, false }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, MakesBody, .{ &layer.mBodies, engine_context, &made, &child, false }, Keep);
 
     try std.testing.expect(!layer.mBodies.IsActiveEntity(made));
     try std.testing.expect(!layer.mBodies.IsActiveEntity(child));
@@ -293,8 +299,8 @@ test "adds, removals and destroys on objects that were there before land when ke
     const kept = Existing{ .mAddTo = try layer.NewBody(1), .mRemoveFrom = try layer.NewBody(1), .mDestroy = try layer.NewBody(1) };
     const dropped = Existing{ .mAddTo = try layer.NewBody(1), .mRemoveFrom = try layer.NewBody(1), .mDestroy = try layer.NewBody(1) };
 
-    _ = layer.mSystems.RunTransaction(engine_context, ChangesExisting, .{ &layer.mBodies, engine_context, kept, true }, Keep);
-    _ = layer.mSystems.RunTransaction(engine_context, ChangesExisting, .{ &layer.mBodies, engine_context, dropped, false }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, ChangesExisting, .{ &layer.mBodies, engine_context, kept, true }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, ChangesExisting, .{ &layer.mBodies, engine_context, dropped, false }, Keep);
 
     try std.testing.expectEqualStrings("added", layer.mBodies.GetComponent(Label, kept.mAddTo).?.mText.items);
     try std.testing.expect(!layer.mBodies.HasComponent(Position, kept.mRemoveFrom));
@@ -323,13 +329,13 @@ test "tags put on or taken off in a dropped transaction are put back as they wer
     const thawed = try layer.NewBody(1);
     const flicker = try layer.NewBody(1);
 
-    _ = layer.mSystems.RunTransaction(engine_context, MovesTags, .{ &layer.mBodies, engine_context, frozen, thawed, flicker, false }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, MovesTags, .{ &layer.mBodies, engine_context, frozen, thawed, flicker, false }, Keep);
 
     try std.testing.expect(layer.mBodies.HasComponent(Frozen, frozen));
     try std.testing.expect(!layer.mBodies.HasComponent(Frozen, thawed));
     try std.testing.expect(!layer.mBodies.HasComponent(Frozen, flicker));
 
-    _ = layer.mSystems.RunTransaction(engine_context, MovesTags, .{ &layer.mBodies, engine_context, frozen, thawed, flicker, true }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, MovesTags, .{ &layer.mBodies, engine_context, frozen, thawed, flicker, true }, Keep);
 
     try std.testing.expect(!layer.mBodies.HasComponent(Frozen, frozen));
     try std.testing.expect(layer.mBodies.HasComponent(Frozen, thawed));
@@ -350,8 +356,8 @@ test "a child made in a dropped transaction leaves its parent's list as it was" 
     const parent = try layer.NewBody(1);
     const first_child = try layer.mBodies.AddChild(engine_context, parent, .Entity);
 
-    _ = layer.mSystems.RunTransaction(engine_context, AddsChild, .{ &layer.mBodies, engine_context, childless, false }, Keep);
-    _ = layer.mSystems.RunTransaction(engine_context, AddsChild, .{ &layer.mBodies, engine_context, parent, false }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, AddsChild, .{ &layer.mBodies, engine_context, childless, false }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, AddsChild, .{ &layer.mBodies, engine_context, parent, false }, Keep);
 
     try std.testing.expect(!layer.mBodies.HasComponent(BodyECS.ParentComponent, childless));
     const only = layer.mBodies.GetComponent(BodyECS.ChildComponent, first_child).?;
@@ -370,9 +376,9 @@ fn DestroysAndDrops(bodies: *BodyECS, engine_context: *EngineContext, id: u32) b
 const QueuesThenDrops = struct {
     pub const Name = "QueuesThenDrops";
 
-    pub fn Run(engine_context: *EngineContext, systems: *Systems, bodies: *BodyECS, before: u32, inside: u32) !void {
+    pub fn Run(engine_context: *EngineContext, transactions: *Transactions, bodies: *BodyECS, before: u32, inside: u32) !void {
         try bodies.DestroyEntity(engine_context, before);
-        _ = systems.RunTransaction(engine_context, DestroysAndDrops, .{ bodies, engine_context, inside }, Keep);
+        _ = transactions.RunTransaction(engine_context, DestroysAndDrops, .{ bodies, engine_context, inside }, Keep);
     }
 };
 
@@ -383,7 +389,7 @@ test "a transaction dropped inside a run only drops its own changes, not what th
     const before = try layer.NewBody(1);
     const inside = try layer.NewBody(1);
 
-    try layer.mSystems.RunSystem(QueuesThenDrops, engine_context, .{ &layer.mSystems, &layer.mBodies, before, inside });
+    try layer.mSystems.RunSystem(QueuesThenDrops, engine_context, .{ layer.mTransactions, &layer.mBodies, before, inside });
 
     try std.testing.expect(!layer.mBodies.IsActiveEntity(before));
     try std.testing.expect(layer.mBodies.IsActiveEntity(inside));
@@ -409,8 +415,8 @@ const Ran = struct {
 };
 
 /// Asks for two actions on commit and two on discard, and hands back `keep`
-fn AsksForActions(systems: *Systems, ran: *Ran, keep: bool) bool {
-    const transaction = systems.OpenTransaction().?;
+fn AsksForActions(transactions: *Transactions, ran: *Ran, keep: bool) bool {
+    const transaction = transactions.OpenTransaction().?;
     transaction.OnCommit(Ran.Note{ .mRan = ran, .mMark = 'a' }, Ran.Note.Run) catch unreachable;
     transaction.OnDiscard(Ran.Note{ .mRan = ran, .mMark = '1' }, Ran.Note.Run) catch unreachable;
     transaction.OnCommit(Ran.Note{ .mRan = ran, .mMark = 'b' }, Ran.Note.Run) catch unreachable;
@@ -424,11 +430,11 @@ test "a kept transaction runs its on-commit actions in order, a dropped one its 
     const engine_context = layer.mEngineContext;
 
     var kept: Ran = .{};
-    _ = layer.mSystems.RunTransaction(engine_context, AsksForActions, .{ &layer.mSystems, &kept, true }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, AsksForActions, .{ layer.mTransactions, &kept, true }, Keep);
     try std.testing.expectEqualStrings("ab", kept.mOrder[0..kept.mCount]);
 
     var dropped: Ran = .{};
-    _ = layer.mSystems.RunTransaction(engine_context, AsksForActions, .{ &layer.mSystems, &dropped, false }, Keep);
+    _ = layer.mTransactions.RunTransaction(engine_context, AsksForActions, .{ layer.mTransactions, &dropped, false }, Keep);
     try std.testing.expectEqualStrings("21", dropped.mOrder[0..dropped.mCount]);
 }
 
@@ -463,18 +469,18 @@ fn RunsHook(bodies: *BodyECS, engine_context: *EngineContext, hook: Hook) bool {
 const TestBatch = struct {
     pub const Name = "TestBatch";
 
-    pub fn Run(engine_context: *EngineContext, systems: *Systems, bodies: *BodyECS, hooks: []const Hook) void {
-        for (hooks) |hook| _ = systems.RunTransaction(engine_context, RunsHook, .{ bodies, engine_context, hook }, Keep);
+    pub fn Run(engine_context: *EngineContext, transactions: *Transactions, bodies: *BodyECS, hooks: []const Hook) void {
+        for (hooks) |hook| _ = transactions.RunTransaction(engine_context, RunsHook, .{ bodies, engine_context, hook }, Keep);
     }
 };
 
 /// Runs `hooks` as one batch with measuring on, and hands back what the report says about it
 fn Measured(layer: *TestLayer, hooks: []const Hook) !ConflictReport.Counts {
-    const conflicts = &layer.mSystems.mConflicts;
+    const conflicts = &layer.mTransactions.mConflicts;
     conflicts.Clear(layer.mEngineContext.EngineAllocator());
     conflicts.mOn = true;
     defer conflicts.mOn = false;
-    try layer.mSystems.RunSystem(TestBatch, layer.mEngineContext, .{ &layer.mSystems, &layer.mBodies, hooks });
+    try layer.mSystems.RunSystem(TestBatch, layer.mEngineContext, .{ layer.mTransactions, &layer.mBodies, hooks });
     return conflicts.mSystems.get(TestBatch.Name) orelse .{};
 }
 
@@ -534,8 +540,207 @@ test "with measuring off nothing is written down" {
     const id = try layer.NewBody(1);
 
     const hooks = [_]Hook{ .{ .mKind = .WritesPosition, .mID = id }, .{ .mKind = .ReadsPosition, .mID = id } };
-    try layer.mSystems.RunSystem(TestBatch, layer.mEngineContext, .{ &layer.mSystems, &layer.mBodies, hooks[0..] });
+    try layer.mSystems.RunSystem(TestBatch, layer.mEngineContext, .{ layer.mTransactions, &layer.mBodies, hooks[0..] });
 
-    try std.testing.expectEqual(@as(usize, 0), layer.mSystems.mConflicts.mSystems.count());
-    try std.testing.expectEqual(@as(usize, 0), layer.mSystems.mTransaction.mReads.count());
+    try std.testing.expectEqual(@as(usize, 0), layer.mTransactions.mConflicts.mSystems.count());
+    try std.testing.expectEqual(@as(usize, 0), layer.mTransactions.mTransaction.mReads.count());
+}
+
+//----------------batches (Transactions.RunBatch): Aria on one thread----------------
+
+/// What a batch hook does
+const BatchKind = enum {
+    /// adds 1 to the body's position, after reading it
+    Increments,
+    /// writes 9 to the body's position (handing it out to change counts as reading it too)
+    WritesNine,
+    /// reads the body's position, and writes down what it saw
+    ReadsX,
+    /// puts a label on the body
+    Labels,
+    /// writes down how many bodies have a label
+    CountsLabels,
+    /// puts Frozen on the body
+    Freezes,
+    /// writes down whether the body has Frozen
+    SeesFrozen,
+    /// makes a new body, which can't be done while speculating
+    Makes,
+    /// writes 5 to the body's position, then fails
+    WritesThenFails,
+    /// reads the body's position and writes it into mOther's
+    CopiesX,
+};
+
+const BatchHook = struct {
+    mKind: BatchKind,
+    mID: u32 = 0,
+    /// how many times it has run, kept or not
+    mRuns: u32 = 0,
+    /// what it saw the last time it ran
+    mSaw: f32 = 0,
+    /// what Makes made, once it could
+    mMade: ?u32 = null,
+    /// CopiesX: the body written to
+    mOther: u32 = 0,
+};
+
+fn RunsBatchHook(bodies: *BodyECS, engine_context: *EngineContext, hooks: []BatchHook, index: usize) bool {
+    const hook = &hooks[index];
+    hook.mRuns += 1;
+    switch (hook.mKind) {
+        .Increments => bodies.GetComponentMut(Position, hook.mID).?.x += 1,
+        .WritesNine => bodies.GetComponentMut(Position, hook.mID).?.x = 9,
+        .ReadsX => hook.mSaw = bodies.GetComponent(Position, hook.mID).?.x,
+        .Labels => _ = bodies.AddComponent(engine_context, hook.mID, Label{}) catch unreachable,
+        .CountsLabels => hook.mSaw = @floatFromInt(bodies.NumWithComponent(Label)),
+        .Freezes => _ = bodies.AddComponent(engine_context, hook.mID, Frozen{}) catch unreachable,
+        .SeesFrozen => hook.mSaw = if (bodies.HasComponent(Frozen, hook.mID)) 1 else 0,
+        .Makes => hook.mMade = bodies.CreateEntity(engine_context.EngineAllocator()) catch |err| {
+            std.debug.assert(err == error.RunSerially);
+            return true;
+        },
+        .CopiesX => {
+            const x = bodies.GetComponent(Position, hook.mID).?.x;
+            bodies.GetComponentMut(Position, hook.mOther).?.x = x;
+        },
+        .WritesThenFails => {
+            bodies.GetComponentMut(Position, hook.mID).?.x = 5;
+            return false;
+        },
+    }
+    return true;
+}
+
+fn RunBatchOf(layer: *TestLayer, hooks: []BatchHook) !void {
+    try layer.mTransactions.RunBatch(layer.mEngineContext, hooks.len, RunsBatchHook, .{ &layer.mBodies, layer.mEngineContext, hooks }, Keep);
+}
+
+test "hooks of a batch that touch different bodies all run once and are all kept" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const a = try layer.NewBody(1);
+    const b = try layer.NewBody(1);
+    var hooks = [_]BatchHook{ .{ .mKind = .Increments, .mID = a }, .{ .mKind = .Increments, .mID = b } };
+
+    try RunBatchOf(layer, &hooks);
+
+    try std.testing.expectEqual(@as(f32, 2), layer.X(a));
+    try std.testing.expectEqual(@as(f32, 2), layer.X(b));
+    try std.testing.expectEqual(@as(u32, 1), hooks[0].mRuns);
+    try std.testing.expectEqual(@as(u32, 1), hooks[1].mRuns);
+}
+
+test "a hook doesn't see another's change while speculating, conflicts, and sees it when run again" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const a = try layer.NewBody(1);
+    var hooks = [_]BatchHook{ .{ .mKind = .WritesNine, .mID = a }, .{ .mKind = .ReadsX, .mID = a } };
+
+    try RunBatchOf(layer, &hooks);
+
+    try std.testing.expectEqual(@as(u32, 2), hooks[1].mRuns);
+    try std.testing.expectEqual(@as(f32, 9), hooks[1].mSaw);
+    try std.testing.expectEqual(@as(f32, 9), layer.X(a));
+}
+
+test "hooks all changing one body come out as if run one after another: retried until each is kept" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const a = try layer.NewBody(0);
+    var hooks = [_]BatchHook{ .{ .mKind = .Increments, .mID = a }, .{ .mKind = .Increments, .mID = a }, .{ .mKind = .Increments, .mID = a } };
+
+    try RunBatchOf(layer, &hooks);
+
+    try std.testing.expectEqual(@as(f32, 3), layer.X(a));
+    try std.testing.expectEqual(@as(u32, 1), hooks[0].mRuns);
+    try std.testing.expectEqual(@as(u32, 2), hooks[1].mRuns);
+    try std.testing.expectEqual(@as(u32, 3), hooks[2].mRuns);
+}
+
+test "an add and a tag a hook holds aren't seen by the others until it is kept" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const a = try layer.NewBody(1);
+    var hooks = [_]BatchHook{
+        .{ .mKind = .Labels, .mID = a },
+        .{ .mKind = .CountsLabels },
+        .{ .mKind = .Freezes, .mID = a },
+        .{ .mKind = .SeesFrozen, .mID = a },
+    };
+
+    try RunBatchOf(layer, &hooks);
+
+    try std.testing.expectEqual(@as(u32, 2), hooks[1].mRuns);
+    try std.testing.expectEqual(@as(f32, 1), hooks[1].mSaw);
+    try std.testing.expectEqual(@as(u32, 2), hooks[3].mRuns);
+    try std.testing.expectEqual(@as(f32, 1), hooks[3].mSaw);
+    try std.testing.expect(layer.mBodies.HasComponent(Label, a));
+    try std.testing.expect(layer.mBodies.HasComponent(Frozen, a));
+}
+
+test "a hook that makes an object is refused while speculating and run on its own after the rounds" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const a = try layer.NewBody(1);
+    var hooks = [_]BatchHook{ .{ .mKind = .Makes }, .{ .mKind = .Increments, .mID = a } };
+
+    try RunBatchOf(layer, &hooks);
+
+    try std.testing.expectEqual(@as(u32, 2), hooks[0].mRuns);
+    try std.testing.expect(layer.mBodies.IsActiveEntity(hooks[0].mMade.?));
+    try std.testing.expectEqual(@as(f32, 2), layer.X(a));
+}
+
+test "a failed hook in a batch is dropped and not run again" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const a = try layer.NewBody(1);
+    var hooks = [_]BatchHook{ .{ .mKind = .WritesThenFails, .mID = a }, .{ .mKind = .ReadsX, .mID = a } };
+
+    try RunBatchOf(layer, &hooks);
+
+    try std.testing.expectEqual(@as(u32, 1), hooks[0].mRuns);
+    try std.testing.expectEqual(@as(u32, 1), hooks[1].mRuns);
+    try std.testing.expectEqual(@as(f32, 1), hooks[1].mSaw);
+    try std.testing.expectEqual(@as(f32, 1), layer.X(a));
+}
+
+test "two hooks writing the same thing without reading it conflict too: the later aborts (write after write)" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const a = try layer.NewBody(1);
+    //putting a tag on reads nothing, it only writes
+    var hooks = [_]BatchHook{ .{ .mKind = .Freezes, .mID = a }, .{ .mKind = .Freezes, .mID = a } };
+
+    try RunBatchOf(layer, &hooks);
+
+    try std.testing.expectEqual(@as(u32, 1), hooks[0].mRuns);
+    try std.testing.expectEqual(@as(u32, 2), hooks[1].mRuns);
+    try std.testing.expect(layer.mBodies.HasComponent(Frozen, a));
+}
+
+test "a hook that aborts still reserved what it wrote, so a later hook reading it aborts too (Aria's reservations)" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const a = try layer.NewBody(1);
+    const b = try layer.NewBody(2);
+    var hooks = [_]BatchHook{
+        //writes a
+        .{ .mKind = .WritesNine, .mID = a },
+        //reads a, so aborts, but writes b first, which reserves b
+        .{ .mKind = .CopiesX, .mID = a, .mOther = b },
+        //reads b, reserved by the hook before it: aborts in round 1 although that hook wasn't kept, and again in round 2
+        //when that hook is
+        .{ .mKind = .ReadsX, .mID = b },
+    };
+
+    try RunBatchOf(layer, &hooks);
+
+    try std.testing.expectEqual(@as(u32, 1), hooks[0].mRuns);
+    try std.testing.expectEqual(@as(u32, 2), hooks[1].mRuns);
+    try std.testing.expectEqual(@as(u32, 3), hooks[2].mRuns);
+    //as if run in order: a is 9, copied into b, which the last one read
+    try std.testing.expectEqual(@as(f32, 9), layer.X(b));
+    try std.testing.expectEqual(@as(f32, 9), hooks[2].mSaw);
 }

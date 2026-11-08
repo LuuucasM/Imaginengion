@@ -96,10 +96,12 @@ pub const PLAIN_TEXTURE_PATH = EngineFiles.PLAIN_TEXTURE;
 pub fn Init(self: *UIManager, engine_context: *EngineContext) !void {
     try self.mECSManager.Init(engine_context.EngineAllocator());
     try engine_context.mSystems.Register(engine_context.EngineAllocator(), &self.mECSManager);
+    engine_context.mTransactions.Register(&self.mECSManager);
 }
 
 pub fn Deinit(self: *UIManager, engine_context: *EngineContext) void {
     engine_context.mSystems.Unregister(engine_context.EngineAllocator(), &self.mECSManager);
+    engine_context.mTransactions.Unregister(engine_context.EngineAllocator(), &self.mECSManager);
     self.mFocusSystem.Deinit(engine_context.EngineAllocator());
     self.mPopupSystem.Deinit(engine_context.EngineAllocator());
     self.mStyleSystem.Deinit(engine_context.EngineAllocator());
@@ -406,7 +408,7 @@ pub fn HasUIComponent(entity: Entity, comptime component_type: type) bool {
 /// Queues `event` for `entity`'s UI event scripts, and whatever else hears the UI's events
 pub fn Send(self: *UIManager, engine_context: *EngineContext, entity: Entity, event: UIEventData.UIEvent) !void {
     //sent from a hook, it waits for the hook to be kept: one that fails never sent it
-    if (engine_context.mSystems.OpenTransaction()) |transaction| {
+    if (engine_context.mTransactions.OpenTransaction()) |transaction| {
         try transaction.OnCommit(HeldUIEvent{ .mManager = self, .mEntity = entity, .mEvent = event }, HeldUIEvent.Send);
         return;
     }

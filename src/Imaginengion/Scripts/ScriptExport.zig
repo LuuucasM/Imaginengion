@@ -183,6 +183,8 @@ pub fn IsScript(comptime File: type) bool {
 fn Finish(comptime script_name: []const u8, comptime function_name: []const u8, result: anytype) ScriptResult {
     if (@typeInfo(@TypeOf(result)) == .error_union) {
         return result catch |err| {
+            //refused while speculating in a batch, to be run again on its own: not something the script did wrong
+            if (err == error.RunSerially) return .Error;
             std.log.err("{s}.{s}: {s}", .{ script_name, function_name, @errorName(err) });
             return .Error;
         };

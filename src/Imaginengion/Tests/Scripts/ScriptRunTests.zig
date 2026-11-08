@@ -426,7 +426,7 @@ test "events a kept hook sends arrive, and events a failed hook sends never do" 
 const IrrevocableThenFails = struct {
     pub fn OnUpdate(_: *IrrevocableThenFails, engine_context: *EngineContext, owner: Entity) !ScriptABI.ScriptResult {
         try owner.SetTranslation(engine_context, .{ .x = 7, .y = 0, .z = 0 });
-        engine_context.mSystems.MarkIrrevocable("the test said so");
+        try engine_context.mTransactions.MarkIrrevocable("the test said so");
         return .Failed;
     }
 };
@@ -464,7 +464,7 @@ test "two scripts in one loop changing the same component are reported as a conf
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
-    const conflicts = &engine_context.mSystems.mConflicts;
+    const conflicts = &engine_context.mTransactions.mConflicts;
 
     gScoreboard = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try gScoreboard.AddComponent(engine_context, EntityComponents.AttribComponent{});

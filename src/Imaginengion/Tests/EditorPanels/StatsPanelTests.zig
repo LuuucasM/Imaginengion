@@ -103,7 +103,7 @@ test "ticking Measure turns conflict measuring on from fresh counts, and the sec
         _ = engine_context._Internal.EngineGPA.deinit();
     }
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
-    const conflicts = &engine_context.mSystems.mConflicts;
+    const conflicts = &engine_context.mTransactions.mConflicts;
 
     var panel = try StatsPanel.Build(engine_context, scene, .{ .StockScripts = false });
     try panel.Toggle(engine_context);

@@ -185,7 +185,7 @@ pub fn Focus(self: *FocusSystem, engine_context: *EngineContext, entity: Entity)
     const text = entity.GetComponent(TextComponent) orelse return false;
 
     //focus isn't part of a transaction: a hook that fails after this is kept, not left half undone
-    engine_context.mSystems.MarkIrrevocable("a text input was focused");
+    try engine_context.mTransactions.MarkIrrevocable("a text input was focused");
     self.mFocused = entity;
     self.mCaret = text.mText.items.len;
     self.mBlinkTime = 0;
@@ -202,7 +202,7 @@ pub fn Focus(self: *FocusSystem, engine_context: *EngineContext, entity: Entity)
 /// Ends the edit of the focused text input, if there is one, and takes the keyboard back
 pub fn EndEdit(self: *FocusSystem, engine_context: *EngineContext, how: EndHow) !void {
     const focused = self.mFocused orelse return;
-    engine_context.mSystems.MarkIrrevocable("a text input's edit ended");
+    try engine_context.mTransactions.MarkIrrevocable("a text input's edit ended");
     self.mFocused = null;
     ReleaseKeyboard(engine_context);
 

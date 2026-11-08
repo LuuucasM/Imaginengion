@@ -109,6 +109,7 @@ pub fn Deinit(self: *AudioManager, engine_context: *EngineContext) void {
 pub fn InitMixer(self: *AudioManager, engine_context: *EngineContext) !void {
     try self.mECSManager.Init(engine_context.EngineAllocator());
     try engine_context.mSystems.Register(engine_context.EngineAllocator(), &self.mECSManager);
+    engine_context.mTransactions.Register(&self.mECSManager);
     //a destroyed bus's UUID comes out of the map (Core.OnObjectDestroyed)
     Core.HookRemovals(self);
     self.mMasterBus = try self.NewBus(engine_context, null, Bus.DefaultConfig, "Master");
@@ -116,6 +117,7 @@ pub fn InitMixer(self: *AudioManager, engine_context: *EngineContext) !void {
 
 pub fn DeinitMixer(self: *AudioManager, engine_context: *EngineContext) void {
     engine_context.mSystems.Unregister(engine_context.EngineAllocator(), &self.mECSManager);
+    engine_context.mTransactions.Unregister(engine_context.EngineAllocator(), &self.mECSManager);
     self.mECSManager.Deinit(engine_context);
     self.mEventManager.Deinit(engine_context.EngineAllocator());
     self.mUUIDToWorldID.deinit(engine_context.EngineAllocator());

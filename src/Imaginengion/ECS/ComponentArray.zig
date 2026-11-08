@@ -17,6 +17,7 @@ pub fn ComponentArray(entity_t: type) type {
         DeinitStaged: *const fn (*EngineContext, *anyopaque) void,
         CloneStaged: *const fn (*EngineContext, std.mem.Allocator, *const anyopaque) anyerror!*anyopaque,
         CommitCopy: *const fn (*anyopaque, *EngineContext, u64, *anyopaque) void,
+        MoveStaged: *const fn (std.mem.Allocator, *const anyopaque) anyerror!*anyopaque,
     };
     return struct {
         const Self = @This();
@@ -94,6 +95,7 @@ pub fn ComponentArray(entity_t: type) type {
                     .DeinitStaged = impl.DeinitStaged,
                     .CloneStaged = impl.CloneStaged,
                     .CommitCopy = internal_type.CommitCopy,
+                    .MoveStaged = internal_type.MoveStaged,
                 },
             };
         }
@@ -137,6 +139,10 @@ pub fn ComponentArray(entity_t: type) type {
         /// array's component type.
         pub fn DeinitStaged(self: Self, engine_context: *EngineContext, staged: *anyopaque) void {
             self.mVtable.DeinitStaged(engine_context, staged);
+        }
+        /// The value at `source`, of this array's type, moved into `arena`: a plain copy that now owns what it owned
+        pub fn MoveStaged(self: Self, arena: std.mem.Allocator, source: *const anyopaque) anyerror!*anyopaque {
+            return try self.mVtable.MoveStaged(arena, source);
         }
         /// How a transaction copies this array's components in, puts them back and drops them (Transaction.Copy).
         /// Pointers into the engine's own code, made when the ECS was: a script DLL's copy of the ECS code goes through

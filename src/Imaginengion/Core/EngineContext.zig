@@ -15,6 +15,7 @@ const EngineContext = @This();
 const EngineStats = @import("EngineStats.zig");
 const Serializer = @import("../Serializer/Serializer.zig");
 const Systems = @import("../ECS/Systems.zig");
+const Transactions = @import("../ECS/Transactions.zig");
 
 const WindowEventData = @import("../Events/WindowEventData.zig");
 const WindowEventManager = @import("../Events/EventManager.zig").EventManager(WindowEventData);
@@ -73,6 +74,10 @@ mDT: f32 = 1.0 / 60.0,
 /// ECS/Systems.zig). Each world registers its own four in its Init, the UI and audio theirs. Registered ECSs point into
 /// it, so it stays here
 mSystems: Systems = .empty,
+
+/// The transactions layer: runs code so its changes to the ECSs can be kept or dropped as one, and batches of hooks the
+/// way Aria does (see ECS/Transactions.zig). Registered ECSs point into it too, so it stays here
+mTransactions: Transactions = .empty,
 
 mAppWindow: Window = .{},
 
@@ -202,6 +207,7 @@ pub fn DeInit(self: *EngineContext) void {
 
     //empty already once every ECS has unregistered in its Deinit, this is for any left registered
     self.mSystems.Deinit(self.EngineAllocator());
+    self.mTransactions.Deinit(self.EngineAllocator());
 
     //anything still live in the Engine pool here is a real leak and is left for Tracy to show as one
     _ = self._Internal.EngineGPA.deinit();

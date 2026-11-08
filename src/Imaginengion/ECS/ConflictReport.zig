@@ -27,8 +27,7 @@ pub const empty: ConflictReport = .{};
 const Batch = struct {
     mName: []const u8 = "",
     /// What the batch's kept hooks have written, so far
-    mWrites: std.AutoHashMapUnmanaged(Transaction.Key, void) = .empty,
-    mTypeWrites: std.AutoHashMapUnmanaged(Transaction.TypeKey, void) = .empty,
+    mWritten: Transaction.WriteSet = .{},
     mCounts: Counts = .{},
     /// Writing down a hook's writes failed (out of memory): the batch's counts aren't kept
     mLost: bool = false,
@@ -51,10 +50,7 @@ pub const Counts = struct {
 
 pub fn Deinit(self: *ConflictReport, engine_allocator: std.mem.Allocator) void {
     std.debug.assert(self.mDepth == 0);
-    for (self.mBatches.items) |*batch| {
-        batch.mWrites.deinit(engine_allocator);
-        batch.mTypeWrites.deinit(engine_allocator);
-    }
+    for (self.mBatches.items) |*batch| batch.mWritten.Deinit(engine_allocator);
     self.mBatches.deinit(engine_allocator);
     self.Clear(engine_allocator);
     self.mSystems.deinit(engine_allocator);
@@ -84,8 +80,7 @@ pub fn PushBatch(self: *ConflictReport, engine_allocator: std.mem.Allocator, nam
     }
     const batch = &self.mBatches.items[self.mDepth];
     batch.mName = name;
-    batch.mWrites.clearRetainingCapacity();
-    batch.mTypeWrites.clearRetainingCapacity();
+    batch.mWritten.Clear();
     batch.mCounts = .{};
     batch.mLost = false;
     self.mDepth += 1;
@@ -122,34 +117,40 @@ pub fn Check(self: *ConflictReport, engine_allocator: std.mem.Allocator, transac
         batch.mCounts.mSerial += 1;
         return;
     }
-    if (_ConflictOn(batch, transaction)) |array| {
+    if (transaction.ConflictOn(&batch.mWritten)) |array| {
         batch.mCounts.mConflicts += 1;
         self._CountType(engine_allocator, batch.mName, transaction.NameOf(array));
         return;
     }
     if (!kept) return;
-
-    var writes = transaction.mWrites.keyIterator();
-    while (writes.next()) |key| batch.mWrites.put(engine_allocator, key.*, {}) catch {
-        batch.mLost = true;
-    };
-    var type_writes = transaction.mTypeWrites.keyIterator();
-    while (type_writes.next()) |key| batch.mTypeWrites.put(engine_allocator, key.*, {}) catch {
+    batch.mWritten.Add(engine_allocator, transaction) catch {
         batch.mLost = true;
     };
 }
 
-// the array of the first thing the transaction read that an earlier kept hook in the batch wrote, null if none
-fn _ConflictOn(batch: *const Batch, transaction: *const Transaction) ?*anyopaque {
-    var reads = transaction.mReads.keyIterator();
-    while (reads.next()) |key| {
-        if (batch.mWrites.contains(key.*)) return key.mArray;
+/// How a hook of a real batch (Transactions.RunBatch) came out in one round
+pub const BatchOutcome = enum {
+    /// ran to the end, kept or failed
+    Done,
+    /// read what a hook kept before it wrote: run again in the next round
+    Conflict,
+    /// asked for something that can't be speculative: run on its own after the rounds
+    Serial,
+};
+
+/// Counts a hook of a real batch in the run it is in, while measuring: each conflict it had on the way, and the hook
+/// itself once it is done. `type_name`: for a conflict, what it was on
+pub fn CountBatchHook(self: *ConflictReport, engine_allocator: std.mem.Allocator, outcome: BatchOutcome, type_name: []const u8) void {
+    if (self.mDepth == 0) return;
+    const batch = &self.mBatches.items[self.mDepth - 1];
+    switch (outcome) {
+        .Done => batch.mCounts.mHooks += 1,
+        .Serial => batch.mCounts.mSerial += 1,
+        .Conflict => {
+            batch.mCounts.mConflicts += 1;
+            if (type_name.len > 0) self._CountType(engine_allocator, batch.mName, type_name);
+        },
     }
-    var type_reads = transaction.mTypeReads.keyIterator();
-    while (type_reads.next()) |key| {
-        if (batch.mTypeWrites.contains(key.*)) return key.mArray;
-    }
-    return null;
 }
 
 // the counts for a system, made the first time with a copy of its name. Null if there was no room

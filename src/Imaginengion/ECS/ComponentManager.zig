@@ -160,6 +160,11 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return try self.mComponentsArrays.items[component_ind].StageDuplicate(engine_context, arena, original_entity_id);
         }
 
+        /// A value of the type in `component_ind` moved into `arena` (ComponentArray.MoveStaged)
+        pub fn MoveStaged(self: *Self, arena: std.mem.Allocator, component_ind: usize, source: *const anyopaque) !*anyopaque {
+            return try self.mComponentsArrays.items[component_ind].MoveStaged(arena, source);
+        }
+
         /// A copy of a staged component in `arena`, for an ECS copy to have staged adds of its own
         pub fn CloneStaged(self: *Self, engine_context: *EngineContext, arena: std.mem.Allocator, component_ind: usize, source: *const anyopaque) !*anyopaque {
             return try self.mComponentsArrays.items[component_ind].CloneStaged(engine_context, arena, source);

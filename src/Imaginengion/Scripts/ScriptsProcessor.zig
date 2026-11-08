@@ -133,6 +133,24 @@ fn ScriptLoop(comptime ObjectType: type, comptime script_type: type, comptime wo
             const script_ids = try manager.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
             SortByOwnerStackPos(ObjectType, world_manager, script_ids.items);
 
+            if (comptime IsBatched(script_type)) {
+                var hooks: std.ArrayList(Batched) = .empty;
+                for (script_ids.items) |script_id| {
+                    if (!manager.mECSManager.IsActiveEntity(script_id)) continue;
+                    if (above) |stack_pos| {
+                        if (OwnerStackPos(ObjectType, world_manager, OwnerOf(ObjectType, world_manager, script_id)) <= stack_pos) break;
+                    }
+                    const script_component = manager.GetComponent(ScriptComponent, script_id) orelse continue;
+                    const prepared = Prepare(ObjectType, script_type, script_component) orelse continue;
+                    try hooks.append(frame_allocator, .{
+                        .mPrepared = prepared,
+                        .mOwner = .{ .mID = OwnerOf(ObjectType, world_manager, script_id), .mManager = world_manager },
+                    });
+                }
+                try engine_context.mTransactions.RunBatch(engine_context, hooks.items.len, RunBatched, .{ engine_context, hooks.items, args }, KeepsChanges);
+                return .Continue;
+            }
+
             for (script_ids.items) |script_id| {
                 if (!manager.mECSManager.IsActiveEntity(script_id)) continue;
                 //sorted from the top of the stack down, so the rest are no higher
@@ -147,7 +165,25 @@ fn ScriptLoop(comptime ObjectType: type, comptime script_type: type, comptime wo
 
             return .Continue;
         }
+
+        /// One hook of the batch, found before it runs
+        const Batched = struct {
+            mPrepared: Prepared,
+            mOwner: ObjectType,
+        };
+
+        fn RunBatched(engine_context: *EngineContext, hooks: []const Batched, args: Args, index: usize) ScriptResult {
+            const hook = &hooks[index];
+            return RunPrepared(ObjectType, script_type, engine_context, hook.mPrepared, &hook.mOwner, args);
+        }
     };
+}
+
+/// Whether a script loop runs its hooks as one batch (Transactions.RunBatch): the hooks every object runs once a frame or a
+/// step, in no order anything relies on. The rest (keys, pointer, UI, collisions, game events, starts) run one after
+/// another, since they rely on .Handled stopping the line and on order. In a batch .Handled stops nothing
+fn IsBatched(comptime script_type: type) bool {
+    return script_type.Hook == .OnUpdate or script_type.Hook == .OnPhysicsUpdate;
 }
 
 /// A loop over one object's own script children of one type, until one hands back .Handled: what it reads is their
@@ -174,34 +210,48 @@ fn OwnScriptsLoop(comptime ObjectType: type, comptime script_type: type, comptim
 /// it imports changed and it doesn't build), or one edited since it was tagged into one without the hook or for another
 /// object type (retagged by SyncScripts)
 fn RunHook(comptime ObjectType: type, comptime script_type: type, engine_context: *EngineContext, script_component: *const ScriptComponent, owner: *const ObjectType, args: anytype) ScriptResult {
-    const id = script_component.mInstance orelse return .Continue;
-    const script_asset = ScriptValues.AssetOf(script_component) orelse return .Continue;
-    if (script_asset.mStopped) return .Continue;
-    if (script_asset.GetOwner() != ScriptABI.OwnerKind.Of(ObjectType) or !script_asset.HasHook(script_type.Hook)) return .Continue;
-    const instance = script_asset.GetInstance(id) orelse return .Continue;
+    const prepared = Prepare(ObjectType, script_type, script_component) orelse return .Continue;
+    const Call = struct {
+        fn Run(context: *EngineContext, call_prepared: Prepared, call_owner: *const ObjectType, call_args: @TypeOf(args)) ScriptResult {
+            return RunPrepared(ObjectType, script_type, context, call_prepared, call_owner, call_args);
+        }
+    };
+    return engine_context.mTransactions.RunTransaction(engine_context, Call.Run, .{ engine_context, prepared, owner, args }, KeepsChanges);
+}
 
+/// What a script child needs to run one of its hooks, found before it runs (Prepare)
+const Prepared = struct {
+    mAsset: *const ScriptAsset,
+    mInstance: *anyopaque,
+    mScriptComponent: *const ScriptComponent,
+};
+
+/// What a script child runs `script_type`'s hook with, null for one with nothing to run (see RunHook)
+fn Prepare(comptime ObjectType: type, comptime script_type: type, script_component: *const ScriptComponent) ?Prepared {
+    const id = script_component.mInstance orelse return null;
+    const script_asset = ScriptValues.AssetOf(script_component) orelse return null;
+    if (script_asset.mStopped) return null;
+    if (script_asset.GetOwner() != ScriptABI.OwnerKind.Of(ObjectType) or !script_asset.HasHook(script_type.Hook)) return null;
+    const instance = script_asset.GetInstance(id) orelse return null;
+    return .{ .mAsset = script_asset, .mInstance = instance, .mScriptComponent = script_component };
+}
+
+/// Runs a prepared hook, inside the transaction it is to run in
+fn RunPrepared(comptime ObjectType: type, comptime script_type: type, engine_context: *EngineContext, prepared: Prepared, owner: *const ObjectType, args: anytype) ScriptResult {
     //one zone per script, renamed to the script's file so a slow script shows up by name
     const script_zone = Tracy.ZoneInit("ScriptsProcessor::Script", @src());
     defer script_zone.Deinit();
-    if (Tracy.enable_tracy) script_zone.Name(script_component.mScriptAssetHandle.GetFileMetaData().mRelPath.items);
+    if (Tracy.enable_tracy) script_zone.Name(prepared.mScriptComponent.mScriptAssetHandle.GetFileMetaData().mRelPath.items);
 
-    const hook_args = .{ engine_context, owner, instance } ++ args;
-    const HookArgs = @TypeOf(hook_args);
-    const Args = @TypeOf(args);
-    const Call = struct {
-        fn Run(context: *EngineContext, asset: *const ScriptAsset, call_args: HookArgs, own_args: Args) ScriptResult {
-            if (!KeepForDiscard(context, .{ .mInfo = asset.GetInfo(), .mData = call_args[2] }, own_args)) return .Error;
-            return asset.RunHook(ObjectType, script_type.Hook, call_args);
-        }
-    };
-    return engine_context.mSystems.RunTransaction(engine_context, Call.Run, .{ engine_context, script_asset, hook_args, args }, KeepsChanges);
+    if (!KeepForDiscard(engine_context, .{ .mInfo = prepared.mAsset.GetInfo(), .mData = prepared.mInstance }, args)) return .Error;
+    return prepared.mAsset.RunHook(ObjectType, script_type.Hook, .{ engine_context, owner, prepared.mInstance } ++ args);
 }
 
 /// Has what a hook can change outside the ECSs put back if its transaction is dropped: its script's variables, and
 /// what each pointer it is handed to change points at (OnPreSolve's PreSolveInfo). False, logged, when there was no
 /// room to keep them, and then the hook mustn't run
 fn KeepForDiscard(engine_context: *EngineContext, instance: ScriptValues.Instance, args: anytype) bool {
-    const transaction = engine_context.mSystems.OpenTransaction() orelse return true;
+    const transaction = engine_context.mTransactions.OpenTransaction() orelse return true;
     ScriptValues.KeepForDiscard(transaction, instance) catch |err| {
         std.log.err("A hook was skipped: its script's variables couldn't be kept to put back if it failed: {s}", .{@errorName(err)});
         return false;
@@ -231,7 +281,7 @@ fn SavedArg(comptime T: type) type {
     };
 }
 
-/// Whether what a hook or handler changed stays (see Systems.RunTransaction): not when it couldn't do what it was for
+/// Whether what a hook or handler changed stays (see Transactions.RunTransaction): not when it couldn't do what it was for
 /// (.Failed) or hit an error (.Error), when it goes as if the hook never ran
 fn KeepsChanges(result: ScriptResult) bool {
     return switch (result) {
@@ -506,7 +556,7 @@ fn RunHandler(comptime ObjectType: type, engine_context: *EngineContext, script_
             return ScriptAsset.RunHandler(ObjectType, handler_ptr, context, handler_owner, handler_instance, handler_event);
         }
     };
-    return engine_context.mSystems.RunTransaction(engine_context, Call.Run, .{ engine_context, script_asset, handler, owner, instance, event }, KeepsChanges);
+    return engine_context.mTransactions.RunTransaction(engine_context, Call.Run, .{ engine_context, script_asset, handler, owner, instance, event }, KeepsChanges);
 }
 
 /// Catches the scripts in `worlds` up with the files that changed last frame (AManager.FileChanged): each script whose

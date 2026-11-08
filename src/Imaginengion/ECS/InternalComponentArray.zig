@@ -122,6 +122,13 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
             component.Deinit(engine_context);
             component.* = typed_copy.*;
         }
+        /// The value at `source` moved into `arena`: a plain copy, and the value at `source` is no longer owned by anyone
+        pub fn MoveStaged(arena: std.mem.Allocator, source: *const anyopaque) !*anyopaque {
+            const source_component: *const component_type = @ptrCast(@alignCast(source));
+            const moved = try arena.create(component_type);
+            moved.* = source_component.*;
+            return moved;
+        }
         pub fn DeinitStaged(engine_context: *EngineContext, staged: *anyopaque) void {
             const staged_component: *component_type = @ptrCast(@alignCast(staged));
             staged_component.Deinit(engine_context);

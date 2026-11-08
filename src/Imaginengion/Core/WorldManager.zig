@@ -120,7 +120,8 @@ pub fn Init(self: *WorldManager, engine_context: *EngineContext) !void {
         //template loaded during a hook part of the hook's transaction: the hook failing mustn't undo the load
         if (self == &engine_context.mAssetWorld) {
             ecs.SetRunDepth(null);
-            ecs.SetTransaction(null);
+        } else {
+            engine_context.mTransactions.Register(ecs);
         }
     }
 }
@@ -179,7 +180,10 @@ pub fn QuitGame(self: *WorldManager, engine_context: *EngineContext) !void {
 }
 
 pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
-    inline for (self._ECSs()) |ecs| engine_context.mSystems.Unregister(engine_context.EngineAllocator(), ecs);
+    inline for (self._ECSs()) |ecs| {
+        engine_context.mSystems.Unregister(engine_context.EngineAllocator(), ecs);
+        if (self != &engine_context.mAssetWorld) engine_context.mTransactions.Unregister(engine_context.EngineAllocator(), ecs);
+    }
     self.mEManager.Deinit(engine_context);
     self.mGCManager.Deinit(engine_context);
     self.mPManager.Deinit(engine_context);
@@ -197,7 +201,7 @@ pub fn Emit(self: *WorldManager, engine_context: *EngineContext, event: anytype)
     comptime GameEvents.Check(T);
     //sent from a hook, it waits for the hook to be kept: one that fails never sent it. The hook is kept straight after it
     //runs, so an event for the phase being handled still goes in this same pass
-    if (engine_context.mSystems.OpenTransaction()) |transaction| {
+    if (engine_context.mTransactions.OpenTransaction()) |transaction| {
         try transaction.OnCommit(HeldEvent{
             .mWorld = self,
             .mPhase = GameEvents.PhaseOf(T),

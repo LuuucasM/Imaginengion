@@ -117,7 +117,7 @@ pub fn Update(self: *StatsPanel, engine_context: *EngineContext, stats: *const E
     try SetWorld(engine_context, self.mGame, stats.LastGameWorldStats);
     try SetWorld(engine_context, self.mEditor, stats.LastEditorWorldStats);
     try SetWorld(engine_context, self.mSimulate, stats.LastSimulateWorldStats);
-    try self.SetConflicts(engine_context, &engine_context.mSystems.mConflicts);
+    try self.SetConflicts(engine_context, &engine_context.mTransactions.mConflicts);
 }
 
 /// The Conflicts section: whether hooks would conflict if each system run's hooks ran in parallel (ConflictReport),
@@ -134,7 +134,7 @@ fn BuildConflicts(self: *StatsPanel, engine_context: *EngineContext, content: En
 
 /// Measuring follows the checkbox, and starts from nothing each time it is ticked
 fn SyncMeasuring(self: *StatsPanel, engine_context: *EngineContext) !void {
-    const conflicts = &engine_context.mSystems.mConflicts;
+    const conflicts = &engine_context.mTransactions.mConflicts;
     const ticked = self.mMeasureBox.HasComponent(SelectedTag);
     if (ticked == conflicts.mOn) return;
     if (ticked) conflicts.Clear(engine_context.EngineAllocator());

@@ -1,22 +1,27 @@
-//! What one transaction has changed so far, kept apart or written down until it ends: Commit keeps it, Discard drops it,
-//! as if it never happened. The systems layer opens one around a piece of code (Systems.RunTransaction), which also
-//! counts as a run, and while it is open every ECS the layer knows goes through it:
+//! What one transaction has changed so far, kept apart until it ends: Commit keeps it, Discard drops it, as if it never
+//! happened. The transactions layer opens one around a piece of code (Transactions.RunTransaction, or one per hook in
+//! Transactions.RunBatch), which also counts as a run, and while it is open every ECS the layer knows goes through it:
 //!
 //!   - Component values: GetComponentMut copies the component in here the first time (a deep copy for a type with a
 //!     Clone) and hands back the copy, the same copy every time after. GetComponent hands back the copy if there is one,
 //!     so the code sees what it has changed itself. Commit puts the copies in place, Discard drops them.
-//!   - Queued changes (staged adds, removals, destroys): they wait in each ECS's queue as in any run. The first time the
-//!     transaction queues into an ECS, the ECS writes down where its queue stood (NoteQueue), and Discard cuts it back
-//!     to there.
-//!   - Objects made (CreateEntity, CreateScript, AddChild): written down, and destroyed by Discard.
-//!   - Tags put on or taken off, which happen right away: written down, and reversed by Discard.
+//!   - Structure: adds, tags put on or taken off, removals and destroys are held here as ops, in the order asked for.
+//!     The code sees its own (HasComponent, GetComponent, GetGroup and NumWithComponent look here too); nothing else does.
+//!     Commit hands each to its ECS to make the way it would have been made straight away (an add staged, a tag put on,
+//!     a removal queued); Discard drops them, undoing what an add set off through the removal hook.
+//!   - Objects made (CreateEntity, CreateScript, AddChild): made at once, written down, and destroyed by Discard. Not
+//!     while speculating, see below.
 //!   - Anything else: code outside the ECSs says what to do at commit (OnCommit, e.g. send an event it held back) or at
 //!     discard (OnDiscard, e.g. put a script's variables back).
 //!   - What can't be taken back at all (a file written, a popup's state): the code doing it marks the transaction
 //!     (MarkIrrevocable), and a marked transaction is kept even when its code fails, rather than coming out half undone.
 //!
+//! A speculating transaction (one hook of a batch, Transactions.RunBatch) may be dropped and run again, so it mustn't do
+//! anything for real: making an object or anything irrevocable is refused with error.RunSerially (or error.Canceled from
+//! the engine's Io) and marks it (mRunSerially), and the batch runs it again on its own afterwards.
+//!
 //! Not held here: a staged component taken back off with RemoveComponentSync (gone for good), and a component staged
-//! during the run, which is handed out as it is rather than copied.
+//! before the transaction, which is handed out as it is rather than copied.
 const Transaction = @This();
 
 const std = @import("std");
@@ -27,16 +32,16 @@ const Tracy = @import("../Core/Tracy.zig");
 mEntries: std.ArrayList(Entry) = .empty,
 /// Where each copy is in mEntries, by what it is a copy of
 mLookup: std.AutoHashMapUnmanaged(Key, usize) = .empty,
-/// Where the copies themselves live, so a pointer handed out stays good until the transaction ends
+/// Where the copies, held adds and actions' data live, so a pointer handed out stays good until the transaction ends
 mArena: std.heap.ArenaAllocator.State = .init,
 /// The context the transaction was opened with (Open): GetComponentMut has none of its own to copy with
 mEngineContext: ?*EngineContext = null,
-/// Each ECS this transaction has queued changes in, in the order it first did, with where its queue stood before
-mQueueMarks: std.ArrayList(QueueMark) = .empty,
+/// The structural changes held, oldest first
+mOps: std.ArrayList(Op) = .empty,
+/// For each component an op put on or took off an entity (an add or a tag), the newest such op: what reads see
+mPresence: std.AutoHashMapUnmanaged(Key, usize) = .empty,
 /// The objects made in this transaction, oldest first
 mCreated: std.ArrayList(Undo) = .empty,
-/// The tags put on or taken off in this transaction, oldest first
-mTagChanges: std.ArrayList(TagChange) = .empty,
 /// What to do if the transaction is kept, in order
 mOnCommit: std.ArrayList(Action) = .empty,
 /// What to do if the transaction is dropped, newest first
@@ -44,7 +49,14 @@ mOnDiscard: std.ArrayList(Action) = .empty,
 /// Why the transaction can't be dropped, null while it still can (MarkIrrevocable)
 mIrrevocable: ?[]const u8 = null,
 
-/// Whether this transaction writes down what it reads and writes, for the conflict report (Systems.mMeasuring). Set by Open
+/// One hook of a batch, which may be dropped and run again: nothing it does may happen for real before commit. Set by Open
+mSpeculating: bool = false,
+/// While speculating, the hook asked for something that can't be speculative (an object made, an irrevocable action):
+/// it is dropped whatever it hands back, and run again on its own after the batch
+mRunSerially: bool = false,
+
+/// Whether this transaction writes down what it reads and writes: for a batch's conflict check, and for the conflict
+/// report (Transactions.mConflicts). Set by Open
 mMeasuring: bool = false,
 /// While measuring: each component it read or wrote, by entity (a value, or whether it is there at all)
 mReads: std.AutoHashMapUnmanaged(Key, void) = .empty,
@@ -54,12 +66,20 @@ mTypeReads: std.AutoHashMapUnmanaged(TypeKey, void) = .empty,
 mTypeWrites: std.AutoHashMapUnmanaged(TypeKey, void) = .empty,
 /// While measuring: each array's component type name, for the report. Good until the transaction ends
 mNames: std.AutoHashMapUnmanaged(*anyopaque, []const u8) = .empty,
-/// While measuring, something couldn't be written down (out of memory): the report doesn't count this one
+/// While measuring, something couldn't be written down (out of memory): it can't be checked for conflicts
 mMeasureLost: bool = false,
 
 pub const empty: Transaction = .{};
 
-/// A whole component array (a type in one ECS) read or written as one, for the conflict report
+/// How a transaction is opened
+pub const Options = struct {
+    /// write down what it reads and writes
+    mMeasuring: bool = false,
+    /// one hook of a batch: refuse what can't be speculative
+    mSpeculating: bool = false,
+};
+
+/// A whole component array (a type in one ECS) read or written as one
 pub const TypeKey = struct {
     mArray: *anyopaque,
     mAccess: TypeAccess,
@@ -78,7 +98,7 @@ pub const Action = struct {
     mRun: *const fn (engine_context: *EngineContext, data: *anyopaque) void,
 };
 
-/// What a copy is a copy of: one component array (a type in one ECS), and the entity in it
+/// One component of one entity: one component array (a type in one ECS), and the entity in it
 pub const Key = struct {
     mArray: *anyopaque,
     mEntityID: u64,
@@ -102,11 +122,36 @@ const Entry = struct {
     mFns: CopyFns,
 };
 
-/// Where one ECS's queue stood before this transaction queued into it, and what cuts it back to there
-pub const QueueMark = struct {
+pub const OpKind = enum {
+    /// a data component added: staged in the ECS at commit
+    Add,
+    /// a tag put on (mOn) or taken off
+    Tag,
+    /// a component taken off: queued at commit, readable until the run ends like any removal
+    Remove,
+    /// an object destroyed: queued at commit
+    Destroy,
+};
+
+/// One structural change held until the transaction ends. Its ECS fills in what makes it (mApply, at commit) and what
+/// drops it (mDrop, at discard)
+pub const Op = struct {
     mECS: *anyopaque,
-    mMark: usize,
-    mDropFrom: *const fn (ecs: *anyopaque, engine_context: *EngineContext, mark: usize) void,
+    mKind: OpKind,
+    mEntityID: u64,
+    mComponentInd: usize = 0,
+    /// Add and Tag: the component's array, which reads look it up by
+    mArray: ?*anyopaque = null,
+    /// Tag: put on, or taken off
+    mOn: bool = true,
+    /// Add: the value
+    mData: ?*anyopaque = null,
+    /// Add: the value is in this transaction's arena, rather than already in the ECS's staging arena
+    mDataInArena: bool = false,
+    /// Made or dropped already, and skipped from then on
+    mDone: bool = false,
+    mApply: *const fn (ecs: *anyopaque, engine_context: *EngineContext, op: *Op) void,
+    mDrop: *const fn (ecs: *anyopaque, engine_context: *EngineContext, op: *Op) void,
 };
 
 /// One object made, and what destroys it
@@ -116,13 +161,66 @@ pub const Undo = struct {
     mUndo: *const fn (ecs: *anyopaque, engine_context: *EngineContext, entity_id: u64) void,
 };
 
-/// One tag put on (`mAdded`) or taken off, and what reverses it
-pub const TagChange = struct {
-    mECS: *anyopaque,
-    mEntityID: u64,
-    mComponentInd: usize,
-    mAdded: bool,
-    mUndo: *const fn (ecs: *anyopaque, engine_context: *EngineContext, entity_id: u64, component_ind: usize, added: bool) void,
+/// What kept transactions have written, for checking a later one against (ConflictOn): a batch's commits so far, or
+/// the conflict report's
+pub const WriteSet = struct {
+    mWrites: std.AutoHashMapUnmanaged(Key, void) = .empty,
+    mTypeWrites: std.AutoHashMapUnmanaged(TypeKey, void) = .empty,
+
+    pub fn Deinit(self: *WriteSet, engine_allocator: std.mem.Allocator) void {
+        self.mWrites.deinit(engine_allocator);
+        self.mTypeWrites.deinit(engine_allocator);
+    }
+
+    pub fn Clear(self: *WriteSet) void {
+        self.mWrites.clearRetainingCapacity();
+        self.mTypeWrites.clearRetainingCapacity();
+    }
+
+    /// Adds what `transaction` wrote
+    pub fn Add(self: *WriteSet, engine_allocator: std.mem.Allocator, transaction: *const Transaction) !void {
+        var writes = transaction.mWrites.keyIterator();
+        while (writes.next()) |key| try self.mWrites.put(engine_allocator, key.*, {});
+        var type_writes = transaction.mTypeWrites.keyIterator();
+        while (type_writes.next()) |key| try self.mTypeWrites.put(engine_allocator, key.*, {});
+    }
+};
+
+/// Aria's reservation table for one round of a batch (Transactions.RunBatch): for each key written, the lowest place in
+/// the batch (Aria's TID) of a hook that writes it. Whole types are reserved apart from single components: a type is
+/// written as a whole by any add or tag of it, and only a read of the whole type (a query) can conflict with that
+pub const Reservations = struct {
+    mKeys: std.AutoHashMapUnmanaged(Key, usize) = .empty,
+    mTypes: std.AutoHashMapUnmanaged(TypeKey, usize) = .empty,
+
+    pub fn Deinit(self: *Reservations, engine_allocator: std.mem.Allocator) void {
+        self.mKeys.deinit(engine_allocator);
+        self.mTypes.deinit(engine_allocator);
+    }
+
+    pub fn Clear(self: *Reservations) void {
+        self.mKeys.clearRetainingCapacity();
+        self.mTypes.clearRetainingCapacity();
+    }
+
+    /// ReserveWrite: every key `transaction`, at place `index` in the batch, writes is reserved by the lowest place
+    /// writing it
+    pub fn Reserve(self: *Reservations, engine_allocator: std.mem.Allocator, transaction: *const Transaction, index: usize) !void {
+        var writes = transaction.mWrites.keyIterator();
+        while (writes.next()) |key| try _ReserveMin(&self.mKeys, engine_allocator, key.*, index);
+        var type_writes = transaction.mTypeWrites.keyIterator();
+        while (type_writes.next()) |key| try _ReserveMin(&self.mTypes, engine_allocator, key.*, index);
+    }
+
+    fn _ReserveMin(map: anytype, engine_allocator: std.mem.Allocator, key: anytype, index: usize) !void {
+        const entry = try map.getOrPut(engine_allocator, key);
+        if (!entry.found_existing or index < entry.value_ptr.*) entry.value_ptr.* = index;
+    }
+
+    fn _ReservedBefore(map: anytype, key: anytype, index: usize) bool {
+        const reserved_by = map.get(key) orelse return false;
+        return reserved_by < index;
+    }
 };
 
 pub fn Deinit(self: *Transaction, engine_allocator: std.mem.Allocator) void {
@@ -130,9 +228,9 @@ pub fn Deinit(self: *Transaction, engine_allocator: std.mem.Allocator) void {
     self.mEntries.deinit(engine_allocator);
     self.mLookup.deinit(engine_allocator);
     self.mArena.promote(engine_allocator).deinit();
-    self.mQueueMarks.deinit(engine_allocator);
+    self.mOps.deinit(engine_allocator);
+    self.mPresence.deinit(engine_allocator);
     self.mCreated.deinit(engine_allocator);
-    self.mTagChanges.deinit(engine_allocator);
     self.mOnCommit.deinit(engine_allocator);
     self.mOnDiscard.deinit(engine_allocator);
     self.mReads.deinit(engine_allocator);
@@ -143,6 +241,14 @@ pub fn Deinit(self: *Transaction, engine_allocator: std.mem.Allocator) void {
     self.* = .empty;
 }
 
+/// Starts the transaction, which has to be empty
+pub fn Open(self: *Transaction, engine_context: *EngineContext, options: Options) void {
+    std.debug.assert(self._IsEmpty());
+    self.mEngineContext = engine_context;
+    self.mMeasuring = options.mMeasuring;
+    self.mSpeculating = options.mSpeculating;
+}
+
 /// The copy of this component made in this transaction, null if there isn't one yet
 pub fn Find(self: *const Transaction, key: Key) ?*anyopaque {
     // most of the time nothing has been copied, which keeps GetComponent from costing a lookup
@@ -151,14 +257,118 @@ pub fn Find(self: *const Transaction, key: Key) ?*anyopaque {
     return self.mEntries.items[entry_ind].mCopy;
 }
 
-/// Starts the transaction, which has to be empty. `measuring`: whether it writes down what it reads and writes
-pub fn Open(self: *Transaction, engine_context: *EngineContext, measuring: bool) void {
-    std.debug.assert(self._IsEmpty());
-    self.mEngineContext = engine_context;
-    self.mMeasuring = measuring;
+/// Copies `source`, the component `key` names, into the transaction and hands back the copy. There mustn't be one already
+pub fn Copy(self: *Transaction, key: Key, source: *const anyopaque, fns: CopyFns) !*anyopaque {
+    std.debug.assert(!self.mLookup.contains(key));
+    const engine_context = self.mEngineContext.?;
+    const engine_allocator = engine_context.EngineAllocator();
+    try self.mEntries.ensureUnusedCapacity(engine_allocator, 1);
+    try self.mLookup.ensureUnusedCapacity(engine_allocator, 1);
+
+    var arena = self.mArena.promote(engine_allocator);
+    defer self.mArena = arena.state;
+    // a component that owns memory copies itself, so the copy can change it without touching the original's
+    const copy = try fns.mClone(engine_context, arena.allocator(), source);
+
+    self.mLookup.putAssumeCapacity(key, self.mEntries.items.len);
+    self.mEntries.appendAssumeCapacity(.{ .mKey = key, .mCopy = copy, .mFns = fns });
+    return copy;
 }
 
-//----------------what it reads and writes, while measuring (the ECSs call these, see Systems.mMeasuring)----------------
+//----------------structure held until commit (the ECSs call these)----------------
+
+/// Room for a value of `T` in the transaction's arena, good until it ends: for an add's value (Op.mData)
+pub fn Create(self: *Transaction, comptime T: type) !*T {
+    var arena = self.mArena.promote(self.mEngineContext.?.EngineAllocator());
+    defer self.mArena = arena.state;
+    return try arena.allocator().create(T);
+}
+
+/// Holds a structural change until the transaction ends. An add or a tag becomes what reads of that component see
+pub fn AddOp(self: *Transaction, op: Op) !void {
+    const engine_allocator = self.mEngineContext.?.EngineAllocator();
+    try self.mOps.ensureUnusedCapacity(engine_allocator, 1);
+    if (op.mKind == .Add or op.mKind == .Tag) {
+        try self.mPresence.put(engine_allocator, .{ .mArray = op.mArray.?, .mEntityID = op.mEntityID }, self.mOps.items.len);
+    }
+    self.mOps.appendAssumeCapacity(op);
+}
+
+/// The newest add or tag op held for this component, null if there is none: then reads go to the ECS as usual
+pub fn Presence(self: *Transaction, key: Key) ?*Op {
+    // most of the time nothing is held, which keeps HasComponent from costing a lookup
+    if (self.mPresence.count() == 0) return null;
+    const op_ind = self.mPresence.get(key) orelse return null;
+    const op = &self.mOps.items[op_ind];
+    return if (op.mDone) null else op;
+}
+
+/// Makes room to write down an object about to be made (AddCreated), so that once it is made writing it down can't fail
+pub fn ReserveCreated(self: *Transaction) !void {
+    try self.mCreated.ensureUnusedCapacity(self.mEngineContext.?.EngineAllocator(), 1);
+}
+
+/// Writes down an object just made, after ReserveCreated
+pub fn AddCreated(self: *Transaction, created: Undo) void {
+    self.mCreated.appendAssumeCapacity(created);
+}
+
+/// Refuses something that can't be done while speculating: marks the transaction to be run again on its own, and hands
+/// back the error to refuse with. Null when it isn't speculating, and the thing can go ahead
+pub fn RefuseSpeculative(self: *Transaction) ?error{RunSerially} {
+    if (!self.mSpeculating) return null;
+    self.mRunSerially = true;
+    return error.RunSerially;
+}
+
+//----------------actions, and what can't be taken back----------------
+
+/// Runs `run(engine_context, &data)` if the transaction is kept, after the copies are in, in the order these were asked
+/// for: for something code outside the ECSs holds back until then (an event it sends). `data` is copied into the
+/// transaction's arena; a slice in it has to be too (Dupe)
+pub fn OnCommit(self: *Transaction, data: anytype, comptime run: fn (*EngineContext, *@TypeOf(data)) void) !void {
+    try self._AddAction(&self.mOnCommit, data, run);
+}
+
+/// Runs `run(engine_context, &data)` if the transaction is dropped, before anything else is undone, newest first: for
+/// putting back something code outside the ECSs changed (a script's variables). `data` is copied as for OnCommit
+pub fn OnDiscard(self: *Transaction, data: anytype, comptime run: fn (*EngineContext, *@TypeOf(data)) void) !void {
+    try self._AddAction(&self.mOnDiscard, data, run);
+}
+
+/// A copy of `bytes` in the transaction's arena, good until the transaction ends: for an action's data with a slice in it
+pub fn Dupe(self: *Transaction, bytes: []const u8) ![]u8 {
+    var arena = self.mArena.promote(self.mEngineContext.?.EngineAllocator());
+    defer self.mArena = arena.state;
+    return try arena.allocator().dupe(u8, bytes);
+}
+
+/// Says the transaction has done something that can't be taken back, so it is kept even if its code fails: it never
+/// comes out half undone. `reason` is for the log line saying so, and has to outlive the transaction (a string literal).
+/// The first reason given is the one kept. Refused while speculating (error.RunSerially), when the caller mustn't go on
+pub fn MarkIrrevocable(self: *Transaction, reason: []const u8) error{RunSerially}!void {
+    if (self.RefuseSpeculative()) |err| return err;
+    if (self.mIrrevocable == null) self.mIrrevocable = reason;
+}
+
+fn _AddAction(self: *Transaction, list: *std.ArrayList(Action), data: anytype, comptime run: fn (*EngineContext, *@TypeOf(data)) void) !void {
+    const T = @TypeOf(data);
+    const engine_allocator = self.mEngineContext.?.EngineAllocator();
+    try list.ensureUnusedCapacity(engine_allocator, 1);
+
+    var arena = self.mArena.promote(engine_allocator);
+    defer self.mArena = arena.state;
+    const stored = try arena.allocator().create(T);
+    stored.* = data;
+
+    list.appendAssumeCapacity(.{ .mData = stored, .mRun = struct {
+        fn Run(engine_context: *EngineContext, erased: *anyopaque) void {
+            run(engine_context, @ptrCast(@alignCast(erased)));
+        }
+    }.Run });
+}
+
+//----------------what it reads and writes, while measuring (the ECSs call these)----------------
 
 /// A component of one entity read, its value or whether it is there. `name` is its type's, for the report
 pub fn NoteRead(self: *Transaction, key: Key, name: []const u8) void {
@@ -171,7 +381,7 @@ pub fn NoteValueWrite(self: *Transaction, key: Key, name: []const u8) void {
     self._Note(&self.mTypeWrites, TypeKey{ .mArray = key.mArray, .mAccess = .Values }, key.mArray, name);
 }
 
-/// A component put on or taken off an entity in a way the rest of the run sees at once (a staged add, a tag)
+/// A component put on or taken off an entity in a way the rest of the run sees once it is kept (an add, a tag)
 pub fn NotePresenceWrite(self: *Transaction, key: Key, name: []const u8) void {
     self._Note(&self.mWrites, key, key.mArray, name);
     self._Note(&self.mTypeWrites, TypeKey{ .mArray = key.mArray, .mAccess = .Membership }, key.mArray, name);
@@ -198,119 +408,65 @@ pub fn NameOf(self: *const Transaction, array: *anyopaque) []const u8 {
     return self.mNames.get(array) orelse "?";
 }
 
-/// Copies `source`, the component `key` names, into the transaction and hands back the copy. There mustn't be one already
-pub fn Copy(self: *Transaction, key: Key, source: *const anyopaque, fns: CopyFns) !*anyopaque {
-    std.debug.assert(!self.mLookup.contains(key));
-    const engine_context = self.mEngineContext.?;
-    const engine_allocator = engine_context.EngineAllocator();
-    try self.mEntries.ensureUnusedCapacity(engine_allocator, 1);
-    try self.mLookup.ensureUnusedCapacity(engine_allocator, 1);
-
-    var arena = self.mArena.promote(engine_allocator);
-    defer self.mArena = arena.state;
-    // a component that owns memory copies itself, so the copy can change it without touching the original's
-    const copy = try fns.mClone(engine_context, arena.allocator(), source);
-
-    self.mLookup.putAssumeCapacity(key, self.mEntries.items.len);
-    self.mEntries.appendAssumeCapacity(.{ .mKey = key, .mCopy = copy, .mFns = fns });
-    return copy;
-}
-
-/// Writes down where `ecs`'s queue stands, before the transaction first queues a change into it. Nothing the second time
-pub fn NoteQueue(self: *Transaction, mark: QueueMark) !void {
-    for (self.mQueueMarks.items) |noted| {
-        if (noted.mECS == mark.mECS) return;
-    }
-    try self.mQueueMarks.append(self.mEngineContext.?.EngineAllocator(), mark);
-}
-
-/// Makes room to write down an object about to be made (AddCreated), so that once it is made writing it down can't fail
-pub fn ReserveCreated(self: *Transaction) !void {
-    try self.mCreated.ensureUnusedCapacity(self.mEngineContext.?.EngineAllocator(), 1);
-}
-
-/// Writes down an object just made, after ReserveCreated
-pub fn AddCreated(self: *Transaction, created: Undo) void {
-    self.mCreated.appendAssumeCapacity(created);
-}
-
-/// Makes room to write down a tag change about to be made (AddTagChange), so that once it is made writing it down can't fail
-pub fn ReserveTagChange(self: *Transaction) !void {
-    try self.mTagChanges.ensureUnusedCapacity(self.mEngineContext.?.EngineAllocator(), 1);
-}
-
-/// Writes down a tag change just made, after ReserveTagChange
-pub fn AddTagChange(self: *Transaction, change: TagChange) void {
-    self.mTagChanges.appendAssumeCapacity(change);
-}
-
-/// Runs `run(engine_context, &data)` if the transaction is kept, after the copies are in, in the order these were asked
-/// for: for something code outside the ECSs holds back until then (an event it sends). `data` is copied into the
-/// transaction's arena; a slice in it has to be too (Dupe)
-pub fn OnCommit(self: *Transaction, data: anytype, comptime run: fn (*EngineContext, *@TypeOf(data)) void) !void {
-    try self._AddAction(&self.mOnCommit, data, run);
-}
-
-/// Runs `run(engine_context, &data)` if the transaction is dropped, before anything else is undone, newest first: for
-/// putting back something code outside the ECSs changed (a script's variables). `data` is copied as for OnCommit
-pub fn OnDiscard(self: *Transaction, data: anytype, comptime run: fn (*EngineContext, *@TypeOf(data)) void) !void {
-    try self._AddAction(&self.mOnDiscard, data, run);
-}
-
-/// A copy of `bytes` in the transaction's arena, good until the transaction ends: for an action's data with a slice in it
-pub fn Dupe(self: *Transaction, bytes: []const u8) ![]u8 {
-    var arena = self.mArena.promote(self.mEngineContext.?.EngineAllocator());
-    defer self.mArena = arena.state;
-    return try arena.allocator().dupe(u8, bytes);
-}
-
-/// Says the transaction has done something that can't be taken back, so it is kept even if its code fails: it never
-/// comes out half undone. `reason` is for the log line saying so, and has to outlive the transaction (a string literal).
-/// The first reason given is the one kept
-pub fn MarkIrrevocable(self: *Transaction, reason: []const u8) void {
-    if (self.mIrrevocable == null) self.mIrrevocable = reason;
-}
-
-fn _AddAction(self: *Transaction, list: *std.ArrayList(Action), data: anytype, comptime run: fn (*EngineContext, *@TypeOf(data)) void) !void {
-    const T = @TypeOf(data);
-    const engine_allocator = self.mEngineContext.?.EngineAllocator();
-    try list.ensureUnusedCapacity(engine_allocator, 1);
-
-    var arena = self.mArena.promote(engine_allocator);
-    defer self.mArena = arena.state;
-    const stored = try arena.allocator().create(T);
-    stored.* = data;
-
-    list.appendAssumeCapacity(.{ .mData = stored, .mRun = struct {
-        fn Run(engine_context: *EngineContext, erased: *anyopaque) void {
-            run(engine_context, @ptrCast(@alignCast(erased)));
+/// Aria's HasConflicts for this transaction at place `index` in its batch: the array of the first thing it read or
+/// wrote (RS U WS) that a hook before it reserved, null if none. Whole types: only its reads of a whole type count
+pub fn ConflictWith(self: *const Transaction, reservations: *const Reservations, index: usize) ?*anyopaque {
+    inline for (.{ &self.mReads, &self.mWrites }) |set| {
+        var keys = set.keyIterator();
+        while (keys.next()) |key| {
+            if (Reservations._ReservedBefore(&reservations.mKeys, key.*, index)) return key.mArray;
         }
-    }.Run });
+    }
+    var type_reads = self.mTypeReads.keyIterator();
+    while (type_reads.next()) |key| {
+        if (Reservations._ReservedBefore(&reservations.mTypes, key.*, index)) return key.mArray;
+    }
+    return null;
 }
 
-/// Keeps everything: puts every copy in place of its component, in the order they were made, runs what was to happen
-/// on commit, leaves what was queued to land with the run, and empties the transaction
+/// The array of the first thing this transaction read or wrote that `writes` has, null if none: the conflict report's
+/// check of a transaction against those kept before it in a run that isn't a real batch. Whole types: only its reads of
+/// a whole type count, as in ConflictWith
+pub fn ConflictOn(self: *const Transaction, writes: *const WriteSet) ?*anyopaque {
+    inline for (.{ &self.mReads, &self.mWrites }) |set| {
+        var keys = set.keyIterator();
+        while (keys.next()) |key| {
+            if (writes.mWrites.contains(key.*)) return key.mArray;
+        }
+    }
+    var type_reads = self.mTypeReads.keyIterator();
+    while (type_reads.next()) |key| {
+        if (writes.mTypeWrites.contains(key.*)) return key.mArray;
+    }
+    return null;
+}
+
+//----------------ending it----------------
+
+/// Keeps everything: puts every copy in place of its component, in the order they were made, has each ECS make the
+/// structural changes held, in order, runs what was to happen on commit, and empties the transaction
 pub fn Commit(self: *Transaction, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("Transaction::Commit", @src());
     defer zone.Deinit();
-    zone.Value(self.mEntries.items.len);
+    zone.Value(self.mEntries.items.len + self.mOps.items.len);
     for (self.mEntries.items) |entry| entry.mFns.mCommit(entry.mKey.mArray, engine_context, entry.mKey.mEntityID, entry.mCopy);
+    for (self.mOps.items) |*op| self._Apply(engine_context, op);
     for (self.mOnCommit.items) |action| action.mRun(engine_context, action.mData);
     self._Reset(engine_context.EngineAllocator());
 }
 
 /// Drops everything, leaving the ECSs as they were before the transaction, and empties it. The order matters:
 ///   1. what was to happen on discard runs, newest first
-///   2. objects made are destroyed, newest first, while what was staged on them can still be read by the removal hook
-///   3. queued changes are cut back, newest ECS first, a staged add on a live object going through the removal hook
-///   4. tag changes are reversed, newest first, skipping objects destroyed in 2
+///   2. what was held for objects it made is made after all, in order, so that the next step can read it
+///   3. objects made are destroyed, newest first, the removal hook reading what was held for them (a UUID to forget)
+///   4. the rest of what was held is dropped, newest first, an add on a live object going through the removal hook
 ///   5. the copies are deinitialized
 /// What was to happen on commit never does. Not for a transaction marked irrevocable, which can only be kept
 pub fn Discard(self: *Transaction, engine_context: *EngineContext) void {
     std.debug.assert(self.mIrrevocable == null);
     const zone = Tracy.ZoneInit("Transaction::Discard", @src());
     defer zone.Deinit();
-    zone.Value(self.mEntries.items.len);
+    zone.Value(self.mEntries.items.len + self.mOps.items.len);
 
     var action_ind = self.mOnDiscard.items.len;
     while (action_ind > 0) {
@@ -319,6 +475,11 @@ pub fn Discard(self: *Transaction, engine_context: *EngineContext) void {
         action.mRun(engine_context, action.mData);
     }
 
+    if (self.mCreated.items.len > 0) {
+        for (self.mOps.items) |*op| {
+            if (self._WasCreated(op.mECS, op.mEntityID)) self._Apply(engine_context, op);
+        }
+    }
     var created_ind = self.mCreated.items.len;
     while (created_ind > 0) {
         created_ind -= 1;
@@ -326,28 +487,35 @@ pub fn Discard(self: *Transaction, engine_context: *EngineContext) void {
         created.mUndo(created.mECS, engine_context, created.mEntityID);
     }
 
-    var mark_ind = self.mQueueMarks.items.len;
-    while (mark_ind > 0) {
-        mark_ind -= 1;
-        const mark = self.mQueueMarks.items[mark_ind];
-        mark.mDropFrom(mark.mECS, engine_context, mark.mMark);
-    }
-
-    var change_ind = self.mTagChanges.items.len;
-    while (change_ind > 0) {
-        change_ind -= 1;
-        const change = self.mTagChanges.items[change_ind];
-        change.mUndo(change.mECS, engine_context, change.mEntityID, change.mComponentInd, change.mAdded);
+    var op_ind = self.mOps.items.len;
+    while (op_ind > 0) {
+        op_ind -= 1;
+        const op = &self.mOps.items[op_ind];
+        if (op.mDone) continue;
+        op.mDone = true;
+        op.mDrop(op.mECS, engine_context, op);
     }
 
     for (self.mEntries.items) |entry| entry.mFns.mDiscard(engine_context, entry.mCopy);
     self._Reset(engine_context.EngineAllocator());
 }
 
+fn _Apply(_: *Transaction, engine_context: *EngineContext, op: *Op) void {
+    if (op.mDone) return;
+    op.mDone = true;
+    op.mApply(op.mECS, engine_context, op);
+}
+
+fn _WasCreated(self: *const Transaction, ecs: *anyopaque, entity_id: u64) bool {
+    for (self.mCreated.items) |created| {
+        if (created.mECS == ecs and created.mEntityID == entity_id) return true;
+    }
+    return false;
+}
+
 fn _IsEmpty(self: *const Transaction) bool {
-    return self.mEntries.items.len == 0 and self.mQueueMarks.items.len == 0 and self.mCreated.items.len == 0 and
-        self.mTagChanges.items.len == 0 and self.mOnCommit.items.len == 0 and self.mOnDiscard.items.len == 0 and
-        self.mIrrevocable == null;
+    return self.mEntries.items.len == 0 and self.mOps.items.len == 0 and self.mCreated.items.len == 0 and
+        self.mOnCommit.items.len == 0 and self.mOnDiscard.items.len == 0 and self.mIrrevocable == null;
 }
 
 fn _Reset(self: *Transaction, engine_allocator: std.mem.Allocator) void {
@@ -357,12 +525,14 @@ fn _Reset(self: *Transaction, engine_allocator: std.mem.Allocator) void {
     var arena = self.mArena.promote(engine_allocator);
     _ = arena.reset(.retain_capacity);
     self.mArena = arena.state;
-    self.mQueueMarks.clearRetainingCapacity();
+    self.mOps.clearRetainingCapacity();
+    self.mPresence.clearRetainingCapacity();
     self.mCreated.clearRetainingCapacity();
-    self.mTagChanges.clearRetainingCapacity();
     self.mOnCommit.clearRetainingCapacity();
     self.mOnDiscard.clearRetainingCapacity();
     self.mIrrevocable = null;
+    self.mSpeculating = false;
+    self.mRunSerially = false;
     self.mMeasuring = false;
     self.mMeasureLost = false;
     self.mReads.clearRetainingCapacity();
