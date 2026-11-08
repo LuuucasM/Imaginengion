@@ -345,11 +345,24 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
     zone.Value(group.items.len);
     Tracy.Plot("Assets/Tracked Files", .{ .color = 0x607D8B }, group.items.len);
     Tracy.Plot("Assets/Pending Delete", .{ .color = 0x9E9E9E }, self.mECSManager.NumWithComponent(PendingDelete));
-    for (group.items) |asset_id| {
+    //every file stat'ed at once, one task per asset on the job Io: a stat is mostly waiting on the OS. Each task only
+    //reads its own path and writes its own result, so they share nothing; everything that changes the asset ECS waits
+    //for the loop after, on this thread
+    const checks = try frame_allocator.alloc(FileCheck, group.items.len);
+    for (group.items, checks) |asset_id, *check| {
+        const file_data = self.mECSManager.GetComponent(FileMetaData, asset_id).?;
+        check.* = .{ .mRelPath = file_data.mRelPath.items, .mPathType = file_data.mPathType };
+    }
+    const io = engine_context.Io();
+    var stats: std.Io.Group = .init;
+    for (checks) |*check| stats.async(io, StatFile, .{ self, engine_context, check });
+    try stats.await(io);
+
+    for (group.items, checks) |asset_id, check| {
         const file_data = self.mECSManager.GetComponentMut(FileMetaData, asset_id).?;
 
-        //stat first: it costs no handle (see StatTimeAndSize), and it is what tells us the file still exists
-        const stat = self.OpenFileStats(engine_context, file_data.mRelPath.items, file_data.mPathType) catch |err| {
+        //the stat tells us the file still exists, and costs no handle (see StatTimeAndSize)
+        const stat = check.mResult catch |err| {
             if (err == error.FileNotFound) {
                 try self.MarkForDelete(engine_context, asset_id, .FileNotFound);
                 continue;
@@ -397,6 +410,19 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
             try self.mEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .ToDestroyAsset = .{ .mAssetID = asset_id } });
         }
     }
+}
+
+/// One tracked file's stat in OnUpdate: where it is, copied out of its FileMetaData before the stats start, and what
+/// its stat found
+const FileCheck = struct {
+    mRelPath: []const u8,
+    mPathType: PathType,
+    mResult: anyerror!FileTimeAndSize = error.NotChecked,
+};
+
+/// One task of OnUpdate's stats
+fn StatFile(self: *AManager, engine_context: *EngineContext, check: *FileCheck) void {
+    check.mResult = self.OpenFileStats(engine_context, check.mRelPath, check.mPathType);
 }
 
 /// Takes every FileChangedTag off, done at the start of OnUpdate so each lasts the one frame after its change

@@ -7,6 +7,8 @@ const std = @import("std");
 const EngineContext = @import("../../../Core/EngineContext.zig");
 const Assets = @import("../../../ECSComponents/AComponents.zig");
 const PendingDelete = Assets.PendingDelete;
+const FileMetaData = Assets.FileMetaData;
+const AssetHandle = @import("../../../ECSObjects/AssetHandle.zig");
 
 /// An EngineContext with just enough set up for the asset manager. No Setup: its default assets
 /// need the GPU, and nothing here loads an asset.
@@ -120,4 +122,58 @@ test "a mark can come off again, for a file that was only briefly missing" {
         .mTime = std.Io.Timestamp.now(engine_context.Io(), .awake),
     });
     try std.testing.expect(asset_manager.mECSManager.HasComponent(PendingDelete, asset_id));
+}
+
+test "OnUpdate stats every file on the job pool: a missing one is marked, a changed one is caught up, the rest stay" {
+    const test_context = try TestContext.Init();
+    defer test_context.Deinit();
+    const engine_context = test_context.mEngineContext;
+    const asset_manager = &engine_context.mAssetManager;
+    const engine_allocator = engine_context.EngineAllocator();
+    //the test's own file setup: the engine's Io doesn't forward deleting a file
+    const io = std.testing.io;
+
+    //a pool of 3 workers besides this thread, so the stats really are spread over threads
+    const threads = try std.heap.page_allocator.create(std.Io.Threaded);
+    threads.* = std.Io.Threaded.init(std.heap.page_allocator, .{ .async_limit = .limited(3), .concurrent_limit = .nothing });
+    engine_context.mJobPool = .{ .mIo = threads.io(), .mWorkers = 3 };
+    engine_context._Internal.ThreadFrameArenas.mMainThread = std.Thread.getCurrentId();
+    defer {
+        engine_context.mJobPool = .{};
+        threads.deinit();
+        std.heap.page_allocator.destroy(threads);
+        engine_context._Internal.ThreadFrameArenas.Deinit();
+    }
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    //files tracked as they are now, the way a loaded asset's FileMetaData is
+    const count = 40;
+    var assets: [count]AssetHandle.Type = undefined;
+    for (&assets, 0..) |*asset, i| {
+        var name_buf: [32]u8 = undefined;
+        const name = try std.fmt.bufPrint(&name_buf, "file{d}.txt", .{i});
+        try tmp.dir.writeFile(io, .{ .sub_path = name, .data = "contents" });
+        const stat = try tmp.dir.statFile(io, name, .{});
+
+        asset.* = try asset_manager.mECSManager.CreateEntity(engine_allocator);
+        var file_data = FileMetaData{ .mPathType = .Eng, .mLastModified = stat.mtime, .mSize = stat.size };
+        try file_data.mRelPath.print(engine_allocator, ".zig-cache/tmp/{s}/{s}", .{ tmp.sub_path, name });
+        _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset.*, file_data);
+    }
+
+    //one file gone, and one whose tracked size is out of date
+    const missing = 7;
+    const changed = 23;
+    try tmp.dir.deleteFile(io, "file7.txt");
+    asset_manager.mECSManager.GetComponentMut(FileMetaData, assets[changed]).?.mSize = 1;
+
+    try asset_manager.OnUpdate(engine_context);
+
+    for (assets, 0..) |asset, i| {
+        try std.testing.expectEqual(i == missing, asset_manager.mECSManager.HasComponent(PendingDelete, asset));
+        try std.testing.expectEqual(@as(u64, "contents".len), asset_manager.mECSManager.GetComponent(FileMetaData, asset).?.mSize);
+    }
+    try std.testing.expect(asset_manager.mECSManager.GetComponent(FileMetaData, assets[changed]).?.mHash != 0);
 }
