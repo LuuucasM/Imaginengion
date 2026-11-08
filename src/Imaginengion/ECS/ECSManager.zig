@@ -1,6 +1,7 @@
 const std = @import("std");
 const ComponentManager = @import("ComponentManager.zig").ComponentManager;
 const Transaction = @import("Transaction.zig");
+const Transactions = @import("Transactions.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
@@ -53,7 +54,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             .mStaged = .empty,
             .mRemovalHook = null,
             .mRunDepth = null,
-            .mTransaction = null,
+            .mTransactions = null,
         };
 
         /// Told about each removal and destroy just before it happens, made right away or drained from the queue,
@@ -89,9 +90,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         /// asked for. Tags are the exception, with no storage to move, and so are parents and children, linked as they are
         /// asked for: both are always made right away.
         mRunDepth: ?*const u32,
-        /// The transactions layer's open transaction (Transactions.RunTransaction), shared by every ECS it knows, null for one it
-        /// doesn't. While one is open, component values are read and changed through it, see Transaction
-        mTransaction: ?*const ?*Transaction,
+        /// The transactions layer (Transactions), null for an ECS it doesn't know. While a transaction is open on the calling
+        /// thread (Transactions.Current), components are read and changed through it, see Transaction
+        mTransactions: ?*const Transactions,
 
         pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
             _ValidateCompList(components_types);
@@ -539,9 +540,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             self.mRunDepth = run_depth;
         }
 
-        /// Points this ECS at the transactions layer's open transaction (null to stop), see mTransaction
-        pub fn SetTransaction(self: *Self, transaction: ?*const ?*Transaction) void {
-            self.mTransaction = transaction;
+        /// Points this ECS at the transactions layer (null to stop), see mTransactions
+        pub fn SetTransactions(self: *Self, transactions: ?*const Transactions) void {
+            self.mTransactions = transactions;
         }
 
         // the transaction open now, if there is one
@@ -575,9 +576,15 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             }
         }
 
+        // in safe builds, a panic when a hook running in a batch does what only the main thread may (Transactions.CheckMainThread)
+        fn _CheckMainThread(self: Self, comptime what: []const u8) void {
+            const transactions = self.mTransactions orelse return;
+            transactions.CheckMainThread(what);
+        }
+
         fn _OpenTransaction(self: Self) ?*Transaction {
-            const transaction = self.mTransaction orelse return null;
-            return transaction.*;
+            const transactions = self.mTransactions orelse return null;
+            return transactions.Current();
         }
 
         // whether a transaction copies this type before it is changed. Tags have no value, and parents, children and the
@@ -612,6 +619,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         // in safe builds, a panic when a change reaches storage during a run: it would move what a running system holds
         fn _CheckStorageChange(self: Self, component_ind: usize, comptime change: []const u8) void {
             if (!std.debug.runtime_safety) return;
+            self._CheckMainThread("Changing an ECS's storage");
             if (self.CanChangeStorage(component_ind)) return;
             std.debug.panic(change ++ " {s} right away during a run, which would move what a running system holds", .{ComponentNames[component_ind]});
         }
@@ -638,6 +646,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
 
         // queues a removal or a destroy
         fn _Enqueue(self: *Self, engine_allocator: std.mem.Allocator, event: ECSEventDataT.EventT) !void {
+            self._CheckMainThread("Queueing a removal or a destroy");
             try self.mECSEventManager.Insert(engine_allocator, .EndOfFrame, event);
         }
 
@@ -857,6 +866,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
 
         // lists a component already in the staging arena under its entity and queues its add
         fn _QueueStagedAdd(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize, staged_component: *anyopaque) !void {
+            self._CheckMainThread("Staging an add");
             const key = StagedKey{ .mEntityID = entity_id, .mComponentInd = component_ind };
             try self.mStaged.put(engine_allocator, key, staged_component);
             errdefer _ = self.mStaged.remove(key);
@@ -996,7 +1006,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         }
 
         /// The staged copy for a component that is still staged (see AddComponent), and an open transaction's copy for one
-        /// it has changed (see mTransaction)
+        /// it has changed (see mTransactions)
         pub fn GetComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*const component_type {
             _ValidateType(component_type);
             std.debug.assert(self.IsActiveEntity(entity_id));
@@ -1009,7 +1019,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return self._FindComponent(component_type, entity_id);
         }
 
-        /// GetComponent for changing it. While a transaction is open, the change is made to its copy (see mTransaction),
+        /// GetComponent for changing it. While a transaction is open, the change is made to its copy (see mTransactions),
         /// which this makes the first time. Failing to make it is out of memory, which panics like any other.
         pub fn GetComponentMut(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
             _ValidateType(component_type);
@@ -1037,6 +1047,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             const component = self.mComponentManager.GetComponent(component_type, entity_id) orelse return self._FindComponent(component_type, entity_id);
             const fns = self.mComponentManager.mComponentsArrays.items[ComponentInd(component_type)].CopyFns();
             const copy = transaction.Copy(key, component, fns) catch |err| {
+                // a Clone that does something a speculating hook mustn't (makes a UI element): the hook is run again on
+                // its own, and what it does until it ends is thrown away, so it is handed nothing meanwhile
+                if (transaction.mRunSerially) return null;
                 std.debug.panic("Copying {s} into a transaction: {s}", .{ @typeName(component_type), @errorName(err) });
             };
             return @ptrCast(@alignCast(copy));
@@ -1159,6 +1172,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         // still there, and the hook hears of each just before it goes. Nothing for one that is gone already
         fn _DestroyNow(self: *Self, engine_context: *EngineContext, entity_id: entity_t) anyerror!void {
             if (!self.IsActiveEntity(entity_id)) return;
+            self._CheckMainThread("Destroying an object");
 
             const zone = Tracy.ZoneInit(debug_name ++ "::DestroyEntity", @src());
             defer zone.Deinit();

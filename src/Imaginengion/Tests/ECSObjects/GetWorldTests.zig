@@ -13,7 +13,7 @@ test "every object type hands back the world it lives in" {
     defer std.heap.page_allocator.destroy(engine_context);
     engine_context.* = .{};
     //UUIDs are drawn from the context's Io, which forwards to this
-    engine_context._Internal.ThreadedIO = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+    engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
         .concurrent_limit = .nothing,
         .async_limit = .nothing,
     });

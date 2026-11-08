@@ -78,7 +78,7 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //UUIDs are drawn from the context's Io, which forwards to this
-        engine_context._Internal.ThreadedIO = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -486,4 +486,55 @@ test "two scripts in one loop changing the same component are reported as a conf
         try std.testing.expect(std.mem.endsWith(u8, counts.mTypes.keys()[0], "AttribComponent"));
     }
     try std.testing.expect(found);
+}
+
+//----------------what a hook in a batch mustn't do while speculating----------------
+
+/// The asset LoadsAsset asks for: listed in the asset manager, never loaded
+var gUnloaded: AssetHandle = undefined;
+/// What LoadsAsset's runs got back, in order
+var gLoadRuns: u32 = 0;
+var gFirstLoadError: ?anyerror = null;
+
+/// Asks for an asset that isn't loaded yet on its first run. A per-frame hook, so it runs in a batch
+const LoadsAsset = struct {
+    pub fn OnUpdate(_: *LoadsAsset, engine_context: *EngineContext, _: Entity) !ScriptABI.ScriptResult {
+        gLoadRuns += 1;
+        //only the first run asks: run again on its own, it would really load, and there is no file
+        if (gLoadRuns == 1) {
+            _ = gUnloaded.GetAsset(engine_context, Assets.TextAsset) catch |err| {
+                gFirstLoadError = err;
+                return err;
+            };
+        }
+        return .Continue;
+    }
+};
+const LoadsAssetExports = ScriptExport.Exports(LoadsAsset, "LoadsAsset", &.{});
+
+test "a hook in a batch asking for an asset that isn't loaded is refused, and run again on its own" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    gLoadRuns = 0;
+    gFirstLoadError = null;
+
+    const asset_manager = &engine_context.mAssetManager;
+    const asset_id = try asset_manager.mECSManager.CreateEntity(engine_context.EngineAllocator());
+    _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, Assets.AssetMetaData{ .mRefs = 1 });
+    var file_meta_data = Assets.FileMetaData{ .mPathType = .Prj };
+    _ = try file_meta_data.mRelPath.print(engine_context.EngineAllocator(), "never/loaded.txt", .{});
+    _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, file_meta_data);
+    gUnloaded = .{ .mID = asset_id, .mManager = asset_manager };
+
+    var handle = try world.ScriptAssetFor(&LoadsAssetExports.info);
+    defer handle.ReleaseAsset();
+    _ = try world.EntityWithScript(handle);
+
+    try world.RunUpdateScripts();
+
+    try std.testing.expect(gFirstLoadError.? == error.RunSerially);
+    try std.testing.expectEqual(@as(u32, 2), gLoadRuns);
+    //and nothing was loaded while it speculated
+    try std.testing.expect(!asset_manager.mECSManager.HasComponent(Assets.TextAsset, asset_id));
 }

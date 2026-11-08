@@ -43,6 +43,18 @@ const TestLayer = struct {
     mSystems: *Systems,
     mTransactions: *Transactions,
     mBodies: BodyECS = .empty,
+    /// A job pool of the test's own, for batches that run on several threads (InitThreaded)
+    mThreads: ?*std.Io.Threaded = null,
+
+    /// Init, with batches run on a job pool of `workers` threads besides the test's own
+    fn InitThreaded(workers: usize) !*TestLayer {
+        const self = try Init();
+        const threads = try std.heap.page_allocator.create(std.Io.Threaded);
+        threads.* = std.Io.Threaded.init(std.heap.page_allocator, .{ .async_limit = .limited(workers), .concurrent_limit = .nothing });
+        self.mThreads = threads;
+        self.mEngineContext.mJobPool = .{ .mIo = threads.io(), .mWorkers = workers };
+        return self;
+    }
 
     fn Init() !*TestLayer {
         const self = try std.heap.page_allocator.create(TestLayer);
@@ -58,6 +70,11 @@ const TestLayer = struct {
 
     fn Deinit(self: *TestLayer) !void {
         const engine_context = self.mEngineContext;
+        if (self.mThreads) |threads| {
+            self.mEngineContext.mJobPool = .{};
+            threads.deinit();
+            std.heap.page_allocator.destroy(threads);
+        }
         self.mSystems.Unregister(engine_context.EngineAllocator(), &self.mBodies);
         self.mTransactions.Unregister(engine_context.EngineAllocator(), &self.mBodies);
         self.mBodies.Deinit(engine_context);
@@ -570,7 +587,16 @@ const BatchKind = enum {
     WritesThenFails,
     /// reads the body's position and writes it into mOther's
     CopiesX,
+    /// writes down how it finds its transaction, and runs a system to see the run depth inside it
+    Probes,
+    /// takes memory from the frame allocator
+    FrameAllocates,
+    /// waits for another Meets hook to be running at the same time (gArrived), giving up after a long while
+    Meets,
 };
+
+/// How many Meets hooks have started
+var gArrived: std.atomic.Value(u32) = .init(0);
 
 const BatchHook = struct {
     mKind: BatchKind,
@@ -583,6 +609,26 @@ const BatchHook = struct {
     mMade: ?u32 = null,
     /// CopiesX: the body written to
     mOther: u32 = 0,
+    /// Probes: what it found
+    mProbe: Probe = .{},
+};
+
+const Probe = struct {
+    mParallel: bool = false,
+    mOnWorker: bool = false,
+    mOwnTransaction: bool = false,
+    mDepthInHook: u32 = 0,
+    mDepthInSystem: u32 = 0,
+    mThread: std.Thread.Id = 0,
+};
+
+/// Writes down the run depth inside a run started from a hook
+const DepthProbe = struct {
+    pub const Name = "DepthProbe";
+
+    pub fn Run(engine_context: *EngineContext, depth: *u32) void {
+        depth.* = engine_context.mSystems.mRunDepth;
+    }
 };
 
 fn RunsBatchHook(bodies: *BodyECS, engine_context: *EngineContext, hooks: []BatchHook, index: usize) bool {
@@ -599,6 +645,24 @@ fn RunsBatchHook(bodies: *BodyECS, engine_context: *EngineContext, hooks: []Batc
         .Makes => hook.mMade = bodies.CreateEntity(engine_context.EngineAllocator()) catch |err| {
             std.debug.assert(err == error.RunSerially);
             return true;
+        },
+        .Probes => {
+            const transactions = &engine_context.mTransactions;
+            hook.mProbe.mParallel = transactions.mParallel;
+            hook.mProbe.mOnWorker = transactions.OnWorker();
+            hook.mProbe.mOwnTransaction = transactions.Current() != null and transactions.mOpenTransaction == null;
+            hook.mProbe.mDepthInHook = engine_context.mSystems.mRunDepth;
+            hook.mProbe.mThread = std.Thread.getCurrentId();
+            engine_context.mSystems.RunSystem(DepthProbe, engine_context, .{&hook.mProbe.mDepthInSystem}) catch unreachable;
+        },
+        .FrameAllocates => _ = engine_context.FrameAllocator().alloc(u8, 4096) catch unreachable,
+        .Meets => {
+            hook.mProbe.mThread = std.Thread.getCurrentId();
+            _ = gArrived.fetchAdd(1, .acq_rel);
+            var spins: u64 = 0;
+            while (gArrived.load(.acquire) < 2 and spins < 4_000_000_000) : (spins += 1) std.atomic.spinLoopHint();
+            //met: both were running at once
+            hook.mSaw = if (gArrived.load(.acquire) >= 2) 1 else 0;
         },
         .CopiesX => {
             const x = bodies.GetComponent(Position, hook.mID).?.x;
@@ -743,4 +807,130 @@ test "a hook that aborts still reserved what it wrote, so a later hook reading i
     //as if run in order: a is 9, copied into b, which the last one read
     try std.testing.expectEqual(@as(f32, 9), layer.X(b));
     try std.testing.expectEqual(@as(f32, 9), hooks[2].mSaw);
+}
+
+test "a batch's hooks find their own transactions through the per-thread lookup, and a run they start leaves the depth alone" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    var hooks = [_]BatchHook{ .{ .mKind = .Probes }, .{ .mKind = .Probes } };
+
+    try RunBatchOf(layer, &hooks);
+
+    for (hooks) |hook| {
+        try std.testing.expect(hook.mProbe.mParallel);
+        try std.testing.expect(hook.mProbe.mOnWorker);
+        try std.testing.expect(hook.mProbe.mOwnTransaction);
+        try std.testing.expect(hook.mProbe.mDepthInHook > 0);
+        try std.testing.expectEqual(hook.mProbe.mDepthInHook, hook.mProbe.mDepthInSystem);
+    }
+    //and once the batch is done, nothing is open and nobody is a worker
+    try std.testing.expect(!layer.mTransactions.mParallel);
+    try std.testing.expect(!layer.mTransactions.OnWorker());
+    try std.testing.expect(layer.mTransactions.Current() == null);
+    try std.testing.expectEqual(@as(u32, 0), layer.mSystems.mRunDepth);
+}
+
+test "a batch's hook takes frame memory from its own transaction's arena, never the engine's shared one" {
+    const layer = try TestLayer.Init();
+    defer layer.Deinit() catch unreachable;
+    const engine_context = layer.mEngineContext;
+    const shared_before = engine_context._Internal.FrameArena.queryCapacity();
+    var hooks = [_]BatchHook{ .{ .mKind = .FrameAllocates }, .{ .mKind = .FrameAllocates } };
+
+    try RunBatchOf(layer, &hooks);
+
+    try std.testing.expectEqual(shared_before, engine_context._Internal.FrameArena.queryCapacity());
+    for (layer.mTransactions.mBatchPool.items[0..2]) |transaction| try std.testing.expect(transaction.mFrameArena.queryCapacity() >= 4096);
+    //emptied with the engine's at the end of the frame, keeping the memory
+    layer.mTransactions.ResetFrameArenas();
+    try std.testing.expect(layer.mTransactions.mBatchPool.items[0].mFrameArena.queryCapacity() >= 4096);
+}
+
+//----------------the same batches on several threads----------------
+
+test "on several threads, hooks touching different bodies all run once, and ones sharing a body still come out in order" {
+    const layer = try TestLayer.InitThreaded(4);
+    defer layer.Deinit() catch unreachable;
+    const allocator = std.testing.allocator;
+
+    //64 bodies a hook each, then 8 hooks all on one more
+    var hooks: std.ArrayList(BatchHook) = .empty;
+    defer hooks.deinit(allocator);
+    var own: [64]u32 = undefined;
+    for (&own) |*id| {
+        id.* = try layer.NewBody(1);
+        try hooks.append(allocator, .{ .mKind = .Increments, .mID = id.* });
+    }
+    const shared = try layer.NewBody(0);
+    for (0..8) |_| try hooks.append(allocator, .{ .mKind = .Increments, .mID = shared });
+
+    try RunBatchOf(layer, hooks.items);
+
+    for (own, 0..) |id, ind| {
+        try std.testing.expectEqual(@as(f32, 2), layer.X(id));
+        try std.testing.expectEqual(@as(u32, 1), hooks.items[ind].mRuns);
+    }
+    try std.testing.expectEqual(@as(f32, 8), layer.X(shared));
+    for (hooks.items[64..], 1..) |hook, runs| try std.testing.expectEqual(@as(u32, @intCast(runs)), hook.mRuns);
+}
+
+test "on several threads, write after write, reservations by hooks that abort, and the serial pass come out the same" {
+    const layer = try TestLayer.InitThreaded(4);
+    defer layer.Deinit() catch unreachable;
+
+    const a = try layer.NewBody(1);
+    var waw = [_]BatchHook{ .{ .mKind = .Freezes, .mID = a }, .{ .mKind = .Freezes, .mID = a } };
+    try RunBatchOf(layer, &waw);
+    try std.testing.expectEqual(@as(u32, 1), waw[0].mRuns);
+    try std.testing.expectEqual(@as(u32, 2), waw[1].mRuns);
+
+    const c = try layer.NewBody(1);
+    const d = try layer.NewBody(2);
+    var chain = [_]BatchHook{
+        .{ .mKind = .WritesNine, .mID = c },
+        .{ .mKind = .CopiesX, .mID = c, .mOther = d },
+        .{ .mKind = .ReadsX, .mID = d },
+    };
+    try RunBatchOf(layer, &chain);
+    try std.testing.expectEqual(@as(u32, 2), chain[1].mRuns);
+    try std.testing.expectEqual(@as(u32, 3), chain[2].mRuns);
+    try std.testing.expectEqual(@as(f32, 9), chain[2].mSaw);
+
+    const e = try layer.NewBody(1);
+    var serial = [_]BatchHook{ .{ .mKind = .Makes }, .{ .mKind = .Increments, .mID = e } };
+    try RunBatchOf(layer, &serial);
+    try std.testing.expectEqual(@as(u32, 2), serial[0].mRuns);
+    try std.testing.expect(layer.mBodies.IsActiveEntity(serial[0].mMade.?));
+    try std.testing.expectEqual(@as(f32, 2), layer.X(e));
+}
+
+test "on several threads, each hook has its own transaction and frame arena, and runs it starts leave the depth alone" {
+    const layer = try TestLayer.InitThreaded(4);
+    defer layer.Deinit() catch unreachable;
+    const engine_context = layer.mEngineContext;
+    const shared_before = engine_context._Internal.FrameArena.queryCapacity();
+
+    var hooks = [_]BatchHook{ .{ .mKind = .Probes }, .{ .mKind = .Probes }, .{ .mKind = .FrameAllocates }, .{ .mKind = .FrameAllocates } };
+    try RunBatchOf(layer, &hooks);
+
+    for (hooks[0..2]) |hook| {
+        try std.testing.expect(hook.mProbe.mOnWorker);
+        try std.testing.expect(hook.mProbe.mOwnTransaction);
+        try std.testing.expectEqual(hook.mProbe.mDepthInHook, hook.mProbe.mDepthInSystem);
+    }
+    try std.testing.expectEqual(shared_before, engine_context._Internal.FrameArena.queryCapacity());
+    try std.testing.expect(!layer.mTransactions.mParallel);
+}
+
+test "on several threads, hooks of a batch really run side by side: two that each wait for the other both get through" {
+    const layer = try TestLayer.InitThreaded(4);
+    defer layer.Deinit() catch unreachable;
+    gArrived = .init(0);
+    var hooks = [_]BatchHook{ .{ .mKind = .Meets }, .{ .mKind = .Meets } };
+
+    try RunBatchOf(layer, &hooks);
+
+    try std.testing.expectEqual(@as(f32, 1), hooks[0].mSaw);
+    try std.testing.expectEqual(@as(f32, 1), hooks[1].mSaw);
+    try std.testing.expect(hooks[0].mProbe.mThread != hooks[1].mProbe.mThread);
 }

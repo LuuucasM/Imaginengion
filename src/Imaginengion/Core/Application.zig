@@ -77,6 +77,7 @@ pub fn Run(self: *Application) !void {
     //the arena empties all at once, so Tracy is told the whole Frame pool is gone rather than each allocation
     Tracy.MemDiscard(.Frame);
     _ = self.mEngineContext._Internal.FrameArena.reset(.retain_capacity);
+        self.mEngineContext.mTransactions.ResetFrameArenas();
     self.mEngineContext.mEngineStats.ResetStats();
     first_zone.Deinit();
     Tracy.FrameMark();
@@ -102,6 +103,7 @@ pub fn Run(self: *Application) !void {
         //the arena empties all at once, so Tracy is told the whole Frame pool is gone rather than each allocation
         Tracy.MemDiscard(.Frame);
         _ = self.mEngineContext._Internal.FrameArena.reset(.retain_capacity);
+        self.mEngineContext.mTransactions.ResetFrameArenas();
         self.mEngineContext.mEngineStats.ResetStats();
 
         t1 = .now(run_io, .awake);

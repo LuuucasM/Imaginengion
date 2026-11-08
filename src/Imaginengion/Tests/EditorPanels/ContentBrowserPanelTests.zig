@@ -32,7 +32,7 @@ const TestBrowser = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //folders are listed through the context's Io, which forwards to this
-        engine_context._Internal.ThreadedIO = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -59,7 +59,7 @@ const TestBrowser = struct {
     }
 
     fn Io(self: *TestBrowser) std.Io {
-        return self.mEngineContext._Internal.ThreadedIO.io();
+        return self.mEngineContext._Internal.ThreadPool.io();
     }
 
     fn WriteFile(self: *TestBrowser, sub_path: []const u8) !void {

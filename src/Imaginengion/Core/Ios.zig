@@ -1,13 +1,15 @@
 const std = @import("std");
 const EngineContext = @import("EngineContext.zig");
 const IoType = EngineContext.IoType;
+const JobGroup = @import("JobGroup.zig");
+const Transactions = @import("../ECS/Transactions.zig");
 
 pub inline fn MakeIoVTable(comptime io_type: IoType) type {
     const fns = struct {
         fn DirOpenDir(context: ?*anyopaque, dir: std.Io.Dir, sub_path: []const u8, options: std.Io.Dir.OpenOptions) std.Io.Dir.OpenError!std.Io.Dir {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
 
@@ -16,7 +18,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn DirCreateDirPath(context: ?*anyopaque, dir: std.Io.Dir, sub_path: []const u8, permissions: std.Io.Dir.Permissions) std.Io.Dir.CreateDirPathError!std.Io.Dir.CreatePathStatus {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             return try inner_io.vtable.dirCreateDirPath(inner_io.userdata, dir, sub_path, permissions);
@@ -24,7 +26,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn DirAccess(context: ?*anyopaque, dir: std.Io.Dir, sub_path: []const u8, options: std.Io.Dir.AccessOptions) std.Io.Dir.AccessError!void {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             return try inner_io.vtable.dirAccess(inner_io.userdata, dir, sub_path, options);
@@ -32,7 +34,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn DirStatFile(context: ?*anyopaque, dir: std.Io.Dir, sub_path: []const u8, options: std.Io.Dir.StatFileOptions) std.Io.Dir.StatFileError!std.Io.File.Stat {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
 
@@ -41,7 +43,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn Now(context: ?*anyopaque, clock: std.Io.Clock) std.Io.Timestamp {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             return inner_io.vtable.now(inner_io.userdata, clock);
@@ -49,7 +51,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn DirClose(context: ?*anyopaque, dirs: []const std.Io.Dir) void {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             inner_io.vtable.dirClose(inner_io.userdata, dirs);
@@ -57,7 +59,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn ChildWait(context: ?*anyopaque, child: *std.process.Child) std.process.Child.WaitError!std.process.Child.Term {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             return try inner_io.vtable.childWait(inner_io.userdata, child);
@@ -65,7 +67,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn Random(context: ?*anyopaque, buffer: []u8) void {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             inner_io.vtable.random(inner_io.userdata, buffer);
@@ -73,7 +75,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn ProcessSpawn(context: ?*anyopaque, options: std.process.SpawnOptions) std.process.SpawnError!std.process.Child {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             return try inner_io.vtable.processSpawn(inner_io.userdata, options);
@@ -81,7 +83,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn FileReadPositional(context: ?*anyopaque, file: std.Io.File, data: []const []u8, offset: u64) std.Io.File.ReadPositionalError!usize {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             return try inner_io.vtable.fileReadPositional(inner_io.userdata, file, data, offset);
@@ -89,7 +91,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn FileClose(context: ?*anyopaque, files: []const std.Io.File) void {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             inner_io.vtable.fileClose(inner_io.userdata, files);
@@ -97,7 +99,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn FileStat(context: ?*anyopaque, file: std.Io.File) std.Io.File.StatError!std.Io.File.Stat {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             return try inner_io.vtable.fileStat(inner_io.userdata, file);
@@ -105,7 +107,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn DirOpenFile(context: ?*anyopaque, dir: std.Io.Dir, sub_path: []const u8, flags: std.Io.Dir.OpenFileOptions) std.Io.File.OpenError!std.Io.File {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             return try inner_io.vtable.dirOpenFile(inner_io.userdata, dir, sub_path, flags);
@@ -113,7 +115,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn DirRealPathFile(context: ?*anyopaque, dir: std.Io.Dir, path_name: []const u8, out_buffer: []u8) std.Io.Dir.RealPathFileError!usize {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             return try inner_io.vtable.dirRealPathFile(inner_io.userdata, dir, path_name, out_buffer);
@@ -121,7 +123,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn DirCreateFile(context: ?*anyopaque, dir: std.Io.Dir, sub_path: []const u8, options: std.Io.Dir.CreateFileOptions) std.Io.File.OpenError!std.Io.File {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             //a file made can't be taken back: a hook that fails after this is kept, and one speculating in a batch is
@@ -132,7 +134,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn DirRead(context: ?*anyopaque, dir_reader: *std.Io.Dir.Reader, buffer: []std.Io.Dir.Entry) std.Io.Dir.Reader.Error!usize {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             return try inner_io.vtable.dirRead(inner_io.userdata, dir_reader, buffer);
@@ -140,7 +142,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn FileWritePositional(context: ?*anyopaque, file: std.Io.File, header: []const u8, data: []const []const u8, splat: usize, offset: u64) std.Io.File.WritePositionalError!usize {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             engine_context.mTransactions.MarkIrrevocable("a file was written") catch return error.Canceled;
@@ -149,7 +151,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
         fn Operate(context: ?*anyopaque, operation: std.Io.Operation) std.Io.Cancelable!std.Io.Operation.Result {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
-                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Job, .Aria => engine_context._Internal.ThreadPool.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
             //anything but a read sends or writes something that can't be taken back
@@ -167,10 +169,16 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
             .await = std.Io.unreachableAwait,
             .cancel = std.Io.unreachableCancel,
 
-            .groupAsync = std.Io.noGroupAsync,
+            //every group's tasks are queued by async and run by await: on the pool and the waiting thread for jobs, as a
+            //batch of transactions for Aria
+            .groupAsync = JobGroup.GroupAsync,
             .groupConcurrent = std.Io.failingGroupConcurrent,
-            .groupAwait = std.Io.unreachableGroupAwait,
-            .groupCancel = std.Io.unreachableGroupCancel,
+            .groupAwait = switch (io_type) {
+                .Job => JobGroup.GroupAwait,
+                .Aria => Transactions.AriaGroupAwait,
+                .Evented => @compileError("evented not implemented for this Io yet"),
+            },
+            .groupCancel = JobGroup.GroupCancel,
 
             .recancel = std.Io.unreachableRecancel,
             .swapCancelProtection = std.Io.unreachableSwapCancelProtection,

@@ -225,7 +225,7 @@ pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, requested
 
     if (asset_id) |id| {
         std.debug.assert(self.mECSManager.HasComponent(AssetMetaData, id));
-        self.mECSManager.GetComponentMut(AssetMetaData, id).?.mRefs += 1;
+        self.mECSManager.GetComponentMut(AssetMetaData, id).?.AddRef();
         return AssetHandle{ .mID = id, .mManager = self };
     } else {
         const new_asset_id = switch (asset_source) {
@@ -234,7 +234,7 @@ pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, requested
             .Default => unreachable,
         };
 
-        self.mECSManager.GetComponentMut(AssetMetaData, new_asset_id).?.mRefs += 1;
+        self.mECSManager.GetComponentMut(AssetMetaData, new_asset_id).?.AddRef();
 
         try self.AddUUID(engine_allocator, asset_hash, new_asset_id);
 
@@ -244,12 +244,13 @@ pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, requested
 
 /// Takes another reference to an asset that is already loaded, for code that copies a handle it owns.
 pub fn RetainAssetHandle(self: *AManager, asset_id: AssetHandle.Type) void {
-    self.mECSManager.GetComponentMut(AssetMetaData, asset_id).?.mRefs += 1;
+    //atomic: a hook running in a batch on a worker thread retains one when it copies a component holding a handle
+    self.mECSManager.GetComponentMut(AssetMetaData, asset_id).?.AddRef();
 }
 
 pub fn ReleaseAssetHandle(self: *AManager, asset_handle: *AssetHandle) void {
     const asset_meta_data = self.mECSManager.GetComponentMut(AssetMetaData, asset_handle.mID).?;
-    asset_meta_data.mRefs -= 1;
+    asset_meta_data.DropRef();
     asset_handle.mID = AssetHandle.NullObject;
 }
 
@@ -287,6 +288,10 @@ pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_
             //it failed last time and the file has not changed since, so it would only fail again
             return try self.GetDefaultAsset(asset_type);
         } else {
+            //a load changes the asset manager, which a hook speculating in a batch mustn't: it runs again on its own
+            if (engine_context.mTransactions.RefuseSpeculative()) |err| return err;
+            engine_context.mTransactions.CheckMainThread("Loading an asset");
+
             //only the load is zoned: the hit path above is a lookup that runs for every drawn shape
             const zone = Tracy.ZoneInit("AssetManager::LoadAsset", @src());
             defer zone.Deinit();

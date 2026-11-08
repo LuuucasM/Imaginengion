@@ -147,7 +147,11 @@ fn ScriptLoop(comptime ObjectType: type, comptime script_type: type, comptime wo
                         .mOwner = .{ .mID = OwnerOf(ObjectType, world_manager, script_id), .mManager = world_manager },
                     });
                 }
-                try engine_context.mTransactions.RunBatch(engine_context, hooks.items.len, RunBatched, .{ engine_context, hooks.items, args }, KeepsChanges);
+                //every hook a task of one group on the AriaIo: queued here, run as a batch of transactions by await
+                const aria = engine_context.AriaIo();
+                var group: std.Io.Group = .init;
+                for (hooks.items) |*hook| group.async(aria, RunBatched, .{ engine_context, hook, args });
+                try group.await(aria);
                 return .Continue;
             }
 
@@ -172,14 +176,15 @@ fn ScriptLoop(comptime ObjectType: type, comptime script_type: type, comptime wo
             mOwner: ObjectType,
         };
 
-        fn RunBatched(engine_context: *EngineContext, hooks: []const Batched, args: Args, index: usize) ScriptResult {
-            const hook = &hooks[index];
-            return RunPrepared(ObjectType, script_type, engine_context, hook.mPrepared, &hook.mOwner, args);
+        // one hook of the batch: a task hands nothing back, so one that failed says so (Transactions.MarkFailed)
+        fn RunBatched(engine_context: *EngineContext, hook: *const Batched, args: Args) void {
+            const result = RunPrepared(ObjectType, script_type, engine_context, hook.mPrepared, &hook.mOwner, args);
+            if (!KeepsChanges(result)) engine_context.mTransactions.MarkFailed();
         }
     };
 }
 
-/// Whether a script loop runs its hooks as one batch (Transactions.RunBatch): the hooks every object runs once a frame or a
+/// Whether a script loop runs its hooks as one batch (a group on EngineContext.AriaIo): the hooks every object runs once a frame or a
 /// step, in no order anything relies on. The rest (keys, pointer, UI, collisions, game events, starts) run one after
 /// another, since they rely on .Handled stopping the line and on order. In a batch .Handled stops nothing
 fn IsBatched(comptime script_type: type) bool {

@@ -21,6 +21,7 @@ const TextComponent = EntityComponents.TextComponent;
 pub const Name = "BVHRefit";
 
 pub fn Run(engine_context: *EngineContext, world: *WorldManager, mask: u4) void {
+    engine_context.mTransactions.CheckMainThread("Refitting the BVH");
     const bvh = &world.mBVH;
     for ([_]*WorldBVH.LayerTree{ &bvh.mGame, &bvh.mOverlay }) |tree| {
         for (tree.mItems.items, tree.mBVHItems.items) |item, *bvh_item| {

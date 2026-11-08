@@ -50,6 +50,7 @@ pub const AssetFonts = struct {
 
 /// Both of the world's trees over everything it has now. World transforms must be up to date
 pub fn Run(engine_context: *EngineContext, world: *WorldManager, fonts: anytype) anyerror!void {
+    engine_context.mTransactions.CheckMainThread("Building the BVH");
     const bvh = &world.mBVH;
     const engine_allocator = engine_context.EngineAllocator();
     const frame_allocator = engine_context.FrameAllocator();

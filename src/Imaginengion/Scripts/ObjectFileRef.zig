@@ -52,6 +52,9 @@ pub fn ObjectFileRef(comptime obj_t: type) type {
         pub fn Get(self: *Self, engine_context: *EngineContext, where: Where) !obj_t {
             if (self.mObject.IsActive()) return self.mObject;
             if (!self.mFile.IsIDValid()) return error.NoFileSet;
+            //loading goes through the asset world, outside transactions, which a hook speculating in a batch mustn't
+            //change: it runs again on its own
+            if (engine_context.mTransactions.RefuseSpeculative()) |err| return err;
             const file_data = self.mFile.GetFileMetaData();
             self.mObject = if (obj_t == Entity)
                 try where.LoadEntity(engine_context, file_data.mRelPath.items, file_data.mPathType)

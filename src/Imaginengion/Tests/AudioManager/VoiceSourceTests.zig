@@ -20,7 +20,7 @@ const Voice = @import("../../ECSObjects/Voice.zig");
 fn InitEngine() !*EngineContext {
     const engine_context = try std.heap.page_allocator.create(EngineContext);
     engine_context.* = .{};
-    engine_context._Internal.ThreadedIO = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+    engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
         .concurrent_limit = .nothing,
         .async_limit = .nothing,
     });

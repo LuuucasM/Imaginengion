@@ -79,6 +79,10 @@ pub fn RunSystem(self: *Systems, comptime S: type, engine_context: *EngineContex
     const zone = Tracy.ZoneInit(S.Name, @src());
     defer zone.Deinit();
 
+    // run by a hook of a batch's parallel execution phase: the batch's own run already holds every change, and the run
+    // depth and the conflict report are the main thread's
+    if (engine_context.mTransactions.OnWorker()) return @call(.auto, S.Run, .{engine_context} ++ args);
+
     self.mRunDepth += 1;
     //the conflict report counts each run's transactions as a batch of its own (Transactions.mConflicts)
     const conflicts = &engine_context.mTransactions.mConflicts;
@@ -102,7 +106,8 @@ pub fn RunSystem(self: *Systems, comptime S: type, engine_context: *EngineContex
 }
 
 /// Starts a run that isn't a system's: for the transactions layer, whose transactions are runs too (Transactions)
-pub fn EnterRun(self: *Systems) void {
+pub fn EnterRun(self: *Systems, engine_context: *EngineContext) void {
+    engine_context.mTransactions.CheckMainThread("Starting a run");
     self.mRunDepth += 1;
 }
 

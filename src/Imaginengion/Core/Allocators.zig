@@ -15,7 +15,8 @@ pub inline fn MakeAllocatorVTable(comptime alloc_type: AllocType) type {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context));
             return switch (alloc_type) {
                 .Engine => engine_context._Internal.EngineGPA.allocator(),
-                .Frame => engine_context._Internal.FrameArena.allocator(),
+                //a batch's hook on a worker thread has an arena of its own: the engine's isn't safe to share
+                .Frame => if (engine_context.mTransactions.WorkerFrameArena()) |arena| arena.allocator() else engine_context._Internal.FrameArena.allocator(),
             };
         }
         fn alloc(context: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {

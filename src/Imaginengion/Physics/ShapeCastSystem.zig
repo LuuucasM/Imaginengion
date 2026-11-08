@@ -39,6 +39,8 @@ pub const Name = "ShapeCast";
 pub fn Run(engine_context: *EngineContext, world: *WorldManager, shape: CastShape, ray: Ray, options: QueryOptions) !?PhysicsHit {
     //anything moved since the tree was last refit, whatever moved it: a script teleporting a body, the last substep
     if (world.NumEntitiesWith(TransformDirtyTag) > 0) {
+        //the refit writes the world's tree, which a hook speculating in a batch mustn't: it runs again on its own
+        if (engine_context.mTransactions.RefuseSpeculative()) |err| return err;
         try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{world});
         try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ world, BVH.Mask.PHYSICS });
     }

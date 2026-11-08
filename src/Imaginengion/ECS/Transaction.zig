@@ -51,6 +51,8 @@ mIrrevocable: ?[]const u8 = null,
 
 /// One hook of a batch, which may be dropped and run again: nothing it does may happen for real before commit. Set by Open
 mSpeculating: bool = false,
+/// Its code said what it was for didn't happen (Transactions.MarkFailed): it is dropped rather than kept
+mFailed: bool = false,
 /// While speculating, the hook asked for something that can't be speculative (an object made, an irrevocable action):
 /// it is dropped whatever it hands back, and run again on its own after the batch
 mRunSerially: bool = false,
@@ -68,6 +70,11 @@ mTypeWrites: std.AutoHashMapUnmanaged(TypeKey, void) = .empty,
 mNames: std.AutoHashMapUnmanaged(*anyopaque, []const u8) = .empty,
 /// While measuring, something couldn't be written down (out of memory): it can't be checked for conflicts
 mMeasureLost: bool = false,
+
+/// What the frame allocator hands out to a batch's hook running on a worker thread (Transactions.WorkerFrameArena):
+/// the engine's one frame arena isn't safe to share between threads. It lives as long as frame allocations do, emptied
+/// with the engine's at the end of the frame (Transactions.ResetFrameArenas), not when the transaction ends
+mFrameArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
 
 pub const empty: Transaction = .{};
 
@@ -238,6 +245,7 @@ pub fn Deinit(self: *Transaction, engine_allocator: std.mem.Allocator) void {
     self.mTypeReads.deinit(engine_allocator);
     self.mTypeWrites.deinit(engine_allocator);
     self.mNames.deinit(engine_allocator);
+    self.mFrameArena.deinit();
     self.* = .empty;
 }
 
@@ -533,6 +541,7 @@ fn _Reset(self: *Transaction, engine_allocator: std.mem.Allocator) void {
     self.mIrrevocable = null;
     self.mSpeculating = false;
     self.mRunSerially = false;
+    self.mFailed = false;
     self.mMeasuring = false;
     self.mMeasureLost = false;
     self.mReads.clearRetainingCapacity();

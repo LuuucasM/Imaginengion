@@ -368,7 +368,7 @@ test "the engine's default theme reads, with every style the editor's look needs
     engine_context.* = .{};
     const engine_allocator = engine_context.EngineAllocator();
     //file reads go through the context's Io, which forwards to this
-    engine_context._Internal.ThreadedIO = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+    engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
         .concurrent_limit = .nothing,
         .async_limit = .nothing,
     });
@@ -406,7 +406,7 @@ test "a style names a theme file of its own, and is taken out of it instead of t
     defer std.heap.page_allocator.destroy(engine_context);
     engine_context.* = .{};
     const engine_allocator = engine_context.EngineAllocator();
-    engine_context._Internal.ThreadedIO = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+    engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
         .concurrent_limit = .nothing,
         .async_limit = .nothing,
     });

@@ -36,6 +36,7 @@ pub const WorldEventCallback = WorldManager.EventManagerT.EventCallback;
 
 const MakeAllocatorVTable = @import("Allocators.zig").MakeAllocatorVTable;
 const MakeIoVTable = @import("Ios.zig").MakeIoVTable;
+const JobGroup = @import("JobGroup.zig");
 
 const InternalData = struct {
     EngineGPA: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
@@ -49,12 +50,21 @@ const InternalData = struct {
     EngineAllocVTable: *const std.mem.Allocator.VTable = &MakeAllocatorVTable(.Engine).vtable,
     FrameAllocVTable: *const std.mem.Allocator.VTable = &MakeAllocatorVTable(.Frame).vtable,
 
-    ThreadedIO: std.Io.Threaded = undefined,
+    /// The engine's thread pool, under both its Ios (Io, AriaIo): the file calls they pass on run on the thread that
+    /// makes them, and its workers (one fewer than the machine has cores) run their groups' tasks (mJobPool)
+    ThreadPool: std.Io.Threaded = undefined,
 };
 
+/// The engine's Ios, each the same file, time and other calls passed on to its thread pool, with groups of their own:
+///   - Job (Io): a group's tasks are queued, then run by the pool's workers and the waiting thread together. For work
+///     whose parts can't get in each other's way, like building the BVH
+///   - Aria (AriaIo): a group's tasks are run as a batch of transactions, Aria's way (Transactions.RunTasks). For work
+///     the engine can't see into, like script hooks
+///   - Evented: not yet
 pub const IoType = enum {
-    Threaded,
+    Job,
     Evented,
+    Aria,
 };
 
 pub const AllocType = enum {
@@ -78,6 +88,10 @@ mSystems: Systems = .empty,
 /// The transactions layer: runs code so its changes to the ECSs can be kept or dropped as one, and batches of hooks the
 /// way Aria does (see ECS/Transactions.zig). Registered ECSs point into it too, so it stays here
 mTransactions: Transactions = .empty,
+
+/// The thread pool the engine's groups run on, and how many workers it has (JobGroup.ParallelFor). Empty until Init,
+/// which runs everything on the calling thread
+mJobPool: JobGroup.Pool = .{},
 
 mAppWindow: Window = .{},
 
@@ -131,12 +145,14 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     const zone = Tracy.ZoneInit("EngineContext::Init", @src());
     defer zone.Deinit();
     self.mEnviron = environ;
-    self._Internal.ThreadedIO = std.Io.Threaded.init(self._Internal.EngineGPA.allocator(), .{
+    //async left at its default, one worker fewer than the machine has cores, the thread waiting on a group being the last
+    self._Internal.ThreadPool = std.Io.Threaded.init(self._Internal.EngineGPA.allocator(), .{
         .concurrent_limit = .nothing,
-        .async_limit = .nothing,
     });
+    const cores = std.Thread.getCpuCount() catch 1;
+    self.mJobPool = .{ .mIo = self._Internal.ThreadPool.io(), .mWorkers = cores -| 1 };
 
-    self.mEngineStats.AppTimer = .now(self._Internal.ThreadedIO.io(), .awake);
+    self.mEngineStats.AppTimer = .now(self._Internal.ThreadPool.io(), .awake);
 
     self.mAppWindow.Init(self);
 
@@ -208,6 +224,8 @@ pub fn DeInit(self: *EngineContext) void {
     //empty already once every ECS has unregistered in its Deinit, this is for any left registered
     self.mSystems.Deinit(self.EngineAllocator());
     self.mTransactions.Deinit(self.EngineAllocator());
+    self.mJobPool = .{};
+    self._Internal.ThreadPool.deinit();
 
     //anything still live in the Engine pool here is a real leak and is left for Tracy to show as one
     _ = self._Internal.EngineGPA.deinit();
@@ -228,9 +246,20 @@ pub fn FrameAllocator(self: *EngineContext) std.mem.Allocator {
     };
 }
 
+/// The engine's Io for jobs (IoType.Job): its groups run on the thread pool, the waiting thread helping
 pub fn Io(self: *EngineContext) std.Io {
     return .{
         .userdata = self,
-        .vtable = &MakeIoVTable(.Threaded).vtable,
+        .vtable = &MakeIoVTable(.Job).vtable,
+    };
+}
+
+/// The engine's Io for transactions (IoType.Aria): the same as Io, except that a group's tasks run as a batch of
+/// transactions, Aria's way, so tasks the engine can't see into can run side by side safely. A task that fails says so
+/// with Transactions.MarkFailed
+pub fn AriaIo(self: *EngineContext) std.Io {
+    return .{
+        .userdata = self,
+        .vtable = &MakeIoVTable(.Aria).vtable,
     };
 }
