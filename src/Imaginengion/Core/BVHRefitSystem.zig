@@ -29,23 +29,42 @@ pub fn Run(engine_context: *EngineContext, world: *WorldManager, mask: u4) void 
     const bvh = &world.mBVH;
     const trees = [_]*WorldBVH.LayerTree{ &bvh.mGame, &bvh.mOverlay };
 
-    //every item of every tree is a task of its own on the job Io. Each only reads its item's entity and writes its own
-    //item's box, so they run side by side with nothing to protect. Then each tree's boxes from them
-    const io = engine_context.Io();
-    var group: std.Io.Group = .init;
+    //each run of CHUNK_ITEMS items of a tree is a task of its own on the job Io. Each only reads its items' entities and
+    //writes its own items' boxes, so they run side by side with nothing to protect. With no more than one task's worth
+    //in all, it is placed right here, since handing it to the pool costs more than placing it. Then each tree's boxes
+    //from them
+    var chunks: usize = 0;
     for (trees) |tree| {
         zone.Value(tree.mItems.items.len);
-        for (0..tree.mItems.items.len) |index| group.async(io, PlaceItem, .{ engine_context, world, tree, mask, index });
+        chunks += std.math.divCeil(usize, tree.mItems.items.len, CHUNK_ITEMS) catch unreachable;
     }
-    group.await(io) catch |err| std.debug.panic("Placing the BVH's items was {s}", .{@errorName(err)});
+    if (chunks <= 1) {
+        for (trees) |tree| PlaceItems(engine_context, world, tree, mask, 0, tree.mItems.items.len);
+    } else {
+        const io = engine_context.Io();
+        var group: std.Io.Group = .init;
+        for (trees) |tree| {
+            const count = tree.mItems.items.len;
+            var start: usize = 0;
+            while (start < count) : (start += CHUNK_ITEMS) {
+                group.async(io, PlaceItems, .{ engine_context, world, tree, mask, start, @min(start + CHUNK_ITEMS, count) });
+            }
+        }
+        group.await(io) catch |err| std.debug.panic("Placing the BVH's items was {s}", .{@errorName(err)});
+    }
     for (trees) |tree| BVH.Refit(tree.mBVHItems.items, tree.mNodes.items);
 }
 
-/// Places the tree's item `index` again: one task of Run
-fn PlaceItem(engine_context: *EngineContext, world: *WorldManager, tree: *WorldBVH.LayerTree, mask: u4, index: usize) void {
-    const bvh_item = &tree.mBVHItems.items[index];
-    if (bvh_item.Mask & mask == 0) return;
-    if (ItemBounds(engine_context, world, tree.mItems.items[index])) |bounds| bvh_item.Bounds = bounds;
+/// How many items one task places. A task per item cost far more to queue and hand out than placing the item does
+/// (~400 ns an item at 200 items, 2026-11-09), and neighbouring items written from different threads share cache lines
+pub const CHUNK_ITEMS = 256;
+
+/// Places the tree's items from `start` up to `end` again: one task of Run
+fn PlaceItems(engine_context: *EngineContext, world: *WorldManager, tree: *WorldBVH.LayerTree, mask: u4, start: usize, end: usize) void {
+    for (tree.mBVHItems.items[start..end], tree.mItems.items[start..end]) |*bvh_item, item| {
+        if (bvh_item.Mask & mask == 0) continue;
+        if (ItemBounds(engine_context, world, item)) |bounds| bvh_item.Bounds = bounds;
+    }
 }
 
 /// Where `item` is now, or null if its entity has lost what places it

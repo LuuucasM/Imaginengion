@@ -107,6 +107,8 @@ const ContentBrowserPanel = @import("../EditorPanels/ContentBrowserPanel.zig");
 const TmplEditPanel = @import("../EditorPanels/TmplEditPanel.zig");
 const ScriptsPanel = @import("../EditorPanels/ScriptsPanel.zig");
 const StatsPanel = @import("../EditorPanels/StatsPanel.zig");
+const ProfilerPanel = @import("../EditorPanels/ProfilerPanel.zig");
+const Profiler = @import("../Core/Profiler.zig");
 const SaveNotice = @import("../EditorPanels/SaveNotice.zig");
 const PickingDebugPanel = @import("../EditorPanels/PickingDebugPanel.zig");
 const UIElementPanel = @import("../EditorPanels/UIElementPanel.zig");
@@ -174,6 +176,8 @@ mTmplEditPanels: std.ArrayList(TmplEditPanel) = .empty,
 mScriptsPanel: ScriptsPanel = .{},
 /// The Stats window, in the editor UI
 mStatsPanel: StatsPanel = .{},
+/// The Profiler window, in the editor UI: how long each zone takes, as a tree of where it was called from
+mProfilerPanel: ProfilerPanel = .{},
 /// The box in the editor UI's bottom right corner saying what was just saved
 mSaveNotice: SaveNotice = .{},
 /// The Picking Debug window, in the editor UI
@@ -275,6 +279,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process
     self.mShell = try EditorShell.Build(engine_context, self.mEditorUIRoot, .{});
     self.mMenuBar = try EditorMenuBar.Build(engine_context, self.mShell.mMenuBar, .{});
     self.mStatsPanel = try StatsPanel.Build(engine_context, self.mEditorUIScene, .{});
+    self.mProfilerPanel = try ProfilerPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mSaveNotice = try SaveNotice.Build(engine_context, self.mEditorUIScene);
     self.mAssetHandlesPanel = try AssetHandlesPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mAudioBusesPanel = try AudioBusesPanel.Build(engine_context, self.mEditorUIScene, .{});
@@ -311,11 +316,16 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process
 
     self.mActiveWorld = &engine_context.mGameWorld;
     self.mActiveWorldType = .Game;
+
+    //from the first pass of the loop on, for the Profiler window
+    try Profiler.gMain.Start(engine_context.EngineAllocator(), engine_context.Io());
 }
 
 pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("EditorProgram::Deinit", @src());
     defer zone.Deinit();
+    Profiler.gMain.Stop();
+    self.mProfilerPanel.Deinit(engine_context.EngineAllocator());
     //open template windows save on the way out, the same as their X does
     for (self.mTmplEditPanels.items) |*panel| {
         panel.Close(engine_context) catch |err| {
@@ -1185,6 +1195,7 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
     shown.set(.ContentBrowser, self.mContentBrowserPanel.IsOpen());
     shown.set(.Scripts, self.mScriptsPanel.IsOpen());
     shown.set(.Stats, self.mStatsPanel.IsOpen());
+    shown.set(.Profiler, self.mProfilerPanel.IsOpen());
     shown.set(.PickingDebug, self.mPickingDebugPanel.IsOpen());
     shown.set(.UIElement, self.mUIElementPanel.IsOpen());
     shown.set(.Viewport, self.mShowViewport);
@@ -1303,6 +1314,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
             .ContentBrowser => try self.mContentBrowserPanel.Toggle(engine_context),
             .Scripts => try self.mScriptsPanel.Toggle(engine_context),
             .Stats => try self.mStatsPanel.Toggle(engine_context),
+            .Profiler => try self.mProfilerPanel.Toggle(engine_context),
             .PickingDebug => try self.mPickingDebugPanel.Toggle(engine_context),
             .UIElement => try self.mUIElementPanel.Toggle(engine_context),
             .Viewport => self.mShowViewport = !self.mShowViewport,
@@ -1330,6 +1342,7 @@ fn UpdateShell(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self.mShell.ShowPlayPreview(engine_context, self.mShowPlayPreview);
     try self.UpdateMenuBar(engine_context);
     try self.mStatsPanel.Update(engine_context, &engine_context.mEngineStats);
+    try self.mProfilerPanel.Update(engine_context, &Profiler.gMain);
     try self.mAssetHandlesPanel.Update(engine_context);
     try self.mAudioBusesPanel.Update(engine_context);
     try self.mCollisionLayersPanel.Update(engine_context);

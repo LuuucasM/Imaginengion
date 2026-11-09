@@ -1,81 +1,58 @@
 const std = @import("std");
 
 const debug_build_options = @import("debug_build_options");
+const Profiler = @import("Profiler.zig");
 pub const enable_tracy = debug_build_options.enable_tracy;
 pub const tracy = if (enable_tracy) @import("Tracy") else void;
 
-pub const Zone = if (enable_tracy) struct {
-    mContext: tracy.TracyCZoneCtx,
-
-    pub fn begin(
-        comptime name: [*:0]const u8,
-        comptime function: ?[*:0]const u8,
-        comptime file: [*:0]const u8,
-        comptime line: u32,
-        comptime color: u32,
-    ) Zone {
-        const src_loc = &struct {
-            pub const value = tracy.___tracy_source_location_data{
-                .name = name,
-                .function = function,
-                .file = file,
-                .line = line,
-                .color = color,
-            };
-        }.value;
-        return Zone{
-            .mContext = tracy.___tracy_emit_zone_begin(src_loc, 1),
-        };
-    }
+/// A measured stretch of code, from ZoneInit to Deinit: sent to Tracy when it is built in, and measured by the engine's
+/// own profiler (Profiler.zig) when that is running on this thread
+pub const Zone = struct {
+    mContext: if (enable_tracy) tracy.TracyCZoneCtx else void,
+    /// the profiler is measuring this zone, so Deinit ends it there too
+    mProfiled: bool,
 
     pub fn Deinit(self: Zone) void {
-        tracy.___tracy_emit_zone_end(self.mContext);
+        if (enable_tracy) tracy.___tracy_emit_zone_end(self.mContext);
+        if (self.mProfiled) Profiler.gMain.End();
     }
 
     /// Attaches runtime text to this zone instance, e.g. the path of the asset being loaded.
     /// Tracy copies the text, so it only has to live for the duration of the call.
     pub fn Text(self: Zone, text: []const u8) void {
-        tracy.___tracy_emit_zone_text(self.mContext, text.ptr, text.len);
+        if (enable_tracy) tracy.___tracy_emit_zone_text(self.mContext, text.ptr, text.len);
     }
 
     /// Replaces this zone instance's name, for zones whose useful name is only known at runtime.
     pub fn Name(self: Zone, name: []const u8) void {
-        tracy.___tracy_emit_zone_name(self.mContext, name.ptr, name.len);
+        if (enable_tracy) tracy.___tracy_emit_zone_name(self.mContext, name.ptr, name.len);
     }
 
     /// Attaches a number to this zone instance, e.g. how many items it processed.
     pub fn Value(self: Zone, value: u64) void {
-        tracy.___tracy_emit_zone_value(self.mContext, value);
+        if (enable_tracy) tracy.___tracy_emit_zone_value(self.mContext, value);
     }
-} else struct {
-    pub fn begin(
-        comptime _: [*:0]const u8,
-        comptime _: ?[*:0]const u8,
-        comptime _: [*:0]const u8,
-        comptime _: u32,
-        comptime _: u32,
-    ) Zone {
-        return Zone{};
-    }
-
-    pub fn Deinit(_: Zone) void {}
-    pub fn Text(_: Zone, _: []const u8) void {}
-    pub fn Name(_: Zone, _: []const u8) void {}
-    pub fn Value(_: Zone, _: u64) void {}
 };
 
 pub fn ZoneInit(comptime name: [*:0]const u8, comptime src: std.builtin.SourceLocation) Zone {
+    //one of each per call site: ZoneInit is compiled once for each name and source location it is given
+    const site = &struct {
+        var value: Profiler.Site = .{ .mName = std.mem.span(name) };
+    }.value;
+    const profiled = Profiler.gMain.Begin(site);
     if (enable_tracy) {
-        return Zone.begin(
-            name,
-            src.fn_name, // Optionally use @src().fn_name if available
-            src.file.ptr,
-            src.line,
-            0,
-        );
-    } else {
-        return Zone{};
+        const src_loc = &struct {
+            pub const value = tracy.___tracy_source_location_data{
+                .name = name,
+                .function = src.fn_name,
+                .file = src.file.ptr,
+                .line = src.line,
+                .color = 0,
+            };
+        }.value;
+        return .{ .mContext = tracy.___tracy_emit_zone_begin(src_loc, 1), .mProfiled = profiled };
     }
+    return .{ .mContext = {}, .mProfiled = profiled };
 }
 
 /// The last component of @typeName(T), e.g. "OnUpdateScript" rather than the full module path.

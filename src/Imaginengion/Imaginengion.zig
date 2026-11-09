@@ -59,6 +59,7 @@ test {
     _ = @import("Tests/UI/InspectorPiecesTests.zig");
     _ = @import("Tests/UI/ComponentRowsTests.zig");
     _ = @import("Tests/EditorPanels/StatsPanelTests.zig");
+    _ = @import("Tests/EditorPanels/ProfilerPanelTests.zig");
     _ = @import("Tests/EditorPanels/AudioBusesPanelTests.zig");
     _ = @import("Tests/EditorPanels/ProjectSettingsPanelTests.zig");
     _ = @import("Tests/EditorPanels/UIElementPanelTests.zig");
@@ -74,6 +75,7 @@ test {
     _ = @import("Tests/Core/WorldCopyTests.zig");
     _ = @import("Tests/Core/WorldBVHTests.zig");
     _ = @import("Tests/Core/EngineStatsTests.zig");
+    _ = @import("Tests/Core/ProfilerTests.zig");
     _ = @import("Tests/Core/ProjectTests.zig");
     _ = @import("Tests/Programs/GameProgramTests.zig");
     _ = @import("Tests/AudioManager/BusSaveTests.zig");

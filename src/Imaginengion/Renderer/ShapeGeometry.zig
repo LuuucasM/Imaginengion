@@ -286,13 +286,31 @@ pub fn MaskRegionAbove(entity: Entity) ?Entity {
 /// cuts. Compares the box's reach across the plane with the quad's rectangle, corners square, which never says outside
 /// for a box that isn't
 pub fn OutsideMaskBox(box: Box, mask_box: Box) bool {
+    const span = SpanInMaskBox(box, mask_box);
+    return span.Near.x > mask_box.HalfExtents.x or span.Near.y > mask_box.HalfExtents.y;
+}
+
+/// Whether all of `box` is inside a mask's quad `mask_box` across the quad's plane, through any depth: the other side of
+/// OutsideMaskBox. Corners square, so a box in a rounded corner can say inside and still be cut a little there
+pub fn InsideMaskBox(box: Box, mask_box: Box) bool {
+    const span = SpanInMaskBox(box, mask_box);
+    return span.Far.x <= mask_box.HalfExtents.x and span.Far.y <= mask_box.HalfExtents.y;
+}
+
+/// How far across a mask quad's plane, from its middle, the nearest and furthest of `box` reach, on its x and on its y
+const MaskSpan = struct { Near: Vec2(f32), Far: Vec2(f32) };
+
+fn SpanInMaskBox(box: Box, mask_box: Box) MaskSpan {
     const center = box.Center.SubVec(mask_box.Center).InvQuatRotate(mask_box.Rotation);
     //the box's own axes, as seen in the mask quad's space: turned by the box's rotation, then back by the mask's
     const axis_x, const axis_y, const axis_z = mask_box.Rotation.Conjugate().MulQuat(box.Rotation).Axes();
     const half = box.HalfExtents;
     const reach_x = @abs(axis_x.x) * half.x + @abs(axis_y.x) * half.y + @abs(axis_z.x) * half.z;
     const reach_y = @abs(axis_x.y) * half.x + @abs(axis_y.y) * half.y + @abs(axis_z.y) * half.z;
-    return @abs(center.x) - reach_x > mask_box.HalfExtents.x or @abs(center.y) - reach_y > mask_box.HalfExtents.y;
+    return .{
+        .Near = .{ .x = @abs(center.x) - reach_x, .y = @abs(center.y) - reach_y },
+        .Far = .{ .x = @abs(center.x) + reach_x, .y = @abs(center.y) + reach_y },
+    };
 }
 
 /// An entity's shape, if it is a quad
@@ -397,6 +415,20 @@ pub fn GlyphBox(transform: *const TransformComponent, params: TextParams, glyph:
             .z = THICKNESS_2D,
         },
     };
+}
+
+/// The box around all of a laid out text's ink: `min` to `max` in its layout's space (GlyphPlacement.Pen plus the
+/// letters' boxes off it), placed and stretched the same as GlyphBox places each letter, so it holds every one of them
+pub fn TextInkBox(transform: *const TransformComponent, params: TextParams, min: Vec2(f32), max: Vec2(f32), canvas: ?CanvasTransform) Box {
+    const whole = TextLayout.GlyphPlacement{
+        .Pen = .{ .x = 0, .y = 0 },
+        .PlaneCenter = min.AddVec(max).MulScalar(0.5),
+        .HalfExtents = max.SubVec(min).MulScalar(0.5),
+        .UV0 = .{ .x = 0, .y = 0 },
+        .UV1 = .{ .x = 0, .y = 0 },
+        .AtlasIndex = 0,
+    };
+    return GlyphBox(transform, params, whole, canvas);
 }
 
 /// The whole text area: across the full left to right bounds, and from the first line's ascender down

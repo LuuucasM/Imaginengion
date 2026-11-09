@@ -27,6 +27,7 @@ const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const MergeComponent = EntityComponents.MergeComponent;
 const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
 const TransformComponent = EntityComponents.TransformComponent;
+const MaskComponent = EntityComponents.MaskComponent;
 
 const TestWorld = struct {
     mEngineContext: *EngineContext,
@@ -500,7 +501,151 @@ test "a text's click box is the whole text area, the same box picking tests, and
     try std.testing.expectEqual(moved, tree.mBVHItems.items[text_ind.?].Bounds);
 }
 
-test "a refit places its items on the job pool, one task each, and comes out the same as one on this thread" {
+/// A mask (MaskComponent) `size` across at `position`, cutting with its quad. Its own quad isn't drawn
+fn AddMask(engine_context: *EngineContext, parent: anytype, position: Vec3(f32), size: Vec2(f32), op: @import("../../Renderer/SDFProgram.zig").MaskOp) !Entity {
+    const mask = try NewEntityIn(engine_context, parent);
+    try mask.SetTranslation(engine_context, position);
+    _ = try mask.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = size }));
+    _ = try mask.AddComponent(engine_context, MaskComponent{ .mOp = op });
+    return mask;
+}
+
+/// A new entity in a scene, or under another entity
+fn NewEntityIn(engine_context: *EngineContext, parent: anytype) !Entity {
+    return switch (@TypeOf(parent)) {
+        Scene => parent.CreateEntity(engine_context, Entity.DefaultConfig),
+        Entity => parent.CreateChild(engine_context, .Entity, Entity.DefaultConfig),
+        else => @compileError("a scene or an entity"),
+    };
+}
+
+/// A drawn unit quad under `parent`, at `position` from it
+fn AddChildQuad(engine_context: *EngineContext, parent: Entity, position: Vec3(f32)) !Entity {
+    const quad = try NewEntityIn(engine_context, parent);
+    try quad.SetTranslation(engine_context, position);
+    _ = try quad.AddComponent(engine_context, ShapeComponent{});
+    _ = try quad.AddComponent(engine_context, SurfaceComponent{});
+    return quad;
+}
+
+/// A drawn text at font size 1 under `parent`, at `position` from it, its lines starting right there (no room left of it) and only
+/// wrapping past `width`
+fn AddChildText(engine_context: *EngineContext, parent: Entity, text: []const u8, position: Vec3(f32), width: f32) !Entity {
+    const entity = try NewEntityIn(engine_context, parent);
+    try entity.SetTranslation(engine_context, position);
+    const text_component = try entity.AddComponent(engine_context, TextComponent{ .mBounds = .{ .x = 0, .y = width }, .mFontSize = 1 });
+    try text_component.SetText(engine_context, text);
+    _ = try entity.AddComponent(engine_context, SurfaceComponent{});
+    return entity;
+}
+
+/// How far from a 4 x 4 mask's middle what it cuts still goes in the tree, on x and on y: its own half size, grown by
+/// the build's margin on both sides
+const MASK_SIZE = 4;
+const MASK_REACH: f32 = MASK_SIZE / 2 * (1 + 2 * BVHBuildSystem.CULL_MARGIN);
+
+test "what a mask cuts off well past its edge gets no items, quads and texts both, and what is near it keeps them" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const mask = try AddMask(engine_context, level, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = MASK_SIZE, .y = MASK_SIZE }, .Intersect);
+    const inside = try AddChildQuad(engine_context, mask, .{ .x = 0, .y = 0, .z = 1 });
+    //cut off when drawn, but close enough that scrolling it in this frame won't leave a gap
+    const near = try AddChildQuad(engine_context, mask, .{ .x = MASK_REACH - 1, .y = 0, .z = 1 });
+    const far = try AddChildQuad(engine_context, mask, .{ .x = MASK_REACH + 1, .y = 0, .z = 1 });
+    const far_below = try AddChildQuad(engine_context, mask, .{ .x = 0, .y = -MASK_REACH - 1, .z = 1 });
+    const far_text = try AddChildText(engine_context, mask, "AA AA", .{ .x = 0, .y = -MASK_REACH - 2, .z = 1 }, 16);
+    const near_text = try AddChildText(engine_context, mask, "AA AA", .{ .x = 0, .y = MASK_REACH - 1.5, .z = 1 }, 16);
+
+    const bvh = try world.Build();
+    const tree = &bvh.mGame;
+    try std.testing.expectEqual(@as(usize, 1), ItemsOf(tree, inside));
+    try std.testing.expectEqual(@as(usize, 1), ItemsOf(tree, near));
+    try std.testing.expectEqual(@as(usize, 0), ItemsOf(tree, far));
+    try std.testing.expectEqual(@as(usize, 0), ItemsOf(tree, far_below));
+    //no letters, and no click box either
+    try std.testing.expectEqual(@as(usize, 0), ItemsOf(tree, far_text));
+    //its four letters and its click box
+    try std.testing.expectEqual(@as(usize, 5), ItemsOf(tree, near_text));
+    try ExpectTreeHoldsItems(tree);
+}
+
+test "a text across a mask's edge keeps only the letters near enough to it, and its click box" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const mask = try AddMask(engine_context, level, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = MASK_SIZE, .y = MASK_SIZE }, .Intersect);
+    //twenty letters on one line, starting a little right of the mask's middle and running far past its room
+    const start = 0.1;
+    const line = try AddChildText(engine_context, mask, "AAAAAAAAAAAAAAAAAAAA", .{ .x = start, .y = 0, .z = 1 }, 100);
+
+    const bvh = try world.Build();
+    const tree = &bvh.mGame;
+    //the stand in font's letters are 0.5 wide, a 0.6 advance apart: one is kept while its left edge is in the room
+    var near_letters: usize = 0;
+    for (0..20) |i| {
+        if (start + 0.6 * @as(f32, @floatFromInt(i)) <= MASK_REACH) near_letters += 1;
+    }
+    try std.testing.expect(near_letters > 0 and near_letters < 20);
+    var glyphs: usize = 0;
+    var clicks: usize = 0;
+    for (tree.mItems.items, tree.mBVHItems.items) |item, bvh_item| {
+        if (item.Entity != line.mID) continue;
+        switch (item.Kind) {
+            .Glyph => {
+                glyphs += 1;
+                try std.testing.expect(bvh_item.Bounds.Min.x <= MASK_REACH);
+            },
+            .Text => clicks += 1,
+            else => return error.TestUnexpectedResult,
+        }
+    }
+    try std.testing.expectEqual(near_letters, glyphs);
+    try std.testing.expectEqual(@as(usize, 1), clicks);
+    try ExpectTreeHoldsItems(tree);
+}
+
+test "a subtract mask, or one with no shape, leaves everything under it in the tree, however far off" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const hole = try AddMask(engine_context, level, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = MASK_SIZE, .y = MASK_SIZE }, .Subtract);
+    const under_hole = try AddChildQuad(engine_context, hole, .{ .x = 50, .y = 0, .z = 1 });
+    const shapeless = try level.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try shapeless.AddComponent(engine_context, MaskComponent{});
+    const under_nothing = try AddChildQuad(engine_context, shapeless, .{ .x = 0, .y = 50, .z = 1 });
+
+    const bvh = try world.Build();
+    try std.testing.expectEqual(@as(usize, 1), ItemsOf(&bvh.mGame, under_hole));
+    try std.testing.expectEqual(@as(usize, 1), ItemsOf(&bvh.mGame, under_nothing));
+}
+
+test "a mask inside another cuts off by both: far from the outer one is out, however big the inner one is" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const outer = try AddMask(engine_context, level, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = MASK_SIZE, .y = MASK_SIZE }, .Intersect);
+    const inner = try AddMask(engine_context, outer, .{ .x = 0, .y = 0, .z = 1 }, .{ .x = 200, .y = 200 }, .Intersect);
+    const kept = try AddChildQuad(engine_context, inner, .{ .x = 0, .y = 0, .z = 1 });
+    const out_of_outer = try AddChildQuad(engine_context, inner, .{ .x = 0, .y = MASK_REACH + 5, .z = 1 });
+    //under the outer one straight, after the inner one has been met: the outer mask's room is its own, not the inner's
+    const beside_inner = try AddChildQuad(engine_context, outer, .{ .x = MASK_REACH + 5, .y = 0, .z = 1 });
+
+    const bvh = try world.Build();
+    try std.testing.expectEqual(@as(usize, 1), ItemsOf(&bvh.mGame, kept));
+    try std.testing.expectEqual(@as(usize, 0), ItemsOf(&bvh.mGame, out_of_outer));
+    try std.testing.expectEqual(@as(usize, 0), ItemsOf(&bvh.mGame, beside_inner));
+}
+
+test "a refit places its items on the job pool, a run of them per task, and comes out the same as one on this thread" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;

@@ -16,6 +16,7 @@ const Program = @import("../Programs/Program.zig");
 const EngineContext = @import("EngineContext.zig");
 const sdl = @import("CImports.zig").sdl;
 const Tracy = @import("Tracy.zig");
+const Profiler = @import("Profiler.zig");
 
 const Application: type = @This();
 
@@ -80,6 +81,7 @@ pub fn Run(self: *Application) !void {
         self.mEngineContext._Internal.ThreadFrameArenas.Reset();
     self.mEngineContext.mEngineStats.ResetStats();
     first_zone.Deinit();
+    Profiler.gMain.EndLoop();
     Tracy.FrameMark();
 
     var t1: std.Io.Timestamp = .now(run_io, .awake);
@@ -92,6 +94,8 @@ pub fn Run(self: *Application) !void {
 
     while (self.mEngineContext.mIsRunning) {
         defer Tracy.FrameMark();
+        //deferred before the loop's zone, so it runs after the zone has ended and the whole pass is in this loop's times
+        defer Profiler.gMain.EndLoop();
         const zone = Tracy.ZoneInit("Main Loop", @src());
         defer zone.Deinit();
 

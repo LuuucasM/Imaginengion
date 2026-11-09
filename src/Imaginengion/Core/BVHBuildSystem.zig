@@ -32,6 +32,8 @@ const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
+const MaskComponent = EntityComponents.MaskComponent;
+const Vec2 = @import("../Math/MathTypes.zig").Vec2;
 const GameLayerTag = EntityComponents.GameLayerTag;
 const OverlayLayerTag = EntityComponents.OverlayLayerTag;
 const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
@@ -74,6 +76,8 @@ const Builder = struct {
     mSlots: std.AutoHashMapUnmanaged(Scene.Type, u8) = .empty,
     /// the merges already added, so each is one item however many of its parts there are
     mMerges: std.AutoHashMapUnmanaged(Entity.Type, void) = .empty,
+    /// each mask entity's room so far (RoomOf)
+    mRooms: std.AutoHashMapUnmanaged(Entity.Type, []const ShapeGeometry.Box) = .empty,
 
     /// What is drawn and clicked: the same as a view's gather (ShapeGeometry.GatherViewShapes), only over every scene.
     /// Folded away by a collapsed layout item is neither, and that only changes at the commit
@@ -101,16 +105,48 @@ const Builder = struct {
             const quad = ShapeGeometry.QuadOf(entity);
             const text = entity.GetComponent(TextComponent);
             if (quad == null and text == null) continue;
-            //where all its items go, its quad's and every letter's, found once
-            const placement = try self.PlacementOf(entity, ShapeGeometry.MaskRegionAbove(entity)) orelse continue;
+            //where all its items go, its quad's and every letter's, and what its masks leave room for, found once
+            const mask_region = ShapeGeometry.MaskRegionAbove(entity);
+            const placement = try self.PlacementOf(entity, mask_region) orelse continue;
+            const room = try self.RoomOf(mask_region);
 
             if (quad) |q| {
-                //invisible quads aren't drawn, but they still take clicks (row buttons)
-                const mask = if (QuadDrawsNothing(surface.*)) BVH.Mask.PICK else BVH.Mask.RENDER | BVH.Mask.PICK;
-                try self.AddTo(placement, entity, .Quad, 0, BoxBounds(ShapeGeometry.QuadBox(transform, q.*, surface.mBorderWidth, null)), mask);
+                const box = ShapeGeometry.QuadBox(transform, q.*, surface.mBorderWidth, null);
+                if (!CutOff(room, box)) {
+                    //invisible quads aren't drawn, but they still take clicks (row buttons)
+                    const mask = if (QuadDrawsNothing(surface.*)) BVH.Mask.PICK else BVH.Mask.RENDER | BVH.Mask.PICK;
+                    try self.AddTo(placement, entity, .Quad, 0, BoxBounds(box), mask);
+                }
             }
-            if (text) |t| try self.AddText(placement, entity, transform, t, try fonts.Get(t));
+            if (text) |t| try self.AddText(placement, entity, transform, t, try fonts.Get(t), room);
         }
+    }
+
+    /// The room the masks above an entity leave it, from `region` (its MaskRegionAbove) out: each Intersect mask's quad,
+    /// grown by CULL_MARGIN, nearest first. Found once per mask for the whole build, however many things are under it.
+    /// Matches what the renderer and picking cut with (MaskFinder.RegionMask): a mask with no quad cuts nothing, and a
+    /// Subtract one can't cut a whole box off
+    fn RoomOf(self: *Builder, region: ?Entity) anyerror![]const ShapeGeometry.Box {
+        const mask_entity = region orelse return &.{};
+        if (self.mRooms.get(mask_entity.mID)) |known| return known;
+
+        //the masks around it first, so following parents always ends
+        const outer = try self.RoomOf(ShapeGeometry.MaskRegionAbove(mask_entity));
+        var room = outer;
+        const cuts_off = mask_entity.GetComponent(MaskComponent).?.mOp == .Intersect;
+        const transform = mask_entity.GetComponent(TransformComponent);
+        const quad = ShapeGeometry.QuadOf(mask_entity);
+        if (cuts_off and transform != null and quad != null) {
+            var box = ShapeGeometry.QuadBox(transform.?, quad.?.*, 0, null);
+            box.HalfExtents.x *= 1 + 2 * CULL_MARGIN;
+            box.HalfExtents.y *= 1 + 2 * CULL_MARGIN;
+            const boxes = try self.mFrameAllocator.alloc(ShapeGeometry.Box, outer.len + 1);
+            boxes[0] = box;
+            @memcpy(boxes[1..], outer);
+            room = boxes;
+        }
+        try self.mRooms.put(self.mFrameAllocator, mask_entity.mID, room);
+        return room;
     }
 
     /// What physics collides: every collider, the same as its own query (CollisionManager.QueryColliderGroups)
@@ -196,8 +232,10 @@ const Builder = struct {
     }
 
     /// One item per letter `text` draws, laid out once here and kept for refits and the renderer, and one for the whole
-    /// text that clicks land on, from the size the same layout measured. All of them go where `placement` says
-    fn AddText(self: *Builder, placement: Placement, entity: Entity, transform: *const TransformComponent, text: *const TextComponent, font: anytype) !void {
+    /// text that clicks land on, from the size the same layout measured. All of them go where `placement` says. Those
+    /// outside the `room` its masks leave (RoomOf) are left out: all its letters at once when all its ink is, and one by
+    /// one only for a text across a mask's edge
+    fn AddText(self: *Builder, placement: Placement, entity: Entity, transform: *const TransformComponent, text: *const TextComponent, font: anytype, room: []const ShapeGeometry.Box) !void {
         const zone = Tracy.ZoneInit("WorldBVH::AddText", @src());
         defer zone.Deinit();
 
@@ -205,19 +243,59 @@ const Builder = struct {
         const glyphs = &self.mBVH.mGlyphs;
         const first_glyph = glyphs.items.len;
         var layout = TextLayout.Iterator(@TypeOf(font.*)).Init(text.mText.items, font, params.FontSize, params.WrapWidth);
+        //the letters' ink in the layout's own space, so the whole text is checked against its masks at once
+        var ink_min = Vec2(f32){ .x = std.math.inf(f32), .y = std.math.inf(f32) };
+        var ink_max = Vec2(f32){ .x = -std.math.inf(f32), .y = -std.math.inf(f32) };
         while (layout.Next()) |glyph| {
-            const glyph_ind: u32 = @intCast(glyphs.items.len);
             try glyphs.append(self.mEngineAllocator, glyph);
-            const bounds = BoxBounds(ShapeGeometry.GlyphBox(transform, params, glyph, null));
-            try self.AddTo(placement, entity, .Glyph, glyph_ind, bounds, BVH.Mask.RENDER);
+            const center = glyph.Pen.AddVec(glyph.PlaneCenter);
+            ink_min = .{ .x = @min(ink_min.x, center.x - glyph.HalfExtents.x), .y = @min(ink_min.y, center.y - glyph.HalfExtents.y) };
+            ink_max = .{ .x = @max(ink_max.x, center.x + glyph.HalfExtents.x), .y = @max(ink_max.y, center.y + glyph.HalfExtents.y) };
         }
-
         zone.Value(glyphs.items.len - first_glyph);
 
+        if (glyphs.items.len > first_glyph) {
+            const ink = ShapeGeometry.TextInkBox(transform, params, ink_min, ink_max, null);
+            if (CutOff(room, ink)) {
+                glyphs.shrinkRetainingCapacity(first_glyph);
+            } else {
+                const check_each = !WithinRoom(room, ink);
+                for (glyphs.items[first_glyph..], first_glyph..) |glyph, glyph_ind| {
+                    const box = ShapeGeometry.GlyphBox(transform, params, glyph, null);
+                    if (check_each and CutOff(room, box)) continue;
+                    try self.AddTo(placement, entity, .Glyph, @intCast(glyph_ind), BoxBounds(box), BVH.Mask.RENDER);
+                }
+            }
+        }
+
+        const metrics = layout.GetMetrics();
+        const click_box = ShapeGeometry.TextBoxFromMetrics(transform, text, metrics, null);
+        if (CutOff(room, click_box)) return;
         const texts = &self.mBVH.mTexts;
         const text_ind: u32 = @intCast(texts.items.len);
-        const metrics = layout.GetMetrics();
         try texts.append(self.mEngineAllocator, metrics);
-        try self.AddTo(placement, entity, .Text, text_ind, BoxBounds(ShapeGeometry.TextBoxFromMetrics(transform, text, metrics, null)), BVH.Mask.PICK);
+        try self.AddTo(placement, entity, .Text, text_ind, BoxBounds(click_box), BVH.Mask.PICK);
     }
 };
+
+/// How far past a mask's edge what it cuts still goes in the tree, as a share of the mask's own size, on every side. The
+/// tree is built at the top of the frame, so what scrolls into a mask during it is only in the next frame's tree:
+/// with a mask's size of room around it, scrolling less than a whole view a frame never leaves a gap at the edge.
+/// What a mask cuts off further out is neither drawn, clicked nor refit
+pub const CULL_MARGIN: f32 = 1;
+
+/// Whether `box` is wholly outside one of the masks' grown quads in `room` (Builder.RoomOf)
+fn CutOff(room: []const ShapeGeometry.Box, box: ShapeGeometry.Box) bool {
+    for (room) |mask_box| {
+        if (ShapeGeometry.OutsideMaskBox(box, mask_box)) return true;
+    }
+    return false;
+}
+
+/// Whether `box` is wholly inside every one of the masks' grown quads in `room`, so nothing in it can be cut off
+fn WithinRoom(room: []const ShapeGeometry.Box, box: ShapeGeometry.Box) bool {
+    for (room) |mask_box| {
+        if (!ShapeGeometry.InsideMaskBox(box, mask_box)) return false;
+    }
+    return true;
+}
