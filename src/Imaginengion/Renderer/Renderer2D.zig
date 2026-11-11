@@ -704,8 +704,7 @@ pub fn DrawGlyph(
         .{ .AtlasTexture = @intCast(atlas_asset.GetTextureHandle()), .Glyph = glyph.AtlasIndex },
         atlas_asset.GetWidth(),
         atlas_asset.GetHeight(),
-        glyph.UV0,
-        glyph.UV1,
+        fill.Font,
     );
 
     const axes = ShapeAxes(glyph_box.Center, glyph_box.Rotation);

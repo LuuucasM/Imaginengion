@@ -9,9 +9,20 @@ const allocator = std.testing.allocator;
 const UV0 = Vec2(f32){ .x = 0.25, .y = 0.5 };
 const UV1 = Vec2(f32){ .x = 0.5, .y = 0.75 };
 
+/// A font whose every letter is at UV0 to UV1 of a 512 x 256 atlas: texels (left, top) and (right, bottom)
+const FakeGlyph = struct {
+    mAtlasTexel0: Vec2(f32) = .{ .x = 128, .y = 192 },
+    mAtlasTexel1: Vec2(f32) = .{ .x = 256, .y = 128 },
+};
+const FakeFont = struct {
+    mGlyphs: [80]FakeGlyph = @splat(.{}),
+    mAtlasSize: Vec2(f32) = .{ .x = 512, .y = 256 },
+};
+const FAKE_FONT = FakeFont{};
+
 /// The atlas entry for `glyph` of the atlas in texture slot `atlas`
 fn Entry(buffers: *ShadingBuffers, atlas: u32, glyph: u32) !usize {
-    return buffers.GlyphSurface(allocator, .{ .AtlasTexture = atlas, .Glyph = glyph }, 512, 256, UV0, UV1);
+    return buffers.GlyphSurface(allocator, .{ .AtlasTexture = atlas, .Glyph = glyph }, 512, 256, &FAKE_FONT);
 }
 
 fn Free(buffers: *ShadingBuffers) void {

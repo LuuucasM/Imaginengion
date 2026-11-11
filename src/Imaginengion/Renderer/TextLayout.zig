@@ -2,7 +2,7 @@
 //! picking testing against it and layout sizing it can never disagree.
 //!
 //! Generic over the font type so it builds without the engine: it only reads mGlyphs, mLineHeight,
-//! mAscender, mDescender, mAtlasSize and ToArrayIndex, which TextAsset has and a test font can fake.
+//! mAscender, mDescender and ToArrayIndex (and mAtlasSize for GlyphUVs), which TextAsset has and a test font can fake.
 const std = @import("std");
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec2 = MathTypes.Vec2;
@@ -14,13 +14,21 @@ pub const GlyphPlacement = struct {
     Pen: Vec2(f32), //baseline pen position, local to the text origin (the first line's baseline), x right y up
     PlaneCenter: Vec2(f32), //the glyph box's center relative to Pen, already scaled by the font size
     HalfExtents: Vec2(f32),
-    //atlas UVs, normalized. bottom-left and top-right, since textures load flipped so v runs bottom
-    //up (matching the font json's yOrigin bottom), and the glyph box's local UV runs bottom up too
-    UV0: Vec2(f32),
-    UV1: Vec2(f32),
-    //the glyph's place in its font (ToArrayIndex), the same for every use of the same letter
+    //the glyph's place in its font (ToArrayIndex), the same for every use of the same letter. Where it is in the
+    //font's atlas is GlyphUVs, which only the renderer needs, once per letter
     AtlasIndex: u32,
 };
+
+/// Where glyph `atlas_index` of `font` is in its atlas, normalized: bottom-left and top-right, since textures load
+/// flipped so v runs bottom up (matching the font json's yOrigin bottom), and the glyph box's local UV runs bottom up too
+pub fn GlyphUVs(comptime FontT: type, font: *const FontT, atlas_index: u32) struct { UV0: Vec2(f32), UV1: Vec2(f32) } {
+    const glyph = &font.mGlyphs[atlas_index];
+    //atlas texels are (left, top) and (right, bottom), so the corners' y swap
+    return .{
+        .UV0 = Vec2(f32).DivVec(.{ .x = glyph.mAtlasTexel0.x, .y = glyph.mAtlasTexel1.y }, font.mAtlasSize),
+        .UV1 = Vec2(f32).DivVec(.{ .x = glyph.mAtlasTexel1.x, .y = glyph.mAtlasTexel0.y }, font.mAtlasSize),
+    };
+}
 
 /// Logical bounds: from x = 0 to the widest line's advance, and from the first line's ascender down
 /// to the last line's descender. They don't depend on which letters are in the text, so a line's
@@ -53,6 +61,9 @@ pub fn Iterator(comptime FontT: type) type {
         mPen: Vec2(f32) = .{ .x = 0, .y = 0 },
         mLineCount: u32 = 1,
         mMaxLineWidth: f32 = 0,
+        //the codepoint at byte mDecodedAt, decoded already by the kerning check of the glyph before it
+        mDecoded: Decoded = undefined,
+        mDecodedAt: usize = std.math.maxInt(usize),
 
         pub fn Init(text: []const u8, font: *const FontT, font_size: f32, wrap_width: f32) Self {
             return .{ .mText = text, .mFont = font, .mFontSize = font_size, .mWrapWidth = wrap_width };
@@ -70,7 +81,7 @@ pub fn Iterator(comptime FontT: type) type {
         /// Moves the pen past the one codepoint at mIndex, and returns where it is drawn if it has anything to draw.
         /// Only call it while mIndex is inside the text
         pub fn Step(self: *Self) ?GlyphPlacement {
-            const decoded = DecodeAt(self.mText, self.mIndex);
+            const decoded = if (self.mDecodedAt == self.mIndex) self.mDecoded else DecodeAt(self.mText, self.mIndex);
             self.mIndex += decoded.Len;
 
             if (decoded.Codepoint == '\n') {
@@ -104,9 +115,6 @@ pub fn Iterator(comptime FontT: type) type {
                 .Pen = self.mPen,
                 .PlaneCenter = .{ .x = (left + right) * 0.5 * self.mFontSize, .y = (top + bottom) * 0.5 * self.mFontSize },
                 .HalfExtents = .{ .x = (right - left) * 0.5 * self.mFontSize, .y = (top - bottom) * 0.5 * self.mFontSize },
-                //atlas texels are (left, top) and (right, bottom), so the corners' y swap
-                .UV0 = Vec2(f32).DivVec(.{ .x = glyph.mAtlasTexel0.x, .y = glyph.mAtlasTexel1.y }, self.mFont.mAtlasSize),
-                .UV1 = Vec2(f32).DivVec(.{ .x = glyph.mAtlasTexel1.x, .y = glyph.mAtlasTexel0.y }, self.mFont.mAtlasSize),
                 .AtlasIndex = @intCast(atlas_index),
             };
 
@@ -136,10 +144,13 @@ pub fn Iterator(comptime FontT: type) type {
             self.mLineCount += 1;
         }
 
-        /// The kerning between the glyph just placed and the codepoint after it, at font size 1.
-        fn Kerning(self: Self, glyph: anytype) f32 {
-            if (self.mIndex >= self.mText.len) return 0;
-            const next_codepoint = DecodeAt(self.mText, self.mIndex).Codepoint;
+        /// The kerning between the glyph just placed and the codepoint after it, at font size 1. The next codepoint
+        /// is only decoded for a glyph with kernings, and kept for the next Step
+        fn Kerning(self: *Self, glyph: anytype) f32 {
+            if (glyph.mKernings.count() == 0 or self.mIndex >= self.mText.len) return 0;
+            self.mDecoded = DecodeAt(self.mText, self.mIndex);
+            self.mDecodedAt = self.mIndex;
+            const next_codepoint = self.mDecoded.Codepoint;
             //the font's kerning table is keyed by u16
             if (next_codepoint > std.math.maxInt(u16)) return 0;
             return glyph.mKernings.get(@intCast(next_codepoint)) orelse 0;
@@ -198,9 +209,13 @@ pub fn CaretIndexAt(comptime FontT: type, text: []const u8, font: *const FontT, 
     return best_index;
 }
 
+const Decoded = struct { Codepoint: u21, Len: usize };
+
 /// One UTF-8 codepoint at `index`. Invalid or cut-off bytes decode to the replacement character one
 /// byte at a time, so bad text draws boxes instead of crashing or swallowing what follows.
-fn DecodeAt(text: []const u8, index: usize) struct { Codepoint: u21, Len: usize } {
+fn DecodeAt(text: []const u8, index: usize) Decoded {
+    //plain ASCII is its own codepoint
+    if (text[index] < 0x80) return .{ .Codepoint = text[index], .Len = 1 };
     const len = std.unicode.utf8ByteSequenceLength(text[index]) catch return .{ .Codepoint = REPLACEMENT_CHAR, .Len = 1 };
     if (index + len > text.len) return .{ .Codepoint = REPLACEMENT_CHAR, .Len = 1 };
     const codepoint = std.unicode.utf8Decode(text[index .. index + len]) catch return .{ .Codepoint = REPLACEMENT_CHAR, .Len = 1 };

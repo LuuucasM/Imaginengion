@@ -26,6 +26,9 @@ const GYLPH_SET_SIZE = 2798; //note this comes from adding up all the characters
 
 pub const Name: []const u8 = "TextAsset";
 
+/// The box glyph's slot (U+25A1): what codepoints the font can't draw are drawn with
+const BOX_IND = 351;
+
 mGlyphs: [GYLPH_SET_SIZE]GlyphInfo = undefined,
 mDistanceRange: u32 = 0,
 mSize: u32 = 0,
@@ -114,7 +117,17 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
     defer file_json.?.close(engine_context.Io());
     defer file_png.?.close(engine_context.Io());
 
+    //every slot starts as no glyph (mAdvance -1), so one the font has no glyph for is never read as garbage
+    for (&self.mGlyphs) |*glyph| glyph.* = .{ .mKernings = KerningsT.init(engine_context.EngineAllocator()) };
     try self.ProcessTextJson(engine_context, file_json.?);
+    //the charset has codepoints no font draws (unassigned ones, U+3130 and U+318F): they draw the box, the same as any
+    //codepoint outside the charset
+    const box = self.mGlyphs[BOX_IND];
+    for (&self.mGlyphs) |*glyph| {
+        if (glyph.mAdvance >= 0) continue;
+        glyph.* = box;
+        glyph.mKernings = KerningsT.init(engine_context.EngineAllocator());
+    }
 
     const rel_ext = std.fs.path.extension(rel_path);
     const atlas_rel_path = try std.fmt.allocPrint(frame_allocator, "{s}.png", .{rel_path[0 .. rel_path.len - rel_ext.len]});
@@ -413,7 +426,7 @@ fn SingleKerning(self: *TextAsset, reader: *std.json.Reader, frame_allocator: st
 pub fn ToArrayIndex(unicode: usize) usize {
     const ascii_ofset = 0;
     const jamo_offset = 95;
-    const box_offset = 351;
+    const box_offset = BOX_IND;
     const comp_jamo_offset = 352;
     const hangul_syllables_offset = 448;
 

@@ -58,6 +58,7 @@ const MediumMaterial = @import("../Physics/MediumMaterial.zig");
 const CameraRay = @import("../Math/CameraRay.zig");
 const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
 const ShapeGeometry = @import("ShapeGeometry.zig");
+const TextLayout = @import("TextLayout.zig");
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
 
 const SDFPipeline = @import("backends/SDFPipeline.zig").SDFPipeline;
@@ -232,23 +233,24 @@ pub const ShadingBuffers = struct {
     }
     /// The atlas entry for one letter: where it is in its font's atlas, which is all the coverage test reads. Every glyph
     /// of that letter in that atlas shares the one entry, so a text's eleven e's add one, not eleven. What a glyph is
-    /// painted with is its text's fill, which its ShapeSurface points at itself. Good until the next Reset
+    /// painted with is its text's fill, which its ShapeSurface points at itself. Where the letter is in the atlas is
+    /// read from `font` (TextLayout.GlyphUVs) only when its entry is made. Good until the next Reset
     pub fn GlyphSurface(
         self: *ShadingBuffers,
         engine_allocator: std.mem.Allocator,
         key: GlyphKey,
         atlas_width: usize,
         atlas_height: usize,
-        uv0: Vec2(f32),
-        uv1: Vec2(f32),
+        font: anytype,
     ) !usize {
         const entry = try self.mGlyphSurfaces.getOrPut(engine_allocator, key);
         if (!entry.found_existing) {
             errdefer _ = self.mGlyphSurfaces.remove(key);
+            const uvs = TextLayout.GlyphUVs(@TypeOf(font.*), font, key.Glyph);
             try self.mSurfShadingBuffBase.append(engine_allocator, .{
                 .Color = .{ 1.0, 1.0, 1.0, 1.0 },
-                .TextureUV0 = uv0.ToArray(),
-                .TextureUV1 = uv1.ToArray(),
+                .TextureUV0 = uvs.UV0.ToArray(),
+                .TextureUV1 = uvs.UV1.ToArray(),
                 .TilingFactor = 1.0,
                 .Texturehandle = key.AtlasTexture,
                 .TextureWidth = @intCast(atlas_width),

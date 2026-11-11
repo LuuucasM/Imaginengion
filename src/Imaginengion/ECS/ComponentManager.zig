@@ -121,6 +121,12 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             self.mComponentsArrays.items[SkipFieldComponent.Ind].DestroyEntity(engine_context, entity_id);
         }
 
+        /// An entity's slot: the same for every generation of its id, and below the number of ids ever made
+        /// (ECSManager.SlotCount). For tables indexed by entity, like the group queries' marks
+        pub fn SlotOf(entity_id: entity_t) usize {
+            return SkipFieldArrayT.SparseSetT.GetIndexFrom(entity_id);
+        }
+
         fn _SkipFieldArray(self: Self) *SkipFieldArrayT {
             return @ptrCast(@alignCast(self.mComponentsArrays.items[SkipFieldComponent.Ind].mPtr));
         }

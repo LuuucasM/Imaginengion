@@ -156,6 +156,14 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             other.mNextID = self.mNextID;
         }
 
+        /// How many entity slots there are: every entity's SlotOf is below it, so a table of this many, indexed by
+        /// SlotOf, has a place for each entity
+        pub fn SlotCount(self: *const Self) usize {
+            return @intCast(self.mNextID);
+        }
+
+        pub const SlotOf = ComponentManagerT.SlotOf;
+
         //---------------entity lifetime--------------
         pub fn CreateEntity(self: *Self, engine_allocator: std.mem.Allocator) !entity_t {
             const zone = Tracy.ZoneInit(debug_name ++ "::CreateEntity", @src());

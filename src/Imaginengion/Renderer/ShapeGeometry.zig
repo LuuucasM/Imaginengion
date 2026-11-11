@@ -424,8 +424,6 @@ pub fn TextInkBox(transform: *const TransformComponent, params: TextParams, min:
         .Pen = .{ .x = 0, .y = 0 },
         .PlaneCenter = min.AddVec(max).MulScalar(0.5),
         .HalfExtents = max.SubVec(min).MulScalar(0.5),
-        .UV0 = .{ .x = 0, .y = 0 },
-        .UV1 = .{ .x = 0, .y = 0 },
         .AtlasIndex = 0,
     };
     return GlyphBox(transform, params, whole, canvas);

@@ -33,6 +33,11 @@ const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const MaskComponent = EntityComponents.MaskComponent;
+const MergeComponent = EntityComponents.MergeComponent;
+const MainObjectComponent = EntityComponents.MainObjectComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
+const EntityECS = @import("../ECSManagers/EManager.zig").ECSManagerT;
 const Vec2 = @import("../Math/MathTypes.zig").Vec2;
 const GameLayerTag = EntityComponents.GameLayerTag;
 const OverlayLayerTag = EntityComponents.OverlayLayerTag;
@@ -58,7 +63,12 @@ pub fn Run(engine_context: *EngineContext, world: *WorldManager, fonts: anytype)
     const frame_allocator = engine_context.FrameAllocator();
     bvh.Clear();
 
-    var builder = Builder{ .mBVH = bvh, .mEngineAllocator = engine_allocator, .mFrameAllocator = frame_allocator };
+    var builder = Builder{
+        .mBVH = bvh,
+        .mEngineAllocator = engine_allocator,
+        .mFrameAllocator = frame_allocator,
+        .mAncestry = try Ancestry.Init(frame_allocator, world),
+    };
 
     try builder.AddVisuals(world, fonts);
     try builder.AddColliders(world);
@@ -78,6 +88,8 @@ const Builder = struct {
     mMerges: std.AutoHashMapUnmanaged(Entity.Type, void) = .empty,
     /// each mask entity's room so far (RoomOf)
     mRooms: std.AutoHashMapUnmanaged(Entity.Type, []const ShapeGeometry.Box) = .empty,
+    /// the merge and mask each entity is under, each ancestor worked out once
+    mAncestry: Ancestry = undefined,
 
     /// What is drawn and clicked: the same as a view's gather (ShapeGeometry.GatherViewShapes), only over every scene.
     /// Folded away by a collapsed layout item is neither, and that only changes at the commit
@@ -93,7 +105,7 @@ const Builder = struct {
         for (visuals.items) |entity_id| {
             const entity = world.GetEntity(entity_id);
             //a part of a merge is its root's one item
-            if (ShapeGeometry.MergeRootOf(entity)) |root| {
+            if (try self.mAncestry.MergeRootOf(entity)) |root| {
                 const seen = try self.mMerges.getOrPut(self.mFrameAllocator, root.mID);
                 if (!seen.found_existing) try self.AddMerge(root);
                 continue;
@@ -106,7 +118,7 @@ const Builder = struct {
             const text = entity.GetComponent(TextComponent);
             if (quad == null and text == null) continue;
             //where all its items go, its quad's and every letter's, and what its masks leave room for, found once
-            const mask_region = ShapeGeometry.MaskRegionAbove(entity);
+            const mask_region = try self.mAncestry.MaskRegionAbove(entity);
             const placement = try self.PlacementOf(entity, mask_region) orelse continue;
             const room = try self.RoomOf(mask_region);
 
@@ -299,3 +311,92 @@ fn WithinRoom(room: []const ShapeGeometry.Box, box: ShapeGeometry.Box) bool {
     }
     return true;
 }
+
+/// The merge (ShapeGeometry.MergeRootOf) and the mask (ShapeGeometry.MaskRegionAbove) each of a world's entities is
+/// under, for one build. Asking each entity alone climbs its whole parent chain, again for every sibling and child, so
+/// deep UI trees paid for the same ancestors over and over (~290 us a build with every Profiler row open, 2026-11-10).
+/// Here each ancestor is worked out once, from its parent's answer, and kept in a table indexed by entity slot. Only
+/// right while the hierarchy and the merge, main object and mask components stay as they are, which a build relies on
+pub const Ancestry = struct {
+    mWorld: *WorldManager,
+    /// at each entity's slot, its answers once worked out
+    mEntries: []Entry,
+    /// the entities being worked out, nearest the known ancestor last
+    mClimb: std.ArrayList(Entity.Type) = .empty,
+    mAllocator: std.mem.Allocator,
+
+    const Entry = struct {
+        Known: bool = false,
+        /// the mask the entity is cut by: its nearest ancestor with a MaskComponent
+        Above: Entity.Type = Entity.NullObject,
+        /// the outermost merge from the entity up to the first main object, both included
+        OuterMerge: Entity.Type = Entity.NullObject,
+
+        /// the mask the entity's children are cut by
+        fn ChildrenMask(self: Entry, entity: Entity) Entity.Type {
+            return if (entity.HasComponent(MaskComponent)) entity.mID else self.Above;
+        }
+    };
+
+    pub fn Init(allocator: std.mem.Allocator, world: *WorldManager) !Ancestry {
+        const entries = try allocator.alloc(Entry, world.mEManager.mECSManager.SlotCount());
+        @memset(entries, .{});
+        return .{ .mWorld = world, .mEntries = entries, .mAllocator = allocator };
+    }
+
+    /// The same as ShapeGeometry.MaskRegionAbove
+    pub fn MaskRegionAbove(self: *Ancestry, entity: Entity) !?Entity {
+        const found = (try self.Of(entity)).Above;
+        return if (found == Entity.NullObject) null else self.mWorld.GetEntity(found);
+    }
+
+    /// The same as ShapeGeometry.MergeRootOf
+    pub fn MergeRootOf(self: *Ancestry, entity: Entity) !?Entity {
+        if (!entity.HasComponent(ShapeComponent) and !entity.HasComponent(MergeComponent)) return null;
+        const found = (try self.Of(entity)).OuterMerge;
+        return if (found == Entity.NullObject) null else self.mWorld.GetEntity(found);
+    }
+
+    /// `entity`'s answers: up its parents to the first one already known (or the top), then each on the way back down
+    /// from its parent's. No recursion, however deep
+    fn Of(self: *Ancestry, entity: Entity) !Entry {
+        const known = self.mEntries[EntityECS.SlotOf(entity.mID)];
+        if (known.Known) return known;
+
+        self.mClimb.clearRetainingCapacity();
+        //the answers of the topmost entity's parent: there is none, so nothing above
+        var parent_entry = Entry{ .Known = true };
+        var parent_id: Entity.Type = Entity.NullObject;
+        var current = entity;
+        while (true) {
+            try self.mClimb.append(self.mAllocator, current.mID);
+            const child_component = current.GetComponent(EntityChildComponent) orelse break;
+            const parent = Entity{ .mID = child_component.mParent, .mManager = entity.mManager };
+            const parent_known = self.mEntries[EntityECS.SlotOf(parent.mID)];
+            if (parent_known.Known) {
+                parent_entry = parent_known;
+                parent_id = parent.mID;
+                break;
+            }
+            current = parent;
+        }
+
+        var entry = parent_entry;
+        var index = self.mClimb.items.len;
+        while (index > 0) {
+            index -= 1;
+            const node = Entity{ .mID = self.mClimb.items[index], .mManager = entity.mManager };
+            const own_merge: Entity.Type = if (node.HasComponent(MergeComponent)) node.mID else Entity.NullObject;
+            entry = .{
+                .Known = true,
+                .Above = if (parent_id == Entity.NullObject) Entity.NullObject else parent_entry.ChildrenMask(Entity{ .mID = parent_id, .mManager = entity.mManager }),
+                //a main object is a merge's top: nothing above it counts
+                .OuterMerge = if (node.HasComponent(MainObjectComponent) or parent_entry.OuterMerge == Entity.NullObject) own_merge else parent_entry.OuterMerge,
+            };
+            self.mEntries[EntityECS.SlotOf(node.mID)] = entry;
+            parent_entry = entry;
+            parent_id = node.mID;
+        }
+        return entry;
+    }
+};

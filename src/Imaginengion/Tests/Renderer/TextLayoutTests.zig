@@ -97,8 +97,9 @@ test "a single glyph at size 1" {
     try ExpectVec2(.{ .x = 0.25, .y = 0.35 }, glyph.PlaneCenter);
     try ExpectVec2(.{ .x = 0.25, .y = 0.35 }, glyph.HalfExtents);
     //bottom-left and top-right, so the glyph box's bottom-up local UV lerps straight across them
-    try ExpectVec2(.{ .x = 0.1, .y = 0.2 }, glyph.UV0);
-    try ExpectVec2(.{ .x = 0.3, .y = 0.5 }, glyph.UV1);
+    const uvs = TextLayout.GlyphUVs(FakeFont, &font, glyph.AtlasIndex);
+    try ExpectVec2(.{ .x = 0.1, .y = 0.2 }, uvs.UV0);
+    try ExpectVec2(.{ .x = 0.3, .y = 0.5 }, uvs.UV1);
 
     try std.testing.expectApproxEqAbs(@as(f32, 0.5), result.Metrics.Max.x, eps);
     try std.testing.expectEqual(@as(u32, 1), result.Metrics.LineCount);
@@ -302,5 +303,92 @@ test "text wrapped at exactly its own measured width stays on one line at any sc
     while (scale < 3) : (scale += 0.0137) {
         const metrics = TextLayout.Measure(FakeFont, text, &font, scale, width * scale);
         try std.testing.expectEqual(@as(u32, 1), metrics.LineCount);
+    }
+}
+
+/// The iterator's answer key: each codepoint decoded on its own by std, then the same rules spelled out plainly
+const Reference = struct {
+    const Placed = struct { Pen: Vec2(f32), AtlasIndex: u32 };
+
+    fn Decode(text: []const u8, index: usize) struct { Codepoint: u21, Len: usize } {
+        const len = std.unicode.utf8ByteSequenceLength(text[index]) catch return .{ .Codepoint = 0xFFFD, .Len = 1 };
+        if (index + len > text.len) return .{ .Codepoint = 0xFFFD, .Len = 1 };
+        const codepoint = std.unicode.utf8Decode(text[index .. index + len]) catch return .{ .Codepoint = 0xFFFD, .Len = 1 };
+        return .{ .Codepoint = codepoint, .Len = len };
+    }
+
+    fn Layout(out: *std.ArrayList(Placed), text: []const u8, font: *const FakeFont, size: f32, wrap: f32) !u32 {
+        var pen = Vec2(f32){ .x = 0, .y = 0 };
+        var lines: u32 = 1;
+        var index: usize = 0;
+        while (index < text.len) {
+            const decoded = Decode(text, index);
+            index += decoded.Len;
+            if (decoded.Codepoint == '\n') {
+                pen = .{ .x = 0, .y = pen.y - font.mLineHeight * size };
+                lines += 1;
+                continue;
+            }
+            const atlas_index = FakeFont.ToArrayIndex(decoded.Codepoint);
+            const glyph = &font.mGlyphs[atlas_index];
+            const advance = glyph.mAdvance * size;
+            if (glyph.mPlaneMax.x <= glyph.mPlaneMin.x) {
+                pen.x += advance;
+                continue;
+            }
+            if (wrap > 0 and pen.x > 0 and pen.x + advance > wrap * (1 + 1e-4)) {
+                pen = .{ .x = 0, .y = pen.y - font.mLineHeight * size };
+                lines += 1;
+            }
+            try out.append(std.testing.allocator, .{ .Pen = pen, .AtlasIndex = @intCast(atlas_index) });
+            var kerning: f32 = 0;
+            if (index < text.len) {
+                const next = Decode(text, index).Codepoint;
+                if (next <= std.math.maxInt(u16)) kerning = glyph.mKernings.get(@intCast(next)) orelse 0;
+            }
+            pen.x += advance + kerning * size;
+        }
+        return lines;
+    }
+};
+
+test "the iterator puts every letter where decoding each codepoint on its own says, kerning, wrapping and bad bytes too" {
+    var font = try FakeFont.Init(std.testing.allocator);
+    defer font.Deinit();
+    //kernings on two letters, the rest none, so both the kerned and unkerned steps are taken
+    try font.mGlyphs[V_IND].mKernings.put('A', 0.3);
+    try font.mGlyphs[HANGUL_IND].mKernings.put('V', -0.2);
+
+    var prng = std.Random.DefaultPrng.init(0x1E77);
+    const random = prng.random();
+    const pieces = [_][]const u8{ "A", "V", "A", "V", " ", "\n", "\xEA\xB0\x80", "\xFF", "\xE0", "\x80", "\xEA\xB0", "x" };
+    var buffer: [200]u8 = undefined;
+    var expected: std.ArrayList(Reference.Placed) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    for (0..2000) |_| {
+        var len: usize = 0;
+        for (0..random.uintLessThan(usize, 50)) |_| {
+            const piece = pieces[random.uintLessThan(usize, pieces.len)];
+            if (len + piece.len > buffer.len) break;
+            @memcpy(buffer[len..][0..piece.len], piece);
+            len += piece.len;
+        }
+        const text = buffer[0..len];
+        const sizes = [_]f32{ 1, 2.5, 9 };
+        const wraps = [_]f32{ 0, 0.6, 2, 7 };
+        const size = sizes[random.uintLessThan(usize, sizes.len)];
+        const wrap = wraps[random.uintLessThan(usize, wraps.len)] * size;
+
+        expected.clearRetainingCapacity();
+        const lines = try Reference.Layout(&expected, text, &font, size, wrap);
+        var iter = Layout.Init(text, &font, size, wrap);
+        var count: usize = 0;
+        while (iter.Next()) |glyph| : (count += 1) {
+            try std.testing.expect(count < expected.items.len);
+            try std.testing.expectEqual(expected.items[count].AtlasIndex, glyph.AtlasIndex);
+            try std.testing.expectEqual(expected.items[count].Pen, glyph.Pen);
+        }
+        try std.testing.expectEqual(expected.items.len, count);
+        try std.testing.expectEqual(lines, iter.GetMetrics().LineCount);
     }
 }

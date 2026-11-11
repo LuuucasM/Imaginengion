@@ -28,6 +28,7 @@ const MergeComponent = EntityComponents.MergeComponent;
 const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
 const TransformComponent = EntityComponents.TransformComponent;
 const MaskComponent = EntityComponents.MaskComponent;
+const MainObjectComponent = EntityComponents.MainObjectComponent;
 
 const TestWorld = struct {
     mEngineContext: *EngineContext,
@@ -689,4 +690,52 @@ test "a refit places its items on the job pool, a run of them per task, and come
     }
     try ExpectTreeHoldsItems(tree);
     try std.testing.expect(tree.mBVHItems.items[IndexOf(tree, moved[2])].Bounds.Contains(.{ .x = -70, .y = 200, .z = 3 }));
+}
+
+test "the build's table of what each entity is under answers the same as climbing its parents, in any order asked" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const editor_world = &engine_context.mEditorWorld;
+    const level = try editor_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    var prng = std.Random.DefaultPrng.init(0xA2CE);
+    const random = prng.random();
+    //a random forest: a few roots, every other entity under one made before it, so chains run deep and branch
+    var entities: std.ArrayList(Entity) = .empty;
+    defer entities.deinit(std.testing.allocator);
+    for (0..400) |i| {
+        const entity = if (i < 4 or random.uintLessThan(u32, 12) == 0)
+            try level.CreateEntity(engine_context, Entity.DefaultConfig)
+        else
+            try entities.items[random.uintLessThan(usize, entities.items.len)].CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+        //quads and merges are what MergeRootOf answers for, masks of both kinds, and main objects that stop a merge
+        if (random.uintLessThan(u32, 2) == 0) _ = try entity.AddComponent(engine_context, ShapeComponent{});
+        if (random.uintLessThan(u32, 6) == 0) _ = try entity.AddComponent(engine_context, MergeComponent{});
+        if (random.uintLessThan(u32, 8) == 0) _ = try entity.AddComponent(engine_context, MaskComponent{ .mOp = if (random.boolean()) .Intersect else .Subtract });
+        if (!entity.HasComponent(MainObjectComponent) and random.uintLessThan(u32, 10) == 0) _ = try entity.AddComponent(engine_context, MainObjectComponent{});
+        try entities.append(std.testing.allocator, entity);
+    }
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var merges: usize = 0;
+    var masks: usize = 0;
+    for (0..3) |_| {
+        //a new table each time, asked in a new order, so climbs start at every depth
+        var ancestry = try BVHBuildSystem.Ancestry.Init(arena.allocator(), editor_world);
+        random.shuffle(Entity, entities.items);
+        for (entities.items) |entity| {
+            const merge = try ancestry.MergeRootOf(entity);
+            const expected_merge = ShapeGeometry.MergeRootOf(entity);
+            try std.testing.expectEqual(if (expected_merge) |e| e.mID else null, if (merge) |e| e.mID else null);
+            const mask = try ancestry.MaskRegionAbove(entity);
+            const expected_mask = ShapeGeometry.MaskRegionAbove(entity);
+            try std.testing.expectEqual(if (expected_mask) |e| e.mID else null, if (mask) |e| e.mID else null);
+            if (merge != null) merges += 1;
+            if (mask != null) masks += 1;
+        }
+    }
+    //the answers weren't all empty
+    try std.testing.expect(merges > 30 and masks > 30);
 }
