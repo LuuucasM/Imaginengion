@@ -503,39 +503,125 @@ pub fn ProcessGameEvents(engine_context: *EngineContext, world: *WorldManager, c
 
     const queue = world.mGameEventManager.GetQueue(phase);
     defer world.mGameEventManager.Clear(phase);
+    const frame_allocator = engine_context.FrameAllocator();
 
+    //built when the first event comes, so a phase with none costs nothing, and again only when the scripts that hear
+    //events or their order may have changed (WorldManager.mEventHandlersVersion). Not for every event: most handlers
+    //change values, not which scripts there are
+    var handlers: ?HandlerList = null;
     var index: usize = 0;
     //by index: a handler can send more, which go on the end and can move the queue
     while (index < queue.mEntries.items.len) : (index += 1) {
         const entry = queue.mEntries.items[index];
+        if (handlers == null or handlers.?.mVersion != world.mEventHandlersVersion) handlers = try HandlerList.Build(frame_allocator, world);
+        const scripts = try handlers.?.For(frame_allocator, entry.mId);
         //the handlers are handed a copy, aligned for any event, which a handler sending an event can't move
-        const copy = try engine_context.FrameAllocator().alignedAlloc(u8, .@"16", @max(entry.mSize, 1));
+        const copy = try frame_allocator.alignedAlloc(u8, .@"16", @max(entry.mSize, 1));
         @memcpy(copy[0..entry.mSize], queue.BytesOf(index));
-        _ = try RunEventHandlers(engine_context, world, entry.mId, copy.ptr);
+        _ = try engine_context.mSystems.RunSystem(EventHandlersLoop, engine_context, .{ world, scripts, entry.mId, @as(*const anyopaque, copy.ptr) });
     }
     zone.Value(index);
 }
 
 /// Runs every handler in `world` for the game event with id `id`, whose bytes are at `event`, until one hands back
-/// .Handled. What ProcessGameEvents does for each queued event, and WorldManager.Dispatch for an event sent right away
+/// .Handled. What WorldManager.Dispatch does for an event sent right away
 pub fn RunEventHandlers(engine_context: *EngineContext, world: *WorldManager, id: u64, event: *const anyopaque) !ScriptResult {
-    return engine_context.mSystems.RunSystem(EventHandlersLoop, engine_context, .{ world, id, event });
+    return engine_context.mSystems.RunSystem(EventHandlersLoop, engine_context, .{ world, @as(?HandlerList.Lists, null), id, event });
 }
 
-/// The loop over every script in a world with game event handlers: from the game context ECS, whose scripts go first,
-/// to the players', the scenes' and the entities', each ordered the way RunScript orders them
+/// Every script in a world with game event handlers, in the order they hear an event: the game context's first, then the
+/// players', the scenes' and the entities', each top of the scene stack first the way RunScript orders them. Built once
+/// for a pass of ProcessGameEvents and used for each of its events, for as long as WorldManager.mEventHandlersVersion
+/// stays where it was. Holds ids, not pointers: a script deleted since is skipped as gone, and its component, script
+/// and variables are looked up as it runs
+const HandlerList = struct {
+    /// WorldManager.mEventHandlersVersion when it was built
+    mVersion: u64,
+    mWorld: *WorldManager,
+    mAll: Lists,
+    /// for each event id seen since it was built: only the scripts with a handler for it
+    mByEvent: std.AutoHashMapUnmanaged(u64, Lists) = .empty,
+
+    const OBJECT_TYPES = .{ GameContext, Player, Scene, Entity };
+    /// one list per object type, in OBJECT_TYPES' order
+    const Lists = struct { []const Script(GameContext), []const Script(Player), []const Script(Scene), []const Script(Entity) };
+
+    fn Script(comptime ObjectType: type) type {
+        return struct {
+            mScript: ObjectType.Type,
+            mOwner: ObjectType.Type,
+            /// where its owner sits in the scene stack, what the list is ordered by
+            mStackPos: usize,
+
+            fn Higher(_: void, a: @This(), b: @This()) bool {
+                return a.mStackPos > b.mStackPos;
+            }
+        };
+    }
+
+    fn Build(allocator: std.mem.Allocator, world: *WorldManager) !HandlerList {
+        const zone = Tracy.ZoneInit("ScriptsProcessor::BuildHandlerList", @src());
+        defer zone.Deinit();
+        var all: Lists = undefined;
+        inline for (OBJECT_TYPES, 0..) |ObjectType, i| all[i] = try Ordered(ObjectType, allocator, world);
+        return .{ .mVersion = world.mEventHandlersVersion, .mWorld = world, .mAll = all };
+    }
+
+    /// The scripts of one object type with GameEventScript, top of the stack first, scripts on the same level in the
+    /// order the ECS hands them back. Each owner's place is looked up once, then sorted
+    fn Ordered(comptime ObjectType: type, allocator: std.mem.Allocator, world: *WorldManager) ![]const Script(ObjectType) {
+        const script_ids = try world.GetManager(ObjectType).GetGroup(allocator, GroupQuery{ .Component = GameEventScript });
+        const scripts = try allocator.alloc(Script(ObjectType), script_ids.items.len);
+        for (script_ids.items, scripts) |script_id, *script| {
+            const owner = OwnerOf(ObjectType, world, script_id);
+            script.* = .{ .mScript = script_id, .mOwner = owner, .mStackPos = OwnerStackPos(ObjectType, world, owner) };
+        }
+        //stable, so a level keeps the ECS's order. Game contexts and players have no place in the stack
+        if (ObjectType == Scene or ObjectType == Entity) std.sort.block(Script(ObjectType), scripts, {}, Script(ObjectType).Higher);
+        return scripts;
+    }
+
+    /// The scripts with a handler for the event with id `id`, worked out the first time it comes
+    fn For(self: *HandlerList, allocator: std.mem.Allocator, id: u64) !Lists {
+        const entry = try self.mByEvent.getOrPut(allocator, id);
+        if (!entry.found_existing) {
+            inline for (OBJECT_TYPES, 0..) |ObjectType, i| entry.value_ptr[i] = try HandlersOf(ObjectType, allocator, self.mWorld, self.mAll[i], id);
+        }
+        return entry.value_ptr.*;
+    }
+
+    /// Leaves out the scripts whose script has no handler for `id`. Only those: whether one can run (loaded, not
+    /// stopped, its variables there) is checked as it runs (RunHandler). What handlers a script has changes only when it
+    /// is built again, at the start of a frame (SyncScripts)
+    fn HandlersOf(comptime ObjectType: type, allocator: std.mem.Allocator, world: *WorldManager, all: []const Script(ObjectType), id: u64) ![]const Script(ObjectType) {
+        const manager = world.GetManager(ObjectType);
+        var kept: std.ArrayList(Script(ObjectType)) = .empty;
+        for (all) |script| {
+            if (!manager.mECSManager.IsActiveEntity(script.mScript)) continue;
+            const script_component = manager.GetComponent(ScriptComponent, script.mScript) orelse continue;
+            if (ScriptValues.AssetOf(script_component)) |script_asset| {
+                if (script_asset.GetInfo().HandlerFor(id) == null) continue;
+            }
+            try kept.append(allocator, script);
+        }
+        return kept.items;
+    }
+};
+
+/// The loop over the scripts in a world with game event handlers, the game context's first (see HandlerList): the ones
+/// with a handler for this event when ProcessGameEvents has the list already, or every one there is, found now, for an
+/// event sent right away
 const EventHandlersLoop = struct {
     pub const Name = "ScriptsProcessor::RunEventHandlers";
 
-    pub fn Run(engine_context: *EngineContext, world: *WorldManager, id: u64, event: *const anyopaque) !ScriptResult {
-        inline for (.{ GameContext, Player, Scene, Entity }) |ObjectType| {
+    pub fn Run(engine_context: *EngineContext, world: *WorldManager, known: ?HandlerList.Lists, id: u64, event: *const anyopaque) !ScriptResult {
+        const scripts = known orelse (try HandlerList.Build(engine_context.FrameAllocator(), world)).mAll;
+        inline for (HandlerList.OBJECT_TYPES, 0..) |ObjectType, i| {
             const manager = world.GetManager(ObjectType);
-            const script_ids = try manager.GetGroup(engine_context.FrameAllocator(), GroupQuery{ .Component = GameEventScript });
-            SortByOwnerStackPos(ObjectType, world, script_ids.items);
-            for (script_ids.items) |script_id| {
-                if (!manager.mECSManager.IsActiveEntity(script_id)) continue;
-                const script_component = manager.GetComponent(ScriptComponent, script_id) orelse continue;
-                const owner = ObjectType{ .mID = OwnerOf(ObjectType, world, script_id), .mManager = world };
+            for (scripts[i]) |script| {
+                if (!manager.mECSManager.IsActiveEntity(script.mScript)) continue;
+                const script_component = manager.GetComponent(ScriptComponent, script.mScript) orelse continue;
+                const owner = ObjectType{ .mID = script.mOwner, .mManager = world };
                 if (RunHandler(ObjectType, engine_context, script_component, &owner, id, event) == .Handled) return .Handled;
             }
         }

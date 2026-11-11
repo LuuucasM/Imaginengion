@@ -22,6 +22,16 @@ mCollapsed: bool = false,
 
 /// The size layout last gave it. Worked out, never saved or edited: shown in the editor to see what layout did
 mComputedSize: Vec2(f32) = .{ .x = 0, .y = 0 },
+/// A leaf's text as layout last measured it, so a tree laid out again only measures the texts that changed. Worked
+/// out, never saved or edited. Null until it is measured, or when it has no text to measure
+mMeasuredText: ?MeasuredText = null,
+
+/// The room a leaf's text takes on one line (or several, where it has line breaks), and the middle of that room
+/// relative to where the text is placed
+pub const MeasuredText = struct {
+    Size: Vec2(f32),
+    Center: Vec2(f32),
+};
 
 pub fn Deinit(_: *LayoutItemComponent, _: *EngineContext) void {}
 
@@ -48,7 +58,7 @@ fn ShowSize(size: Vec2(f32), buffer: []u8) []const u8 {
     return std.fmt.bufPrint(buffer, "{d:.2} x {d:.2}", .{ size.x, size.y }) catch "?";
 }
 
-//the computed size is left out: it is worked out again every time the tree is laid out
+//the computed size and measured text are left out: they are worked out again when the tree is laid out
 const Json = JsonUtils.JsonFields(LayoutItemComponent, .{
     .Width = "mWidth",
     .Height = "mHeight",

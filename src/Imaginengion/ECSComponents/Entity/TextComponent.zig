@@ -37,13 +37,15 @@ pub fn Clone(self: *const TextComponent, engine_context: *EngineContext) !TextCo
 }
 
 /// Replaces the text. Layout doesn't see the change on its own, so if the entity is in a layout the caller
-/// marks it with entity.MarkLayoutDirty
+/// marks it with entity.MarkLayoutDirty: this text's own entity, not another in its tree, because layout keeps each
+/// text's measured size and only measures again the texts that are tagged themselves. The same goes for changing
+/// the font or the font size
 pub fn SetText(self: *TextComponent, engine_context: *EngineContext, text: []const u8) !void {
     self.mText.clearRetainingCapacity();
     try self.mText.appendSlice(engine_context.EngineAllocator(), text);
 }
 
-/// Adds to the end of the text. Same as SetText, the caller marks the layout dirty if the entity is in one
+/// Adds to the end of the text. Same as SetText, the caller marks this entity's layout dirty if it is in one
 pub fn AppendText(self: *TextComponent, engine_context: *EngineContext, text: []const u8) !void {
     try self.mText.appendSlice(engine_context.EngineAllocator(), text);
 }

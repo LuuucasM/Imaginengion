@@ -240,13 +240,45 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                 .Script => try self.CreateScript(engine_allocator),
             };
 
-            try self._InternalDuplicateInto(engine_context, original_entity_id, new_entity_id);
+            // the adds still staged for anything, found in one pass over the queue rather than one per node of the
+            // subtree, and sorted by entity (stable, so each entity's keep their queue order) for each node to find
+            // its own. Taken now, since staging the copies appends to this same queue, so the copies' own adds
+            // aren't copied again. With nothing staged there is nothing to find
+            var queued_adds: std.ArrayList(QueuedAdd) = .empty;
+            defer queued_adds.deinit(engine_allocator);
+            if (self.mStaged.count() > 0) {
+                for (self.mECSEventManager.mEventsArray.getPtr(.EndOfFrame).items) |event| switch (event) {
+                    .AddComponent => |add| {
+                        if (self._GetStaged(add.mEntityID, add.mComponentInd) != add.mData) continue; // taken back off
+                        try queued_adds.append(engine_allocator, .{ .mEntityID = add.mEntityID, .mComponentInd = add.mComponentInd, .mData = add.mData });
+                    },
+                    else => {},
+                };
+                std.mem.sort(QueuedAdd, queued_adds.items, {}, QueuedAdd.LessThan);
+            }
+
+            try self._InternalDuplicateInto(engine_context, original_entity_id, new_entity_id, queued_adds.items);
 
             return new_entity_id;
         }
 
+        // an add still staged when a duplicate began, for DuplicateEntity to give the copies too
+        const QueuedAdd = struct {
+            mEntityID: entity_t,
+            mComponentInd: usize,
+            mData: *anyopaque,
+
+            fn LessThan(_: void, a: QueuedAdd, b: QueuedAdd) bool {
+                return a.mEntityID < b.mEntityID;
+            }
+
+            fn CompareTo(entity_id: entity_t, item: QueuedAdd) std.math.Order {
+                return std.math.order(entity_id, item.mEntityID);
+            }
+        };
+
         // stages a copy of one entity's components and subtree onto another, already created, entity
-        fn _InternalDuplicateInto(self: *Self, engine_context: *EngineContext, original_entity_id: entity_t, new_entity_id: entity_t) anyerror!void {
+        fn _InternalDuplicateInto(self: *Self, engine_context: *EngineContext, original_entity_id: entity_t, new_entity_id: entity_t, queued_adds: []const QueuedAdd) anyerror!void {
             const engine_allocator = engine_context.EngineAllocator();
 
             // iterated from a copy, since nothing here needs the original's own one
@@ -267,26 +299,17 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                 try self._StageOrAddCopy(engine_context, new_entity_id, component_ind, staged_component);
             }
 
-            // and the ones still staged for it. Indexed rather than sliced, since staging the copies below appends to
-            // this same queue, and only up to its length now, so the copies' own adds aren't copied again
-            const queued_adds = self.mECSEventManager.mEventsArray.getPtr(.EndOfFrame);
-            const queued_count = queued_adds.items.len;
-            for (0..queued_count) |event_ind| {
-                const add = switch (queued_adds.items[event_ind]) {
-                    .AddComponent => |add| add,
-                    else => continue,
-                };
-                if (add.mEntityID != original_entity_id) continue;
-                if (self._GetStaged(original_entity_id, add.mComponentInd) != add.mData) continue; // taken back off
-
+            // and the ones still staged for it
+            const own_start, const own_end = std.sort.equalRange(QueuedAdd, queued_adds, original_entity_id, QueuedAdd.CompareTo);
+            for (queued_adds[own_start..own_end]) |add| {
                 var staging_arena = self.mStagingArena.promote(engine_allocator);
                 defer self.mStagingArena = staging_arena.state;
                 const staged_component = try self.mComponentManager.CloneStaged(engine_context, staging_arena.allocator(), add.mComponentInd, add.mData);
                 try self._StageOrAddCopy(engine_context, new_entity_id, add.mComponentInd, staged_component);
             }
 
-            try self._InternalDuplicateChildren(engine_context, original_entity_id, new_entity_id, .Entity);
-            try self._InternalDuplicateChildren(engine_context, original_entity_id, new_entity_id, .Script);
+            try self._InternalDuplicateChildren(engine_context, original_entity_id, new_entity_id, .Entity, queued_adds);
+            try self._InternalDuplicateChildren(engine_context, original_entity_id, new_entity_id, .Script, queued_adds);
         }
 
         // puts a copy made in the staging arena on the duplicate: staged if it has to wait, the way AddComponent
@@ -308,7 +331,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             }
         }
 
-        fn _InternalDuplicateChildren(self: *Self, engine_context: *EngineContext, original_entity_id: entity_t, new_entity_id: entity_t, child_type: ChildType) anyerror!void {
+        fn _InternalDuplicateChildren(self: *Self, engine_context: *EngineContext, original_entity_id: entity_t, new_entity_id: entity_t, child_type: ChildType, queued_adds: []const QueuedAdd) anyerror!void {
             const first_id = blk: {
                 // only the id is kept, the pointer is not needed past this
                 const parent_component = self.GetComponent(ParentComponent, original_entity_id) orelse return;
@@ -324,7 +347,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                 const next_id = self.GetComponent(ChildComponent, curr_id).?.mNext;
 
                 const new_child_id = try self.AddChild(engine_context, new_entity_id, child_type);
-                try self._InternalDuplicateInto(engine_context, curr_id, new_child_id);
+                try self._InternalDuplicateInto(engine_context, curr_id, new_child_id, queued_adds);
 
                 if (next_id == first_id) break; // the list is circular
                 curr_id = next_id;
@@ -1196,8 +1219,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             self.mComponentManager.DestroyEntity(engine_context, entity_id);
         }
 
-        // destroys one of the entity's two child lists, always its first child: each destroy unlinks the child it was,
-        // and the ParentComponent goes with the last one
+        // destroys one of the entity's two child lists, always its last child: each destroy unlinks the child it was,
+        // and the ParentComponent goes with the final one. Taking the last (the head's mPrev, the list is circular)
+        // rather than the head means the head never moves, so no unlink has to rewrite every sibling's mFirst
         fn _DestroyChildrenNow(self: *Self, engine_context: *EngineContext, entity_id: entity_t, child_type: ChildType) anyerror!void {
             while (self.mComponentManager.GetComponent(ParentComponent, entity_id)) |parent_component| {
                 const first_id = switch (child_type) {
@@ -1205,7 +1229,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                     .Script => parent_component.mFirstScript,
                 };
                 if (first_id == std.math.maxInt(entity_t)) return;
-                try self._DestroyNow(engine_context, first_id);
+                const last_id = self.mComponentManager.GetComponent(ChildComponent, first_id).?.mPrev;
+                try self._DestroyNow(engine_context, last_id);
             }
         }
 

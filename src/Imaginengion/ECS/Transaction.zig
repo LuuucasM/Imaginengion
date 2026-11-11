@@ -68,6 +68,9 @@ mTypeReads: std.AutoHashMapUnmanaged(TypeKey, void) = .empty,
 mTypeWrites: std.AutoHashMapUnmanaged(TypeKey, void) = .empty,
 /// While measuring: each array's component type name, for the report. Good until the transaction ends
 mNames: std.AutoHashMapUnmanaged(*anyopaque, []const u8) = .empty,
+/// The array mNames was last given a name for: notes come in runs on one array (a GetComponentMut notes it up to five
+/// times), so this skips the put for all but the first
+mLastNamed: ?*anyopaque = null,
 /// While measuring, something couldn't be written down (out of memory): it can't be checked for conflicts
 mMeasureLost: bool = false,
 
@@ -401,9 +404,13 @@ fn _Note(self: *Transaction, set: anytype, key: anytype, array: *anyopaque, name
         self.mMeasureLost = true;
         return;
     };
+    // an array's name never changes, so once it is in there is nothing to put
+    if (self.mLastNamed == array) return;
     self.mNames.put(engine_allocator, array, name) catch {
         self.mMeasureLost = true;
+        return;
     };
+    self.mLastNamed = array;
 }
 
 /// The type name written down for `array`, for the report
@@ -544,4 +551,5 @@ fn _Reset(self: *Transaction, engine_allocator: std.mem.Allocator) void {
     self.mTypeReads.clearRetainingCapacity();
     self.mTypeWrites.clearRetainingCapacity();
     self.mNames.clearRetainingCapacity();
+    self.mLastNamed = null;
 }

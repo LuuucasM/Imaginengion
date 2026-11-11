@@ -66,6 +66,10 @@ mEventManager: EventManagerT = .empty,
 
 /// The game events sent in this world (Emit), waiting for their phase (see Scripts/GameEvents.zig)
 mGameEventManager: GameEvents.GameEventManager = .empty,
+/// Goes up whenever which scripts hear game events, or the order they hear them in, may have changed: a GameEventScript
+/// tag going on or coming off, or a scene moving in the stack. A handler list built at one count (ScriptsProcessor
+/// .ProcessGameEvents) is built again once it moves. A script deleted needs no count: it is skipped as gone
+mEventHandlersVersion: u64 = 0,
 
 /// How every overlay scene in this world turns its units into screen pixels: one for all of them, so they all share
 /// the one screen space, and the renderer can hold all their shapes in one tree. Each view still places that space

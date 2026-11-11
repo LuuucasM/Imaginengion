@@ -1,6 +1,6 @@
 //! The layout pass on real entities: finding the trees that are dirty, laying them out, and writing the results
-//! back. No window or renderer needed, so only quads: text needs a loaded font, and how text is measured is
-//! covered by TextLayoutTests. Run with `zig build test-engine`.
+//! back. No window or renderer needed, so mostly quads. The text tests use a stand-in font (TestWorld.InitWithFont),
+//! and how text is measured is covered by TextLayoutTests. Run with `zig build test-engine`.
 const std = @import("std");
 
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -21,6 +21,10 @@ const TransformComponent = EntityComponents.TransformComponent;
 const TransformDirtyTag = EntityComponents.TransformDirtyTag;
 const SceneComponent = @import("../../ECSComponents/SComponents.zig").SceneComponent;
 const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
+const TextComponent = EntityComponents.TextComponent;
+const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
+const LoadFailedTag = @import("../../ECSComponents/AComponents.zig").LoadFailedTag;
+const EngineFiles = @import("../../GameBuild/EngineFiles.zig");
 
 const SEventData = @import("../../Events/SManagerData.zig");
 const EEventData = @import("../../Events/EManagerData.zig");
@@ -34,6 +38,8 @@ const eps: f32 = 0.001;
 
 const TestWorld = struct {
     mEngineContext: *EngineContext,
+    /// set by InitWithFont: a font every letter of which is the same width
+    mFont: ?AssetHandle = null,
 
     fn Init() !*TestWorld {
         const self = try std.heap.page_allocator.create(TestWorld);
@@ -44,10 +50,57 @@ const TestWorld = struct {
         return self;
     }
 
+    /// Init, with the asset manager and a stand-in font. The real fonts need the GPU, so the font is an asset whose load
+    /// has failed, which hands back the default font, filled in here by hand: every letter 0.6 wide and 0.7 tall
+    fn InitWithFont() !*TestWorld {
+        const self = try std.heap.page_allocator.create(TestWorld);
+        self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
+        const engine_context = self.mEngineContext;
+        engine_context.* = .{};
+        //file paths go through the context's Io, which forwards to this
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+            .concurrent_limit = .nothing,
+            .async_limit = .nothing,
+        });
+        //no Setup: its default assets need the GPU
+        try engine_context.mAssetManager.Init(engine_context);
+        try engine_context.mUIManager.Init(engine_context);
+        try engine_context.mEditorWorld.Init(engine_context);
+
+        const asset_manager = &engine_context.mAssetManager;
+        const font = &asset_manager._internal.DefaultTextAsset;
+        for (&font.mGlyphs) |*glyph| glyph.* = .{
+            .mPlaneMin = .{ .x = 0, .y = 0.7 },
+            .mPlaneMax = .{ .x = 0.6, .y = 0 },
+            .mAdvance = 0.6,
+            .mKernings = .init(engine_context.EngineAllocator()),
+        };
+        font.mLineHeight = 1.2;
+        font.mAscender = 0.9;
+        font.mDescender = -0.2;
+
+        //a font file that is there, as making a handle opens it, marked as failed so it is never read
+        const handle = try asset_manager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = EngineFiles.DEFAULT_FONT, .path_type = .Eng } });
+        _ = try asset_manager.mECSManager.AddComponentSync(engine_context, handle.mID, LoadFailedTag{});
+        self.mFont = handle;
+        return self;
+    }
+
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
+        //after the world: its texts let go of the font as they go
+        if (self.mFont != null) {
+            const engine_allocator = engine_context.EngineAllocator();
+            const asset_manager = &engine_context.mAssetManager;
+            for (&asset_manager._internal.DefaultTextAsset.mGlyphs) |*glyph| glyph.mKernings.deinit();
+            //the asset manager, minus the default assets Setup never made and the working directory it does not own
+            asset_manager.mECSManager.Deinit(engine_context);
+            asset_manager.mUUIDToWorldID.deinit(engine_allocator);
+            asset_manager.mEventManager.Deinit(engine_allocator);
+            asset_manager.mCWDPath.deinit(engine_allocator);
+        }
         _ = engine_context._Internal.EngineGPA.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -535,6 +588,83 @@ test "a collapsed element and everything under it are hidden, and shown again wh
     try std.testing.expect(!by_hand.HasComponent(LayoutHiddenTag));
     try std.testing.expect(inner.HasComponent(LayoutHiddenTag));
     try std.testing.expect(inner_child.HasComponent(LayoutHiddenTag));
+}
+
+//------------------------------measuring text------------------------------
+
+/// A leaf that fits `text` in the world's stand-in font
+fn Label(world: *TestWorld, scene: Scene, parent: ?Entity, text: []const u8) !Entity {
+    const engine_context = world.mEngineContext;
+    const label = try Element(engine_context, scene, parent, .{}, null);
+    const font = world.mFont.?;
+    //the text lets go of its own reference when it goes
+    font.RetainAsset();
+    const text_component = try label.AddComponent(engine_context, TextComponent{ .mTextAssetHandle = font, .mFontSize = 10 });
+    try text_component.SetText(engine_context, text);
+    return label;
+}
+
+fn QuadWidth(entity: Entity) f32 {
+    return entity.GetComponent(ShapeComponent).?.GetQuad().?.Size.x;
+}
+
+test "a text is measured again only when it is tagged itself, not when something else in its tree is" {
+    const world = try TestWorld.InitWithFont();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try world.DrawnOverlay();
+
+    const column = try Element(engine_context, scene, null, .{ .mPlacement = .{ .Anchored = .{} } }, .{});
+    const label = try Label(world, scene, column, "ab");
+    try world.Update();
+    const short_width = QuadWidth(label);
+    try std.testing.expect(short_width > 0);
+
+    //changed without tagging the text: the size it was measured at is kept, however often its tree is laid out
+    try label.GetComponentMut(TextComponent).?.SetText(engine_context, "abcd");
+    try column.MarkLayoutDirty(engine_context);
+    try world.Update();
+    try std.testing.expectEqual(short_width, QuadWidth(label));
+
+    //tagged as SetText asks: measured again
+    try label.MarkLayoutDirty(engine_context);
+    try world.Update();
+    try std.testing.expect(QuadWidth(label) > short_width);
+}
+
+test "text under something collapsed isn't measured, and a change made while folded shows once it unfolds" {
+    const world = try TestWorld.InitWithFont();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try world.DrawnOverlay();
+
+    const column = try Element(engine_context, scene, null, .{ .mPlacement = .{ .Anchored = .{} } }, .{});
+    const node = try Element(engine_context, scene, column, .{ .mCollapsed = true }, .{});
+    const label = try Label(world, scene, node, "ab");
+    try world.Update();
+    try std.testing.expect(label.GetComponent(LayoutItemComponent).?.mMeasuredText == null);
+
+    //unfolded: measured
+    node.GetComponentMut(LayoutItemComponent).?.mCollapsed = false;
+    try node.MarkLayoutDirty(engine_context);
+    try world.Update();
+    const short_width = QuadWidth(label);
+    try std.testing.expect(short_width > 0);
+
+    //folded again, and its text changed while folded: the pass clears its tag without measuring it
+    node.GetComponentMut(LayoutItemComponent).?.mCollapsed = true;
+    try node.MarkLayoutDirty(engine_context);
+    try world.Update();
+    try label.GetComponentMut(TextComponent).?.SetText(engine_context, "abcd");
+    try label.MarkLayoutDirty(engine_context);
+    try world.Update();
+    try std.testing.expect(!label.HasComponent(LayoutDirtyTag));
+
+    //unfolding tags only the node, and the label still fits its new text
+    node.GetComponentMut(LayoutItemComponent).?.mCollapsed = false;
+    try node.MarkLayoutDirty(engine_context);
+    try world.Update();
+    try std.testing.expect(QuadWidth(label) > short_width);
 }
 
 //------------------------------adding layout in the editor------------------------------

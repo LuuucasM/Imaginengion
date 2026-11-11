@@ -105,6 +105,58 @@ const Bumped = struct {
 };
 const BumpedExports = ScriptExport.Exports(Bumped, "Bumped", &.{});
 
+/// Two entity scripts hearing ScoreChanged, to tell apart which heard it first: 'X' and 'Y'
+const ListenerX = struct {
+    pub fn OnScoreChanged(_: *ListenerX, _: *EngineContext, _: Entity, _: *const ScoreChanged) ScriptResult {
+        Handled('X');
+        return .Continue;
+    }
+};
+const ListenerXExports = ScriptExport.Exports(ListenerX, "ListenerX", &.{});
+const ListenerY = struct {
+    pub fn OnScoreChanged(_: *ListenerY, _: *EngineContext, _: Entity, _: *const ScoreChanged) ScriptResult {
+        Handled('Y');
+        return .Continue;
+    }
+};
+const ListenerYExports = ScriptExport.Exports(ListenerY, "ListenerY", &.{});
+
+/// What the game context scripts below act on, set by each test
+var gTarget: Entity = .uninit;
+var gScriptToAdd: AssetHandle = undefined;
+var gSceneToMove: Scene = .uninit;
+
+/// Hearing Scored, gives gTarget a gScriptToAdd script: 'A'
+const Adder = struct {
+    pub fn OnScored(_: *Adder, engine_context: *EngineContext, _: GameContext, _: *const Scored) !ScriptResult {
+        Handled('A');
+        gScriptToAdd.RetainAsset();
+        _ = try ECSObject.Core(Entity).AddScript(gTarget, engine_context, gScriptToAdd);
+        return .Continue;
+    }
+};
+const AdderExports = ScriptExport.Exports(Adder, "Adder", &.{});
+
+/// Hearing Scored, deletes gTarget: 'D'
+const Deleter = struct {
+    pub fn OnScored(_: *Deleter, engine_context: *EngineContext, _: GameContext, _: *const Scored) !ScriptResult {
+        Handled('D');
+        try gTarget.Delete(engine_context);
+        return .Continue;
+    }
+};
+const DeleterExports = ScriptExport.Exports(Deleter, "Deleter", &.{});
+
+/// Hearing Scored, moves gSceneToMove to the top of the game layers: 'M'
+const Mover = struct {
+    pub fn OnScored(_: *Mover, engine_context: *EngineContext, owner: GameContext, _: *const Scored) !ScriptResult {
+        Handled('M');
+        try owner.GetWorld().MoveScene(engine_context.FrameAllocator(), gSceneToMove, 1);
+        return .Continue;
+    }
+};
+const MoverExports = ScriptExport.Exports(Mover, "Mover", &.{});
+
 const TestWorld = struct {
     mEngineContext: *EngineContext,
     mScene: Scene = .uninit,
@@ -272,6 +324,64 @@ test "a dispatch from inside a handler finishes before that handler carries on" 
     const text_instance = @import("../../Scripts/ScriptValues.zig").InstanceOf(text.GetComponent(@import("../../ECSComponents/Shared/ScriptComponent.zig")).?).?;
     const text_values: *ScoreText = @ptrCast(@alignCast(text_instance.mData));
     try std.testing.expectEqual(@as(u32, 7), text_values.mShown);
+}
+
+test "a script given a handler during a pass hears the pass's later events" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+
+    const game_context = try game_world.CreateGameContext(engine_context, GameContext.DefaultConfig);
+    _ = try world.AddScript(game_context, &AdderExports.info);
+    gTarget = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    gScriptToAdd = try world.ScriptAssetFor(&ListenerXExports.info);
+
+    //Scored's handler adds a script that hears ScoreChanged, which is already waiting behind it
+    try game_world.Emit(engine_context, Scored{});
+    try game_world.Emit(engine_context, ScoreChanged{});
+    try ScriptsProcessor.ProcessGameEvents(engine_context, game_world, .AfterUpdate);
+    try std.testing.expectEqualStrings("AX", gHandled.items);
+}
+
+test "a script deleted during a pass hears none of the pass's later events" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+
+    const game_context = try game_world.CreateGameContext(engine_context, GameContext.DefaultConfig);
+    _ = try world.AddScript(game_context, &DeleterExports.info);
+    gTarget = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try world.AddScript(gTarget, &ListenerXExports.info);
+
+    try game_world.Emit(engine_context, ScoreChanged{});
+    try game_world.Emit(engine_context, Scored{});
+    try game_world.Emit(engine_context, ScoreChanged{});
+    try ScriptsProcessor.ProcessGameEvents(engine_context, game_world, .AfterUpdate);
+    try std.testing.expectEqualStrings("XD", gHandled.items);
+}
+
+test "a scene moved in the stack during a pass changes the order the pass's later events go in" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+
+    const game_context = try game_world.CreateGameContext(engine_context, GameContext.DefaultConfig);
+    _ = try world.AddScript(game_context, &MoverExports.info);
+    //the second game scene goes on top of the first
+    const top_scene = try game_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    _ = try world.AddScript(try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig), &ListenerXExports.info);
+    _ = try world.AddScript(try top_scene.CreateEntity(engine_context, Entity.DefaultConfig), &ListenerYExports.info);
+    gSceneToMove = world.mScene;
+
+    //Scored's handler moves the bottom scene to the top between the two ScoreChangeds
+    try game_world.Emit(engine_context, ScoreChanged{});
+    try game_world.Emit(engine_context, Scored{});
+    try game_world.Emit(engine_context, ScoreChanged{});
+    try ScriptsProcessor.ProcessGameEvents(engine_context, game_world, .AfterUpdate);
+    try std.testing.expectEqualStrings("YXMXY", gHandled.items);
 }
 
 test "an event with nothing in it dispatches, ignoring its phase" {

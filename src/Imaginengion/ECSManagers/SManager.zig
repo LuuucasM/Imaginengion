@@ -105,6 +105,14 @@ pub fn clearAndFree(self: *SManager, engine_context: *EngineContext) void {
     Core.clearAndFree(self, engine_context);
     self.mGameLayerInsertIndex = 0;
     self.mNumofLayers = 0;
+    self.StackChanged();
+}
+
+/// The scene stack's order changed, which is the order game event handlers hear events in, see
+/// WorldManager.mEventHandlersVersion
+fn StackChanged(self: *SManager) void {
+    const world: *WorldManager = @fieldParentPtr("mSManager", self);
+    world.mEventHandlersVersion +%= 1;
 }
 
 pub const GetComponent = Core.GetComponent;
@@ -133,6 +141,7 @@ pub fn Copy(self: *SManager, engine_context: *EngineContext, other: *SManager) !
     try Core.Copy(self, engine_context, other);
     other.mNumofLayers = self.mNumofLayers;
     other.mGameLayerInsertIndex = self.mGameLayerInsertIndex;
+    other.StackChanged();
 }
 
 pub fn GetSceneComponent(self: *SManager, scene_id: Scene.Type) *SceneComponent {
@@ -193,7 +202,7 @@ pub fn OnManagerEvents(_: *SManager, _: *EngineContext, event: EventData.EventT)
 
 pub fn MoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_layer: Scene, move_to_pos: usize) !void {
     const layer = scene_layer.GetLayer();
-    const stack_pos_component = scene_layer.GetComponent(SceneStackPos).?;
+    const stack_pos_component = scene_layer.GetComponentMut(SceneStackPos).?;
     const current_pos = stack_pos_component.mPosition;
 
     var new_pos: usize = 0;
@@ -212,7 +221,7 @@ pub fn MoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_laye
         const scene_stack_pos_list = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
 
         for (scene_stack_pos_list.items) |list_scene_id| {
-            const scene_stack_pos_component = self.mECSManager.GetComponent(SceneStackPos, list_scene_id).?;
+            const scene_stack_pos_component = self.mECSManager.GetComponentMut(SceneStackPos, list_scene_id).?;
             if (scene_stack_pos_component.mPosition >= new_pos and scene_stack_pos_component.mPosition < current_pos) {
                 scene_stack_pos_component.mPosition += 1;
             }
@@ -222,7 +231,7 @@ pub fn MoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_laye
         const scene_stack_pos_list = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
 
         for (scene_stack_pos_list.items) |list_scene_id| {
-            const scene_stack_pos_component = self.mECSManager.GetComponent(SceneStackPos, list_scene_id).?;
+            const scene_stack_pos_component = self.mECSManager.GetComponentMut(SceneStackPos, list_scene_id).?;
             if (scene_stack_pos_component.mPosition > current_pos and scene_stack_pos_component.mPosition <= new_pos) {
                 scene_stack_pos_component.mPosition -= 1;
             }
@@ -230,6 +239,7 @@ pub fn MoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_laye
     }
 
     stack_pos_component.mPosition = new_pos;
+    self.StackChanged();
 }
 
 /// Scenes ordered for display: highest stack position first, so the topmost layer
@@ -265,6 +275,7 @@ pub fn InsertScene(self: *SManager, engine_context: *EngineContext, scene_layer:
         _ = try scene_layer.AddComponent(engine_context, SceneStackPos{ .mPosition = self.mNumofLayers });
     }
     self.mNumofLayers += 1;
+    self.StackChanged();
 }
 
 fn RemoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_layer: Scene) !void {
@@ -285,6 +296,7 @@ fn RemoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_layer:
         self.mGameLayerInsertIndex -= 1;
     }
     self.mNumofLayers -= 1;
+    self.StackChanged();
 }
 
 pub fn ApplyConfig(self: *SManager, engine_context: *EngineContext, player_id: Scene.Type, config: Scene.CreateConfig) !void {

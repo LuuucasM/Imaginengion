@@ -42,6 +42,7 @@ const ShapeComponent = EntityComponents.ShapeComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const DisabledTag = EntityComponents.DisabledTag;
 const UUIDComponent = @import("../ECSComponents/Shared/UUIDComponent.zig");
+const GameEventScript = @import("../ECSComponents/Shared/ScriptTags.zig").GameEventScript;
 
 const Serializer = @import("../Serializer/Serializer.zig");
 
@@ -149,6 +150,8 @@ pub fn Core(comptime Self: type) type {
         /// route a removal comes by ends here, made right away or drained from the ECS's queue.
         /// anyerror because what it removes comes back here
         pub fn OnComponentRemoved(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), component_ind: usize) anyerror!void {
+            _CountEventHandlerChange(self, component_ind);
+
             if (comptime Self == EManager) {
                 const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
 
@@ -223,6 +226,8 @@ pub fn Core(comptime Self: type) type {
         pub fn OnComponentAdded(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), component_ind: usize) anyerror!void {
             const ECSManagerT = Self.ECSManagerT;
 
+            _CountEventHandlerChange(self, component_ind);
+
             if (comptime Self == EManager) {
                 const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
 
@@ -274,6 +279,13 @@ pub fn Core(comptime Self: type) type {
 
             //a UI element's component may need another to go with it, e.g. a scroll needs a scroll state
             if (comptime Self == UIManager) try self.OnElementComponentAdded(engine_context, obj_id, component_ind);
+        }
+
+        /// A script starting or stopping hearing game events changes which scripts a world's handler list holds, see
+        /// WorldManager.mEventHandlersVersion
+        fn _CountEventHandlerChange(self: *Self, component_ind: usize) void {
+            if (comptime !_InWorld) return;
+            if (component_ind == Self.ECSManagerT.ComponentInd(GameEventScript)) ObjManager(self).mEventHandlersVersion +%= 1;
         }
 
         fn _IsStateTagInd(component_ind: usize) bool {

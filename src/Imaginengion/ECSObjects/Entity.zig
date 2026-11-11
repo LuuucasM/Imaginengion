@@ -222,8 +222,8 @@ pub fn ClearTransformDirty(self: Entity, engine_context: *EngineContext) !void {
 }
 
 /// Asks for the layout tree this entity is in to be worked out again (UI/LayoutSystem.zig). Tagging any entity of a
-/// tree relays out the whole tree, once. Adding the tag twice would trip AddComponent's assert, so this is the only
-/// way it goes on
+/// tree relays out the whole tree, once, but only a tagged text is measured again: after changing a text, tag the
+/// text's own entity. Adding the tag twice would trip AddComponent's assert, so this is the only way it goes on
 pub fn MarkLayoutDirty(self: Entity, engine_context: *EngineContext) !void {
     if (self.HasComponent(LayoutDirtyTag)) return;
     _ = try self.AddComponent(engine_context, LayoutDirtyTag{});

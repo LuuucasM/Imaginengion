@@ -193,7 +193,7 @@ fn LayoutTree(root: Entity, engine_context: *EngineContext) !void {
     };
 
     var tree: Tree = .{};
-    try tree.Add(root, null, engine_context, frame_allocator);
+    try tree.Add(root, null, false, engine_context, frame_allocator);
 
     const results = try Layout.Solve(frame_allocator, tree.mNodes.items, 0, root_area);
     for (tree.mEntities.items, tree.mTextCenters.items, results) |entity, text_center, result| {
@@ -238,9 +238,12 @@ const Tree = struct {
     mTextCenters: std.ArrayList(?Vec2(f32)) = .empty,
     mLastChild: std.ArrayList(?Layout.Index) = .empty,
 
-    /// Adds `entity` as the last child of `parent`, and then everything under it that is in the tree
-    fn Add(self: *Tree, entity: Entity, parent: ?Layout.Index, engine_context: *EngineContext, frame_allocator: std.mem.Allocator) anyerror!void {
+    /// Adds `entity` as the last child of `parent`, and then everything under it that is in the tree. `folded` is
+    /// whether something above it is collapsed
+    fn Add(self: *Tree, entity: Entity, parent: ?Layout.Index, folded: bool, engine_context: *EngineContext, frame_allocator: std.mem.Allocator) anyerror!void {
         var node = if (entity.GetComponent(LayoutItemComponent)) |item| item.ToNode() else (LayoutItemComponent{}).ToNode();
+        //the solver leaves out a collapsed element and everything under it, so there is no text in there to measure
+        const hidden = folded or node.Collapsed;
         var text_center: ?Vec2(f32) = null;
         if (entity.GetComponent(LayoutComponent)) |layout| {
             node.Container = layout.ToContainer();
@@ -249,10 +252,13 @@ const Tree = struct {
                 node.Container.?.Scroll = scroll.mScroll;
                 if (UIManager.GetUIComponent(entity, ScrollStateComponent)) |state| node.Container.?.ScrollOffset = state.mOffset;
             }
-        } else if (try MeasureText(entity, engine_context)) |metrics| {
+        } else if (hidden) {
+            //its text may have changed while hidden: this pass clears its tag, so it is measured when it is shown
+            if (entity.HasComponent(LayoutDirtyTag)) ForgetMeasuredText(entity);
+        } else if (try LeafText(entity, engine_context)) |measured| {
             //a leaf fits its text. A container fits its children, and its own text is left as it is
-            node.Content = .{ .Size = metrics.Size() };
-            text_center = metrics.Center();
+            node.Content = .{ .Size = measured.Size };
+            text_center = measured.Center;
         }
 
         const index: Layout.Index = @intCast(self.mNodes.items.len);
@@ -272,10 +278,30 @@ const Tree = struct {
         if (node.Container == null) return;
         var children = entity.GetIterator(.Child);
         while (children.next()) |child| {
-            if (IsInLayout(child)) try self.Add(child, index, engine_context, frame_allocator);
+            if (IsInLayout(child)) try self.Add(child, index, hidden, engine_context, frame_allocator);
         }
     }
 };
+
+/// A leaf's text as it was last measured, measured again only when the leaf is dirty itself: whatever changes its text,
+/// font or font size tags the text's own entity (TextComponent.SetText), so a tree laid out again for some other
+/// change doesn't measure every text in it. Null if it has no text to measure
+fn LeafText(entity: Entity, engine_context: *EngineContext) !?LayoutItemComponent.MeasuredText {
+    if (!entity.HasComponent(LayoutDirtyTag)) {
+        if (entity.GetComponent(LayoutItemComponent)) |item| {
+            if (item.mMeasuredText) |measured| return measured;
+        }
+    }
+    const metrics = try MeasureText(entity, engine_context);
+    const measured: ?LayoutItemComponent.MeasuredText = if (metrics) |m| .{ .Size = m.Size(), .Center = m.Center() } else null;
+    if (entity.GetComponentMut(LayoutItemComponent)) |item| item.mMeasuredText = measured;
+    return measured;
+}
+
+fn ForgetMeasuredText(entity: Entity) void {
+    const item = entity.GetComponentMut(LayoutItemComponent) orelse return;
+    item.mMeasuredText = null;
+}
 
 /// The room the entity's text takes on one line (or several, where it has line breaks) at its own font size, or
 /// null if it has no text to measure. Scale is left out, like everything layout does: it is applied on top
