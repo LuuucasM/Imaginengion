@@ -1,6 +1,7 @@
 //! The tags on a script child that say which of its script's hooks run: one for each hook the script has (see
 //! ScriptABI.Hook), given by ScriptsProcessor.SetUpScript from the script's DLL. A tag is what the engine queries for,
 //! its Hook which of the script's functions it calls
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ScriptHook = @import("../../Scripts/ScriptABI.zig").Hook;
 
@@ -10,14 +11,14 @@ pub const OnKeyPressedScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnKeyPressedScript";
     pub const Hook: ScriptHook = .OnKeyPressed;
-    pub fn Deinit(_: *OnKeyPressedScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *OnKeyPressedScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 pub const EntityOnUpdateScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "EntityOnUpdateScript";
     pub const Hook: ScriptHook = .OnUpdate;
-    pub fn Deinit(_: *EntityOnUpdateScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *EntityOnUpdateScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// Runs once when the owner's collider starts touching another one (see CollisionBeginEvent), whatever
@@ -27,7 +28,7 @@ pub const OnCollisionBeginScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnCollisionBeginScript";
     pub const Hook: ScriptHook = .OnCollisionBegin;
-    pub fn Deinit(_: *OnCollisionBeginScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *OnCollisionBeginScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// Runs once when the owner's collider stops touching another one (see CollisionEndEvent), the counterpart of
@@ -38,7 +39,7 @@ pub const OnCollisionEndScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnCollisionEndScript";
     pub const Hook: ScriptHook = .OnCollisionEnd;
-    pub fn Deinit(_: *OnCollisionEndScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *OnCollisionEndScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// Runs from the middle of the physics step, before the solver acts on a solid contact of the owner's, every substep
@@ -49,7 +50,7 @@ pub const OnPreSolveScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnPreSolveScript";
     pub const Hook: ScriptHook = .OnPreSolve;
-    pub fn Deinit(_: *OnPreSolveScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *OnPreSolveScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// Runs at the start of every physics step, at the physics' own fixed rate rather than once a frame (see
@@ -59,7 +60,7 @@ pub const EntityOnPhysicsUpdateScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "EntityOnPhysicsUpdateScript";
     pub const Hook: ScriptHook = .OnPhysicsUpdate;
-    pub fn Deinit(_: *EntityOnPhysicsUpdateScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *EntityOnPhysicsUpdateScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// Runs for every pointer event sent to the owner (see Events/PointerEventData.zig): entered, exited, pressed,
@@ -71,7 +72,7 @@ pub const OnPointerEventScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnPointerEventScript";
     pub const Hook: ScriptHook = .OnPointerEvent;
-    pub fn Deinit(_: *OnPointerEventScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *OnPointerEventScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// OnPointerEventScript for the UI's events (see Events/UIEventData.zig): a text input getting or losing the keyboard,
@@ -80,7 +81,7 @@ pub const OnUIEventScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnUIEventScript";
     pub const Hook: ScriptHook = .OnUIEvent;
-    pub fn Deinit(_: *OnUIEventScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *OnUIEventScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// On a script that has nothing to run: it does not load (it does not compile, say), or it is a script for another
@@ -89,7 +90,7 @@ pub const OnUIEventScript = struct {
 pub const UntypedScriptTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "UntypedScriptTag";
-    pub fn Deinit(_: *UntypedScriptTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *UntypedScriptTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// On a script child whose script handles game events (any of its functions takes one, see Scripts/GameEvents.zig), so
@@ -97,7 +98,7 @@ pub const UntypedScriptTag = struct {
 pub const GameEventScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "GameEventScript";
-    pub fn Deinit(_: *GameEventScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *GameEventScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 //SCENE SCRIPTS
@@ -106,7 +107,7 @@ pub const OnSceneStartScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnSceneStartScript";
     pub const Hook: ScriptHook = .OnSceneStart;
-    pub fn Deinit(_: *OnSceneStartScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *OnSceneStartScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// Runs once a frame for each scene, after the players' OnUpdate scripts and before the entities'
@@ -114,7 +115,7 @@ pub const SceneOnUpdateScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "SceneOnUpdateScript";
     pub const Hook: ScriptHook = .OnUpdate;
-    pub fn Deinit(_: *SceneOnUpdateScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *SceneOnUpdateScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// EntityOnPhysicsUpdateScript for a scene, e.g. a rule that pushes on every body in it. A scene's run before its
@@ -123,7 +124,7 @@ pub const SceneOnPhysicsUpdateScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "SceneOnPhysicsUpdateScript";
     pub const Hook: ScriptHook = .OnPhysicsUpdate;
-    pub fn Deinit(_: *SceneOnPhysicsUpdateScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *SceneOnPhysicsUpdateScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 //PLAYER SCRIPTS
@@ -132,7 +133,7 @@ pub const PlayerOnUpdateScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "PlayerOnUpdateScript";
     pub const Hook: ScriptHook = .OnUpdate;
-    pub fn Deinit(_: *PlayerOnUpdateScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *PlayerOnUpdateScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// OnKeyPressedScript for a player: handed every key, like the entities' ones, and checks which it got. Hears what the
@@ -142,7 +143,7 @@ pub const PlayerOnInputPressedScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "PlayerOnInputPressedScript";
     pub const Hook: ScriptHook = .OnKeyPressed;
-    pub fn Deinit(_: *PlayerOnInputPressedScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *PlayerOnInputPressedScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 //GAME CONTEXT SCRIPTS
@@ -152,7 +153,7 @@ pub const OnGameStartScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnGameStartScript";
     pub const Hook: ScriptHook = .OnGameStart;
-    pub fn Deinit(_: *OnGameStartScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *OnGameStartScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// Runs once a frame for the game context, first of all the OnUpdate scripts
@@ -160,5 +161,5 @@ pub const GameContextOnUpdateScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "GameContextOnUpdateScript";
     pub const Hook: ScriptHook = .OnUpdate;
-    pub fn Deinit(_: *GameContextOnUpdateScript, _: *EngineContext) void {}
+    pub fn Deinit(_: *GameContextOnUpdateScript, _: *EngineContext, _: std.mem.Allocator) void {}
 };

@@ -600,7 +600,7 @@ fn Label(world: *TestWorld, scene: Scene, parent: ?Entity, text: []const u8) !En
     //the text lets go of its own reference when it goes
     font.RetainAsset();
     const text_component = try label.AddComponent(engine_context, TextComponent{ .mTextAssetHandle = font, .mFontSize = 10 });
-    try text_component.SetText(engine_context, text);
+    try text_component.SetText(label.Keep(), text);
     return label;
 }
 
@@ -621,7 +621,7 @@ test "a text is measured again only when it is tagged itself, not when something
     try std.testing.expect(short_width > 0);
 
     //changed without tagging the text: the size it was measured at is kept, however often its tree is laid out
-    try label.GetComponentMut(TextComponent).?.SetText(engine_context, "abcd");
+    try label.GetComponentMut(TextComponent).?.SetText(label.Keep(), "abcd");
     try column.MarkLayoutDirty(engine_context);
     try world.Update();
     try std.testing.expectEqual(short_width, QuadWidth(label));
@@ -655,7 +655,7 @@ test "text under something collapsed isn't measured, and a change made while fol
     node.GetComponentMut(LayoutItemComponent).?.mCollapsed = true;
     try node.MarkLayoutDirty(engine_context);
     try world.Update();
-    try label.GetComponentMut(TextComponent).?.SetText(engine_context, "abcd");
+    try label.GetComponentMut(TextComponent).?.SetText(label.Keep(), "abcd");
     try label.MarkLayoutDirty(engine_context);
     try world.Update();
     try std.testing.expect(!label.HasComponent(LayoutDirtyTag));

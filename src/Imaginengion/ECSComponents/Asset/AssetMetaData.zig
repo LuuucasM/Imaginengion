@@ -16,6 +16,6 @@ pub fn DropRef(self: *@This()) void {
     _ = @atomicRmw(usize, &self.mRefs, .Sub, 1, .monotonic);
 }
 
-pub fn Deinit(_: *AssetMetaData, _: *EngineContext) void {}
+pub fn Deinit(_: *AssetMetaData, _: *EngineContext, _: std.mem.Allocator) void {}
 
 pub const Name: []const u8 = "AssetMetaData";

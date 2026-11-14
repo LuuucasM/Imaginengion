@@ -12,16 +12,17 @@ pub const Name: []const u8 = "FileRefComponent";
 mRelPath: std.ArrayList(u8) = .empty,
 mPathType: PathType = .Prj,
 
-pub fn Init(engine_context: *EngineContext, rel_path: []const u8, path_type: PathType) !FileRefComponent {
+/// `keep_allocator` is the Keep of the object it goes on (Entity.Keep), which frees it
+pub fn Init(keep_allocator: std.mem.Allocator, rel_path: []const u8, path_type: PathType) !FileRefComponent {
     var file_ref = FileRefComponent{ .mPathType = path_type };
-    try file_ref.mRelPath.appendSlice(engine_context.Keep(), rel_path);
+    try file_ref.mRelPath.appendSlice(keep_allocator, rel_path);
     return file_ref;
 }
 
-pub fn Deinit(self: *FileRefComponent, engine_context: *EngineContext) void {
-    self.mRelPath.deinit(engine_context.Keep());
+pub fn Deinit(self: *FileRefComponent, _: *EngineContext, keep_allocator: std.mem.Allocator) void {
+    self.mRelPath.deinit(keep_allocator);
 }
 
-pub fn Clone(self: *const FileRefComponent, engine_context: *EngineContext) !FileRefComponent {
-    return .{ .mRelPath = try self.mRelPath.clone(engine_context.Keep()), .mPathType = self.mPathType };
+pub fn Clone(self: *const FileRefComponent, _: *EngineContext, keep_allocator: std.mem.Allocator) !FileRefComponent {
+    return .{ .mRelPath = try self.mRelPath.clone(keep_allocator), .mPathType = self.mPathType };
 }

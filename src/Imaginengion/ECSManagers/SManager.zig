@@ -162,7 +162,7 @@ pub fn ProcessEvents(self: *SManager, comptime event_data: type, comptime event_
         callback_list.append(&callback.mNode);
         defer callback_list.remove(&callback.mNode);
         try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
-        self.mEventManager.ClearCategory(engine_context.Keep(), event_category, .ClearRetainingCapacity);
+        self.mEventManager.ClearCategory(self.mECSManager.Keep(), event_category, .ClearRetainingCapacity);
     } else if (event_data == ECSEventData) {
         try self.mECSManager.ProcessEvents(engine_context);
     } else {
@@ -302,13 +302,13 @@ fn RemoveScene(self: *SManager, scratch_allocator: std.mem.Allocator, scene_laye
 pub fn ApplyConfig(self: *SManager, engine_context: *EngineContext, player_id: Scene.Type, config: Scene.CreateConfig) !void {
     if (config.bAddSceneName) {
         var name_component: NameComponent = .empty;
-        try name_component.mName.appendSlice(engine_context.Keep(), "New Scene");
+        try name_component.mName.appendSlice(self.mECSManager.Keep(), "New Scene");
         _ = try self.AddComponent(engine_context, player_id, name_component);
     }
     if (config.bAddSceneUUID) {
         const io_source = std.Random.IoSource{ .io = engine_context.Io() };
         const new_random = io_source.interface();
         const new_uuid_component = try self.AddComponent(engine_context, player_id, UUIDComponent{ .ID = new_random.int(u64) });
-        try self.AddUUID(engine_context.Keep(), new_uuid_component.ID, player_id);
+        try self.AddUUID(self.mECSManager.Keep(), new_uuid_component.ID, player_id);
     }
 }

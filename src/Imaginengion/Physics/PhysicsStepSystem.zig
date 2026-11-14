@@ -97,7 +97,7 @@ pub fn Run(engine_context: *EngineContext, world_manager: *WorldManager) !void {
         //since the tree was built, before physics, so no refit is needed ahead of the step
         try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ world_manager, BVH.Mask.PHYSICS });
 
-        try physics._CollisionManager.BroadPass(engine_context, world_manager, collider_groups);
+        try physics._CollisionManager.BroadPass(world_manager, collider_groups);
         physics._CollisionManager.NarrowPass(SUB_STEP_DT);
         try physics._CollisionManager.PreSolverPass(engine_context, &physics.mEventManager);
         physics._CollisionManager.SolveVelocities(SUB_STEP_DT);
@@ -119,7 +119,7 @@ pub fn Run(engine_context: *EngineContext, world_manager: *WorldManager) !void {
         }
 
         try physics._CollisionManager.CorrectPositions(world_manager, engine_context);
-        try physics._CollisionManager.UpdateTouching(engine_context, &physics.mEventManager);
+        try physics._CollisionManager.UpdateTouching(world_manager.Keep(), &physics.mEventManager);
         try physics._CollisionManager.PostsolverPass(engine_context);
         physics._CollisionManager.EndPass(engine_context);
     }

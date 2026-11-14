@@ -59,7 +59,7 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         const entity = try self.mForm.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
         const text_component = try entity.AddComponent(engine_context, TextComponent{});
-        try text_component.SetText(engine_context, text);
+        try text_component.SetText(entity.Keep(), text);
         _ = try entity.AddComponent(engine_context, SurfaceComponent{});
         try AddUI(engine_context, entity, TextInputComponent{});
         return entity;

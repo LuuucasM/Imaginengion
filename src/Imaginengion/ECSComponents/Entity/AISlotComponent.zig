@@ -9,7 +9,7 @@ pub const Name: []const u8 = "AISlotComponent";
 
 mAIEntity: Entity.Type = Entity.NullObject,
 
-pub fn Deinit(_: *AISlotComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *AISlotComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 //nothing is saved yet
 const Json = JsonUtils.JsonFields(AISlotComponent, .{});

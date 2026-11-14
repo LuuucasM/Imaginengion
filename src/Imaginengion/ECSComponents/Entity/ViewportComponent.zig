@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Player = @import("../../ECSObjects/Player.zig");
 
@@ -13,4 +14,4 @@ pub const Name: []const u8 = "ViewportComponent";
 /// The player whose view it shows
 mPlayer: Player = .uninit,
 
-pub fn Deinit(_: *ViewportComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *ViewportComponent, _: *EngineContext, _: std.mem.Allocator) void {}

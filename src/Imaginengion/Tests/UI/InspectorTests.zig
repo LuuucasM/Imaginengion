@@ -201,7 +201,7 @@ test "an enum is a dropdown, text a text field, and a struct with no UIRender sh
 
     //text
     const text = try world.mObject.AddComponent(engine_context, TextComponent{});
-    try text.SetText(engine_context, "Hello");
+    try text.SetText(world.mObject.Keep(), "Hello");
     var text_ui = world.Builder(TextComponent);
     try text_ui.Text(&text.mText, "Text", .{});
     const typed = UIManager.LabelOf(world.Widget(1)).?;
@@ -269,10 +269,10 @@ test "fields read and write each type as a value" {
     var whole: i32 = -3;
     const int_access = Inspector.AccessFor(i32);
     try std.testing.expectEqual(@as(f64, -3), int_access.Read(&whole).Number);
-    try int_access.Write(undefined, &whole, .{ .Number = 4.6 });
+    try int_access.Write(undefined, undefined, &whole, .{ .Number = 4.6 });
     try std.testing.expectEqual(@as(i32, 5), whole);
 
     var count: u32 = 2;
-    try Inspector.AccessFor(u32).Write(undefined, &count, .{ .Number = -10 });
+    try Inspector.AccessFor(u32).Write(undefined, undefined, &count, .{ .Number = -10 });
     try std.testing.expectEqual(@as(u32, 0), count);
 }

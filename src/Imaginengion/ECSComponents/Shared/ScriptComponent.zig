@@ -25,7 +25,7 @@ pub const Link = struct {
 pub const Editable: bool = false;
 pub const Name: []const u8 = "ScriptComponent";
 
-pub fn Deinit(self: *ScriptComponent, engine_context: *EngineContext) void {
+pub fn Deinit(self: *ScriptComponent, engine_context: *EngineContext, keep_allocator: std.mem.Allocator) void {
     //the asset is loaded while there is an instance: this component holds a reference to it, and a script is swapped in
     //place rather than unloaded when its file changes
     if (ScriptValues.InstanceOf(self)) |instance| ScriptValues.ReleaseRefs(instance);
@@ -34,7 +34,7 @@ pub fn Deinit(self: *ScriptComponent, engine_context: *EngineContext) void {
     }
     self.mInstance = null;
     self.mScriptAssetHandle.ReleaseAsset();
-    self.mLinks.deinit(engine_context.Keep());
+    self.mLinks.deinit(keep_allocator);
 }
 
 /// The UUID the variable called `name` wants, null if it wants none
@@ -46,7 +46,8 @@ pub fn GetLink(self: *const ScriptComponent, name: []const u8) ?u64 {
     return null;
 }
 
-pub fn SetLink(self: *ScriptComponent, engine_context: *EngineContext, name: []const u8, uuid: u64) !void {
+/// `keep_allocator` is the Keep of the script it is on (Entity.Keep and the like), which frees the links
+pub fn SetLink(self: *ScriptComponent, keep_allocator: std.mem.Allocator, name: []const u8, uuid: u64) !void {
     const hash = std.hash.Fnv1a_64.hash(name);
     for (self.mLinks.items) |*link| {
         if (link.mNameHash == hash) {
@@ -54,7 +55,7 @@ pub fn SetLink(self: *ScriptComponent, engine_context: *EngineContext, name: []c
             return;
         }
     }
-    try self.mLinks.append(engine_context.Keep(), .{ .mNameHash = hash, .mUUID = uuid });
+    try self.mLinks.append(keep_allocator, .{ .mNameHash = hash, .mUUID = uuid });
 }
 
 pub fn RemoveLink(self: *ScriptComponent, name: []const u8) void {
@@ -68,12 +69,12 @@ pub fn RemoveLink(self: *ScriptComponent, name: []const u8) void {
 }
 
 /// Wants what `from` wants, instead of what it wanted
-pub fn CopyLinks(self: *ScriptComponent, engine_context: *EngineContext, from: *const ScriptComponent) !void {
+pub fn CopyLinks(self: *ScriptComponent, keep_allocator: std.mem.Allocator, from: *const ScriptComponent) !void {
     self.mLinks.clearRetainingCapacity();
-    try self.mLinks.appendSlice(engine_context.Keep(), from.mLinks.items);
+    try self.mLinks.appendSlice(keep_allocator, from.mLinks.items);
 }
 
-pub fn Clone(self: *const ScriptComponent, engine_context: *EngineContext) !ScriptComponent {
+pub fn Clone(self: *const ScriptComponent, engine_context: *EngineContext, keep_allocator: std.mem.Allocator) !ScriptComponent {
     var new_component = self.*;
 
     // the copy releases the script asset itself, so it needs its own reference
@@ -81,13 +82,13 @@ pub fn Clone(self: *const ScriptComponent, engine_context: *EngineContext) !Scri
     errdefer new_component.mScriptAssetHandle.ReleaseAsset();
 
     // and its own list of what its variables want
-    new_component.mLinks = try self.mLinks.clone(engine_context.Keep());
-    errdefer new_component.mLinks.deinit(engine_context.Keep());
+    new_component.mLinks = try self.mLinks.clone(keep_allocator);
+    errdefer new_component.mLinks.deinit(keep_allocator);
 
     // and its own variables, starting as these are
     new_component.mInstance = null;
     if (self.mInstance) |id| {
-        if (ScriptValues.AssetOf(self)) |asset| new_component.mInstance = try asset.NewInstance(engine_context, id);
+        if (ScriptValues.AssetOf(self)) |asset| new_component.mInstance = try asset.NewInstance(engine_context, keep_allocator, id);
     }
     //the variables came across byte for byte, so each file ref needs its own reference
     if (ScriptValues.InstanceOf(&new_component)) |instance| ScriptValues.RetainRefs(instance);

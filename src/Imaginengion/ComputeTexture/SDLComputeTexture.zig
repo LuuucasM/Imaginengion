@@ -3,6 +3,7 @@ const TextureFormat = @import("../ECSComponents/AComponents.zig").Texture2D.Text
 const sdl = @import("../Core/CImports.zig").sdl;
 const EngineContext = @import("../Core/EngineContext.zig");
 const Tracy = @import("../Core/Tracy.zig");
+const GPUAllocator = @import("../Core/GPUAllocator.zig");
 
 pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
     return struct {
@@ -13,16 +14,20 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
             .mSampler = null,
             .mWidth = 0,
             .mHeight = 0,
+            .mOwner = GPUAllocator.ENGINE,
         };
 
         mTexture: ?*sdl.SDL_GPUTexture,
         mSampler: ?*sdl.SDL_GPUSampler,
         mWidth: usize,
         mHeight: usize,
+        /// who the GPU texture is made for (GPUAllocator.Owner), given by Init and Resize
+        mOwner: GPUAllocator.Owner,
 
-        pub fn Init(self: *Self, engine_context: *EngineContext, width: usize, height: usize) !void {
+        pub fn Init(self: *Self, engine_context: *EngineContext, owner: GPUAllocator.Owner, width: usize, height: usize) !void {
             self.mWidth = width;
             self.mHeight = height;
+            self.mOwner = owner;
             try self.Create(engine_context);
         }
 
@@ -30,10 +35,12 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
             self.Destroy(engine_context);
         }
 
-        pub fn Resize(self: *Self, engine_context: *EngineContext, width: usize, height: usize) !void {
+        /// `owner` is who the texture is for (GPUAllocator.Owner): the world of the player it draws
+        pub fn Resize(self: *Self, engine_context: *EngineContext, owner: GPUAllocator.Owner, width: usize, height: usize) !void {
             if (width < 1 or height < 1 or width > 8192 or height > 8192 or (width == self.mWidth and height == self.mHeight)) return;
             self.mWidth = width;
             self.mHeight = height;
+            self.mOwner = owner;
             try self.Invalidate(engine_context);
         }
 
@@ -119,8 +126,7 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
         }
 
         fn Create(self: *Self, engine_context: *EngineContext) !void {
-            const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
-
+            const gpu = &engine_context.mGPUAllocator;
             const info = sdl.SDL_GPUTextureCreateInfo{
                 .type = sdl.SDL_GPU_TEXTURETYPE_2D,
                 .format = ToSDLTextureFormat(format),
@@ -136,7 +142,7 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
                 .sample_count = sdl.SDL_GPU_SAMPLECOUNT_1, // storage images: no MSAA
                 .props = 0,
             };
-            self.mTexture = sdl.SDL_CreateGPUTexture(device, &info) orelse return error.CreateComputeTexture;
+            self.mTexture = gpu.CreateTexture(engine_context, &info, self.mOwner) orelse return error.CreateComputeTexture;
 
             const sampler_info = sdl.SDL_GPUSamplerCreateInfo{
                 .min_filter = sdl.SDL_GPU_FILTER_NEAREST,
@@ -146,17 +152,17 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
                 .address_mode_v = sdl.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
                 .address_mode_w = sdl.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
             };
-            self.mSampler = sdl.SDL_CreateGPUSampler(device, &sampler_info) orelse return error.CreateComputeTexture;
+            self.mSampler = gpu.CreateSampler(engine_context, &sampler_info, self.mOwner) orelse return error.CreateComputeTexture;
         }
 
         fn Destroy(self: *Self, engine_context: *EngineContext) void {
-            const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
+            const gpu = &engine_context.mGPUAllocator;
             if (self.mTexture) |t| {
-                sdl.SDL_ReleaseGPUTexture(device, t);
+                gpu.ReleaseTexture(engine_context, t);
                 self.mTexture = null;
             }
             if (self.mSampler) |s| {
-                sdl.SDL_ReleaseGPUSampler(device, s);
+                gpu.ReleaseSampler(engine_context, s);
                 self.mSampler = null;
             }
         }

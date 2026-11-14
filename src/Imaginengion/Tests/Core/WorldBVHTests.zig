@@ -111,7 +111,7 @@ fn AddText(engine_context: *EngineContext, scene: Scene, text: []const u8, posit
     const entity = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
     try entity.SetTranslation(engine_context, position);
     const text_component = try entity.AddComponent(engine_context, TextComponent{});
-    try text_component.SetText(engine_context, text);
+    try text_component.SetText(entity.Keep(), text);
     _ = try entity.AddComponent(engine_context, SurfaceComponent{});
     return entity;
 }
@@ -535,7 +535,7 @@ fn AddChildText(engine_context: *EngineContext, parent: Entity, text: []const u8
     const entity = try NewEntityIn(engine_context, parent);
     try entity.SetTranslation(engine_context, position);
     const text_component = try entity.AddComponent(engine_context, TextComponent{ .mBounds = .{ .x = 0, .y = width }, .mFontSize = 1 });
-    try text_component.SetText(engine_context, text);
+    try text_component.SetText(entity.Keep(), text);
     _ = try entity.AddComponent(engine_context, SurfaceComponent{});
     return entity;
 }

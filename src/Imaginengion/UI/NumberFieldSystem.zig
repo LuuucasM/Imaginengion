@@ -177,7 +177,7 @@ fn ShowValue(engine_context: *EngineContext, field: Entity, label: Entity) !void
     const shown = Format(&buffer, attrib.mData, settings.mDecimals);
     const text = label.GetComponentMut(TextComponent).?;
     if (std.mem.eql(u8, text.mText.items, shown)) return;
-    try text.SetText(engine_context, shown);
+    try text.SetText(label.Keep(), shown);
     //layout sizes text to fit
     try label.MarkLayoutDirty(engine_context);
 }

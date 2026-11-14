@@ -13,6 +13,8 @@ const Systems = @This();
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Tracy = @import("../Core/Tracy.zig");
+const Profiler = @import("../Core/Profiler.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 
 mNodes: std.ArrayList(Node) = .empty,
 /// How many runs are going on now. Every registered ECS points at this, so the layer must stay where it is while anything
@@ -72,9 +74,17 @@ pub fn IsRegistered(self: *const Systems, ecs: *anyopaque) bool {
 
 /// Runs the system `S`: S.Run gets `engine_context`, then `args` (a tuple) in order. What it returns comes back, and so
 /// does its error; when it fails, what it changed still lands, and a failure landing it is logged. A run inside another
-/// leaves the landing to the outermost one
+/// leaves the landing to the outermost one. A system handed a world is measured as running on it (Profiler.EnterWorld),
+/// and so is everything it calls
 pub fn RunSystem(self: *Systems, comptime S: type, engine_context: *EngineContext, args: anytype) anyerror!Payload(S) {
     comptime _CheckArgs(S, @TypeOf(args));
+
+    //before the zone begins, so the system's own node is the world's too, and left after it ends
+    const outer_world: ?Profiler.World = if (comptime _WorldArg(@TypeOf(args))) |arg_ind|
+        Profiler.gMain.EnterWorld(engine_context.WorldTag(_WorldOf(args[arg_ind])))
+    else
+        null;
+    defer if (outer_world) |outer| Profiler.gMain.LeaveWorld(outer);
 
     const zone = Tracy.ZoneInit(S.Name, @src());
     defer zone.Deinit();
@@ -165,6 +175,24 @@ fn _ValidateSystem(comptime S: type) void {
         @compileError(name ++ ": Run has to take the context first, Run(engine_context: *EngineContext, ...)");
     }
     if (run_info.return_type == null) @compileError(name ++ ": Run's return type has to be written out, not worked out from its arguments");
+}
+
+/// Which of a run's arguments says the world it runs on, if any: the first that is a world, or an object in one (an
+/// Entity, Scene, Player or GameContext, whose mManager is its world)
+fn _WorldArg(comptime Args: type) ?usize {
+    for (@typeInfo(Args).@"struct".field_types, 0..) |field_type, arg_ind| {
+        if (field_type == *WorldManager or field_type == *const WorldManager) return arg_ind;
+        if (@typeInfo(field_type) == .@"struct" and @hasField(field_type, "mManager") and @FieldType(field_type, "mManager") == *WorldManager) return arg_ind;
+    }
+    return null;
+}
+
+/// The world an argument _WorldArg picked says
+fn _WorldOf(arg: anytype) *const WorldManager {
+    return switch (@TypeOf(arg)) {
+        *WorldManager, *const WorldManager => arg,
+        else => arg.mManager,
+    };
 }
 
 fn _ReturnsError(comptime S: type) bool {

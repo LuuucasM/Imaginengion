@@ -16,7 +16,7 @@ mExtensions: []const []const u8 = &.{},
 /// Of objects (ObjectRefComponent), the kind it takes: every object if null
 mObjectKind: ?std.meta.Tag(ObjectRefComponent.Ref) = null,
 
-pub fn Deinit(_: *DropTargetComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *DropTargetComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 /// A drop target taking drag sources that have any of `component_types`, e.g. Accepting(&.{ ItemComponent })
 pub fn Accepting(comptime component_types: []const type) DropTargetComponent {

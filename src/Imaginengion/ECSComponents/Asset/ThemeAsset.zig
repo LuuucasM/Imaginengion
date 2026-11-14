@@ -83,7 +83,7 @@ pub fn Init(self: *ThemeAsset, engine_context: *EngineContext, _: []const u8, re
     const contents = try file_reader.interface.allocRemaining(engine_context.Scratch(), .unlimited);
     self.FromJson(engine_context, contents) catch |err| {
         std.log.err("Theme {s} could not be read: {s}", .{ rel_path, @errorName(err) });
-        self.Deinit(engine_context);
+        self.Deinit(engine_context, engine_context.Keep());
         return error.AssetInitFailed;
     };
     self.LoadFonts(engine_context);
@@ -128,8 +128,7 @@ pub fn FromJson(self: *ThemeAsset, engine_context: *EngineContext, contents: []c
     }
 }
 
-pub fn Deinit(self: *ThemeAsset, engine_context: *EngineContext) void {
-    const keep_allocator = engine_context.Keep();
+pub fn Deinit(self: *ThemeAsset, _: *EngineContext, keep_allocator: std.mem.Allocator) void {
     var iter = self.mStyles.iterator();
     while (iter.next()) |entry| {
         entry.value_ptr.Font.ReleaseAsset();

@@ -11,13 +11,20 @@ pub fn EngineContextFromAllocator(scratch_allocator: std.mem.Allocator) *EngineC
     return engine_context;
 }
 
+/// The Keep that what is parsed now goes into: the Keep of the ECS whose component is being read (set by the reader,
+/// Serializer.DeserializeContext.keep), the engine's otherwise. `scratch_allocator` is the one parsing is given
+pub fn KeepFromAllocator(scratch_allocator: std.mem.Allocator) std.mem.Allocator {
+    const engine_context = EngineContextFromAllocator(scratch_allocator);
+    return engine_context.mSerializer.mCurrDeserialize.keep orelse engine_context.Keep();
+}
+
 /// Generates jsonStringify/jsonParse for a struct from a key -> field mapping, e.g.
 ///     const Json = JsonUtils.JsonFields(TransformComponent, .{ .Translation = "Translation", .Scale = "Scale" });
 ///     pub const jsonStringify = Json.jsonStringify;
 ///     pub const jsonParse = Json.jsonParse;
 /// Each field is written with Stringify.write and read with std.json.innerParse, so nested types that define
 /// their own jsonStringify/jsonParse (AssetHandle, TexOptions, ...) cascade automatically.
-/// std.ArrayList(u8) fields are written as JSON strings and read back into the Keep allocator.
+/// std.ArrayList(u8) fields are written as JSON strings and read back into the Keep they belong to (KeepFromAllocator).
 /// Keys missing from the JSON keep the struct's default value (T.default if declared, otherwise .{}),
 /// and an unknown key is an error.
 pub fn JsonFields(comptime T: type, comptime fields: anytype) type {
@@ -62,7 +69,7 @@ pub fn JsonFields(comptime T: type, comptime fields: anytype) type {
                         const field = &@field(result, @field(fields, field_key));
                         if (@TypeOf(field.*) == std.ArrayList(u8)) {
                             const text = try std.json.innerParse([]const u8, scratch_allocator, source, options);
-                            const keep_allocator = EngineContextFromAllocator(scratch_allocator).Keep();
+                            const keep_allocator = KeepFromAllocator(scratch_allocator);
                             field.clearRetainingCapacity();
                             try field.appendSlice(keep_allocator, text);
                         } else {

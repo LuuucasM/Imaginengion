@@ -1,6 +1,7 @@
 const std = @import("std");
 const sdl = @import("../../Core/CImports.zig").sdl;
 const Bin = @import("../Bin.zig").Bin;
+const GPUAllocator = @import("../../Core/GPUAllocator.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Tracy = @import("../../Core/Tracy.zig");
 const SkipField = @import("../../Core/SkipField.zig").StaticSkipField;
@@ -73,9 +74,8 @@ pub fn Init(self: *SGTextureManager, engine_context: *EngineContext, vram_bytes_
         .props = 0,
     };
 
-    const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
-
-    self.mTexture = sdl.SDL_CreateGPUTexture(device, &texture_info) orelse {
+    //the atlas every texture and shown render target is copied into, shared by every world: the engine's
+    self.mTexture = engine_context.mGPUAllocator.CreateTexture(engine_context, &texture_info, GPUAllocator.ENGINE) orelse {
         std.log.err("TextureAtlasManager: SDL_CreateGPUTexture failed — {s}", .{sdl.SDL_GetError()});
         return error.InitFailed;
     };
@@ -98,7 +98,7 @@ pub fn Init(self: *SGTextureManager, engine_context: *EngineContext, vram_bytes_
         .padding2 = 0,
         .props = 0,
     };
-    self.mSampler = sdl.SDL_CreateGPUSampler(device, &sampler_info) orelse {
+    self.mSampler = engine_context.mGPUAllocator.CreateSampler(engine_context, &sampler_info, GPUAllocator.ENGINE) orelse {
         std.log.err("TextureAtlasManager: SDL_CreateGPUSampler failed — {s}", .{sdl.SDL_GetError()});
         return error.InitFailed;
     };
@@ -121,8 +121,8 @@ pub fn Deinit(self: *SGTextureManager, engine_context: *EngineContext) void {
     self.mBins.deinit(engine_context.Keep());
     self.mLayers.deinit(engine_context.Keep());
 
-    if (self.mSampler) |s| sdl.SDL_ReleaseGPUSampler(device, s);
-    if (self.mTexture) |t| sdl.SDL_ReleaseGPUTexture(device, t);
+    if (self.mSampler) |s| engine_context.mGPUAllocator.ReleaseSampler(engine_context, s);
+    if (self.mTexture) |t| engine_context.mGPUAllocator.ReleaseTexture(engine_context, t);
 
     self.mTexture = null;
     self.mSampler = null;
@@ -163,7 +163,7 @@ pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?
     const offset_x, const offset_y = GetPixelOffsets(bin_index, slot_index);
 
     if (data) |d| {
-        try self.UpdateToLayer(device, d, width, height, layer_index, offset_x, offset_y);
+        try self.UpdateToLayer(engine_context, device, d, width, height, layer_index, offset_x, offset_y);
     }
 
     return (@as(u32, @intCast(slot_index)) << (LAYER_BYTES + BINS_BYTES)) | (@as(u32, @intCast(layer_index)) << BINS_BYTES) | @as(u32, @intCast(bin_index));
@@ -284,7 +284,7 @@ fn GetUVOffsets(bin_index: usize, slot_index: usize) struct { f32, f32 } {
     };
 }
 
-fn UpdateToLayer(self: *SGTextureManager, device: ?*sdl.SDL_GPUDevice, pixels: *anyopaque, width: usize, height: usize, layer_index: usize, offset_x: usize, offset_y: usize) !void {
+fn UpdateToLayer(self: *SGTextureManager, engine_context: *EngineContext, device: ?*sdl.SDL_GPUDevice, pixels: *anyopaque, width: usize, height: usize, layer_index: usize, offset_x: usize, offset_y: usize) !void {
     const data_size = width * height * 4; //4 because RGBA8
 
     const transfer_info = sdl.SDL_GPUTransferBufferCreateInfo{
@@ -293,8 +293,8 @@ fn UpdateToLayer(self: *SGTextureManager, device: ?*sdl.SDL_GPUDevice, pixels: *
         .props = 0,
     };
 
-    const transfer_buf = sdl.SDL_CreateGPUTransferBuffer(device, &transfer_info) orelse return error.UpdateFailed;
-    defer sdl.SDL_ReleaseGPUTransferBuffer(device, transfer_buf);
+    const transfer_buf = engine_context.mGPUAllocator.CreateTransferBuffer(engine_context, &transfer_info, GPUAllocator.ENGINE) orelse return error.UpdateFailed;
+    defer engine_context.mGPUAllocator.ReleaseTransferBuffer(engine_context, transfer_buf);
 
     std.log.debug("UpdateToLayer: pixels={*} w={d} h={d} data_size={d}", .{ pixels, width, height, data_size });
 

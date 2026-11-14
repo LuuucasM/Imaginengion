@@ -218,8 +218,11 @@ fn DeserializeObject(engine_context: *EngineContext, scanner: *std.json.Scanner,
 fn DeserializeComponent(engine_context: *EngineContext, scanner: *std.json.Scanner, object: anytype, key: []const u8) !bool {
     inline for (comptime SerializeList(@TypeOf(object))) |component_type| {
         if (std.mem.eql(u8, key, component_type.Name)) {
-            //components that need to know their owner while parsing (e.g. to request UUID resolves) read it from here
-            engine_context.mSerializer.mCurrDeserialize = .{ .requester = .Init(object) };
+            //components that need to know their owner while parsing (e.g. to request UUID resolves) read it from here, and
+            //what they own is taken from the object's Keep, which frees it. Put back after, for the object this is inside of
+            const outer = engine_context.mSerializer.mCurrDeserialize;
+            engine_context.mSerializer.mCurrDeserialize = .{ .requester = .Init(object), .keep = object.Keep() };
+            defer engine_context.mSerializer.mCurrDeserialize = outer;
 
             //parse first then add, so AddComponent can hook up the manager pointers of the parsed value
             const parsed = try std.json.innerParse(component_type, engine_context.Scratch(), scanner, PARSE_OPTIONS);

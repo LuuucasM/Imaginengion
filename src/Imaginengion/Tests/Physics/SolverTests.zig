@@ -99,14 +99,14 @@ fn RunCollisionPasses(collision_manager: *CollisionManager, engine_context: *Eng
     try world_manager.BuildBVH(engine_context);
 
     const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.Scratch());
-    try collision_manager.BroadPass(engine_context, world_manager, groups);
+    try collision_manager.BroadPass(world_manager, groups);
     collision_manager.NarrowPass(SUBSTEP_DT);
     try collision_manager.PreSolverPass(engine_context, &world_manager.mPhysicsManager.mEventManager);
     collision_manager.SolveVelocities(SUBSTEP_DT);
     collision_manager.SweepTriggers(SUBSTEP_DT);
     try collision_manager.CorrectPositions(world_manager, engine_context);
     //queued where the world's own physics step would queue them, and freed with the world
-    try collision_manager.UpdateTouching(engine_context, &world_manager.mPhysicsManager.mEventManager);
+    try collision_manager.UpdateTouching(world_manager.Keep(), &world_manager.mPhysicsManager.mEventManager);
 }
 
 fn ExpectBallStoppedByWall(engine_context: *EngineContext, collision_manager: *CollisionManager, ball: Entity, wall: Entity) !void {

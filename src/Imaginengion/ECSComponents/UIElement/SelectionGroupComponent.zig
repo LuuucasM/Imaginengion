@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const SelectionGroupComponent = @This();
 
@@ -10,4 +11,4 @@ pub const Name: []const u8 = "SelectionGroupComponent";
 /// SelectedTag off everything else in its tree, checked checkboxes included, so it goes on the list or tree itself rather
 /// than on a whole panel. Carries no data
 
-pub fn Deinit(_: *SelectionGroupComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *SelectionGroupComponent, _: *EngineContext, _: std.mem.Allocator) void {}

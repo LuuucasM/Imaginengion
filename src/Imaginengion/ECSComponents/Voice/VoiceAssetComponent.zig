@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const VoiceAssetComponent = @This();
@@ -8,6 +9,6 @@ pub const Name: []const u8 = "VoiceAssetComponent";
 /// may be gone before it finishes. Holds its own reference, so the asset stays loaded until the voice is destroyed
 mAsset: AssetHandle = .uninit,
 
-pub fn Deinit(self: *VoiceAssetComponent, _: *EngineContext) void {
+pub fn Deinit(self: *VoiceAssetComponent, _: *EngineContext, _: std.mem.Allocator) void {
     self.mAsset.ReleaseAsset();
 }

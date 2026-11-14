@@ -20,7 +20,7 @@ mPlacement: Layout.Anchoring = .{
     .Pivot = .{ .x = -1, .y = 1 },
 },
 
-pub fn Deinit(_: *PopupComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *PopupComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 /// The usual ways a popup hangs off its opener, each setting the anchor and pivot together. Shown as a dropdown that
 /// says Custom when the placement is none of them
@@ -52,7 +52,7 @@ const PRESET_ACCESS = Inspector.Access{
         }
     }.Read,
     .Write = struct {
-        fn Write(_: *EngineContext, field: *anyopaque, written: Inspector.Value) anyerror!void {
+        fn Write(_: *EngineContext, _: std.mem.Allocator, field: *anyopaque, written: Inspector.Value) anyerror!void {
             //Custom isn't a placement of its own: it is what any other anchor and pivot show as
             if (written.Choice >= PRESETS.len) return;
             const placement: *Layout.Anchoring = @ptrCast(@alignCast(field));

@@ -18,7 +18,7 @@ mScroll: Layout.Scroll = .Vertical,
 /// How far one notch of the mouse wheel scrolls, in the tree's units (canvas units in an overlay)
 mWheelStep: f32 = 40,
 
-pub fn Deinit(_: *ScrollComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *ScrollComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 pub fn UIRender(self: *ScrollComponent, ui: *Inspector.Builder) !void {
     try ui.Enum(Layout.Scroll, &self.mScroll, "Scroll", .{});

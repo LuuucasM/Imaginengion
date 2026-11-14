@@ -266,13 +266,14 @@ pub const ScriptInfo = extern struct {
     mFields: [*]const FieldDesc,
     mFieldCount: u32,
     mDataSize: u32,
-    /// makes instance `id`, a copy of `copy_from` (another instance's variables) or the script's defaults when null.
-    /// False if there was no memory for it
-    mNewInstance: *const fn (engine_context: *EngineContext, id: u32, copy_from: ?*const anyopaque) callconv(.c) bool,
-    mFreeInstance: *const fn (engine_context: *EngineContext, id: u32) callconv(.c) void,
+    /// makes instance `id`, a copy of `copy_from` (another instance's variables) or the script's defaults when null, in
+    /// `keep_allocator`: the Keep of the script child it is for, its world's. False if there was no memory for it
+    mNewInstance: *const fn (engine_context: *EngineContext, keep_allocator: *const std.mem.Allocator, id: u32, copy_from: ?*const anyopaque) callconv(.c) bool,
+    /// frees instance `id`, given the Keep it was made in
+    mFreeInstance: *const fn (engine_context: *EngineContext, keep_allocator: *const std.mem.Allocator, id: u32) callconv(.c) void,
     /// null for an id that has no instance. Stays where it is until it is freed, or the script is swapped for a new build
     mGetInstance: *const fn (id: u32) callconv(.c) ?*anyopaque,
-    /// frees what the DLL keeps the instances in, before it is unloaded
+    /// frees what the DLL keeps the instances in, before it is unloaded. Every instance is freed by then
     mDeinit: *const fn (engine_context: *EngineContext) callconv(.c) void,
     /// the game events it handles (see GameEvents), one handler each
     mHandlers: [*]const EventHandler,

@@ -181,7 +181,7 @@ test "an asset field's Clear lets go of its asset" {
     const box = parts.next().?;
 
     const picture = try world.mUIScene.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try picture.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "src/Imaginengion/EngineAssets/textures/White.png", .Eng));
+    _ = try picture.AddComponent(engine_context, try FileRefComponent.Init(picture.Keep(), "src/Imaginengion/EngineAssets/textures/White.png", .Eng));
     try world.Drop(picture, box);
     try std.testing.expect(entity.GetComponent(SurfaceComponent).?.mTexture.mID != AssetHandle.NullObject);
     try world.Clear(box);
@@ -195,7 +195,7 @@ test "the Components panel's Possess box possesses a dropped entity, linking bot
     const page = try world.mUIScene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try page.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
     var panel = try ComponentsPanel.Build(engine_context, page, NO_SCRIPTS);
-    defer panel.Deinit(engine_context.Keep());
+    defer panel.Deinit(engine_context.mEditorWorld.Keep());
 
     var player_config = Player.DefaultConfig;
     player_config.bAddPossessComponent = true;

@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 /// Marks an asset whose last load failed. AManager.GetAsset hands back the default asset for it
@@ -8,4 +9,4 @@ const LoadFailedTag = @This();
 
 pub const Name: []const u8 = "LoadFailedTag";
 
-pub fn Deinit(_: *LoadFailedTag, _: *EngineContext) void {}
+pub fn Deinit(_: *LoadFailedTag, _: *EngineContext, _: std.mem.Allocator) void {}

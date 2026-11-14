@@ -177,7 +177,7 @@ pub fn HierarchyPanel(comptime T: type) type {
             //one menu for every row, made once: its items act on the row it was opened on
             self.mRowMenu = try Widgets.NewContextMenu(engine_context, self.mArea);
             const type_name = TypeName();
-            try self.AddRowItem(engine_context, try std.fmt.allocPrint(engine_context.Scratch(), "New Child {s}", .{type_name}), .NewChild);
+            try self.AddRowItem(engine_context, try std.fmt.allocPrint(engine_context.mEditorWorld.Scratch(), "New Child {s}", .{type_name}), .NewChild);
             if (T == Scene) try self.AddRowItem(engine_context, "New Entity", .NewEntity);
             if (T == Entity or T == Scene) {
                 const ui_menu = try Widgets.Submenu(engine_context, self.mRowMenu, if (T == Entity) "New UI Child" else "New UI Entity", self.mOptions);
@@ -186,14 +186,14 @@ pub fn HierarchyPanel(comptime T: type) type {
                 }
             }
             try self.AddRowItem(engine_context, "Make Template", .MakeTemplate);
-            try self.AddRowItem(engine_context, try std.fmt.allocPrint(engine_context.Scratch(), "Duplicate {s}", .{type_name}), .Duplicate);
-            try self.AddRowItem(engine_context, try std.fmt.allocPrint(engine_context.Scratch(), "Delete {s}", .{type_name}), .Delete);
+            try self.AddRowItem(engine_context, try std.fmt.allocPrint(engine_context.mEditorWorld.Scratch(), "Duplicate {s}", .{type_name}), .Duplicate);
+            try self.AddRowItem(engine_context, try std.fmt.allocPrint(engine_context.mEditorWorld.Scratch(), "Delete {s}", .{type_name}), .Delete);
             return self;
         }
 
         /// The panel's own menu, New of its type, on its empty space
         fn AddAreaMenu(self: *Self, engine_context: *EngineContext) !void {
-            const keep_allocator = engine_context.Keep();
+            const keep_allocator = engine_context.mEditorWorld.Keep();
             const item_options = Widgets.MenuItemOptions{ .StockScripts = self.mOptions.StockScripts };
             const area_menu = try Widgets.ContextMenu(engine_context, self.mArea, self.mOptions);
             switch (T) {
@@ -228,7 +228,7 @@ pub fn HierarchyPanel(comptime T: type) type {
         pub fn Update(self: *Self, engine_context: *EngineContext, world: *WorldManager, selected: ?SelectedObject) !void {
             const zone = Tracy.ZoneInit("HierarchyPanel::Update", @src());
             defer zone.Deinit();
-            const scratch_allocator = engine_context.Scratch();
+            const scratch_allocator = engine_context.mEditorWorld.Scratch();
 
             var objects: std.ArrayList(T) = .empty;
             var shape: std.ArrayList(u64) = .empty;
@@ -245,7 +245,7 @@ pub fn HierarchyPanel(comptime T: type) type {
         pub fn UpdateRoots(self: *Self, engine_context: *EngineContext, roots: []const T, selected: ?SelectedObject) !void {
             const zone = Tracy.ZoneInit("HierarchyPanel::UpdateRoots", @src());
             defer zone.Deinit();
-            const scratch_allocator = engine_context.Scratch();
+            const scratch_allocator = engine_context.mEditorWorld.Scratch();
             var objects: std.ArrayList(T) = .empty;
             var shape: std.ArrayList(u64) = .empty;
             for (roots) |root| {
@@ -370,7 +370,7 @@ pub fn HierarchyPanel(comptime T: type) type {
         /// An item of `menu` doing `action`, kept in `items`
         fn AddItem(self: *Self, engine_context: *EngineContext, menu: Entity, items: *std.ArrayList(MenuItem), text: []const u8, action: Action) !void {
             const item = try Widgets.MenuItem(engine_context, menu, text, .{ .StockScripts = self.mOptions.StockScripts });
-            try items.append(engine_context.Keep(), .{ .Item = item, .Action = action });
+            try items.append(engine_context.mEditorWorld.Keep(), .{ .Item = item, .Action = action });
         }
 
         /// A ready-made UI entity of `kind` under `parent`, named after its kind. It takes the theme's look once and is
@@ -437,7 +437,7 @@ pub fn HierarchyPanel(comptime T: type) type {
         fn Rebuild(self: *Self, engine_context: *EngineContext, world: ?*WorldManager, objects: []const T, shape: []const u64) !void {
             const zone = Tracy.ZoneInit("HierarchyPanel::Rebuild", @src());
             defer zone.Deinit();
-            const keep_allocator = engine_context.Keep();
+            const keep_allocator = engine_context.mEditorWorld.Keep();
             //which nodes were open, from the tree about to go
             for (self.mRows.items) |row| {
                 const content = row.Content orelse continue;
@@ -458,7 +458,7 @@ pub fn HierarchyPanel(comptime T: type) type {
             self.mTree = tree;
             //the content each depth's next node goes in: a node's children follow it straight away in the walk
             var parents: std.ArrayList(Entity) = .empty;
-            try parents.append(engine_context.Scratch(), tree);
+            try parents.append(engine_context.mEditorWorld.Scratch(), tree);
             for (objects, shape, 0..) |object, packed_shape, i| {
                 const depth: usize = @intCast(packed_shape & 0xFFFF_FFFF);
                 parents.shrinkRetainingCapacity(depth + 1);
@@ -476,7 +476,7 @@ pub fn HierarchyPanel(comptime T: type) type {
                 try Widgets.ShareContextMenu(engine_context, node.Header, self.mRowMenu, self.mOptions);
                 const stripe: ?Stripe = if (stripe_scene) |scene| .{ .Bar = node.Stripe.?, .Scene = scene } else null;
                 try self.mRows.append(keep_allocator, .{ .Header = node.Header, .Label = UIManager.LabelOf(node.Header).?, .Content = node.Content, .Object = object, .Depth = @intCast(depth), .Stripe = stripe });
-                if (node.Content) |content| try parents.append(engine_context.Scratch(), content);
+                if (node.Content) |content| try parents.append(engine_context.mEditorWorld.Scratch(), content);
             }
             try self.mArea.MarkLayoutDirty(engine_context);
         }

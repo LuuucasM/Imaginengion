@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 const StyleDirtyTag = @This();
@@ -10,4 +11,4 @@ pub const Name: []const u8 = "StyleDirtyTag";
 /// surface or text) was added. The tag is the query: the style system only restyles the elements that have one, and
 /// clears it. It carries no data. Never saved or copied: an element that is loaded or copied is marked when its
 /// entity takes it (UIManager.Adopt). See UIManager.MarkStyleDirty
-pub fn Deinit(_: *StyleDirtyTag, _: *EngineContext) void {}
+pub fn Deinit(_: *StyleDirtyTag, _: *EngineContext, _: std.mem.Allocator) void {}

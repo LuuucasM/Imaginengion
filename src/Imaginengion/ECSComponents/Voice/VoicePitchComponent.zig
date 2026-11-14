@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const VoicePitchComponent = @This();
 
@@ -7,4 +8,4 @@ pub const Name: []const u8 = "VoicePitchComponent";
 /// may be gone before it finishes
 mPitch: f32 = 1.0,
 
-pub fn Deinit(_: *VoicePitchComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *VoicePitchComponent, _: *EngineContext, _: std.mem.Allocator) void {}

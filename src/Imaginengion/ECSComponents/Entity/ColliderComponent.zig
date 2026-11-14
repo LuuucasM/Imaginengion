@@ -33,7 +33,7 @@ mCollisionFilter: CollisionFilter = .default,
 //Either collider of a pair asking is enough, and the scripts of both main objects are run
 mPreSolveEvents: bool = false,
 
-pub fn Deinit(_: *ColliderComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *ColliderComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 /// The box's half extents in world units: its full size, grown by the transform's scale, halved.
 pub fn GetWorldHalfExtents(self: ColliderComponent, world_scale: Vec3(f32)) Vec3(f32) {

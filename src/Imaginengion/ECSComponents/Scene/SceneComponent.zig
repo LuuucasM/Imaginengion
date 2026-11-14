@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Vec2 = @import("../../Math/MathTypes.zig").Vec2;
@@ -18,7 +19,7 @@ pub const Removable: bool = false;
 /// saved: it belongs to whatever view the scene is in, not to the scene
 mLayoutArea: ?Vec2(f32) = null,
 
-pub fn Deinit(_: *SceneComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *SceneComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 //nothing of it is saved
 const Json = JsonUtils.JsonFields(SceneComponent, .{});

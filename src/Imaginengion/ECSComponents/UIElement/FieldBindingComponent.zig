@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Inspector = @import("../../UI/Inspector.zig");
@@ -39,4 +40,4 @@ mClear: ?Inspector.Value = null,
 /// For a readout's Copy menu item: clicking it puts the field's text on the clipboard. Such a binding is never shown
 mCopies: bool = false,
 
-pub fn Deinit(_: *FieldBindingComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *FieldBindingComponent, _: *EngineContext, _: std.mem.Allocator) void {}

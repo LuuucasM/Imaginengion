@@ -578,11 +578,11 @@ test "a target asking for file types takes only those files, whatever the letter
     const target = DropTargetComponent.Files(&.{ ".png", ".jpg" });
 
     const picture = try world.mMenu.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
-    _ = try picture.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "art/Hero.PNG", .Prj));
+    _ = try picture.AddComponent(engine_context, try FileRefComponent.Init(picture.Keep(), "art/Hero.PNG", .Prj));
     try std.testing.expect(PointerSystem.Takes(target, picture));
 
     const script = try world.mMenu.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
-    _ = try script.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "Mover.zig", .Prj));
+    _ = try script.AddComponent(engine_context, try FileRefComponent.Init(script.Keep(), "Mover.zig", .Prj));
     try std.testing.expect(!PointerSystem.Takes(target, script));
 
     //not carrying a file at all
@@ -608,7 +608,7 @@ test "dragging a file past a field that doesn't take it lands on the panel aroun
     _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Files(&.{".png"}));
     _ = try world.mMenu.AddComponent(engine_context, DropTargetComponent.Files(&.{".zig"}));
     _ = try world.mPlay.AddComponent(engine_context, DragSourceComponent{});
-    _ = try world.mPlay.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "Mover.zig", .Prj));
+    _ = try world.mPlay.AddComponent(engine_context, try FileRefComponent.Init(world.mPlay.Keep(), "Mover.zig", .Prj));
 
     try world.MoveTo(world.mPlay, .{ .x = 960, .y = 540 }, 1920, 1080);
     try engine_context.mPointerSystem.OnPressed(engine_context, .BUTTON_LEFT);

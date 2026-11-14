@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 /// Marks an asset whose file changed last frame. Added with the FileUpdate event that unloads the asset, and taken off
@@ -7,4 +8,4 @@ const FileChangedTag = @This();
 
 pub const Name: []const u8 = "FileChangedTag";
 
-pub fn Deinit(_: *FileChangedTag, _: *EngineContext) void {}
+pub fn Deinit(_: *FileChangedTag, _: *EngineContext, _: std.mem.Allocator) void {}

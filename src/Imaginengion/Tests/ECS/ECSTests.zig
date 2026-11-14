@@ -12,7 +12,7 @@ const Position = struct {
 
     x: f32 = 0,
 
-    pub fn Deinit(_: *Position, _: *EngineContext) void {}
+    pub fn Deinit(_: *Position, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// owns memory, so it has a Clone for DuplicateEntity to use
@@ -22,12 +22,12 @@ const Label = struct {
 
     mText: std.ArrayList(u8) = .empty,
 
-    pub fn Deinit(self: *Label, engine_context: *EngineContext) void {
-        self.mText.deinit(engine_context.Keep());
+    pub fn Deinit(self: *Label, _: *EngineContext, keep_allocator: std.mem.Allocator) void {
+        self.mText.deinit(keep_allocator);
     }
 
-    pub fn Clone(self: *const Label, engine_context: *EngineContext) !Label {
-        return .{ .mText = try self.mText.clone(engine_context.Keep()) };
+    pub fn Clone(self: *const Label, _: *EngineContext, keep_allocator: std.mem.Allocator) !Label {
+        return .{ .mText = try self.mText.clone(keep_allocator) };
     }
 };
 
@@ -37,7 +37,7 @@ const Health = struct {
 
     mHP: u32 = 100,
 
-    pub fn Deinit(_: *Health, _: *EngineContext) void {}
+    pub fn Deinit(_: *Health, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 const TestComponentsList = [_]type{ Position, Label, Health };

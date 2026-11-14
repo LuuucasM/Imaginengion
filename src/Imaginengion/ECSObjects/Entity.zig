@@ -87,6 +87,7 @@ pub const GetComponent = Core.GetComponent;
 pub const GetComponentMut = Core.GetComponentMut;
 
 pub const HasComponent = Core.HasComponent;
+pub const Keep = Core.Keep;
 
 pub const GetUUID = Core.GetUUID;
 
@@ -349,11 +350,11 @@ pub fn CreateEntityConfig(self: Entity, engine_context: *EngineContext, config: 
         const io_source = std.Random.IoSource{ .io = engine_context.Io() };
         const new_random = io_source.interface();
         const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = new_random.int(u64) });
-        try self.mManager.mEManager.AddUUID(engine_context.Keep(), new_uuid_component.ID, self.mID);
+        try self.mManager.mEManager.AddUUID(self.Keep(), new_uuid_component.ID, self.mID);
     }
     if (config.bAddName) {
         var new_name_component: NameComponent = .empty;
-        _ = try new_name_component.mName.print(engine_context.Keep(), "New Entity", .{});
+        _ = try new_name_component.mName.print(self.Keep(), "New Entity", .{});
         _ = try self.AddComponent(engine_context, new_name_component);
     }
     if (config.bAddTransform) {

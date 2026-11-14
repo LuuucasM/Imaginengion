@@ -38,11 +38,15 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
         pub const empty: Self = .{
             .mComponentsArrays = .empty,
+            .mKeep = undefined,
         };
 
         mComponentsArrays: std.ArrayList(ComponentArray(entity_t)),
+        /// The Keep of whoever owns this ECS (the engine, or one world), given to Init: every array is made with it
+        mKeep: std.mem.Allocator,
 
         pub fn Init(self: *Self, keep_allocator: std.mem.Allocator) !void {
+            self.mKeep = keep_allocator;
 
             //add the components for entity hiearchy
             const parent_array = try ComponentArray(entity_t).Init(keep_allocator, ParentComponent);
@@ -78,10 +82,10 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                 component_array.DeinitComponents(engine_context);
             }
             for (self.mComponentsArrays.items) |component_array| {
-                component_array.Deinit(engine_context);
+                component_array.Deinit();
             }
 
-            self.mComponentsArrays.deinit(engine_context.Keep());
+            self.mComponentsArrays.deinit(self.mKeep);
         }
 
         pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
@@ -90,7 +94,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                 component_array.DeinitComponents(engine_context);
             }
             for (self.mComponentsArrays.items) |component_array| {
-                component_array.clearAndFree(engine_context);
+                component_array.clearAndFree();
             }
         }
 
@@ -152,7 +156,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                     component_array.DeinitComponents(engine_context);
                 }
                 for (other.mComponentsArrays.items[0..copied]) |component_array| {
-                    component_array.clearAndFree(engine_context);
+                    component_array.clearAndFree();
                 }
             }
             while (copied < self.mComponentsArrays.items.len) : (copied += 1) {

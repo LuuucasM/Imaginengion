@@ -7,6 +7,10 @@
 //! allocation made in Start, so measuring a zone never allocates. Zones never seen before are added as they are met,
 //! until MAX_NODES; past that, and past MAX_DEPTH zones deep, a zone's time goes to the zone it is inside.
 //!
+//! A node also says which world it ran on (EnterWorld): a zone run on the Game world and the same zone run on the
+//! Simulate world are two nodes, and so is everything under them, so each world's time can be told apart. What a world
+//! is to the profiler is a number the caller picks (EngineContext.WorldTag), NO_WORLD for none.
+//!
 //! Script DLLs compile their own copy of this file with a gMain of their own that is never started, so their zones
 //! cost a check and nothing more.
 const std = @import("std");
@@ -23,6 +27,10 @@ pub const MAX_DEPTH = 64;
 pub const ROOT: NodeIndex = 0;
 pub const NONE: NodeIndex = std.math.maxInt(NodeIndex);
 
+/// Which world a zone ran on, as the caller numbers them. NO_WORLD for one run on no world in particular
+pub const World = u8;
+pub const NO_WORLD: World = 0;
+
 /// The one the engine's zones measure into (Tracy.ZoneInit)
 pub var gMain: Profiler = .{};
 
@@ -37,6 +45,8 @@ pub const Site = struct {
 pub const Node = struct {
     mSite: *Site,
     mParent: NodeIndex,
+    /// the world it ran on (EnterWorld)
+    mWorld: World = NO_WORLD,
     mFirstChild: NodeIndex = NONE,
     mNextSibling: NodeIndex = NONE,
     /// this pass of the loop so far
@@ -72,6 +82,8 @@ mDepth: u8 = 0,
 mTooDeep: u32 = 0,
 /// passes of the loop ended since Start
 mLoops: u64 = 0,
+/// the world zones begun now run on (EnterWorld)
+mWorld: World = NO_WORLD,
 
 /// Starts measuring the calling thread's zones, with `io`'s clock
 pub fn Start(self: *Profiler, allocator: std.mem.Allocator, io: std.Io) !void {
@@ -102,6 +114,24 @@ pub fn IsRunning(self: *const Profiler) bool {
 }
 
 var root_site: Site = .{ .mName = "Root" };
+
+/// Zones begun from now on run on `world`, until LeaveWorld is given what this hands back. Only on the measured thread
+pub fn EnterWorld(self: *Profiler, world: World) World {
+    if (!self.IsMeasuredThread()) return self.mWorld;
+    const outer = self.mWorld;
+    self.mWorld = world;
+    return outer;
+}
+
+/// Zones go back to the world they ran on before EnterWorld, which handed `outer` back
+pub fn LeaveWorld(self: *Profiler, outer: World) void {
+    if (!self.IsMeasuredThread()) return;
+    self.mWorld = outer;
+}
+
+fn IsMeasuredThread(self: *const Profiler) bool {
+    return self.mStorage != null and std.Thread.getCurrentId() == self.mThread;
+}
 
 /// A zone at `site` starts. False when it isn't measured (not started, another thread), and then End mustn't be called
 pub fn Begin(self: *Profiler, site: *Site) bool {
@@ -193,6 +223,24 @@ pub const ChildIterator = struct {
     }
 };
 
+/// How long `world` takes a pass of the loop on average: every node on it whose parent isn't, added up. A world run
+/// inside another world's run is in that one's time too
+pub fn WorldAverage(self: *const Profiler, world: World) std.Io.Duration {
+    var total: i96 = 0;
+    for (1..self.mNodeCount) |node_ind| {
+        const node = self.GetNode(@intCast(node_ind));
+        if (node.mWorld != world or self.GetNode(node.mParent).mWorld == world) continue;
+        total += self.Average(@intCast(node_ind)).toNanoseconds();
+    }
+    return .fromNanoseconds(total);
+}
+
+/// Whether `node` starts a world's part of the tree: on a world its parent isn't on
+pub fn StartsWorld(self: *const Profiler, node: NodeIndex) bool {
+    const world = self.GetNode(node).mWorld;
+    return world != NO_WORLD and self.GetNode(self.GetNode(node).mParent).mWorld != world;
+}
+
 /// A node over the loops it remembers. Avg, P99 and Max are per pass of the loop, counting passes it didn't run in
 pub const Summary = struct {
     Avg: std.Io.Duration = .zero,
@@ -254,19 +302,20 @@ fn Largest(values: []const u32, rank: usize) u32 {
     return top[kept - 1];
 }
 
-// the node `site` is when called from inside `parent`: the one it was last time if it was called from there then,
-// otherwise looked for among the parent's children, otherwise added. A site inside itself is measured as the outer
-// one (folded), and with no room left a site is folded into its parent
+// the node `site` is when called from inside `parent` on the current world: the one it was last time if it was called
+// from there then, otherwise looked for among the parent's children, otherwise added. A site inside itself on the same
+// world is measured as the outer one (folded), and with no room left a site is folded into its parent
 fn NodeFor(self: *Profiler, storage: *Storage, parent: NodeIndex, site: *Site) NodeIndex {
-    if (parent != ROOT and storage.mNodes[parent].mSite == site) return parent;
+    const world = self.mWorld;
+    if (parent != ROOT and storage.mNodes[parent].mSite == site and storage.mNodes[parent].mWorld == world) return parent;
     if (site.mLastNode < self.mNodeCount) {
         const last = storage.mNodes[site.mLastNode];
-        if (last.mSite == site and last.mParent == parent) return site.mLastNode;
+        if (last.mSite == site and last.mParent == parent and last.mWorld == world) return site.mLastNode;
     }
     var child = storage.mNodes[parent].mFirstChild;
     var last_child = NONE;
     while (child != NONE) : (child = storage.mNodes[child].mNextSibling) {
-        if (storage.mNodes[child].mSite == site) {
+        if (storage.mNodes[child].mSite == site and storage.mNodes[child].mWorld == world) {
             site.mLastNode = child;
             return child;
         }
@@ -276,7 +325,7 @@ fn NodeFor(self: *Profiler, storage: *Storage, parent: NodeIndex, site: *Site) N
 
     const node = self.mNodeCount;
     self.mNodeCount += 1;
-    storage.mNodes[node] = .{ .mSite = site, .mParent = parent };
+    storage.mNodes[node] = .{ .mSite = site, .mParent = parent, .mWorld = world };
     storage.mTimes[node] = .empty;
     storage.mCalls[node] = .empty;
     if (last_child == NONE) storage.mNodes[parent].mFirstChild = node else storage.mNodes[last_child].mNextSibling = node;

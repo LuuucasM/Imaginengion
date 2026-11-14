@@ -55,7 +55,7 @@ test "a tree of only the roots it is handed, with no menu of its own and no Dele
     _ = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
 
     var tree = try HierarchyPanel(Entity).BuildForRoots(engine_context, world.mPage, .{ .StockScripts = false });
-    defer tree.Deinit(engine_context.Keep());
+    defer tree.Deinit(engine_context.mEditorWorld.Keep());
     var selected: ?SelectedObject = null;
     try tree.UpdateRoots(engine_context, &.{root}, selected);
     try std.testing.expectEqual(@as(usize, 2), tree.mRows.items.len);

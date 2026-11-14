@@ -155,11 +155,11 @@ test "a copied AudioComponent has none of the original's voices" {
     _ = try source.AddComponent(engine_context, AudioComponent{});
     const voice = (try source.PlayAudio(engine_context)).?;
 
-    var copy = try source.GetComponent(AudioComponent).?.Clone(engine_context);
+    var copy = try source.GetComponent(AudioComponent).?.Clone(engine_context, source.Keep());
     try std.testing.expect(!copy.mFirstVoice.IsIDValid());
 
     //the copy going leaves the original's voice playing
-    copy.Deinit(engine_context);
+    copy.Deinit(engine_context, source.Keep());
     try std.testing.expect(voice.GetComponent(VoiceComponent).?.mSource != null);
 }
 

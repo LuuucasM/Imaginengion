@@ -10,7 +10,7 @@ pub const Name: []const u8 = "PlayerSlotComponent";
 
 mPlayerEntity: Player = .uninit,
 
-pub fn Deinit(_: *PlayerSlotComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *PlayerSlotComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 //nothing is saved yet
 const Json = JsonUtils.JsonFields(PlayerSlotComponent, .{});

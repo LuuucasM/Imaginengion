@@ -127,7 +127,7 @@ fn ScriptLoop(comptime ObjectType: type, comptime script_type: type, comptime wo
         pub const Name = std.fmt.comptimePrint("ScriptsProcessor::RunScript({s}, {s}, {s})", .{ Tracy.ShortTypeName(ObjectType), Tracy.ShortTypeName(script_type), world_name });
 
         pub fn Run(engine_context: *EngineContext, world_manager: *WorldManager, above: ?usize, args: Args) !ScriptResult {
-            const scratch_allocator = engine_context.Scratch();
+            const scratch_allocator = world_manager.Scratch();
             const manager = world_manager.GetManager(ObjectType);
 
             const script_ids = try manager.GetGroup(scratch_allocator, GroupQuery{ .Component = script_type });
@@ -503,7 +503,7 @@ pub fn ProcessGameEvents(engine_context: *EngineContext, world: *WorldManager, c
 
     const queue = world.mGameEventManager.GetQueue(phase);
     defer world.mGameEventManager.Clear(phase);
-    const scratch_allocator = engine_context.Scratch();
+    const scratch_allocator = world.Scratch();
 
     //built when the first event comes, so a phase with none costs nothing, and again only when the scripts that hear
     //events or their order may have changed (WorldManager.mEventHandlersVersion). Not for every event: most handlers
@@ -615,7 +615,7 @@ const EventHandlersLoop = struct {
     pub const Name = "ScriptsProcessor::RunEventHandlers";
 
     pub fn Run(engine_context: *EngineContext, world: *WorldManager, known: ?HandlerList.Lists, id: u64, event: *const anyopaque) !ScriptResult {
-        const scripts = known orelse (try HandlerList.Build(engine_context.Scratch(), world)).mAll;
+        const scripts = known orelse (try HandlerList.Build(world.Scratch(), world)).mAll;
         inline for (HandlerList.OBJECT_TYPES, 0..) |ObjectType, i| {
             const manager = world.GetManager(ObjectType);
             for (scripts[i]) |script| {
@@ -706,7 +706,7 @@ pub fn SetUpScript(comptime ObjectType: type, script: ObjectType, engine_context
 
     if (script_asset) |asset| {
         if (script.GetComponent(ScriptComponent).?.mInstance == null) {
-            const id = try asset.NewInstance(engine_context, null);
+            const id = try asset.NewInstance(engine_context, script.Keep(), null);
             script.GetComponentMut(ScriptComponent).?.mInstance = id;
         }
     }

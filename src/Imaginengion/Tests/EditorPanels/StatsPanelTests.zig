@@ -54,6 +54,10 @@ test "the stats window starts closed, opens and closes, and shows the loop, the 
     try std.testing.expectEqualStrings("FPS: 32", TextOf(panel.mFPS));
     try std.testing.expectEqualStrings("Loops/s: 64", TextOf(panel.mLoopRate));
     try std.testing.expectEqualStrings("Loop time: 15625 us (0.01563 s)", TextOf(panel.mLoopTime));
+    //a memory line for each owner, the game world's first
+    try std.testing.expect(std.mem.startsWith(u8, TextOf(panel.mMemoryLines[0]), "Game: Keep "));
+    try std.testing.expect(std.mem.startsWith(u8, TextOf(panel.mMemoryLines[@intFromEnum(StatsPanel.MemoryOwner.Engine)]), "Engine (shared): Keep "));
+    try std.testing.expect(std.mem.endsWith(u8, TextOf(panel.mMemoryLines[0]), "GPU 0 B / 0 B in 0 textures, 0 buffers"));
     //the last rendered frame's, kept when the frame's were reset
     try std.testing.expectEqualStrings("Glyphs: 42", TextOf(panel.mEditor.Glyphs));
     //each layer's BVH: its deepest and average leaf, then its size; a layer with no tree is all 0. Then both trees' costs

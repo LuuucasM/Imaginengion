@@ -68,7 +68,7 @@ const TestEngine = struct {
     fn DropOn(self: *TestEngine, box: Entity, rel_path: []const u8) !void {
         const engine_context = self.mEngineContext;
         const file = try self.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
-        _ = try file.AddComponent(engine_context, try FileRefComponent.Init(engine_context, rel_path, .Prj));
+        _ = try file.AddComponent(engine_context, try FileRefComponent.Init(file.Keep(), rel_path, .Prj));
         try self.mPanel.OnDrop(engine_context, box, .{ .mSource = file, .mPosition = .{ .x = 0, .y = 0, .z = 0 } });
     }
 };
@@ -120,7 +120,7 @@ test "the name typed in and kept renames the game, not the project file" {
     const engine_context = engine.mEngineContext;
     const panel = &engine.mPanel;
 
-    try panel.mName.GetComponentMut(TextComponent).?.SetText(engine_context, "Space Pong");
+    try panel.mName.GetComponentMut(TextComponent).?.SetText(panel.mName.Keep(), "Space Pong");
     try panel.OnUIEvent(engine_context, .{ .mEntity = panel.mName, .mEvent = .{ .TextSubmitted = .{ .mTarget = panel.mName } } });
     try std.testing.expectEqualStrings("Space Pong", engine_context.mProject.GetName());
     try std.testing.expect(!std.mem.eql(u8, "Space Pong", std.fs.path.stem(engine_context.mProject.mFileName.items)));

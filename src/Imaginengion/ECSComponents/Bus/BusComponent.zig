@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Inspector = @import("../../UI/Inspector.zig");
 const BusComponent = @This();
@@ -15,7 +16,7 @@ mPaused: bool = false,
 /// speed (see AudioManager.FADE_FRAMES), so a volume change or a pause glides instead of clicking
 mGain: f32 = 1.0,
 
-pub fn Deinit(_: *BusComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *BusComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 /// Only whether it is paused: its gain is where the mixer has got to, not a setting
 pub fn UIRender(self: *BusComponent, ui: *Inspector.Builder) !void {

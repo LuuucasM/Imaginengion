@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
 
@@ -15,14 +16,14 @@ pub const TransformDirtyTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "TransformDirtyTag";
 
-    pub fn Deinit(_: *TransformDirtyTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *TransformDirtyTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 pub const ShouldRenderTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "ShouldRenderTag";
 
-    pub fn Deinit(_: *ShouldRenderTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *ShouldRenderTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// Which layer a scene is drawn in. Game layer scenes are the world everyone sees, overlay scenes are
@@ -60,7 +61,7 @@ fn LayerTagT(comptime layer: LayerType) type {
             .OverlayLayer => "OverlayLayerTag",
         };
 
-        pub fn Deinit(_: *Self, _: *EngineContext) void {}
+        pub fn Deinit(_: *Self, _: *EngineContext, _: std.mem.Allocator) void {}
 
         /// A scene read from a file or copied from a template is slotted into the scene stack here,
         /// once its layer is known, the same as SManager.CreateScene does for a new one

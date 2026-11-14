@@ -29,7 +29,7 @@ fn OnRefEdited(component: *anyopaque) void {
     self.mWantedUUID = ObjectLink.WantedNow(self.mScene, self.mWantedUUID);
 }
 
-pub fn Deinit(_: *OverlayComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *OverlayComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 /// See WorldManager.RelinkRefs
 pub fn Relink(self: *OverlayComponent) void {

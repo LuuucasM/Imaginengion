@@ -78,9 +78,9 @@ fn KeptPairs(engine_context: *EngineContext, comptime linear: bool) !Kept {
     var collision_manager: CollisionManager = .empty;
     defer collision_manager.Deinit(engine_context.Keep());
     if (linear) {
-        try collision_manager.BroadPassLinear(engine_context, world_manager, groups);
+        try collision_manager.BroadPassLinear(world_manager, groups);
     } else {
-        try collision_manager.BroadPass(engine_context, world_manager, groups);
+        try collision_manager.BroadPass(world_manager, groups);
     }
     collision_manager.NarrowPass(SUB_STEP_DT);
 
@@ -99,7 +99,7 @@ fn BroadPairCount(engine_context: *EngineContext) !usize {
     const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.Scratch());
     var collision_manager: CollisionManager = .empty;
     defer collision_manager.Deinit(engine_context.Keep());
-    try collision_manager.BroadPass(engine_context, world_manager, groups);
+    try collision_manager.BroadPass(world_manager, groups);
     return collision_manager._BlockingContacts.items.len + collision_manager._OverlapContacts.items.len;
 }
 

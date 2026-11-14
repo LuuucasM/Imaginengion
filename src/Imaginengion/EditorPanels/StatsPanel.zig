@@ -4,7 +4,11 @@
 //! renderer has to draw, so a section only costs them while it is open. The Editor world's are the editor UI itself,
 //! which is what counts towards the renderer's limit. The render stats are the last rendered frame's: they are only
 //! complete once a frame has rendered, which is after the UI has been laid out, and a pass of the loop that skipped
-//! rendering keeps showing the last frame that did.
+//! rendering keeps showing the last frame that did. The Memory section has a line for each owner of memory: each world,
+//! and the engine for what every world shares (UI land, assets, audio, the renderer). What the game uses is the Game
+//! world's while editing and the Simulate world's while playing; the Editor's and the Engine's are never part of it.
+//! Each line ends with what the owner holds on the GPU (GPUAllocator): a world's render targets, the engine's texture
+//! atlas and renderer buffers.
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -16,12 +20,14 @@ const WidgetActions = @import("../UI/WidgetActions.zig");
 const BVH = @import("../Core/BVH.zig");
 const ConflictReport = @import("../ECS/ConflictReport.zig");
 const SelectedTag = @import("../ECSComponents/EComponents.zig").SelectedTag;
+const Allocators = @import("../Core/Allocators.zig");
+const GPUAllocator = @import("../Core/GPUAllocator.zig");
 
 const StatsPanel = @This();
 
 /// Where the window opens, from the middle of the editor UI, and how big it is
 const AT = @import("../Math/MathTypes.zig").Vec2(f32){ .x = 300, .y = 100 };
-const SIZE = @import("../Math/MathTypes.zig").Vec2(f32){ .x = 420, .y = 380 };
+const SIZE = @import("../Math/MathTypes.zig").Vec2(f32){ .x = 680, .y = 380 };
 
 /// How often its lines are refreshed. A line that changes is laid out and drawn again, and the loop time changes every
 /// pass of the loop, so refreshing every pass would cost more than most of what it shows
@@ -29,6 +35,50 @@ pub const REFRESH_SECONDS: f32 = 0.25;
 
 /// How many systems the Conflicts section shows, those with the most hooks
 const CONFLICT_LINES = 8;
+
+/// The owners of memory the Memory section has a line for, in its order
+pub const MemoryOwner = enum {
+    Game,
+    Simulate,
+    Editor,
+    Engine,
+    Assets,
+    Templates,
+
+    fn Title(self: MemoryOwner) []const u8 {
+        return switch (self) {
+            .Game => "Game",
+            .Simulate => "Playing",
+            .Editor => "Editor",
+            .Engine => "Engine (shared)",
+            .Assets => "Loaded objects",
+            .Templates => "Template editing",
+        };
+    }
+
+    /// Who it is to the GPU allocator
+    fn GPUOwner(self: MemoryOwner, engine_context: *EngineContext) GPUAllocator.Owner {
+        return switch (self) {
+            .Game => engine_context.WorldTag(&engine_context.mGameWorld),
+            .Simulate => engine_context.WorldTag(&engine_context.mSimulateWorld),
+            .Editor => engine_context.WorldTag(&engine_context.mEditorWorld),
+            .Engine => GPUAllocator.ENGINE,
+            .Assets => engine_context.WorldTag(&engine_context.mAssetWorld),
+            .Templates => engine_context.WorldTag(&engine_context.mTmplEditWorld),
+        };
+    }
+
+    fn CountsOf(self: MemoryOwner, engine_context: *EngineContext) *const Allocators.Counts {
+        return switch (self) {
+            .Game => &engine_context.mGameWorld.mAllocators.mCounts,
+            .Simulate => &engine_context.mSimulateWorld.mAllocators.mCounts,
+            .Editor => &engine_context.mEditorWorld.mAllocators.mCounts,
+            .Engine => &engine_context._Internal.Counts,
+            .Assets => &engine_context.mAssetWorld.mAllocators.mCounts,
+            .Templates => &engine_context.mTmplEditWorld.mAllocators.mCounts,
+        };
+    }
+};
 
 /// One world's section: a line for each stat
 const WorldLines = struct {
@@ -55,6 +105,8 @@ mFPS: Entity = .uninit,
 mMeasureBox: Entity = .uninit,
 mConflictTotal: Entity = .uninit,
 mConflictLines: [CONFLICT_LINES]Entity = undefined,
+/// A line for each owner of memory (MemoryOwner)
+mMemoryLines: [std.enums.values(MemoryOwner).len]Entity = undefined,
 mGame: WorldLines = undefined,
 mEditor: WorldLines = undefined,
 mSimulate: WorldLines = undefined,
@@ -73,6 +125,7 @@ pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Opti
     self.mLoopTime = try Widgets.Label(engine_context, content, "");
     self.mLoopRate = try Widgets.Label(engine_context, content, "");
     self.mFPS = try Widgets.Label(engine_context, content, "");
+    try self.BuildMemory(engine_context, window.Content, options);
     self.mGame = try World(engine_context, window.Content, "Game World", options);
     self.mEditor = try World(engine_context, window.Content, "Editor World", options);
     self.mSimulate = try World(engine_context, window.Content, "Simulate World", options);
@@ -114,11 +167,52 @@ pub fn Update(self: *StatsPanel, engine_context: *EngineContext, stats: *const E
     try SetLine(engine_context, self.mLoopTime, "Loop time: {d:.0} us ({d:.5} s)", .{ std.time.us_per_s * dt, dt });
     try SetLine(engine_context, self.mLoopRate, "Loops/s: {d:.0}", .{stats.LoopRate.mRate});
     try SetLine(engine_context, self.mFPS, "FPS: {d:.0}", .{stats.FrameRate.mRate});
+    try self.SetMemory(engine_context);
     try SetWorld(engine_context, self.mGame, stats.LastGameWorldStats);
     try SetWorld(engine_context, self.mEditor, stats.LastEditorWorldStats);
     try SetWorld(engine_context, self.mSimulate, stats.LastSimulateWorldStats);
     try self.SetConflicts(engine_context, &engine_context.mTransactions.mConflicts);
 }
+
+/// The Memory section, open to start with: a line for each owner of memory
+fn BuildMemory(self: *StatsPanel, engine_context: *EngineContext, content: Entity, options: Widgets.Options) !void {
+    const section = try Widgets.CollapsingHeader(engine_context, .{ .Entity = content }, "Memory (Keep held / peak, Scratch a pass / peak, GPU held / peak)", true, options);
+    const lines: Widgets.Parent = .{ .Entity = section.Content.? };
+    for (&self.mMemoryLines) |*line| line.* = try Widgets.Label(engine_context, lines, "");
+}
+
+fn SetMemory(self: *StatsPanel, engine_context: *EngineContext) !void {
+    for (self.mMemoryLines, std.enums.values(MemoryOwner)) |line, owner| {
+        const counts = owner.CountsOf(engine_context).Read();
+        const gpu = engine_context.mGPUAllocator.CountsOf(owner.GPUOwner(engine_context));
+        try SetLine(engine_context, line, "{s}: Keep {f} / {f} in {d} allocations, Scratch {f} / {f}, GPU {f} / {f} in {d} textures, {d} buffers", .{
+            owner.Title(),
+            Bytes{ .mBytes = counts.KeepBytes },
+            Bytes{ .mBytes = counts.KeepPeak },
+            counts.KeepAllocs,
+            Bytes{ .mBytes = counts.ScratchLast },
+            Bytes{ .mBytes = counts.ScratchPeak },
+            Bytes{ .mBytes = @intCast(gpu.Bytes) },
+            Bytes{ .mBytes = @intCast(gpu.Peak) },
+            gpu.Textures,
+            gpu.Buffers + gpu.TransferBuffers,
+        });
+    }
+}
+
+/// A count of bytes in the largest unit it fills one of (1024 to the next), e.g. "12.3 MB"
+pub const Bytes = struct {
+    mBytes: i64,
+
+    pub fn format(self: Bytes, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        const units = [_][]const u8{ "B", "KB", "MB", "GB" };
+        var value: f64 = @floatFromInt(self.mBytes);
+        var unit: usize = 0;
+        while (@abs(value) >= 1024 and unit + 1 < units.len) : (unit += 1) value /= 1024;
+        if (unit == 0) return writer.print("{d} B", .{self.mBytes});
+        try writer.print("{d:.1} {s}", .{ value, units[unit] });
+    }
+};
 
 /// The Conflicts section: whether hooks would conflict if each system run's hooks ran in parallel (ConflictReport),
 /// with the checkbox that turns measuring on
@@ -144,7 +238,7 @@ fn SyncMeasuring(self: *StatsPanel, engine_context: *EngineContext) !void {
 /// The total and a line for each of the systems with the most hooks: how many of its hooks would conflict, how many
 /// would run on their own, and the type most of its conflicts were on
 fn SetConflicts(self: *StatsPanel, engine_context: *EngineContext, conflicts: *const ConflictReport) !void {
-    const scratch_allocator = engine_context.Scratch();
+    const scratch_allocator = engine_context.mEditorWorld.Scratch();
     var hooks: u64 = 0;
     var conflicting: u64 = 0;
     var serial: u64 = 0;
@@ -260,5 +354,5 @@ fn SetWorld(engine_context: *EngineContext, lines: WorldLines, stats: EngineStat
 
 /// Puts a formatted line on a label, if it doesn't say that already
 fn SetLine(engine_context: *EngineContext, label: Entity, comptime format: []const u8, args: anytype) !void {
-    try WidgetActions.SetText(engine_context, label, try std.fmt.allocPrint(engine_context.Scratch(), format, args));
+    try WidgetActions.SetText(engine_context, label, try std.fmt.allocPrint(engine_context.mEditorWorld.Scratch(), format, args));
 }

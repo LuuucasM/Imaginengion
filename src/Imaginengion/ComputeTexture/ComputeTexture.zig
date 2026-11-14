@@ -1,6 +1,7 @@
 const builtin = @import("builtin");
 const TextureFormat = @import("../ECSComponents/AComponents.zig").Texture2D.TextureFormat;
 const EngineContext = @import("../Core/EngineContext.zig");
+const GPUAllocator = @import("../Core/GPUAllocator.zig");
 
 pub fn ComputeStorageTexture(comptime format: TextureFormat) type {
     return struct {
@@ -17,16 +18,17 @@ pub fn ComputeStorageTexture(comptime format: TextureFormat) type {
             ._Impl = .empty,
         };
 
-        pub fn Init(self: *Self, engine_context: *EngineContext, width: usize, height: usize) !void {
-            try self._Impl.Init(engine_context, width, height);
+        pub fn Init(self: *Self, engine_context: *EngineContext, owner: GPUAllocator.Owner, width: usize, height: usize) !void {
+            try self._Impl.Init(engine_context, owner, width, height);
         }
 
         pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
             self._Impl.Deinit(engine_context);
         }
 
-        pub fn Resize(self: *Self, engine_context: *EngineContext, width: usize, height: usize) !void {
-            try self._Impl.Resize(engine_context, width, height);
+        /// `owner` is who the texture is for (GPUAllocator.Owner): the world of the player it draws
+        pub fn Resize(self: *Self, engine_context: *EngineContext, owner: GPUAllocator.Owner, width: usize, height: usize) !void {
+            try self._Impl.Resize(engine_context, owner, width, height);
         }
 
         pub fn Invalidate(self: *Self, engine_context: *EngineContext) !void {

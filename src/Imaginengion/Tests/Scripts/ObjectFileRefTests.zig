@@ -203,7 +203,7 @@ const TestWorld = struct {
     fn FileTile(self: *TestWorld, rel_path: []const u8) !Entity {
         const engine_context = self.mEngineContext;
         const tile = try self.mUIScene.CreateEntity(engine_context, Entity.DefaultConfig);
-        _ = try tile.AddComponent(engine_context, try FileRefComponent.Init(engine_context, rel_path, .Eng));
+        _ = try tile.AddComponent(engine_context, try FileRefComponent.Init(tile.Keep(), rel_path, .Eng));
         return tile;
     }
 

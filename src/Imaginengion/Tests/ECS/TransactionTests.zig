@@ -11,7 +11,7 @@ const Position = struct {
     pub const Name: []const u8 = "Position";
     pub const Ind: usize = ECS.BuiltinComponentCount;
     x: f32 = 0,
-    pub fn Deinit(_: *Position, _: *EngineContext) void {}
+    pub fn Deinit(_: *Position, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// Owns memory, so a transaction has to deep copy it, and free whichever copy loses
@@ -19,11 +19,11 @@ const Label = struct {
     pub const Name: []const u8 = "Label";
     pub const Ind: usize = ECS.BuiltinComponentCount + 1;
     mText: std.ArrayList(u8) = .empty,
-    pub fn Deinit(self: *Label, engine_context: *EngineContext) void {
-        self.mText.deinit(engine_context.Keep());
+    pub fn Deinit(self: *Label, _: *EngineContext, keep_allocator: std.mem.Allocator) void {
+        self.mText.deinit(keep_allocator);
     }
-    pub fn Clone(self: *const Label, engine_context: *EngineContext) !Label {
-        return .{ .mText = try self.mText.clone(engine_context.Keep()) };
+    pub fn Clone(self: *const Label, _: *EngineContext, keep_allocator: std.mem.Allocator) !Label {
+        return .{ .mText = try self.mText.clone(keep_allocator) };
     }
 };
 
@@ -31,7 +31,7 @@ const Label = struct {
 const Frozen = struct {
     pub const Name: []const u8 = "Frozen";
     pub const Ind: usize = ECS.BuiltinComponentCount + 2;
-    pub fn Deinit(_: *Frozen, _: *EngineContext) void {}
+    pub fn Deinit(_: *Frozen, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 const BodyECS = ECS.ECSManager(u32, &[_]type{ Position, Label, Frozen }, "TransactionBodyECS");

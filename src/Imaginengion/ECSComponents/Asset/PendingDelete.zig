@@ -12,4 +12,4 @@ mReason: u32 = 0,
 //when it was first marked, so the sweep can give the file a grace period to come back
 mTime: std.Io.Timestamp = .zero,
 
-pub fn Deinit(_: *PendingDelete, _: *EngineContext) void {}
+pub fn Deinit(_: *PendingDelete, _: *EngineContext, _: std.mem.Allocator) void {}

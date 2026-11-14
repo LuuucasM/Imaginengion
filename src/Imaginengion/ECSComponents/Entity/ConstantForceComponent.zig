@@ -20,7 +20,7 @@ mForce: Vec3(f32) = .{ .x = 0, .y = 0, .z = 0 },
 //body's world rotation at the start of each step
 mLocalForce: Vec3(f32) = .{ .x = 0, .y = 0, .z = 0 },
 
-pub fn Deinit(_: *ConstantForceComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *ConstantForceComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 pub fn UIRender(self: *ConstantForceComponent, ui: *Inspector.Builder) !void {
     try ui.Vec3Field(&self.mForce, "World Force", .{ .Speed = 0.1 });

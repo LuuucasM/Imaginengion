@@ -24,11 +24,11 @@ mMaterial: Material.SurfaceRenderMat = .default,
 mBorderWidth: f32 = 0,
 mBorderColor: Vec4(f32) = .{ .x = 0, .y = 0, .z = 0, .w = 1 },
 
-pub fn Deinit(self: *SurfaceComponent, _: *EngineContext) void {
+pub fn Deinit(self: *SurfaceComponent, _: *EngineContext, _: std.mem.Allocator) void {
     self.mTexture.ReleaseAsset();
 }
 
-pub fn Clone(self: *const SurfaceComponent, _: *EngineContext) !SurfaceComponent {
+pub fn Clone(self: *const SurfaceComponent, _: *EngineContext, _: std.mem.Allocator) !SurfaceComponent {
     var new_component = self.*;
 
     // the copy releases the texture itself, so it needs its own reference

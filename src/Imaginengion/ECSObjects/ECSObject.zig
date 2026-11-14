@@ -212,6 +212,24 @@ pub fn Core(comptime Self: type) type {
             return if (write) manager.GetComponentMut(component_type, self.mID) else manager.GetComponent(component_type, self.mID);
         }
 
+        /// The Keep of the ECS this object lives in: its world's for an Entity, GameContext, Player or Scene, the engine's
+        /// for the rest. What a component on it owns is taken from here, since that is what frees it (the component's Deinit)
+        pub fn Keep(self: Self) std.mem.Allocator {
+            const manager = if (Self == Entity)
+                &self.mManager.mEManager
+            else if (Self == GameContext)
+                &self.mManager.mGCManager
+            else if (Self == Player)
+                &self.mManager.mPManager
+            else if (Self == Scene)
+                &self.mManager.mSManager
+            else if (Self == Voice or Self == Bus or Self == UIElement)
+                self.mManager
+            else
+                @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
+            return manager.mECSManager.Keep();
+        }
+
         pub fn HasComponent(self: Self, comptime component_type: type) bool {
             _ValidateComponent(Self, component_type);
             if (Self == Entity) {
@@ -244,10 +262,10 @@ pub fn Core(comptime Self: type) type {
         }
 
         /// Renames the object. Nothing happens for one with no NameComponent
-        pub fn SetName(self: Self, engine_context: *EngineContext, name: []const u8) !void {
+        pub fn SetName(self: Self, _: *EngineContext, name: []const u8) !void {
             const name_component = GetComponentMut(self, NameComponent) orelse return;
             name_component.mName.clearRetainingCapacity();
-            try name_component.mName.appendSlice(engine_context.Keep(), name);
+            try name_component.mName.appendSlice(Keep(self), name);
         }
 
         /// Plays the object's AudioComponent from the start. Keep the returned voice to stop that one sound later, or
@@ -534,7 +552,7 @@ pub fn Core(comptime Self: type) type {
                     //whatever the target already has stays as it is
                     if (GetComponent(tmpl, component_type)) |tmpl_component| {
                         //a component that owns memory copies itself, anything else is a plain value copy (as DuplicateEntity does)
-                        const component = if (@hasDecl(component_type, "Clone")) try tmpl_component.Clone(engine_context) else tmpl_component.*;
+                        const component = if (@hasDecl(component_type, "Clone")) try tmpl_component.Clone(engine_context, Keep(target)) else tmpl_component.*;
                         const new_component = try AddComponent(target, engine_context, component);
                         //whatever a component hooks up when it is loaded from a file it hooks up here too, e.g. a scene's stack slot
                         if (@hasDecl(component_type, "PostParse")) try new_component.PostParse(engine_context, target);
@@ -552,7 +570,7 @@ pub fn Core(comptime Self: type) type {
                     const script = try AddScript(target, engine_context, script_handle);
                     //the copy starts with the template's variables, its object variables pointed at copies by _RemapRefs.
                     //Both looked up again now: adding the script can move the template's (a duplicate in the same world)
-                    try ScriptValues.CopyValues(engine_context, GetComponent(tmpl_script, ScriptComponent).?, GetComponentMut(script, ScriptComponent).?);
+                    try ScriptValues.CopyValues(Keep(script), GetComponent(tmpl_script, ScriptComponent).?, GetComponentMut(script, ScriptComponent).?);
                 }
             }
 

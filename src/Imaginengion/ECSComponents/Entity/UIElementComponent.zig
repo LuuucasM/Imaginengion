@@ -18,7 +18,7 @@ mElement: UIElement = .uninit,
 /// The element goes with the component, at the end of the frame. The ECS deinits a component however it goes: removed,
 /// its entity deleted (or a parent of it), or its whole world cleared, as stopping play does. Nothing else holds an
 /// element, so this is the only place one is let go of
-pub fn Deinit(self: *UIElementComponent, engine_context: *EngineContext) void {
+pub fn Deinit(self: *UIElementComponent, engine_context: *EngineContext, _: std.mem.Allocator) void {
     if (!self.mElement.IsActive()) return;
     self.mElement.Delete(engine_context) catch |err| {
         std.log.err("A UI element could not be deleted with its entity's UIElementComponent: {s}", .{@errorName(err)});
@@ -27,7 +27,7 @@ pub fn Deinit(self: *UIElementComponent, engine_context: *EngineContext) void {
 
 /// A copy gets an element of its own with the same settings. The UIManager tells it which entity it belongs to once
 /// the copy is on one (UIManager.Adopt)
-pub fn Clone(self: *const UIElementComponent, engine_context: *EngineContext) !UIElementComponent {
+pub fn Clone(self: *const UIElementComponent, engine_context: *EngineContext, _: std.mem.Allocator) !UIElementComponent {
     return .{ .mElement = try engine_context.mUIManager.CopyElement(engine_context, self.mElement) };
 }
 
@@ -62,6 +62,11 @@ pub fn jsonParse(scratch_allocator: std.mem.Allocator, source: anytype, options:
     const element = engine_context.mUIManager.NewElement(engine_context) catch return error.OutOfMemory;
     //a file that fails to read part way leaves no element behind that nothing would ever delete
     errdefer element.Delete(engine_context) catch {};
+
+    //its components go in UI land's ECS, so what they own is the engine's (JsonUtils.KeepFromAllocator)
+    const outer_keep = engine_context.mSerializer.mCurrDeserialize.keep;
+    engine_context.mSerializer.mCurrDeserialize.keep = engine_context.mUIManager.mECSManager.Keep();
+    defer engine_context.mSerializer.mCurrDeserialize.keep = outer_keep;
 
     if (.object_begin != try source.next()) return error.UnexpectedToken;
     while (true) {

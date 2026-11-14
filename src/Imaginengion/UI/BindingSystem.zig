@@ -120,7 +120,7 @@ pub const OnPointerEvent = struct {
 fn Write(self: *BindingSystem, engine_context: *EngineContext, binding: FieldBindingComponent, value: Inspector.Value) !void {
     const component = binding.mResolve(binding.mObject) orelse return;
     const field: *anyopaque = @ptrFromInt(@intFromPtr(component) + binding.mOffset);
-    try binding.mAccess.Write(engine_context, field, value);
+    try binding.mAccess.Write(engine_context, binding.mObject.Keep(), field, value);
 
     if (binding.mOnChange) |on_change| on_change(component);
     const reshaped = try binding.mAfterEdit(engine_context, binding.mObject);
@@ -231,7 +231,7 @@ fn ShowText(engine_context: *EngineContext, widget: Entity, text: []const u8) !v
     const label = if (widget.HasComponent(TextComponent)) widget else UIManager.LabelOf(widget) orelse return;
     const text_component = label.GetComponentMut(TextComponent).?;
     if (std.mem.eql(u8, text_component.mText.items, text)) return;
-    try text_component.SetText(engine_context, text);
+    try text_component.SetText(label.Keep(), text);
     try label.MarkLayoutDirty(engine_context);
 }
 

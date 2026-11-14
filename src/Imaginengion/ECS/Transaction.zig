@@ -115,11 +115,11 @@ pub const Key = struct {
 /// themselves, which a script DLL's copy of this code would have to compile, C calls in their Deinit and all
 pub const CopyFns = struct {
     /// A copy of the component in the arena given, deep for a type with a Clone
-    mClone: *const fn (engine_context: *EngineContext, arena: std.mem.Allocator, source: *const anyopaque) anyerror!*anyopaque,
+    mClone: *const fn (array: *anyopaque, engine_context: *EngineContext, arena: std.mem.Allocator, source: *const anyopaque) anyerror!*anyopaque,
     /// Puts a copy in place of the component in `array`, or deinitializes the copy if the component is gone by then
     mCommit: *const fn (array: *anyopaque, engine_context: *EngineContext, entity_id: u64, copy: *anyopaque) void,
     /// Deinitializes a copy that won't be put back
-    mDiscard: *const fn (engine_context: *EngineContext, copy: *anyopaque) void,
+    mDiscard: *const fn (array: *anyopaque, engine_context: *EngineContext, copy: *anyopaque) void,
 };
 
 const Entry = struct {
@@ -274,7 +274,7 @@ pub fn Copy(self: *Transaction, key: Key, source: *const anyopaque, fns: CopyFns
     var arena = self.mArena.promote(keep_allocator);
     defer self.mArena = arena.state;
     // a component that owns memory copies itself, so the copy can change it without touching the original's
-    const copy = try fns.mClone(engine_context, arena.allocator(), source);
+    const copy = try fns.mClone(key.mArray, engine_context, arena.allocator(), source);
 
     self.mLookup.putAssumeCapacity(key, self.mEntries.items.len);
     self.mEntries.appendAssumeCapacity(.{ .mKey = key, .mCopy = copy, .mFns = fns });
@@ -506,7 +506,7 @@ pub fn Discard(self: *Transaction, engine_context: *EngineContext) void {
         op.mDrop(op.mECS, engine_context, op);
     }
 
-    for (self.mEntries.items) |entry| entry.mFns.mDiscard(engine_context, entry.mCopy);
+    for (self.mEntries.items) |entry| entry.mFns.mDiscard(entry.mKey.mArray, engine_context, entry.mCopy);
     self._Reset(engine_context.Keep());
 }
 

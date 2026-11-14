@@ -216,7 +216,7 @@ pub fn Toggle(self: ContentBrowserPanel, engine_context: *EngineContext) !void {
 
 /// Shows `root`'s files, from its top: the project just opened or made
 pub fn SetRoot(self: *ContentBrowserPanel, engine_context: *EngineContext, root: []const u8) !void {
-    const keep_allocator = engine_context.Keep();
+    const keep_allocator = engine_context.mEditorWorld.Keep();
     self.mRoot.clearRetainingCapacity();
     try self.mRoot.appendSlice(keep_allocator, root);
     self.mPath.clearRetainingCapacity();
@@ -272,7 +272,7 @@ pub fn Update(self: *ContentBrowserPanel, engine_context: *EngineContext) !void 
     const listing = ListFolder(engine_context, self.mPath.items) catch |err| {
         //gone from disk, or can't be read: back to the top of the project
         std.log.warn("The content browser can't show {s} ({s})", .{ self.mPath.items, @errorName(err) });
-        return try self.GoToRoot(engine_context.Keep());
+        return try self.GoToRoot(engine_context.mEditorWorld.Keep());
     };
     try ShowLine(engine_context, self.mMessage, "");
 
@@ -331,7 +331,7 @@ pub fn Run(self: *ContentBrowserPanel, engine_context: *EngineContext, action: A
             const top = self.Top();
             if (self.mPath.items.len <= top.len) {
                 //out of the engine's assets, back to the project they were entered from
-                if (self.mInEngine) try self.GoToRoot(engine_context.Keep());
+                if (self.mInEngine) try self.GoToRoot(engine_context.mEditorWorld.Keep());
                 return;
             }
             const last_slash = std.mem.lastIndexOfAny(u8, self.mPath.items, "/\\") orelse return;
@@ -339,28 +339,28 @@ pub fn Run(self: *ContentBrowserPanel, engine_context: *EngineContext, action: A
         },
         .Enter => |index| {
             const name = self.NameOf(index);
-            try self.mPath.print(engine_context.Keep(), "/{s}", .{name});
+            try self.mPath.print(engine_context.mEditorWorld.Keep(), "/{s}", .{name});
         },
         .EnterEngineAssets => {
             self.mInEngine = true;
             self.mPath.clearRetainingCapacity();
-            try self.mPath.appendSlice(engine_context.Keep(), self.mEngineRoot.items);
+            try self.mPath.appendSlice(engine_context.mEditorWorld.Keep(), self.mEngineRoot.items);
         },
         .Open => |index| {
-            const rel_path = try self.RelPath(engine_context.Scratch(), self.NameOf(index));
+            const rel_path = try self.RelPath(engine_context.mEditorWorld.Scratch(), self.NameOf(index));
             const tmpl = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = self.CurrentPathType() } });
             try engine_context.mEditorEventManager.Insert(engine_context.Keep(), .EndOfFrame, .{ .OpenTmplEvent = .{ .mTmpl = tmpl } });
         },
         .NewScene => {},
         .NewScript => |index| {
             if (self.mPath.items.len == 0) return;
-            const abs_path = try PlatformUtils.SaveFile(engine_context.Scratch(), ".zig", self.mPath.items);
+            const abs_path = try PlatformUtils.SaveFile(engine_context.mEditorWorld.Scratch(), ".zig", self.mPath.items);
             if (abs_path.len == 0) return;
             try std.Io.Dir.cwd().writeFile(engine_context.Io(), .{ .sub_path = abs_path, .data = SCRIPT_TEMPLATES[index].Text });
         },
         .NewEnum => {
             if (self.mPath.items.len == 0) return;
-            const scratch_allocator = engine_context.Scratch();
+            const scratch_allocator = engine_context.mEditorWorld.Scratch();
             const abs_path = try PlatformUtils.SaveFile(scratch_allocator, ".zig", self.mPath.items);
             if (abs_path.len == 0) return;
             const text = try EnumFileText(scratch_allocator, std.fs.path.stem(abs_path));
@@ -392,7 +392,7 @@ fn RelPath(self: ContentBrowserPanel, scratch_allocator: std.mem.Allocator, name
 
 /// The folder's folders and the files the editor uses, folders first and then files, each by name
 fn ListFolder(engine_context: *EngineContext, path: []const u8) ![]Listed {
-    const scratch_allocator = engine_context.Scratch();
+    const scratch_allocator = engine_context.mEditorWorld.Scratch();
     const io = engine_context.Io();
     var dir = try std.Io.Dir.openDirAbsolute(io, path, .{ .iterate = true });
     defer dir.close(io);
@@ -432,7 +432,7 @@ fn KindOf(name: []const u8) ?Kind {
 fn Rebuild(self: *ContentBrowserPanel, engine_context: *EngineContext, listing: []const Listed) !void {
     const zone = Tracy.ZoneInit("ContentBrowserPanel::Rebuild", @src());
     defer zone.Deinit();
-    const keep_allocator = engine_context.Keep();
+    const keep_allocator = engine_context.mEditorWorld.Keep();
     if (self.mGrid) |grid| try Widgets.Remove(engine_context, grid, &.{});
     self.mGrid = null;
     self.mTiles.clearRetainingCapacity();
@@ -453,15 +453,15 @@ fn Rebuild(self: *ContentBrowserPanel, engine_context: *EngineContext, listing: 
 }
 
 fn AddTile(self: *ContentBrowserPanel, engine_context: *EngineContext, grid: Entity, kind: Kind, name: []const u8) !void {
-    const keep_allocator = engine_context.Keep();
-    const shown = try ShortName(engine_context.Scratch(), name);
+    const keep_allocator = engine_context.mEditorWorld.Keep();
+    const shown = try ShortName(engine_context.mEditorWorld.Scratch(), name);
     const tile = try Widgets.Tile(engine_context, .{ .Entity = grid }, self.mIcons.Of(kind), shown, TILE_WIDTH);
     switch (kind) {
         .Back, .Folder, .EngineAssets => {},
         //a file can be dragged, carrying which file it is
         .Texture, .Object, .Script, .Audio, .Font, .Theme => {
             _ = try tile.AddComponent(engine_context, DragSourceComponent{});
-            _ = try tile.AddComponent(engine_context, try FileRefComponent.Init(engine_context, try self.RelPath(engine_context.Scratch(), name), self.CurrentPathType()));
+            _ = try tile.AddComponent(engine_context, try FileRefComponent.Init(tile.Keep(), try self.RelPath(engine_context.mEditorWorld.Scratch(), name), self.CurrentPathType()));
         },
     }
     try self.mTiles.append(keep_allocator, .{ .Entity = tile, .Kind = kind, .NameStart = self.mNames.items.len, .NameLen = name.len });

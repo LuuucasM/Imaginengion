@@ -50,7 +50,7 @@ pub fn Build(engine_context: *EngineContext, scene: Scene) !SaveNotice {
 
 /// Shows `format` filled with `args`, fully, starting its time again
 pub fn Show(self: *SaveNotice, engine_context: *EngineContext, comptime format: []const u8, args: anytype) !void {
-    try WidgetActions.SetText(engine_context, self.mLabel, try std.fmt.allocPrint(engine_context.Scratch(), format, args));
+    try WidgetActions.SetText(engine_context, self.mLabel, try std.fmt.allocPrint(engine_context.mEditorWorld.Scratch(), format, args));
     try self.SetShown(engine_context, true);
     self.mTimeLeft = HOLD_TIME + FADE_TIME;
 }

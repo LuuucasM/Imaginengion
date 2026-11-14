@@ -178,7 +178,7 @@ pub fn AddQuad(engine_context: *EngineContext, entity: Entity, quad: ShapeCompon
 pub fn Label(engine_context: *EngineContext, parent: Parent, text: []const u8) !Entity {
     const entity = try NewEntity(engine_context, parent);
     var text_component = TextComponent{ .mFontSize = TEXT_SIZE };
-    try text_component.SetText(engine_context, text);
+    try text_component.SetText(entity.Keep(), text);
     _ = try entity.AddComponent(engine_context, text_component);
     _ = try entity.AddComponent(engine_context, SurfaceComponent{});
     _ = try entity.AddComponent(engine_context, LayoutItemComponent{});
@@ -291,7 +291,7 @@ pub fn Lines(engine_context: *EngineContext, parent: Parent) !Entity {
 pub fn SyncLines(engine_context: *EngineContext, column: Entity, lines: []const []const u8) !void {
     var labels: std.ArrayList(Entity) = .empty;
     var children = column.GetIterator(.Child);
-    while (children.next()) |child| try labels.append(engine_context.Scratch(), child);
+    while (children.next()) |child| try labels.append(column.mManager.Scratch(), child);
 
     for (lines, 0..) |line, i| {
         if (i < labels.items.len) {
@@ -645,7 +645,7 @@ pub fn ScrollingMenu(engine_context: *EngineContext, menu: Entity, rows: usize) 
 pub fn Remove(engine_context: *EngineContext, entity: Entity, keep: []const Entity) !void {
     if (!entity.IsActive()) return;
     var popups: std.ArrayList(Entity) = .empty;
-    try PopupsIn(engine_context.Scratch(), entity, keep, &popups);
+    try PopupsIn(entity.mManager.Scratch(), entity, keep, &popups);
     try entity.Delete(engine_context);
     for (popups.items) |popup| try popup.Delete(engine_context);
 }

@@ -215,7 +215,7 @@ pub fn Read(engine_context: *EngineContext, script: anytype, values: std.json.Va
             },
             inline .Entity, .Scene, .Player, .GameContext => |kind| {
                 const uuid = UUIDOf(value) orelse continue;
-                try component.SetLink(engine_context, field.Name(), uuid);
+                try component.SetLink(script.Keep(), field.Name(), uuid);
                 At(kind.ObjectType(), data, field).* = ObjectLink.Waiting(kind.ObjectType(), script.mManager);
             },
             inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| {
@@ -234,13 +234,13 @@ pub fn Read(engine_context: *EngineContext, script: anytype, values: std.json.Va
 }
 
 /// Links every waiting object variable of every script in `world` whose object is loaded now, see ObjectLink.Relink
-pub fn Relink(engine_context: *EngineContext, world: *WorldManager) !void {
+pub fn Relink(_: *EngineContext, world: *WorldManager) !void {
     const zone = Tracy.ZoneInit("ScriptValues::Relink", @src());
     defer zone.Deinit();
 
     inline for (.{ Entity, Scene, Player, GameContext }) |ObjectType| {
         const manager = world.GetManager(ObjectType);
-        const script_ids = try manager.GetGroup(engine_context.Scratch(), GroupQuery{ .Component = ScriptComponent });
+        const script_ids = try manager.GetGroup(world.Scratch(), GroupQuery{ .Component = ScriptComponent });
         for (script_ids.items) |script_id| {
             const component = manager.GetComponent(ScriptComponent, script_id) orelse continue;
             if (component.mLinks.items.len == 0) continue;
@@ -258,7 +258,7 @@ pub fn Relink(engine_context: *EngineContext, world: *WorldManager) !void {
 }
 
 /// Makes what `script`'s object variables want match what they point at, after one is edited, see ObjectLink.WantedNow
-pub fn SyncLinks(engine_context: *EngineContext, script: anytype) !void {
+pub fn SyncLinks(script: anytype) !void {
     const component = script.GetComponentMut(ScriptComponent) orelse return;
     const instance = InstanceOf(component) orelse return;
     for (instance.mInfo.Fields()) |field| {
@@ -266,7 +266,7 @@ pub fn SyncLinks(engine_context: *EngineContext, script: anytype) !void {
             inline .Entity, .Scene, .Player, .GameContext => |kind| {
                 const object = At(kind.ObjectType(), instance.mData, field).*;
                 if (ObjectLink.WantedNow(object, component.GetLink(field.Name()))) |uuid| {
-                    try component.SetLink(engine_context, field.Name(), uuid);
+                    try component.SetLink(script.Keep(), field.Name(), uuid);
                 } else {
                     component.RemoveLink(field.Name());
                 }
@@ -301,7 +301,8 @@ fn ResolveRef(requester: Serializer.Requester, uuid: u64, field_index: u32) bool
 
 /// Gives the script child `to` the variables of `from`, which runs the same script: a copy of an object starting as
 /// its template is (ECSObject.Core._CopyObject). Its object variables still point where `from`'s do, see RemapRefs
-pub fn CopyValues(engine_context: *EngineContext, from: *const ScriptComponent, to: *ScriptComponent) !void {
+/// `keep_allocator` is the Keep of the script `to` is on, which frees what it is given
+pub fn CopyValues(keep_allocator: std.mem.Allocator, from: *const ScriptComponent, to: *ScriptComponent) !void {
     const source = InstanceOf(from) orelse return;
     const dest = InstanceOf(to) orelse return;
     if (source.mInfo != dest.mInfo) return;
@@ -309,7 +310,7 @@ pub fn CopyValues(engine_context: *EngineContext, from: *const ScriptComponent, 
     ReleaseRefs(dest);
     @memcpy(@as([*]u8, @ptrCast(dest.mData))[0..size], @as([*]const u8, @ptrCast(source.mData))[0..size]);
     RetainRefs(dest);
-    try to.CopyLinks(engine_context, from);
+    try to.CopyLinks(keep_allocator, from);
 }
 
 /// Has `instance`'s variables put back as they are now if `transaction` is dropped: run before a hook, so one that fails
@@ -523,8 +524,8 @@ fn ResolveFor(comptime object_type: type) *const fn (Inspector.ObjectRef) ?*anyo
 /// A script's variables only matter to the script, all that has to catch up when one is edited is what it wants
 fn AfterEditFor(comptime object_type: type) *const fn (*EngineContext, Inspector.ObjectRef) anyerror!bool {
     return &struct {
-        fn AfterEdit(engine_context: *EngineContext, object: Inspector.ObjectRef) anyerror!bool {
-            try SyncLinks(engine_context, @field(object, @tagName(ScriptABI.OwnerKind.Of(object_type))));
+        fn AfterEdit(_: *EngineContext, object: Inspector.ObjectRef) anyerror!bool {
+            try SyncLinks(@field(object, @tagName(ScriptABI.OwnerKind.Of(object_type))));
             return false;
         }
     }.AfterEdit;
@@ -547,7 +548,7 @@ fn EnumAccessOf(comptime Int: type) *const Inspector.Access {
             return .{ .Choice = @as(*Int, @ptrCast(@alignCast(field))).* };
         }
 
-        fn WriteChoice(_: *EngineContext, field: *anyopaque, written: Inspector.Value) anyerror!void {
+        fn WriteChoice(_: *EngineContext, _: std.mem.Allocator, field: *anyopaque, written: Inspector.Value) anyerror!void {
             if (written != .Choice) return;
             @as(*Int, @ptrCast(@alignCast(field))).* = @intCast(written.Choice);
         }

@@ -7,4 +7,4 @@ pub const Name: []const u8 = "GenMetaData";
 
 mLastModified: i128 = 0,
 
-pub fn Deinit(_: *GenMetaData, _: *EngineContext) void {}
+pub fn Deinit(_: *GenMetaData, _: *EngineContext, _: std.mem.Allocator) void {}

@@ -15,12 +15,12 @@ pub const Addable: bool = false;
 /// type of object that holds this. See ECSObject.Core.Fill
 mTmpl: AssetHandle = .uninit,
 
-pub fn Deinit(self: *TmplRefComponent, _: *EngineContext) void {
+pub fn Deinit(self: *TmplRefComponent, _: *EngineContext, _: std.mem.Allocator) void {
     self.mTmpl.ReleaseAsset();
 }
 
 /// The copy releases the handle itself, so it needs its own reference
-pub fn Clone(self: *const TmplRefComponent, _: *EngineContext) !TmplRefComponent {
+pub fn Clone(self: *const TmplRefComponent, _: *EngineContext, _: std.mem.Allocator) !TmplRefComponent {
     self.mTmpl.RetainAsset();
     return self.*;
 }

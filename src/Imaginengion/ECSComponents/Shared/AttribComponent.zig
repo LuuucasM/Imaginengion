@@ -47,7 +47,7 @@ mData: ValueTypes = .default,
 pub const Editable: bool = true;
 pub const Name: []const u8 = "AttribComponent";
 
-pub fn Deinit(_: *AttribComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *AttribComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 pub fn UIRender(self: *AttribComponent, ui: *Inspector.Builder) !void {
     try ui.Union(&self.mData, "Value", .{});

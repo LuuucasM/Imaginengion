@@ -99,7 +99,7 @@ pub fn Update(self: *const PickingDebugPanel, engine_context: *EngineContext, ed
     const zone = Tracy.ZoneInit("PickingDebugPanel::Update", @src());
     defer zone.Deinit();
     if (!self.IsOpen()) return;
-    const scratch_allocator = engine_context.Scratch();
+    const scratch_allocator = engine_context.mEditorWorld.Scratch();
     const mouse_pos = engine_context.mInputManager.GetMousePosition();
 
     if (self.mWindowSection.IsOpen()) {
@@ -198,7 +198,7 @@ fn ViewLines(_: *const PickingDebugPanel, engine_context: *EngineContext, editor
         .Simulate => &engine_context.mSimulateWorld,
     };
     //the overlays this view shows, as the renderer drew it
-    const view_scenes = try editor_program.ViewScenesFor(engine_context.Scratch(), view.Camera, world);
+    const view_scenes = try editor_program.ViewScenesFor(engine_context.mEditorWorld.Scratch(), view.Camera, world);
 
     //exactly what a left click here would do
     try cast_lines.Add("A click here selects:", .{});

@@ -1,3 +1,4 @@
+const std = @import("std");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
@@ -7,7 +8,7 @@ pub const Name: []const u8 = "PossessComponent";
 
 mPossessedEntity: Entity = .uninit,
 
-pub fn Deinit(_: *PossessComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *PossessComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 //only that the player can possess is saved, what it possesses is decided at runtime
 const Json = JsonUtils.JsonFields(PossessComponent, .{});

@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ObjectRef = @import("../Entity/ObjectRefComponent.zig").Ref;
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
@@ -41,4 +42,4 @@ mLastPitch: f32 = 1.0,
 /// had when it started
 mBusID: Bus.Type = Bus.NullObject,
 
-pub fn Deinit(_: *VoiceComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *VoiceComponent, _: *EngineContext, _: std.mem.Allocator) void {}

@@ -187,7 +187,7 @@ pub const Anchoring = struct {
             }
         }.Read,
         .Write = struct {
-            fn Write(_: *EngineContext, field: *anyopaque, written: Inspector.Value) anyerror!void {
+            fn Write(_: *EngineContext, _: std.mem.Allocator, field: *anyopaque, written: Inspector.Value) anyerror!void {
                 if (written.Choice >= PIN_POINTS.len) return;
                 const anchoring: *Anchoring = @ptrCast(@alignCast(field));
                 anchoring.Anchor = PIN_POINTS[written.Choice];

@@ -22,7 +22,7 @@ fn OnRefEdited(component: *anyopaque) void {
     self.mWantedUUID = ObjectLink.WantedNow(self.mEntityRef, self.mWantedUUID);
 }
 
-pub fn Deinit(_: *SpawnPossComponent, _: *EngineContext) void {
+pub fn Deinit(_: *SpawnPossComponent, _: *EngineContext, _: std.mem.Allocator) void {
     //deinit stuff
 }
 

@@ -55,7 +55,9 @@ pub fn SetSyncCallback(self: *PhysicsManager, ctx: anytype, comptime handler: an
 /// Hands the events queued in a category to the caller's listeners, then empties it
 pub fn ProcessEvents(self: *PhysicsManager, comptime event_category: EventData.EventCategories, engine_context: *EngineContext, callback_list: *std.DoublyLinkedList) !void {
     try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
-    self.mEventManager.ClearCategory(engine_context.Keep(), event_category, .ClearRetainingCapacity);
+    //this manager is always its world's mPhysicsManager
+    const world: *WorldManager = @alignCast(@fieldParentPtr("mPhysicsManager", self));
+    self.mEventManager.ClearCategory(world.Keep(), event_category, .ClearRetainingCapacity);
 }
 
 /// Pauses or carries on the world's physics, e.g. from a pause menu's script. While paused there are no physics steps:

@@ -58,6 +58,7 @@ pub const GetComponent = Core.GetComponent;
 pub const GetComponentMut = Core.GetComponentMut;
 
 pub const HasComponent = Core.HasComponent;
+pub const Keep = Core.Keep;
 
 pub const GetName = Core.GetName;
 pub const SetName = Core.SetName;

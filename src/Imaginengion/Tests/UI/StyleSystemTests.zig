@@ -63,7 +63,7 @@ const TestWorld = struct {
 
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
-        self.mTheme.Deinit(engine_context);
+        self.mTheme.Deinit(engine_context, engine_context.Keep());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
         _ = engine_context._Internal.KeepHeap.deinit();
@@ -388,7 +388,7 @@ test "the engine's default theme reads, with every style the editor's look needs
     //every label's style names a font: text with none takes up no room and draws nothing
     try std.testing.expect(theme.GetStyle("Text").?.Font.IsIDValid());
     try std.testing.expect(theme.GetStyle("TextDim").?.Font.IsIDValid());
-    theme.Deinit(engine_context);
+    theme.Deinit(engine_context, engine_context.Keep());
 
     //the asset manager, minus the default assets Init never set up and the working directory handle it does not own
     const asset_manager = &engine_context.mAssetManager;
@@ -417,7 +417,7 @@ test "a style names a theme file of its own, and is taken out of it instead of t
     var editor_theme = ThemeAsset{};
     try editor_theme.FromJson(engine_context, THEME);
     defer {
-        editor_theme.Deinit(engine_context);
+        editor_theme.Deinit(engine_context, engine_context.Keep());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
         const asset_manager = &engine_context.mAssetManager;

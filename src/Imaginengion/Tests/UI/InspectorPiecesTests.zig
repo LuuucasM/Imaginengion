@@ -240,11 +240,11 @@ test "an asset field shows its asset's name, and takes a dropped file of a kind 
     //something carrying a file: a script isn't taken, a picture dropped on the box is
     const drop_target = box.GetComponent(EntityComponents.DropTargetComponent).?.*;
     const carried = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try carried.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "Mover.zig", .Prj));
+    _ = try carried.AddComponent(engine_context, try FileRefComponent.Init(carried.Keep(), "Mover.zig", .Prj));
     try std.testing.expect(!PointerSystem.Takes(drop_target, carried));
 
     const picture = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try picture.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "src/Imaginengion/EngineAssets/textures/White.png", .Eng));
+    _ = try picture.AddComponent(engine_context, try FileRefComponent.Init(picture.Keep(), "src/Imaginengion/EngineAssets/textures/White.png", .Eng));
     try std.testing.expect(PointerSystem.Takes(drop_target, picture));
     try engine_context.mUIManager.OnPointerEvent(engine_context, .{ .mEntity = box, .mEvent = .{ .PointerDropped = .{ .mSource = picture, .mPosition = .{ .x = 0, .y = 0, .z = 0 } } } });
     const texture = world.mObject.GetComponent(SurfaceComponent).?.mTexture;
@@ -303,7 +303,7 @@ const PAST_THE_END = Inspector.Access{
         }
     }.Read,
     .Write = struct {
-        fn Write(_: *EngineContext, _: *anyopaque, _: Inspector.Value) anyerror!void {}
+        fn Write(_: *EngineContext, _: std.mem.Allocator, _: *anyopaque, _: Inspector.Value) anyerror!void {}
     }.Write,
 };
 

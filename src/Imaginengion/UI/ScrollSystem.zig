@@ -185,7 +185,7 @@ fn ThumbEntity(engine_context: *EngineContext, region: Entity, thumb_slot: *?Ent
     const thumb = try region.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     if (thumb.GetComponentMut(NameComponent)) |name| {
         name.mName.clearRetainingCapacity();
-        try name.mName.appendSlice(engine_context.Keep(), "Scrollbar");
+        try name.mName.appendSlice(thumb.Keep(), "Scrollbar");
     }
     try Widgets.AddQuad(engine_context, thumb, .{}, .{});
     //its colors, including when it is hovered and dragged, are the theme's

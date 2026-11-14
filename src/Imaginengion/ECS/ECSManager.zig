@@ -94,11 +94,18 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         /// thread (Transactions.Current), components are read and changed through it, see Transaction
         mTransactions: ?*const Transactions,
 
+        /// `keep_allocator` is the Keep of whoever owns this ECS (the engine, or one world): its storage, its queues, and the
+        /// memory every component in it owns (handed to the component's Deinit and Clone)
         pub fn Init(self: *Self, keep_allocator: std.mem.Allocator) !void {
             _ValidateCompList(components_types);
             const zone = Tracy.ZoneInit(debug_name ++ "::Init", @src());
             defer zone.Deinit();
             try self.mComponentManager.Init(keep_allocator);
+        }
+
+        /// The Keep given to Init
+        pub fn Keep(self: Self) std.mem.Allocator {
+            return self.mComponentManager.mKeep;
         }
 
         pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
@@ -107,9 +114,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             // staged components go first: like any component, their Deinit can reach into the arrays
             self._DeinitStagedAdds(engine_context);
             self.mComponentManager.Deinit(engine_context);
-            self.mECSEventManager.Deinit(engine_context.Keep());
-            self.mStagingArena.promote(engine_context.Keep()).deinit();
-            self.mStaged.deinit(engine_context.Keep());
+            self.mECSEventManager.Deinit(self.Keep());
+            self.mStagingArena.promote(self.Keep()).deinit();
+            self.mStaged.deinit(self.Keep());
         }
 
         pub fn SetRemovalHook(self: *Self, hook: RemovalHook) void {
@@ -128,8 +135,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             self._DeinitStagedAdds(engine_context);
             self.mComponentManager.clearAndFree(engine_context);
             // pending events refer to entities that no longer exist
-            self.mECSEventManager.EventsReset(engine_context.Keep(), .ClearAndFree);
-            self._ResetStagingArena(engine_context.Keep());
+            self.mECSEventManager.EventsReset(self.Keep(), .ClearAndFree);
+            self._ResetStagingArena(self.Keep());
             self.mNextID = 0;
         }
 
@@ -150,7 +157,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
 
             // queued events name entities by id, which the copy shares, so they carry over as they are. Except that
             // a queued add also points into this ECS's staging arena, so each one is given a clone of its own there
-            try self.mECSEventManager.CopyInto(engine_context.Keep(), &other.mECSEventManager);
+            try self.mECSEventManager.CopyInto(other.Keep(), &other.mECSEventManager);
             try other._CloneCopiedAdds(engine_context, self);
 
             other.mNextID = self.mNextID;
@@ -211,7 +218,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             std.debug.assert(self.IsActiveEntity(entity_id));
             if (self._OpenTransaction()) |transaction| return try self._Hold(transaction, self._HeldOp(.Destroy, entity_id, 0));
             if (self._Queues()) {
-                try self._Enqueue(engine_context.Keep(), .{ .DestroyEntity = .{ .mEntityID = entity_id } });
+                try self._Enqueue(self.Keep(), .{ .DestroyEntity = .{ .mEntityID = entity_id } });
                 return;
             }
             try self._DestroyNow(engine_context, entity_id);
@@ -230,7 +237,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             const zone = Tracy.ZoneInit(debug_name ++ "::DuplicateEntity", @src());
             defer zone.Deinit();
 
-            const keep_allocator = engine_context.Keep();
+            const keep_allocator = self.Keep();
             const child_type: ChildType = if (self.HasComponent(ScriptTagComponent, original_entity_id)) .Script else .Entity;
 
             const new_entity_id = if (self.GetComponent(ChildComponent, original_entity_id)) |child_component|
@@ -279,7 +286,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
 
         // stages a copy of one entity's components and subtree onto another, already created, entity
         fn _InternalDuplicateInto(self: *Self, engine_context: *EngineContext, original_entity_id: entity_t, new_entity_id: entity_t, queued_adds: []const QueuedAdd) anyerror!void {
-            const keep_allocator = engine_context.Keep();
+            const keep_allocator = self.Keep();
 
             // iterated from a copy, since nothing here needs the original's own one
             var original_skipfield = self.GetComponent(SkipFieldComponent, original_entity_id).?.mSkipField;
@@ -325,9 +332,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             }
             if (self.mComponentManager.IsTag(component_ind) or !self._Queues()) {
                 self._CheckStorageChange(component_ind, "Adding");
-                try self.mComponentManager.AddStaged(engine_context.Keep(), new_entity_id, component_ind, staged_component);
+                try self.mComponentManager.AddStaged(self.Keep(), new_entity_id, component_ind, staged_component);
             } else {
-                try self._QueueStagedAdd(engine_context.Keep(), new_entity_id, component_ind, staged_component);
+                try self._QueueStagedAdd(self.Keep(), new_entity_id, component_ind, staged_component);
             }
         }
 
@@ -486,7 +493,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             const zone = Tracy.ZoneInit(debug_name ++ "::AddChild", @src());
             defer zone.Deinit();
 
-            const keep_allocator = engine_context.Keep();
+            const keep_allocator = self.Keep();
             const new_entity_id = switch (child_type) {
                 .Entity => try self.CreateEntity(keep_allocator),
                 .Script => try self.CreateScript(keep_allocator),
@@ -760,7 +767,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         }
 
         fn _ApplyHeldOrFail(self: *Self, engine_context: *EngineContext, op: *Transaction.Op) !void {
-            const keep_allocator = engine_context.Keep();
+            const keep_allocator = self.Keep();
             const id: entity_t = @intCast(op.mEntityID);
             switch (op.mKind) {
                 .Add => {
@@ -859,7 +866,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             // when the add lands instead, since a queued removal of it may land first
             std.debug.assert(self._GetStaged(entity_id, ComponentInd(component_t)) == null);
 
-            const keep_allocator = engine_context.Keep();
+            const keep_allocator = self.Keep();
 
             var staging_arena = self.mStagingArena.promote(keep_allocator);
             defer self.mStagingArena = staging_arena.state;
@@ -939,7 +946,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             }
 
             self._CheckStorageChange(ComponentInd(component_t), "Adding");
-            const component_ptr = try self.mComponentManager.AddComponent(engine_context.Keep(), entity_id, new_component);
+            const component_ptr = try self.mComponentManager.AddComponent(self.Keep(), entity_id, new_component);
 
             _ = try self.mECSEventManager.Dispatch(engine_context, .{ .AddComponent = .{
                 .mEntityID = entity_id,
@@ -962,7 +969,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                 return try self._Hold(transaction, self._HeldOp(.Remove, entity_id, component_ind));
             }
             if (self.mComponentManager.IsTag(component_ind) or !self._Queues()) return try self._RemoveNow(engine_context, entity_id, component_ind);
-            try self._Enqueue(engine_context.Keep(), .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
+            try self._Enqueue(self.Keep(), .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
         }
 
         /// RemoveComponent made right away even during a run. Only where nothing holds a pointer into that
@@ -1138,10 +1145,10 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             }
             zone.Value(event_ind);
 
-            self.mECSEventManager.ClearCategory(engine_context.Keep(), .EndOfFrame, .ClearRetainingCapacity);
+            self.mECSEventManager.ClearCategory(self.Keep(), .EndOfFrame, .ClearRetainingCapacity);
             // every staged component has now been copied onto its entity or deinitialized with it
             std.debug.assert(self.mStaged.count() == 0);
-            self._ResetStagingArena(engine_context.Keep());
+            self._ResetStagingArena(self.Keep());
         }
 
         /// Applies a queued AddComponent. One taken back off the stage (RemoveComponentSync) is skipped, its
@@ -1161,7 +1168,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             const zone = Tracy.ZoneInit(debug_name ++ "::_InternalAddComponent", @src());
             defer zone.Deinit();
 
-            try self.mComponentManager.AddStaged(engine_context.Keep(), entity_id, component_ind, staged);
+            try self.mComponentManager.AddStaged(self.Keep(), entity_id, component_ind, staged);
         }
 
         // deinitializes every component still staged, for when the queue is dropped unprocessed
@@ -1178,7 +1185,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         // isn't listed here, so it is skipped and never read. On failure the clones made so far are listed, which is
         // all Copy's clearAndFree needs to free them
         fn _CloneCopiedAdds(self: *Self, engine_context: *EngineContext, source: *const Self) !void {
-            const keep_allocator = engine_context.Keep();
+            const keep_allocator = self.Keep();
             var staging_arena = self.mStagingArena.promote(keep_allocator);
             defer self.mStagingArena = staging_arena.state;
 
@@ -1323,8 +1330,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                     }
 
                     const fn_info = deinit_info.@"fn";
-                    if (fn_info.param_types.len != 2) {
-                        @compileError(type_name ++ "'s Deinit must have 2 parameters");
+                    if (fn_info.param_types.len != 3) {
+                        @compileError(type_name ++ "'s Deinit must have 3 parameters");
                     }
 
                     const first_param = fn_info.param_types[0].?;
@@ -1335,6 +1342,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                     const second_param = fn_info.param_types[1].?;
                     if (second_param != *EngineContext) {
                         @compileError(type_name ++ "'s Deinit's second parameter must be *EngineContext currently " ++ @typeName(second_param));
+                    }
+
+                    //the ECS's own Keep (Init), which whatever the component owns was taken from
+                    if (fn_info.param_types[2].? != std.mem.Allocator) {
+                        @compileError(type_name ++ "'s Deinit's third parameter must be std.mem.Allocator");
                     }
 
                     const return_type = fn_info.return_type.?;
@@ -1352,8 +1364,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                     }
 
                     const fn_info = clone_info.@"fn";
-                    if (fn_info.param_types.len != 2) {
-                        @compileError(type_name ++ "'s Clone must have 2 parameters");
+                    if (fn_info.param_types.len != 3) {
+                        @compileError(type_name ++ "'s Clone must have 3 parameters");
                     }
 
                     const first_param = fn_info.param_types[0].?;
@@ -1364,6 +1376,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                     const second_param = fn_info.param_types[1].?;
                     if (second_param != *EngineContext) {
                         @compileError(type_name ++ "'s Clone's second parameter must be *EngineContext currently " ++ @typeName(second_param));
+                    }
+
+                    //the Keep of the ECS the copy is going into
+                    if (fn_info.param_types[2].? != std.mem.Allocator) {
+                        @compileError(type_name ++ "'s Clone's third parameter must be std.mem.Allocator");
                     }
 
                     const return_type_info = @typeInfo(fn_info.return_type.?);

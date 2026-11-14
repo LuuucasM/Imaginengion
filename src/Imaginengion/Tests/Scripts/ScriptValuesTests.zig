@@ -260,7 +260,7 @@ test "a variable whose object isn't loaded saves what it wants, however many tim
     try std.testing.expectEqual(@as(?u64, 123456), try SavedTarget(script));
     //editing another variable changes nothing about it
     ChaserOf(script).mSpeed = 1;
-    try ScriptValues.SyncLinks(engine_context, script);
+    try ScriptValues.SyncLinks(script);
     try std.testing.expectEqual(@as(?u64, 123456), try SavedTarget(script));
 }
 
@@ -363,13 +363,13 @@ test "an edit makes a variable want what it points at, and Clear makes it want n
 
     //a row dropped on it, and then that object closed: it waits for that one, not the one it was saved with
     ChaserOf(script).mTarget = dropped;
-    try ScriptValues.SyncLinks(engine_context, script);
+    try ScriptValues.SyncLinks(script);
     try dropped.Delete(engine_context);
     try std.testing.expectEqual(@as(?u64, uuid), try SavedTarget(script));
 
     //its Clear
     ChaserOf(script).mTarget = .uninit;
-    try ScriptValues.SyncLinks(engine_context, script);
+    try ScriptValues.SyncLinks(script);
     try std.testing.expectEqual(@as(?u64, null), script.GetComponent(ScriptComponent).?.GetLink("mTarget"));
 
     const new_ball = try worlds.mScene.CreateEntity(engine_context, Entity.DefaultConfig);

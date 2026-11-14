@@ -408,7 +408,7 @@ fn OnWorldEvent(_: *anyopaque, engine_context: *EngineContext, event: *const Wor
 /// a player possess an entity with a viewpoint
 fn ShownView(engine_context: *EngineContext) !?Player.RenderView {
     const game_world = &engine_context.mGameWorld;
-    const player_ids = try game_world.GetPlayerGroup(engine_context.Scratch(), .{ .Component = PossessComponent });
+    const player_ids = try game_world.GetPlayerGroup(game_world.Scratch(), .{ .Component = PossessComponent });
     for (player_ids.items) |player_id| {
         if (game_world.GetPlayer(player_id).GetRenderView()) |view| return view;
     }
@@ -427,7 +427,7 @@ fn PointerInput(engine_context: *EngineContext) !PointerSystem.Input {
         .CameraView = Renderer.CameraView.FromViewpoint(view.mTransform, view.mViewpoint, engine_context.mAppWindow.GetDisplayScale()),
     };
     input.View = pointer_view;
-    const overlays = try view.mPlayer.GetOverlayScenes(engine_context.Scratch());
+    const overlays = try view.mPlayer.GetOverlayScenes(view.mPlayer.mManager.Scratch());
     if (try RayCast.CastRay(engine_context, &engine_context.mGameWorld, pointer_view.Ray, pointer_view.CameraView, .{ .Overlays = overlays.items }, .{})) |hit| {
         input.Target = hit.Entity;
         input.Position = hit.Position;
@@ -446,10 +446,10 @@ fn RenderGame(engine_context: *EngineContext) !void {
     //a minimized window has nothing to draw into
     if (width < 1 or height < 1) return;
     view.mViewpoint.SetViewportSize(width, height);
-    try view.mRenderTarget.mComputeTexture.Resize(engine_context, width, height);
+    try view.mRenderTarget.mComputeTexture.Resize(engine_context, engine_context.WorldTag(view.mPlayer.mManager), width, height);
     if (!view.mRenderTarget.mComputeTexture.IsCreated()) return;
 
-    const overlays = try view.mPlayer.GetOverlayScenes(engine_context.Scratch());
+    const overlays = try view.mPlayer.GetOverlayScenes(view.mPlayer.mManager.Scratch());
     try engine_context.mRenderer.RenderWorld(
         &engine_context.mGameWorld,
         .{ .Overlays = overlays.items },

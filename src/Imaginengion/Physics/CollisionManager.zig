@@ -209,26 +209,26 @@ const Pairable = struct {
 /// - static colliders never walk: neither side of a static pair ever moves
 /// A layer's tree only holds its own colliders, so game and overlay colliders never pair. The tree has to be refit to
 /// this substep (PhysicsManager.Step). groups is QueryColliderGroups, fetched once by the caller for every substep
-pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, groups: ColliderGroups) !void {
+pub fn BroadPass(self: *CollisionManager, world_manager: *WorldManager, groups: ColliderGroups) !void {
     const zone = Tracy.ZoneInit("CollisionManager::BroadPass", @src());
     defer zone.Deinit();
 
     //what each collider the tree can hand back is, by id
-    const scratch_allocator = engine_context.Scratch();
+    const scratch_allocator = world_manager.Scratch();
     var pairables: std.AutoHashMapUnmanaged(Entity.Type, Pairable) = .empty;
     try pairables.ensureTotalCapacity(scratch_allocator, @intCast(groups.mDynamic.len + groups.mKinematic.len + groups.mStatic.len));
     for (groups.mDynamic) |body_collider| pairables.putAssumeCapacity(body_collider.mCollider, .{ .mBodyCollider = body_collider, .mKind = .Dynamic });
     for (groups.mKinematic) |body_collider| pairables.putAssumeCapacity(body_collider.mCollider, .{ .mBodyCollider = body_collider, .mKind = .Kinematic });
     for (groups.mStatic) |body_collider| pairables.putAssumeCapacity(body_collider.mCollider, .{ .mBodyCollider = body_collider, .mKind = .Static });
 
-    for (groups.mDynamic) |origin| try self.PairNearby(engine_context, world_manager, &pairables, origin, .Dynamic);
-    for (groups.mKinematic) |origin| try self.PairNearby(engine_context, world_manager, &pairables, origin, .Kinematic);
+    for (groups.mDynamic) |origin| try self.PairNearby(world_manager, &pairables, origin, .Dynamic);
+    for (groups.mKinematic) |origin| try self.PairNearby(world_manager, &pairables, origin, .Kinematic);
 
     Tracy.Plot("Physics/Broad Pairs", .{ .color = 0x795548 }, self._BlockingContacts.items.len + self._OverlapContacts.items.len);
 }
 
 /// Pairs one moving collider with the colliders in its layer's tree whose boxes overlap its own
-fn PairNearby(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, pairables: *const std.AutoHashMapUnmanaged(Entity.Type, Pairable), origin: BodyCollider, comptime origin_kind: BodyKind) !void {
+fn PairNearby(self: *CollisionManager, world_manager: *WorldManager, pairables: *const std.AutoHashMapUnmanaged(Entity.Type, Pairable), origin: BodyCollider, comptime origin_kind: BodyKind) !void {
     const entity = world_manager.GetEntity(origin.mCollider);
     const box = WorldBVH.ColliderBounds(entity) orelse return;
     const tree = if (entity.HasComponent(OverlayLayerTag))
@@ -240,7 +240,6 @@ fn PairNearby(self: *CollisionManager, engine_context: *EngineContext, world_man
 
     const Visitor = struct {
         mManager: *CollisionManager,
-        mEngineContext: *EngineContext,
         mWorld: *WorldManager,
         mPairables: *const std.AutoHashMapUnmanaged(Entity.Type, Pairable),
         mTree: *const WorldBVH.LayerTree,
@@ -270,12 +269,11 @@ fn PairNearby(self: *CollisionManager, engine_context: *EngineContext, world_man
         }
 
         fn Pair(visitor: *const @This(), target: Pairable, comptime pairing: Pairing) !void {
-            try visitor.mManager.AddBroadPair(visitor.mEngineContext, visitor.mWorld, visitor.mOrigin, target.mBodyCollider, pairing);
+            try visitor.mManager.AddBroadPair(visitor.mWorld, visitor.mOrigin, target.mBodyCollider, pairing);
         }
     };
     const visitor = Visitor{
         .mManager = self,
-        .mEngineContext = engine_context,
         .mWorld = world_manager,
         .mPairables = pairables,
         .mTree = tree,
@@ -287,20 +285,20 @@ fn PairNearby(self: *CollisionManager, engine_context: *EngineContext, world_man
 
 /// BroadPass by trying every pair that can interact, with no tree: what BroadPass's pairs are checked against in the
 /// tests. Never called by the engine, so it isn't compiled into it
-pub fn BroadPassLinear(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, groups: ColliderGroups) !void {
+pub fn BroadPassLinear(self: *CollisionManager, world_manager: *WorldManager, groups: ColliderGroups) !void {
 
     //a dynamic body can be pushed, so every pair with one in it can need solving: dynamic against everything
     for (0..groups.mDynamic.len) |i| {
         for (i + 1..groups.mDynamic.len) |j| {
-            try self.AddBroadPair(engine_context, world_manager, groups.mDynamic[i], groups.mDynamic[j], .Push);
+            try self.AddBroadPair(world_manager, groups.mDynamic[i], groups.mDynamic[j], .Push);
         }
     }
     for (groups.mDynamic) |origin| {
         for (groups.mKinematic) |target| {
-            try self.AddBroadPair(engine_context, world_manager, origin, target, .Push);
+            try self.AddBroadPair(world_manager, origin, target, .Push);
         }
         for (groups.mStatic) |target| {
-            try self.AddBroadPair(engine_context, world_manager, origin, target, .Push);
+            try self.AddBroadPair(world_manager, origin, target, .Push);
         }
     }
 
@@ -309,18 +307,18 @@ pub fn BroadPassLinear(self: *CollisionManager, engine_context: *EngineContext, 
     //mask. Static against static is never built: neither ever moves.
     for (groups.mKinematic) |origin| {
         for (groups.mStatic) |target| {
-            try self.AddBroadPair(engine_context, world_manager, origin, target, .StopOnly);
+            try self.AddBroadPair(world_manager, origin, target, .StopOnly);
         }
     }
     for (0..groups.mKinematic.len) |i| {
         for (i + 1..groups.mKinematic.len) |j| {
-            try self.AddBroadPair(engine_context, world_manager, groups.mKinematic[i], groups.mKinematic[j], .StopOnly);
+            try self.AddBroadPair(world_manager, groups.mKinematic[i], groups.mKinematic[j], .StopOnly);
         }
     }
 }
 
 /// Classifies one pair and records it if the two can interact at all.
-fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, origin: BodyCollider, target: BodyCollider, comptime pairing: Pairing) !void {
+fn AddBroadPair(self: *CollisionManager, world_manager: *WorldManager, origin: BodyCollider, target: BodyCollider, comptime pairing: Pairing) !void {
     //two colliders of the same main object are one body, which never collides with itself
     if (origin.mBody == target.mBody) return;
 
@@ -345,8 +343,8 @@ fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_m
     };
 
     switch (collision_type) {
-        .Block => try self._BlockingContacts.append(engine_context.Keep(), contact),
-        .Overlap => try self._OverlapContacts.append(engine_context.Keep(), contact),
+        .Block => try self._BlockingContacts.append(world_manager.Keep(), contact),
+        .Overlap => try self._OverlapContacts.append(world_manager.Keep(), contact),
         .Ignore => unreachable,
     }
 }
@@ -423,9 +421,7 @@ fn SpeculativeReach(contact: Contact, dt: f32) f32 {
 /// A trigger pair touches while it overlaps, or when its path went into the trigger this substep (SweepTriggers).
 /// A pair the broad pass no longer builds (filtered out, collider removed, entity deleted) is not touching either,
 /// so it ends too. Nothing of a pair that ends is read from the ECS here, its entities may be gone
-pub fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext, event_manager: *PhysicsEventManager) !void {
-    const keep_allocator = engine_context.Keep();
-
+pub fn UpdateTouching(self: *CollisionManager, keep_allocator: std.mem.Allocator, event_manager: *PhysicsEventManager) !void {
     self._TouchingNow.clearRetainingCapacity();
     try self._TouchingNow.ensureTotalCapacity(keep_allocator, self._BlockingContacts.items.len + self._OverlapContacts.items.len);
     for (self._BlockingContacts.items, 0..) |contact, contact_ind| {

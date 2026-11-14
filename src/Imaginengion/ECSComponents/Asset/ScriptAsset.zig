@@ -44,6 +44,9 @@ _Lib: Lib = .{},
 _Info: ?*const ScriptInfo = null,
 /// which instance ids are in use, so a new one gets a free id and a reload knows which to carry over
 _Live: std.DynamicBitSetUnmanaged = .{},
+/// the Keep each instance id was made in (NewInstance), its script child's: what it is freed with, and what its copy is
+/// made in when the script is swapped for a new build. As long as _Live
+_Keeps: std.ArrayList(std.mem.Allocator) = .empty,
 /// goes up each time the script is swapped for a new build, which can move its variables: what was built from the old
 /// variable table (the Scripts panel's fields) checks it to know to build again
 mGeneration: u32 = 0,
@@ -62,11 +65,12 @@ pub fn Init(self: *ScriptAsset, engine_context: *EngineContext, abs_path: []cons
     try self.WatchDependencies(engine_context);
 }
 
-pub fn Deinit(self: *ScriptAsset, engine_context: *EngineContext) void {
+pub fn Deinit(self: *ScriptAsset, engine_context: *EngineContext, keep_allocator: std.mem.Allocator) void {
     //every script child gives its instance back first (ScriptComponent.Deinit holds a reference to this asset)
     if (self._Info) |info| info.mDeinit(engine_context);
     self._Lib.Close(engine_context);
-    self._Live.deinit(engine_context.Keep());
+    self._Live.deinit(keep_allocator);
+    self._Keeps.deinit(keep_allocator);
     self.ReleaseDependencies(engine_context);
 }
 
@@ -93,12 +97,12 @@ pub fn Reload(self: *ScriptAsset, engine_context: *EngineContext, abs_path: []co
     var live = self._Live.iterator(.{});
     while (live.next()) |index| {
         const id: u32 = @intCast(index);
-        if (!new_info.mNewInstance(engine_context, id, null)) {
+        if (!new_info.mNewInstance(engine_context, &self._Keeps.items[id], id, null)) {
             //out of memory part way through: the new build goes and the old one stays as it was
             var made = self._Live.iterator(.{});
             while (made.next()) |made_index| {
                 if (made_index >= index) break;
-                new_info.mFreeInstance(engine_context, @intCast(made_index));
+                new_info.mFreeInstance(engine_context, &self._Keeps.items[made_index], @intCast(made_index));
             }
             new_info.mDeinit(engine_context);
             new_lib.Close(engine_context);
@@ -110,6 +114,9 @@ pub fn Reload(self: *ScriptAsset, engine_context: *EngineContext, abs_path: []co
     //only now that nothing can turn the new build down
     live = self._Live.iterator(.{});
     while (live.next()) |index| ScriptValues.ReleaseDropped(old_info, old_info.mGetInstance(@intCast(index)).?, new_info);
+    //the old build's instances go before it does, each in the Keep it was made in
+    live = self._Live.iterator(.{});
+    while (live.next()) |index| old_info.mFreeInstance(engine_context, &self._Keeps.items[index], @intCast(index));
 
     old_info.mDeinit(engine_context);
     self._Lib.Close(engine_context);
@@ -196,25 +203,31 @@ pub fn HasHook(self: *const ScriptAsset, hook: Hook) bool {
     return self.GetInfo().HasHook(hook);
 }
 
-/// A new instance of the script's variables: a copy of instance `copy_from`'s, or the script's defaults when null
-pub fn NewInstance(self: *ScriptAsset, engine_context: *EngineContext, copy_from: ?u32) !u32 {
-    const keep_allocator = engine_context.Keep();
+/// A new instance of the script's variables: a copy of instance `copy_from`'s, or the script's defaults when null.
+/// `keep_allocator` is the Keep of the script child it is for (Entity.Keep and the like), which it is made in
+pub fn NewInstance(self: *ScriptAsset, engine_context: *EngineContext, keep_allocator: std.mem.Allocator, copy_from: ?u32) !u32 {
+    //which ids are taken is the asset's, so the engine's
+    const asset_keep = engine_context.Keep();
     var free_ids = self._Live.iterator(.{ .kind = .unset });
     const id = free_ids.next() orelse blk: {
         const old_len = self._Live.bit_length;
-        try self._Live.resize(keep_allocator, @max(16, old_len * 2), false);
+        const new_len = @max(16, old_len * 2);
+        try self._Keeps.ensureTotalCapacityPrecise(asset_keep, new_len);
+        try self._Live.resize(asset_keep, new_len, false);
+        self._Keeps.items.len = new_len;
         break :blk old_len;
     };
     self._Live.set(id);
     errdefer self._Live.unset(id);
+    self._Keeps.items[id] = keep_allocator;
 
     const from: ?*const anyopaque = if (copy_from) |from_id| self.GetInstance(from_id) else null;
-    if (!self.GetInfo().mNewInstance(engine_context, @intCast(id), from)) return error.OutOfMemory;
+    if (!self.GetInfo().mNewInstance(engine_context, &self._Keeps.items[id], @intCast(id), from)) return error.OutOfMemory;
     return @intCast(id);
 }
 
 pub fn FreeInstance(self: *ScriptAsset, engine_context: *EngineContext, id: u32) void {
-    self.GetInfo().mFreeInstance(engine_context, id);
+    self.GetInfo().mFreeInstance(engine_context, &self._Keeps.items[id], id);
     self._Live.unset(id);
 }
 

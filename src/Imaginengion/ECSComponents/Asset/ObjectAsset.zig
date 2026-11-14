@@ -38,7 +38,7 @@ pub fn ObjectAsset(comptime obj_t: type, comptime name: []const u8) type {
             self.mObject = object;
         }
 
-        pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
+        pub fn Deinit(self: *Self, engine_context: *EngineContext, _: std.mem.Allocator) void {
             //at shutdown the asset world is emptied before the asset manager (see EngineContext.DeInit),
             //so the object is already gone by the time this runs
             if (!self.mObject.IsActive()) return;
@@ -48,7 +48,7 @@ pub fn ObjectAsset(comptime obj_t: type, comptime name: []const u8) type {
 
         /// Loaded assets are shared through handles rather than copied, and a plain copy would point at the
         /// same object and delete it twice
-        pub fn Clone(_: *const Self, _: *EngineContext) !Self {
+        pub fn Clone(_: *const Self, _: *EngineContext, _: std.mem.Allocator) !Self {
             return error.AssetNotDuplicatable;
         }
 

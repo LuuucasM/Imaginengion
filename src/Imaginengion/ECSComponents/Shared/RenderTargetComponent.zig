@@ -5,6 +5,7 @@ const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ComputeOutput = @import("../../Renderer/Renderer.zig").ComputeOutput;
 const Texture2D = @import("../AComponents.zig").Texture2D;
+const GPUAllocator = @import("../../Core/GPUAllocator.zig");
 
 const RenderTargetComponent = @This();
 
@@ -22,7 +23,7 @@ mShownSlot: ?u32 = null,
 mShownWidth: usize = 0,
 mShownHeight: usize = 0,
 
-pub fn Deinit(self: *RenderTargetComponent, engine_context: *EngineContext) void {
+pub fn Deinit(self: *RenderTargetComponent, engine_context: *EngineContext, _: std.mem.Allocator) void {
     self.ReleaseShownSlot(engine_context);
     self.mComputeTexture.Deinit(engine_context);
 }
@@ -63,7 +64,7 @@ fn ReleaseShownSlot(self: *RenderTargetComponent, engine_context: *EngineContext
 
 /// The GPU texture is owned, so a copy can't share it: a plain value copy would share the handle, and whichever copy
 /// is deinit first frees it out from under the other. The copy starts with none, see the GPU texture note below
-pub fn Clone(_: *const RenderTargetComponent, _: *EngineContext) !RenderTargetComponent {
+pub fn Clone(_: *const RenderTargetComponent, _: *EngineContext, _: std.mem.Allocator) !RenderTargetComponent {
     return .{};
 }
 
@@ -71,8 +72,9 @@ pub fn GetOutputTexture(self: *RenderTargetComponent) *Texture2D {
     return self.mComputeTexture.GetColorTexture(0);
 }
 
-pub fn SetViewportSize(self: *RenderTargetComponent, engine_context: *EngineContext, width: usize, height: usize) !void {
-    try self.mComputeTexture.Resize(engine_context, width, height);
+/// `owner` is the world of the player it is on (EngineContext.WorldTag), who its GPU texture is for
+pub fn SetViewportSize(self: *RenderTargetComponent, engine_context: *EngineContext, owner: GPUAllocator.Owner, width: usize, height: usize) !void {
+    try self.mComputeTexture.Resize(engine_context, owner, width, height);
 }
 
 //nothing to save, the render target is recreated on load

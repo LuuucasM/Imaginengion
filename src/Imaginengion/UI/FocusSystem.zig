@@ -216,7 +216,7 @@ pub fn EndEdit(self: *FocusSystem, engine_context: *EngineContext, how: EndHow) 
         .Submit => try Send(engine_context, focused, .TextSubmitted),
         .Revert => if (focused.GetComponentMut(TextComponent)) |text| {
             if (!std.mem.eql(u8, text.mText.items, self.mOriginal.items)) {
-                try text.SetText(engine_context, self.mOriginal.items);
+                try text.SetText(focused.Keep(), self.mOriginal.items);
                 try self.Changed(engine_context, focused);
             }
         },
@@ -275,7 +275,7 @@ fn Type(self: *FocusSystem, engine_context: *EngineContext, bytes: []u8) !void {
 
     self.mCaret = @min(self.mCaret, text.mText.items.len);
     self.mBlinkTime = 0;
-    try TextEdit.Insert(engine_context.Keep(), &text.mText, &self.mCaret, line);
+    try TextEdit.Insert(focused.Keep(), &text.mText, &self.mCaret, line);
     try self.Changed(engine_context, focused);
 }
 
@@ -331,7 +331,7 @@ fn CaretEntity(self: *FocusSystem, engine_context: *EngineContext, focused: Enti
     const caret = try focused.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     if (caret.GetComponentMut(NameComponent)) |name| {
         name.mName.clearRetainingCapacity();
-        try name.mName.appendSlice(engine_context.Keep(), "Caret");
+        try name.mName.appendSlice(caret.Keep(), "Caret");
     }
     try Widgets.AddQuad(engine_context, caret, .{}, .{});
     //its color is the theme's

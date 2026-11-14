@@ -101,5 +101,5 @@ pub fn FitPlayerToQuad(engine_context: *EngineContext, entity: Entity, camera_vi
     if (size.Width < 1 or size.Height < 1 or !viewport.mPlayer.IsActive()) return;
     const render_view = viewport.mPlayer.GetRenderView() orelse return;
     render_view.mViewpoint.SetViewportSize(size.Width, size.Height);
-    try render_view.mRenderTarget.mComputeTexture.Resize(engine_context, size.Width, size.Height);
+    try render_view.mRenderTarget.mComputeTexture.Resize(engine_context, engine_context.WorldTag(viewport.mPlayer.mManager), size.Width, size.Height);
 }

@@ -33,7 +33,7 @@ pub const MeasuredText = struct {
     Center: Vec2(f32),
 };
 
-pub fn Deinit(_: *LayoutItemComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *LayoutItemComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 /// What the layout algorithm needs of it, as a node with no container, content or links yet: the layout pass adds
 /// those from the entity's other components and its place in the tree

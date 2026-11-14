@@ -5,6 +5,8 @@ const std = @import("std");
 
 const Profiler = @import("../../Core/Profiler.zig");
 const CircularHistory = @import("../../Core/CircularHistory.zig").CircularHistory;
+const EngineContext = @import("../../Core/EngineContext.zig");
+const WorldManager = @import("../../Core/WorldManager.zig");
 
 fn Started() !*Profiler {
     const profiler = try std.testing.allocator.create(Profiler);
@@ -207,4 +209,77 @@ test "a circular history keeps the last items, and the latest" {
     for (history.items()) |item| total += item;
     try std.testing.expectEqual(@as(u32, 3 + 4 + 5 + 6), total);
     try std.testing.expectEqual(@as(u32, 6), history.latest());
+}
+
+test "the same zone on two worlds is two nodes, what it calls is on its world too, and each world adds up its own time" {
+    const profiler = try Started();
+    defer Done(profiler);
+    var loop: Profiler.Site = .{ .mName = "Loop" };
+    var run: Profiler.Site = .{ .mName = "Run" };
+    var inner: Profiler.Site = .{ .mName = "Inner" };
+    const game: Profiler.World = 1;
+    const playing: Profiler.World = 2;
+
+    //Loop { [game] Run { Inner }  [playing] Run { Inner } }
+    try Zone(profiler, &loop);
+    for ([_]Profiler.World{ game, playing }) |world| {
+        const outer = profiler.EnterWorld(world);
+        try Zone(profiler, &run);
+        try Zone(profiler, &inner);
+        profiler.End();
+        profiler.End();
+        profiler.LeaveWorld(outer);
+    }
+    profiler.End();
+    profiler.EndLoop();
+
+    //Loop is on no world, then a Run and an Inner for each world
+    try std.testing.expectEqual(@as(Profiler.NodeIndex, 6), profiler.NodeCount());
+    const loop_node: Profiler.NodeIndex = 1;
+    try std.testing.expectEqual(Profiler.NO_WORLD, profiler.GetNode(loop_node).mWorld);
+    var names: [8][]const u8 = undefined;
+    try std.testing.expectEqual(@as(usize, 2), ChildNames(profiler, loop_node, &names).len);
+    var runs = profiler.Children(loop_node);
+    const game_run = runs.next().?;
+    const playing_run = runs.next().?;
+    try std.testing.expectEqual(game, profiler.GetNode(game_run).mWorld);
+    try std.testing.expectEqual(playing, profiler.GetNode(playing_run).mWorld);
+    try std.testing.expect(profiler.StartsWorld(game_run));
+    //what it calls is on its world, and doesn't start it again
+    var game_children = profiler.Children(game_run);
+    const game_inner = game_children.next().?;
+    try std.testing.expectEqual(game, profiler.GetNode(game_inner).mWorld);
+    try std.testing.expect(!profiler.StartsWorld(game_inner));
+
+    //a world's time is its top nodes' time
+    profiler.History(game_run).Times.append(5000);
+    profiler.History(game_inner).Times.append(3000);
+    try std.testing.expectEqual(profiler.Average(game_run).toNanoseconds(), profiler.WorldAverage(game).toNanoseconds());
+    //leaving a world goes back to the one outside it
+    try std.testing.expectEqual(Profiler.NO_WORLD, profiler.mWorld);
+}
+
+test "a system handed a world is measured on that world, and the world is left when it ends" {
+    const engine_context = try std.heap.page_allocator.create(EngineContext);
+    defer std.heap.page_allocator.destroy(engine_context);
+    engine_context.* = .{};
+    try Profiler.gMain.Start(std.testing.allocator, std.testing.io);
+    defer Profiler.gMain.Stop();
+
+    const WorldSystem = struct {
+        pub const Name = "ProfilerTests::WorldSystem";
+        pub fn Run(_: *EngineContext, _: *WorldManager) void {}
+    };
+    try engine_context.mSystems.RunSystem(WorldSystem, engine_context, .{&engine_context.mSimulateWorld});
+
+    var found = false;
+    for (1..Profiler.gMain.NodeCount()) |node_ind| {
+        const node: Profiler.NodeIndex = @intCast(node_ind);
+        if (!std.mem.eql(u8, Profiler.gMain.Name(node), WorldSystem.Name)) continue;
+        found = true;
+        try std.testing.expectEqual(engine_context.WorldTag(&engine_context.mSimulateWorld), Profiler.gMain.GetNode(node).mWorld);
+        try std.testing.expectEqualStrings("Playing", EngineContext.WorldName(Profiler.gMain.GetNode(node).mWorld));
+    }
+    try std.testing.expect(found);
+    try std.testing.expectEqual(Profiler.NO_WORLD, Profiler.gMain.mWorld);
 }

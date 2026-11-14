@@ -89,7 +89,7 @@ pub fn ProcessEvents(self: *GCManager, comptime event_data: type, comptime event
         callback_list.append(&callback.mNode);
         defer callback_list.remove(&callback.mNode);
         try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
-        self.mEventManager.ClearCategory(engine_context.Keep(), event_category, .ClearRetainingCapacity);
+        self.mEventManager.ClearCategory(self.mECSManager.Keep(), event_category, .ClearRetainingCapacity);
     } else if (event_data == ECSEventData) {
         try self.mECSManager.ProcessEvents(engine_context);
     } else {
@@ -103,7 +103,7 @@ pub fn ProcessConfig(self: GCManager, engine_context: *EngineContext, gamecontex
     }
     if (config.bAddNameComponent) {
         const name_component = try self.mECSManager.AddComponentSync(engine_context, gamecontext_id, GCComponents.NameComponent.empty);
-        name_component.mName.appendSlice(engine_context.Keep(), "New Game Context");
+        name_component.mName.appendSlice(self.mECSManager.Keep(), "New Game Context");
     }
 }
 
@@ -117,13 +117,13 @@ pub fn OnManagerEvents(_: *GCManager, _: *EngineContext, event: EventData.EventT
 pub fn ApplyConfig(self: *GCManager, engine_context: *EngineContext, gamecontext_id: GameContext.Type, config: GameContext.CreateConfig) !void {
     if (config.bAddNameComponent) {
         var name_component: NameComponent = .empty;
-        try name_component.mName.appendSlice(engine_context.Keep(), "New Game Context");
+        try name_component.mName.appendSlice(self.mECSManager.Keep(), "New Game Context");
         _ = try self.AddComponent(engine_context, gamecontext_id, name_component);
     }
     if (config.bAddUUIDComponent) {
         const io_source = std.Random.IoSource{ .io = engine_context.Io() };
         const new_random = io_source.interface();
         const new_uuid_component = try self.AddComponent(engine_context, gamecontext_id, UUIDComponent{ .ID = new_random.int(u64) });
-        try self.AddUUID(engine_context.Keep(), new_uuid_component.ID, gamecontext_id);
+        try self.AddUUID(self.mECSManager.Keep(), new_uuid_component.ID, gamecontext_id);
     }
 }

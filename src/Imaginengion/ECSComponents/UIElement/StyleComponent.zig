@@ -21,15 +21,15 @@ mTheme: AssetHandle = .uninit,
 /// by the next frame
 mOnce: bool = false,
 
-pub fn Deinit(self: *StyleComponent, engine_context: *EngineContext) void {
-    self.mStyle.deinit(engine_context.Keep());
+pub fn Deinit(self: *StyleComponent, _: *EngineContext, keep_allocator: std.mem.Allocator) void {
+    self.mStyle.deinit(keep_allocator);
     self.mTheme.ReleaseAsset();
 }
 
-pub fn Clone(self: *const StyleComponent, engine_context: *EngineContext) !StyleComponent {
+pub fn Clone(self: *const StyleComponent, _: *EngineContext, keep_allocator: std.mem.Allocator) !StyleComponent {
     //the copy releases its theme itself, so it needs its own reference
     self.mTheme.RetainAsset();
-    return .{ .mStyle = try self.mStyle.clone(engine_context.Keep()), .mTheme = self.mTheme, .mOnce = self.mOnce };
+    return .{ .mStyle = try self.mStyle.clone(keep_allocator), .mTheme = self.mTheme, .mOnce = self.mOnce };
 }
 
 /// A style component for the style called `name`

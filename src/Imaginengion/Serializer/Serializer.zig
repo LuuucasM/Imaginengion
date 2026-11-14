@@ -69,6 +69,9 @@ pub const ResolveReq = struct {
 
 pub const DeserializeContext = struct {
     requester: Requester,
+    /// The Keep of the ECS what is being read now goes into (ObjectKeep): a world's for its objects' components, the
+    /// engine's for UI land's. Null for anything else read, which is the engine's
+    keep: ?std.mem.Allocator = null,
 
     pub const empty: DeserializeContext = .{
         .requester = .default,

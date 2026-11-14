@@ -1,6 +1,7 @@
 const std = @import("std");
 const sdl = @import("../Core/CImports.zig").sdl;
 const Stage = @import("../ECSComponents/Asset/ShaderAsset.zig").Stage;
+const GPUAllocator = @import("../Core/GPUAllocator.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const SDLSSBO = @This();
 
@@ -27,19 +28,18 @@ pub fn Init(self: *SDLSSBO, engine_context: *EngineContext, size: usize, slot: u
 
     if (size == 0) return;
 
-    const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
-    self.mBuffer = CreateBuffer(device, size, stage);
-    self.mTransferBuff = CreateTransferBuffer(device, size);
+    self.mBuffer = CreateBuffer(engine_context, size, stage);
+    self.mTransferBuff = CreateTransferBuffer(engine_context, size);
 }
 
 pub fn Deinit(self: *SDLSSBO, engine_context: *EngineContext) void {
-    const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
+    const gpu = &engine_context.mGPUAllocator;
     if (self.mBuffer) |buf| {
-        sdl.SDL_ReleaseGPUBuffer(device, buf);
+        gpu.ReleaseBuffer(engine_context, buf);
         self.mBuffer = null;
     }
     if (self.mTransferBuff) |tb| {
-        sdl.SDL_ReleaseGPUTransferBuffer(device, tb);
+        gpu.ReleaseTransferBuffer(engine_context, tb);
         self.mTransferBuff = null;
     }
 }
@@ -62,16 +62,16 @@ pub fn SetData(self: *SDLSSBO, engine_context: *EngineContext, copy_pass: *anyop
     const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
 
     if (size + offset > self.mSize) {
-        if (self.mBuffer) |buf| sdl.SDL_ReleaseGPUBuffer(device, buf);
+        if (self.mBuffer) |buf| engine_context.mGPUAllocator.ReleaseBuffer(engine_context, buf);
         self.mSize = size + offset;
-        self.mBuffer = CreateBuffer(device, self.mSize, self.mStage);
+        self.mBuffer = CreateBuffer(engine_context, self.mSize, self.mStage);
         resize = true;
     }
 
     if (size > self.mTransferSize) {
-        if (self.mTransferBuff) |tb| sdl.SDL_ReleaseGPUTransferBuffer(device, tb);
+        if (self.mTransferBuff) |tb| engine_context.mGPUAllocator.ReleaseTransferBuffer(engine_context, tb);
         self.mTransferSize = size;
-        self.mTransferBuff = CreateTransferBuffer(device, size);
+        self.mTransferBuff = CreateTransferBuffer(engine_context, size);
     }
 
     const mapped = sdl.SDL_MapGPUTransferBuffer(device, self.mTransferBuff, true);
@@ -110,7 +110,8 @@ pub fn GetBinding(self: SDLSSBO) usize {
 
 /// A storage buffer the shaders of `stage` read. The usage is what SDL puts the buffer back to between passes, so it
 /// matches the stage it is bound to
-fn CreateBuffer(device: *sdl.SDL_GPUDevice, size: usize, stage: Stage) ?*sdl.SDL_GPUBuffer {
+/// The renderer's, so the engine's (GPUAllocator)
+fn CreateBuffer(engine_context: *EngineContext, size: usize, stage: Stage) ?*sdl.SDL_GPUBuffer {
     const buffer_info = sdl.SDL_GPUBufferCreateInfo{
         .usage = switch (stage) {
             .Vertex, .Fragment => sdl.SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
@@ -119,18 +120,18 @@ fn CreateBuffer(device: *sdl.SDL_GPUDevice, size: usize, stage: Stage) ?*sdl.SDL
         .size = @intCast(size),
         .props = 0,
     };
-    const buffer = sdl.SDL_CreateGPUBuffer(device, &buffer_info);
+    const buffer = engine_context.mGPUAllocator.CreateBuffer(engine_context, &buffer_info, GPUAllocator.ENGINE);
     std.debug.assert(buffer != null);
     return buffer;
 }
 
-fn CreateTransferBuffer(device: *sdl.SDL_GPUDevice, size: usize) ?*sdl.SDL_GPUTransferBuffer {
+fn CreateTransferBuffer(engine_context: *EngineContext, size: usize) ?*sdl.SDL_GPUTransferBuffer {
     const info = sdl.SDL_GPUTransferBufferCreateInfo{
         .usage = sdl.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
         .size = @intCast(size),
         .props = 0,
     };
-    const buffer = sdl.SDL_CreateGPUTransferBuffer(device, &info);
+    const buffer = engine_context.mGPUAllocator.CreateTransferBuffer(engine_context, &info, GPUAllocator.ENGINE);
     std.debug.assert(buffer != null);
     return buffer;
 }

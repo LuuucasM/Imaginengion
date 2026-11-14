@@ -92,7 +92,7 @@ pub fn Update(self: *ScriptsPanel, engine_context: *EngineContext, selected: ?Se
     defer zone.Deinit();
     if (!self.IsOpen()) return;
 
-    const scratch_allocator = engine_context.Scratch();
+    const scratch_allocator = engine_context.mEditorWorld.Scratch();
     var title: []const u8 = "";
     var message: []const u8 = "";
     var scripts: std.ArrayList(SelectedObject) = .empty;
@@ -193,7 +193,7 @@ fn Version(script: SelectedObject) u32 {
 fn Rebuild(self: *ScriptsPanel, engine_context: *EngineContext, listed: ?SelectedObject, scripts: []const SelectedObject) !void {
     const zone = Tracy.ZoneInit("ScriptsPanel::Rebuild", @src());
     defer zone.Deinit();
-    const keep_allocator = engine_context.Keep();
+    const keep_allocator = engine_context.mEditorWorld.Keep();
     //each row's menu goes with it
     if (self.mRows) |rows| try Widgets.Remove(engine_context, rows, &.{});
     self.mRows = null;

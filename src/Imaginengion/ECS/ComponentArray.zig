@@ -7,15 +7,15 @@ pub fn ComponentArray(entity_t: type) type {
     const VTab = struct {
         CopyInto: *const fn (*anyopaque, *EngineContext, *anyopaque) anyerror!void,
         DeinitComponents: *const fn (*anyopaque, *EngineContext) void,
-        Deinit: *const fn (*anyopaque, *EngineContext) void,
+        Deinit: *const fn (*anyopaque) void,
         StageDuplicate: *const fn (*anyopaque, *EngineContext, std.mem.Allocator, entity_t) anyerror!*anyopaque,
         HasComponent: *const fn (*anyopaque, entity_t) bool,
         RemoveComponent: *const fn (*anyopaque, *EngineContext, entity_t) void,
-        clearAndFree: *const fn (*anyopaque, *EngineContext) void,
+        clearAndFree: *const fn (*anyopaque) void,
         DestroyEntity: *const fn (*anyopaque, *EngineContext, entity_t) void,
         AddStaged: *const fn (*anyopaque, std.mem.Allocator, entity_t, *anyopaque) anyerror!void,
-        DeinitStaged: *const fn (*EngineContext, *anyopaque) void,
-        CloneStaged: *const fn (*EngineContext, std.mem.Allocator, *const anyopaque) anyerror!*anyopaque,
+        DeinitStaged: *const fn (*anyopaque, *EngineContext, *anyopaque) void,
+        CloneStaged: *const fn (*anyopaque, *EngineContext, std.mem.Allocator, *const anyopaque) anyerror!*anyopaque,
         CommitCopy: *const fn (*anyopaque, *EngineContext, u64, *anyopaque) void,
         MoveStaged: *const fn (std.mem.Allocator, *const anyopaque) anyerror!*anyopaque,
     };
@@ -39,10 +39,11 @@ pub fn ComponentArray(entity_t: type) type {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     self.DeinitComponents(engine_context);
                 }
-                fn Deinit(ptr: *anyopaque, engine_context: *EngineContext) void {
+                fn Deinit(ptr: *anyopaque) void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    self.Deinit(engine_context);
-                    engine_context.Keep().destroy(self);
+                    const array_keep = self.mKeep;
+                    self.Deinit();
+                    array_keep.destroy(self);
                 }
                 fn StageDuplicate(ptr: *anyopaque, engine_context: *EngineContext, arena: std.mem.Allocator, original_entity_id: entity_t) anyerror!*anyopaque {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
@@ -56,9 +57,9 @@ pub fn ComponentArray(entity_t: type) type {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     self.RemoveComponent(engine_context, entityID);
                 }
-                fn clearAndFree(ptr: *anyopaque, engine_context: *EngineContext) void {
+                fn clearAndFree(ptr: *anyopaque) void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    self.clearAndFree(engine_context);
+                    self.clearAndFree();
                 }
                 fn DestroyEntity(ptr: *anyopaque, engine_context: *EngineContext, entity_id: entity_t) void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
@@ -68,16 +69,16 @@ pub fn ComponentArray(entity_t: type) type {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     try self.AddStaged(allocator, entity_id, staged);
                 }
-                fn DeinitStaged(engine_context: *EngineContext, staged: *anyopaque) void {
-                    internal_type.DeinitStaged(engine_context, staged);
+                fn DeinitStaged(ptr: *anyopaque, engine_context: *EngineContext, staged: *anyopaque) void {
+                    internal_type.DeinitStaged(ptr, engine_context, staged);
                 }
-                fn CloneStaged(engine_context: *EngineContext, arena: std.mem.Allocator, source: *const anyopaque) anyerror!*anyopaque {
-                    return try internal_type.CloneStaged(engine_context, arena, source);
+                fn CloneStaged(ptr: *anyopaque, engine_context: *EngineContext, arena: std.mem.Allocator, source: *const anyopaque) anyerror!*anyopaque {
+                    return try internal_type.CloneStaged(ptr, engine_context, arena, source);
                 }
             };
 
             const new_component_array = try keep_allocator.create(internal_type);
-            new_component_array.* = .{};
+            new_component_array.* = .{ .mKeep = keep_allocator };
 
             return Self{
                 .mPtr = new_component_array,
@@ -110,8 +111,8 @@ pub fn ComponentArray(entity_t: type) type {
             self.mVtable.DeinitComponents(self.mPtr, engine_context);
         }
         /// Frees the storage and the array itself, DeinitComponents has to have run first
-        pub fn Deinit(self: Self, engine_context: *EngineContext) void {
-            self.mVtable.Deinit(self.mPtr, engine_context);
+        pub fn Deinit(self: Self) void {
+            self.mVtable.Deinit(self.mPtr);
         }
         /// A copy of the entity's component in `arena`, cloned if the type has a Clone
         pub fn StageDuplicate(self: Self, engine_context: *EngineContext, arena: std.mem.Allocator, original_entity_id: entity_t) anyerror!*anyopaque {
@@ -124,8 +125,8 @@ pub fn ComponentArray(entity_t: type) type {
             return self.mVtable.HasComponent(self.mPtr, entityID);
         }
         /// Frees the storage, DeinitComponents has to have run first
-        pub fn clearAndFree(self: Self, engine_context: *EngineContext) void {
-            self.mVtable.clearAndFree(self.mPtr, engine_context);
+        pub fn clearAndFree(self: Self) void {
+            self.mVtable.clearAndFree(self.mPtr);
         }
         pub fn DestroyEntity(self: Self, engine_context: *EngineContext, entity_id: entity_t) void {
             self.mVtable.DestroyEntity(self.mPtr, engine_context, entity_id);
@@ -138,7 +139,7 @@ pub fn ComponentArray(entity_t: type) type {
         /// Deinitializes a staged component that will never be added. `staged` has to point at a value of this
         /// array's component type.
         pub fn DeinitStaged(self: Self, engine_context: *EngineContext, staged: *anyopaque) void {
-            self.mVtable.DeinitStaged(engine_context, staged);
+            self.mVtable.DeinitStaged(self.mPtr, engine_context, staged);
         }
         /// The value at `source`, of this array's type, moved into `arena`: a plain copy that now owns what it owned
         pub fn MoveStaged(self: Self, arena: std.mem.Allocator, source: *const anyopaque) anyerror!*anyopaque {
@@ -153,7 +154,7 @@ pub fn ComponentArray(entity_t: type) type {
         /// A copy of a staged component in `arena`, cloned if the type has a Clone. `source` has to point at a value
         /// of this array's component type.
         pub fn CloneStaged(self: Self, engine_context: *EngineContext, arena: std.mem.Allocator, source: *const anyopaque) anyerror!*anyopaque {
-            return try self.mVtable.CloneStaged(engine_context, arena, source);
+            return try self.mVtable.CloneStaged(self.mPtr, engine_context, arena, source);
         }
     };
 }

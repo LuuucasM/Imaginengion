@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const VoiceFadeComponent = @This();
 
@@ -10,4 +11,4 @@ pub const Name: []const u8 = "VoiceFadeComponent";
 /// How much of the fade is still to go. Counts down to 0 as the fade stage fades frames
 mFramesLeft: u32 = 0,
 
-pub fn Deinit(_: *VoiceFadeComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *VoiceFadeComponent, _: *EngineContext, _: std.mem.Allocator) void {}

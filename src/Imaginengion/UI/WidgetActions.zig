@@ -134,7 +134,7 @@ pub fn ShowColor(color_field: Entity, color: Vec4(f32)) void {
 pub fn ShowChoice(engine_context: *EngineContext, dropdown: Entity, row: Entity) !void {
     const from = UIManager.LabelOf(row) orelse return;
     const to = UIManager.LabelOf(dropdown) orelse return;
-    try to.GetComponentMut(TextComponent).?.SetText(engine_context, from.GetComponent(TextComponent).?.mText.items);
+    try to.GetComponentMut(TextComponent).?.SetText(to.Keep(), from.GetComponent(TextComponent).?.mText.items);
     try to.MarkLayoutDirty(engine_context);
 }
 
@@ -223,7 +223,7 @@ pub fn SetText(engine_context: *EngineContext, entity: Entity, text: []const u8)
     const label = UIManager.LabelOf(entity) orelse return;
     const text_component = label.GetComponentMut(TextComponent).?;
     if (std.mem.eql(u8, text_component.mText.items, text)) return;
-    try text_component.SetText(engine_context, text);
+    try text_component.SetText(label.Keep(), text);
     try label.MarkLayoutDirty(engine_context);
 }
 

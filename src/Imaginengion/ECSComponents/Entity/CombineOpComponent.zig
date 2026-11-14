@@ -24,7 +24,7 @@ pub const Op = enum(u32) {
     Intersect,
 };
 
-pub fn Deinit(_: *CombineOpComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *CombineOpComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 pub fn UIRender(self: *CombineOpComponent, ui: *Inspector.Builder) !void {
     try ui.Enum(Op, &self.mOp, "Op", .{});

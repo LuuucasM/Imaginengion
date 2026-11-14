@@ -85,6 +85,7 @@ pub const GetComponent = Core.GetComponent;
 pub const GetComponentMut = Core.GetComponentMut;
 
 pub const HasComponent = Core.HasComponent;
+pub const Keep = Core.Keep;
 
 pub const GetName = Core.GetName;
 pub const SetName = Core.SetName;
@@ -167,13 +168,14 @@ pub fn AddOverlay(self: Player, engine_context: *EngineContext, scene: Scene) !P
 
     var name_component: PlayerNameComponent = .empty;
     const name = if (scene.HasComponent(PlayerNameComponent)) scene.GetName() else "Overlay";
-    name_component.mName.appendSlice(engine_context.Keep(), name) catch |err| {
-        name_component.Deinit(engine_context);
+    const keep_allocator = child.Keep();
+    name_component.mName.appendSlice(keep_allocator, name) catch |err| {
+        name_component.Deinit(engine_context, keep_allocator);
         return err;
     };
     //once added the child owns it, and deleting the child frees it
     _ = child.AddComponent(engine_context, name_component) catch |err| {
-        name_component.Deinit(engine_context);
+        name_component.Deinit(engine_context, keep_allocator);
         return err;
     };
 

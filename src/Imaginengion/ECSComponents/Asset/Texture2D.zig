@@ -86,7 +86,7 @@ pub fn Init(self: *Texture2D, engine_context: *EngineContext, abs_path: []const 
 pub fn InitGen(self: *Texture2D, engine_context: *EngineContext, descriptor: GenDescriptor) !void {
     try self._Impl.InitGen(engine_context, descriptor);
 }
-pub fn Deinit(self: *Texture2D, engine_context: *EngineContext) void {
+pub fn Deinit(self: *Texture2D, engine_context: *EngineContext, _: std.mem.Allocator) void {
     self._Impl.Deinit(engine_context);
 }
 pub fn GetWidth(self: Texture2D) usize {

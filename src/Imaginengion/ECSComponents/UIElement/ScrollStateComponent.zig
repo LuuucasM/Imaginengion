@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Vec2 = @import("../../Math/MathTypes.zig").Vec2;
@@ -18,4 +19,4 @@ mContentSize: Vec2(f32) = .{ .x = 0, .y = 0 },
 mThumbX: ?Entity = null,
 mThumbY: ?Entity = null,
 
-pub fn Deinit(_: *ScrollStateComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *ScrollStateComponent, _: *EngineContext, _: std.mem.Allocator) void {}

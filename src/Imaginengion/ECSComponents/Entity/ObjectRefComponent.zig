@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
@@ -31,4 +32,4 @@ pub const Ref = union(enum) {
     }
 };
 
-pub fn Deinit(_: *ObjectRefComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *ObjectRefComponent, _: *EngineContext, _: std.mem.Allocator) void {}

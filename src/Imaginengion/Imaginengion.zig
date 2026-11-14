@@ -76,6 +76,7 @@ test {
     _ = @import("Tests/Core/WorldBVHTests.zig");
     _ = @import("Tests/Core/EngineStatsTests.zig");
     _ = @import("Tests/Core/ProfilerTests.zig");
+    _ = @import("Tests/Core/AllocatorCountsTests.zig");
     _ = @import("Tests/Core/ProjectTests.zig");
     _ = @import("Tests/Programs/GameProgramTests.zig");
     _ = @import("Tests/AudioManager/BusSaveTests.zig");

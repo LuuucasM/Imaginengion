@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
@@ -14,7 +15,7 @@ pub const Name: []const u8 = "MergeComponent";
 /// CombineOpComponent. Each part is painted with its own surface's color, blended where they meet; a part with no
 /// surface takes the color of what it is merged into. SDFCompiler turns it into what the renderer runs
 
-pub fn Deinit(_: *MergeComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *MergeComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 const Json = JsonUtils.JsonFields(MergeComponent, .{});
 pub const jsonStringify = Json.jsonStringify;

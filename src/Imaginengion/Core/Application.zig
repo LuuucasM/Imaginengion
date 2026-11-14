@@ -75,10 +75,7 @@ pub fn Run(self: *Application) !void {
     self.mEngineContext.mEngineStats.CollectFrameStart(&self.mEngineContext);
     try self.mProgram.OnUpdate(&self.mEngineContext);
     self.mEngineContext.mEngineStats.EmitPlots(&self.mEngineContext);
-    //the arena empties all at once, so Tracy is told the whole Scratch pool is gone rather than each allocation
-    Tracy.MemDiscard(.Scratch);
-    _ = self.mEngineContext._Internal.ScratchArena.reset(.retain_capacity);
-        self.mEngineContext._Internal.ThreadScratchArenas.Reset();
+    self.mEngineContext.EndScratchPass();
     self.mEngineContext.mEngineStats.ResetStats();
     first_zone.Deinit();
     Profiler.gMain.EndLoop();
@@ -104,10 +101,7 @@ pub fn Run(self: *Application) !void {
         self.mEngineContext.mEngineStats.CollectFrameStart(&self.mEngineContext);
         try self.mProgram.OnUpdate(&self.mEngineContext);
         self.mEngineContext.mEngineStats.EmitPlots(&self.mEngineContext);
-        //the arena empties all at once, so Tracy is told the whole Scratch pool is gone rather than each allocation
-        Tracy.MemDiscard(.Scratch);
-        _ = self.mEngineContext._Internal.ScratchArena.reset(.retain_capacity);
-        self.mEngineContext._Internal.ThreadScratchArenas.Reset();
+        self.mEngineContext.EndScratchPass();
         self.mEngineContext.mEngineStats.ResetStats();
 
         t1 = .now(run_io, .awake);

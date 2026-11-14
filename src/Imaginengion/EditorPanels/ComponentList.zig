@@ -82,7 +82,7 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
             const same_object = self.mRoot != null and self.mObject.mID == object.mID and self.mObject.mManager == object.mManager;
             self.mOpen = if (same_object) self.OpenSections() else .empty;
             try self.Clear(engine_context);
-            const keep_allocator = engine_context.Keep();
+            const keep_allocator = engine_context.mEditorWorld.Keep();
             self.mObject = object;
 
             const root = try Widgets.Column(engine_context, .{ .Entity = parent });
@@ -165,7 +165,7 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
 
         fn AddItem(self: *Self, engine_context: *EngineContext, menu: Entity, text: []const u8, action: Action, options: Widgets.Options) !void {
             const item = try Widgets.MenuItem(engine_context, menu, text, .{ .StockScripts = options.StockScripts });
-            try self.mItems.append(engine_context.Keep(), .{ .Item = item, .Action = action });
+            try self.mItems.append(engine_context.mEditorWorld.Keep(), .{ .Item = item, .Action = action });
         }
     };
 }

@@ -69,7 +69,7 @@ fn RunBroadPass(collision_manager: *CollisionManager, engine_context: *EngineCon
     const world_manager = &engine_context.mEditorWorld;
     try world_manager.BuildBVH(engine_context);
     const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.Scratch());
-    try collision_manager.BroadPass(engine_context, world_manager, groups);
+    try collision_manager.BroadPass(world_manager, groups);
 }
 
 test "a new rigid body is dynamic with a mass of 1" {

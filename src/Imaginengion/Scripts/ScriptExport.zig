@@ -85,20 +85,20 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime
             }.Run;
         }
 
-        fn NewInstance(engine_context: *EngineContext, id: u32, copy_from: ?*const anyopaque) callconv(.c) bool {
-            const keep_allocator = engine_context.Keep();
+        //the instance is its script child's, so its world's; the list of them is the script asset's, so the engine's
+        fn NewInstance(engine_context: *EngineContext, keep_allocator: *const std.mem.Allocator, id: u32, copy_from: ?*const anyopaque) callconv(.c) bool {
             const instance = keep_allocator.create(Script) catch return false;
             instance.* = if (copy_from) |from| @as(*const Script, @ptrCast(@alignCast(from))).* else .{};
-            _ = gInstances.AddValue(keep_allocator, id, instance) catch {
+            _ = gInstances.AddValue(engine_context.Keep(), id, instance) catch {
                 keep_allocator.destroy(instance);
                 return false;
             };
             return true;
         }
 
-        fn FreeInstance(engine_context: *EngineContext, id: u32) callconv(.c) void {
+        fn FreeInstance(_: *EngineContext, keep_allocator: *const std.mem.Allocator, id: u32) callconv(.c) void {
             if (!gInstances.HasSparse(id)) return;
-            engine_context.Keep().destroy(gInstances.GetValueBySparse(id).*);
+            keep_allocator.destroy(gInstances.GetValueBySparse(id).*);
             gInstances.Remove(id);
         }
 
@@ -107,10 +107,12 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime
             return @ptrCast(gInstances.GetValueBySparse(id).*);
         }
 
+        //every instance has been freed through FreeInstance by now (ScriptAsset.Reload, ScriptComponent.Deinit), each in
+        //the Keep it was made in, which only the engine knows
         fn Deinit(engine_context: *EngineContext) callconv(.c) void {
-            const keep_allocator = engine_context.Keep();
-            for (gInstances.mValues.items) |instance| keep_allocator.destroy(instance);
-            gInstances.Deinit(keep_allocator);
+            //one still here was never given back, and is left for the leak check to report
+            if (gInstances.mValues.items.len > 0) std.log.err("{d} instance(s) of a script's variables were never freed", .{gInstances.mValues.items.len});
+            gInstances.Deinit(engine_context.Keep());
             gInstances = .empty;
         }
 

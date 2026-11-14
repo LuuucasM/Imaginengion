@@ -52,7 +52,7 @@ pub fn Update(self: AssetHandlesPanel, engine_context: *EngineContext) !void {
     defer zone.Deinit();
     if (!self.IsOpen()) return;
 
-    const scratch_allocator = engine_context.Scratch();
+    const scratch_allocator = engine_context.mEditorWorld.Scratch();
     const asset_ids = try engine_context.mAssetManager.GetGroup(scratch_allocator, .{ .Component = FileMetaData });
     const lines = try scratch_allocator.alloc([]const u8, asset_ids.items.len);
     for (asset_ids.items, lines) |asset_id, *line| {

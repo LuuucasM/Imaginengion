@@ -70,8 +70,8 @@ pub fn Core(comptime Self: type) type {
 
         pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
             self.mECSManager.Deinit(engine_context);
-            self.mUUIDToWorldID.deinit(engine_context.Keep());
-            self.mEventManager.Deinit(engine_context.Keep());
+            self.mUUIDToWorldID.deinit(self.mECSManager.Keep());
+            self.mEventManager.Deinit(self.mECSManager.Keep());
         }
 
         /// Points both of this manager's event managers (its own and its ECS manager's) at the
@@ -103,7 +103,7 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn CreateObj(self: *Self, engine_context: *EngineContext, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {
-            const new_obj: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.CreateEntity(engine_context.Keep()), .mManager = ObjManager(self) };
+            const new_obj: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.CreateEntity(self.mECSManager.Keep()), .mManager = ObjManager(self) };
             try self.ApplyConfig(engine_context, new_obj.mID, config);
             return new_obj;
         }
@@ -132,7 +132,7 @@ pub fn Core(comptime Self: type) type {
             for (self.mEventManager.mEventsArray.getPtr(.EndOfFrame).items) |queued_event| {
                 if (std.meta.eql(queued_event, event)) return;
             }
-            try self.mEventManager.Insert(engine_context.Keep(), .EndOfFrame, event);
+            try self.mEventManager.Insert(self.mECSManager.Keep(), .EndOfFrame, event);
         }
 
         /// The ECS's removal hook (see ECSManager.RemovalHook): hands each removal and destroy to OnComponentRemoved or
@@ -356,8 +356,8 @@ pub fn Core(comptime Self: type) type {
 
         pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
             self.mECSManager.clearAndFree(engine_context);
-            self.mUUIDToWorldID.clearAndFree(engine_context.Keep());
-            self.mEventManager.EventsReset(engine_context.Keep(), .ClearAndFree);
+            self.mUUIDToWorldID.clearAndFree(self.mECSManager.Keep());
+            self.mEventManager.EventsReset(self.mECSManager.Keep(), .ClearAndFree);
         }
 
         pub fn AddUUID(self: *Self, keep_allocator: std.mem.Allocator, uuid: u64, world_id: UnderlyingObjType(Self)) !void {
@@ -379,7 +379,7 @@ pub fn Core(comptime Self: type) type {
         /// The manager's own event queue is left alone: its events carry objects that hold a
         /// *WorldManager, which would still be this world's.
         pub fn Copy(self: *Self, engine_context: *EngineContext, other: *Self) !void {
-            const keep_allocator = engine_context.Keep();
+            const keep_allocator = other.mECSManager.Keep();
 
             try other.mUUIDToWorldID.ensureTotalCapacity(keep_allocator, self.mUUIDToWorldID.count());
             var iter = self.mUUIDToWorldID.iterator();

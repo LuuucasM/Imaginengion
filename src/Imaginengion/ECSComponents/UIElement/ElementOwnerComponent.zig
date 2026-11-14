@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const ElementOwnerComponent = @This();
@@ -10,4 +11,4 @@ pub const Name: []const u8 = "ElementOwnerComponent";
 /// at it, is deleted at the end of the frame
 mOwner: Entity = .uninit,
 
-pub fn Deinit(_: *ElementOwnerComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *ElementOwnerComponent, _: *EngineContext, _: std.mem.Allocator) void {}

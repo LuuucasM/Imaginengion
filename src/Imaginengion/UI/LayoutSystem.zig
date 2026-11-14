@@ -49,7 +49,7 @@ pub const Name = "Layout";
 
 /// Lays out every tree in `world` that has a dirty entity in it, each once however many of its entities are dirty
 pub fn Run(engine_context: *EngineContext, world: *WorldManager) !void {
-    const scratch_allocator = engine_context.Scratch();
+    const scratch_allocator = world.Scratch();
     const dirty_ids = try world.GetEntityGroup(scratch_allocator, .{ .Component = LayoutDirtyTag });
 
     var roots: std.ArrayList(Entity.Type) = .empty;
@@ -72,7 +72,7 @@ pub fn Run(engine_context: *EngineContext, world: *WorldManager) !void {
 /// Asks for every layout tree in `scene` to be laid out again, e.g. because the screen it fits into changed. Tagging
 /// each tree's root is enough, one tag lays out its whole tree
 pub fn MarkSceneDirty(scene: Scene, engine_context: *EngineContext) !void {
-    const entity_ids = try scene.GetEntityGroup(engine_context.Scratch(), .{ .Or = &.{
+    const entity_ids = try scene.GetEntityGroup(scene.mManager.Scratch(), .{ .Or = &.{
         .{ .Component = LayoutItemComponent },
         .{ .Component = LayoutComponent },
     } });
@@ -181,7 +181,7 @@ pub fn OnEntityDestroyed(engine_context: *EngineContext, entity: Entity) !void {
 /// Lays out the tree under `root` and clears the dirty tag from all of it. An overlay tree whose scene hasn't been
 /// drawn yet has no screen to fit into, so it keeps its tags and waits for the frame after its first draw
 fn LayoutTree(root: Entity, engine_context: *EngineContext) !void {
-    const scratch_allocator = engine_context.Scratch();
+    const scratch_allocator = root.mManager.Scratch();
 
     const root_area: ?Vec2(f32) = switch (root.GetLayer()) {
         //nothing around a panel in the world: it is sized, and placed by its own transform

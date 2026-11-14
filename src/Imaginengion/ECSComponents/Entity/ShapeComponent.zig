@@ -36,7 +36,7 @@ pub const Quad = struct {
     }
 };
 
-pub fn Deinit(_: *ShapeComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *ShapeComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 /// A quad shape
 pub fn MakeQuad(quad: Quad) ShapeComponent {

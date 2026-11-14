@@ -13,13 +13,13 @@ mLastModified: std.Io.Timestamp = .zero,
 mSize: u64 = 0,
 mHash: u64 = 0,
 
-pub fn Deinit(self: *FileMetaData, engine_context: *EngineContext) void {
-    self.mRelPath.deinit(engine_context.Keep());
+pub fn Deinit(self: *FileMetaData, _: *EngineContext, keep_allocator: std.mem.Allocator) void {
+    self.mRelPath.deinit(keep_allocator);
 }
 
-pub fn Clone(self: *const FileMetaData, engine_context: *EngineContext) !FileMetaData {
+pub fn Clone(self: *const FileMetaData, _: *EngineContext, keep_allocator: std.mem.Allocator) !FileMetaData {
     var new_component = self.*;
-    new_component.mRelPath = try self.mRelPath.clone(engine_context.Keep());
+    new_component.mRelPath = try self.mRelPath.clone(keep_allocator);
     return new_component;
 }
 

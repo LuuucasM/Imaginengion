@@ -22,7 +22,7 @@ mMax: ?f32 = null,
 /// How many decimal places a float is shown with. Whole number values show none
 mDecimals: u8 = 3,
 
-pub fn Deinit(_: *NumberFieldComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *NumberFieldComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 /// `value` kept within the limits
 pub fn Clamp(self: NumberFieldComponent, value: f64) f64 {

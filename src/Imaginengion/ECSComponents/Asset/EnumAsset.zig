@@ -39,13 +39,12 @@ pub fn Init(self: *EnumAsset, engine_context: *EngineContext, abs_path: []const 
     };
 
     const keep_allocator = engine_context.Keep();
-    errdefer self.Deinit(engine_context);
+    errdefer self.Deinit(engine_context, keep_allocator);
     try self.mNames.ensureTotalCapacityPrecise(keep_allocator, names.len);
     for (names) |name| self.mNames.appendAssumeCapacity(try keep_allocator.dupe(u8, name));
 }
 
-pub fn Deinit(self: *EnumAsset, engine_context: *EngineContext) void {
-    const keep_allocator = engine_context.Keep();
+pub fn Deinit(self: *EnumAsset, _: *EngineContext, keep_allocator: std.mem.Allocator) void {
     for (self.mNames.items) |name| keep_allocator.free(name);
     self.mNames.deinit(keep_allocator);
 }

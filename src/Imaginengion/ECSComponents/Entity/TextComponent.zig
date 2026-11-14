@@ -20,15 +20,15 @@ mTextAssetHandle: AssetHandle = .uninit,
 mFontSize: f32 = 9,
 mBounds: Vec2(f32) = .{ .x = 8, .y = 8 },
 
-pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) void {
+pub fn Deinit(self: *TextComponent, _: *EngineContext, keep_allocator: std.mem.Allocator) void {
     self.mTextAssetHandle.ReleaseAsset();
-    self.mText.deinit(engine_context.Keep());
+    self.mText.deinit(keep_allocator);
 }
 
-pub fn Clone(self: *const TextComponent, engine_context: *EngineContext) !TextComponent {
+pub fn Clone(self: *const TextComponent, _: *EngineContext, keep_allocator: std.mem.Allocator) !TextComponent {
     var new_component = self.*;
 
-    new_component.mText = try self.mText.clone(engine_context.Keep());
+    new_component.mText = try self.mText.clone(keep_allocator);
 
     // the copy releases it itself, so it needs its own reference
     new_component.mTextAssetHandle.RetainAsset();
@@ -39,15 +39,15 @@ pub fn Clone(self: *const TextComponent, engine_context: *EngineContext) !TextCo
 /// Replaces the text. Layout doesn't see the change on its own, so if the entity is in a layout the caller
 /// marks it with entity.MarkLayoutDirty: this text's own entity, not another in its tree, because layout keeps each
 /// text's measured size and only measures again the texts that are tagged themselves. The same goes for changing
-/// the font or the font size
-pub fn SetText(self: *TextComponent, engine_context: *EngineContext, text: []const u8) !void {
+/// the font or the font size. `keep_allocator` is the Keep of the entity it is on (Entity.Keep), which frees the text
+pub fn SetText(self: *TextComponent, keep_allocator: std.mem.Allocator, text: []const u8) !void {
     self.mText.clearRetainingCapacity();
-    try self.mText.appendSlice(engine_context.Keep(), text);
+    try self.mText.appendSlice(keep_allocator, text);
 }
 
 /// Adds to the end of the text. Same as SetText, the caller marks this entity's layout dirty if it is in one
-pub fn AppendText(self: *TextComponent, engine_context: *EngineContext, text: []const u8) !void {
-    try self.mText.appendSlice(engine_context.Keep(), text);
+pub fn AppendText(self: *TextComponent, keep_allocator: std.mem.Allocator, text: []const u8) !void {
+    try self.mText.appendSlice(keep_allocator, text);
 }
 
 pub fn UIRender(self: *TextComponent, ui: *Inspector.Builder) !void {

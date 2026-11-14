@@ -8,6 +8,7 @@ const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType;
 const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
 const WorldBVH = @import("WorldBVH.zig");
+const WorldAllocators = @import("Allocators.zig").WorldAllocators;
 const ESceneComponents = @import("../ECSComponents/SComponents.zig").EComponents;
 
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -51,6 +52,9 @@ const ClearAndFreeOptions = enum {
     PManager,
     SManager,
 };
+
+/// This world's own Keep and Scratch (Keep, Scratch), so what it takes is told apart from the engine's and other worlds'
+mAllocators: WorldAllocators = .{},
 
 mEManager: EManager = .empty,
 mGCManager: GCManager = .empty,
@@ -107,10 +111,22 @@ pub fn GetScene(self: *WorldManager, scene_id: Scene.Type) Scene {
     return Scene{ .mID = scene_id, .mManager = self };
 }
 
+/// Memory of this world's that lasts until it is freed: its ECSs and everything in them, its queues, its physics state.
+/// The engine's Keep (EngineContext.Keep) is for what every world shares
+pub fn Keep(self: *WorldManager) std.mem.Allocator {
+    return self.mAllocators.Keep();
+}
+
+/// Memory for work on this world during this pass of the loop only, emptied at its end. Never freed by hand
+pub fn Scratch(self: *WorldManager) std.mem.Allocator {
+    return self.mAllocators.Scratch();
+}
+
 /// Sets up the world, and makes its four ECSs (an entity's, a game context's, a player's, a scene's) known to the
 /// systems layer
 pub fn Init(self: *WorldManager, engine_context: *EngineContext) !void {
-    const keep_allocator = engine_context.Keep();
+    self.mAllocators.Init(engine_context);
+    const keep_allocator = self.Keep();
     try self.mEManager.Init(keep_allocator);
     try self.mGCManager.Init(keep_allocator);
     try self.mPManager.Init(keep_allocator);
@@ -157,7 +173,7 @@ pub fn RelinkRefs(self: *WorldManager, engine_context: *EngineContext) !void {
     defer zone.Deinit();
 
     try ScriptValues.Relink(engine_context, self);
-    const scratch_allocator = engine_context.Scratch();
+    const scratch_allocator = self.Scratch();
 
     const scene_ids = try self.GetSceneGroup(scratch_allocator, .{ .Component = SpawnPossComponent });
     for (scene_ids.items) |scene_id| {
@@ -180,7 +196,8 @@ pub fn RelinkRefs(self: *WorldManager, engine_context: *EngineContext) !void {
 
 /// Asks to quit the game this world is playing, handled at the end of the frame (see WorldEventData.QuitGameEvent)
 pub fn QuitGame(self: *WorldManager, engine_context: *EngineContext) !void {
-    try self.mEventManager.Insert(engine_context.Keep(), .EndOfFrame, .{ .QuitGame = .{ .mWorld = self } });
+    _ = engine_context;
+    try self.mEventManager.Insert(self.Keep(), .EndOfFrame, .{ .QuitGame = .{ .mWorld = self } });
 }
 
 pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
@@ -192,10 +209,10 @@ pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
     self.mGCManager.Deinit(engine_context);
     self.mPManager.Deinit(engine_context);
     self.mSManager.Deinit(engine_context);
-    self.mPhysicsManager.Deinit(engine_context.Keep());
-    self.mEventManager.Deinit(engine_context.Keep());
-    self.mGameEventManager.Deinit(engine_context.Keep());
-    self.mBVH.Deinit(engine_context.Keep());
+    self.mPhysicsManager.Deinit(self.Keep());
+    self.mEventManager.Deinit(self.Keep());
+    self.mGameEventManager.Deinit(self.Keep());
+    self.mBVH.Deinit(self.Keep());
 }
 
 /// Sends the game event `event` (an instance of an event file's struct, see Scripts/GameEvents.zig) in this world: every
@@ -214,7 +231,7 @@ pub fn Emit(self: *WorldManager, engine_context: *EngineContext, event: anytype)
         }, HeldEvent.Send);
         return;
     }
-    try self.mGameEventManager.Insert(engine_context.Keep(), GameEvents.PhaseOf(T), GameEvents.IdOf(T), std.mem.asBytes(&event));
+    try self.mGameEventManager.Insert(self.Keep(), GameEvents.PhaseOf(T), GameEvents.IdOf(T), std.mem.asBytes(&event));
 }
 
 /// A game event sent inside a transaction, waiting for it to be kept (Emit)
@@ -224,8 +241,8 @@ const HeldEvent = struct {
     mId: u64,
     mBytes: []const u8,
 
-    fn Send(engine_context: *EngineContext, self: *HeldEvent) void {
-        self.mWorld.mGameEventManager.Insert(engine_context.Keep(), self.mPhase, self.mId, self.mBytes) catch |err| {
+    fn Send(_: *EngineContext, self: *HeldEvent) void {
+        self.mWorld.mGameEventManager.Insert(self.mWorld.Keep(), self.mPhase, self.mId, self.mBytes) catch |err| {
             std.log.err("A game event a kept transaction sent was lost: {s}", .{@errorName(err)});
         };
     }
@@ -248,13 +265,13 @@ pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options
     defer zone.Deinit();
 
     //the physics state names entities by id, so it goes whenever they do
-    if (options == .All or options == .EManager) self.mPhysicsManager.Reset(engine_context.Keep());
+    if (options == .All or options == .EManager) self.mPhysicsManager.Reset(self.Keep());
     //so does the tree
     if (options == .All or options == .EManager) self.mBVH.Clear();
     //asks about the world that is going. Safe from inside this world's own ProcessEvents: its loop sees the list empty
-    if (options == .All) self.mEventManager.EventsReset(engine_context.Keep(), .ClearAndFree);
+    if (options == .All) self.mEventManager.EventsReset(self.Keep(), .ClearAndFree);
     //game events too, which can name the entities going
-    if (options == .All) self.mGameEventManager.ClearAndFree(engine_context.Keep());
+    if (options == .All) self.mGameEventManager.ClearAndFree(self.Keep());
 
     switch (options) {
         .All => {
@@ -291,9 +308,9 @@ pub fn Copy(self: *WorldManager, engine_context: *EngineContext, other_world: *W
     other_world.mOverlayScaleMode = self.mOverlayScaleMode;
 
     //physics state is not copied: the copy starts its own stepping, so nothing in it has touched yet
-    other_world.mPhysicsManager.Reset(engine_context.Keep());
+    other_world.mPhysicsManager.Reset(other_world.Keep());
     //nor are game events waiting here: they were sent in this world, the copy starts with none
-    other_world.mGameEventManager.ClearAndFree(engine_context.Keep());
+    other_world.mGameEventManager.ClearAndFree(other_world.Keep());
 }
 
 /// Points every object handle (Entity, GameContext, Player, Scene) held in this world's components at
@@ -361,7 +378,7 @@ pub fn ProcessEvents(self: *WorldManager, comptime event_data: type, comptime ev
         try self.mPhysicsManager.ProcessEvents(event_category, engine_context, callback_list);
     } else if (event_data == WorldEventData) {
         try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
-        self.mEventManager.ClearCategory(engine_context.Keep(), event_category, .ClearRetainingCapacity);
+        self.mEventManager.ClearCategory(self.Keep(), event_category, .ClearRetainingCapacity);
     } else if (event_data == ECSEventData) {
         try self.mEManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
         try self.mGCManager.ProcessEvents(event_data, event_category, engine_context, callback_list);

@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const FloatingWindowComponent = @This();
 
@@ -9,4 +10,4 @@ pub const Name: []const u8 = "FloatingWindowComponent";
 /// front of every other floating window in its scene (WidgetActions.RaiseWindow).
 /// Carries no data
 
-pub fn Deinit(_: *FloatingWindowComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *FloatingWindowComponent, _: *EngineContext, _: std.mem.Allocator) void {}

@@ -91,7 +91,7 @@ pub fn Update(self: *AudioBusesPanel, engine_context: *EngineContext) !void {
     if (!self.IsOpen()) return;
 
     var buses: std.ArrayList(Bus) = .empty;
-    try Walk(engine_context.Scratch(), engine_context.mAudioManager.GetMasterBus(), &buses);
+    try Walk(engine_context.mEditorWorld.Scratch(), engine_context.mAudioManager.GetMasterBus(), &buses);
     if (!self.IsBuiltFrom(buses.items)) try self.Rebuild(engine_context);
 
     for (buses.items, self.mTitles.items) |bus, title| try WidgetActions.SetText(engine_context, title, NameOf(bus));
@@ -149,7 +149,7 @@ fn Rebuild(self: *AudioBusesPanel, engine_context: *EngineContext) !void {
 }
 
 fn BuildBus(self: *AudioBusesPanel, engine_context: *EngineContext, bus: Bus, parent: Entity, master: Bus) !void {
-    const keep_allocator = engine_context.Keep();
+    const keep_allocator = engine_context.mEditorWorld.Keep();
     const node = try Widgets.TreeNode(engine_context, .{ .Entity = parent }, NameOf(bus), .{ .Open = true, .StockScripts = self.mOptions.StockScripts });
     try self.mBuilt.append(keep_allocator, bus.mID);
     try self.mTitles.append(keep_allocator, UIManager.LabelOf(node.Header).?);

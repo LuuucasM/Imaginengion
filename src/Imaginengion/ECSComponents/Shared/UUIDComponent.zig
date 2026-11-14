@@ -14,7 +14,7 @@ pub const empty: UUIDComponent = .{
 
 ID: u64 = std.math.maxInt(u64),
 
-pub fn Deinit(_: *UUIDComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *UUIDComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 pub fn UIRender(self: *UUIDComponent, ui: *Inspector.Builder) !void {
     try ui.Readout(&self.ID, "UUID", ShowID);
@@ -29,6 +29,6 @@ pub const jsonStringify = Json.jsonStringify;
 pub const jsonParse = Json.jsonParse;
 
 /// Registers the loaded UUID with the manager of whatever object owns this component (entity, scene, ...)
-pub fn PostParse(self: *UUIDComponent, engine_context: *EngineContext, owner: anytype) !void {
-    try owner.mManager.GetManager(@TypeOf(owner)).AddUUID(engine_context.Keep(), self.ID, owner.mID);
+pub fn PostParse(self: *UUIDComponent, _: *EngineContext, owner: anytype) !void {
+    try owner.mManager.GetManager(@TypeOf(owner)).AddUUID(owner.Keep(), self.ID, owner.mID);
 }

@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Inspector = @import("../../UI/Inspector.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
@@ -17,7 +18,7 @@ pub const Name: []const u8 = "MaskComponent";
 /// see the UI element's ScrollComponent
 mOp: SDFProgram.MaskOp = .Intersect,
 
-pub fn Deinit(_: *MaskComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *MaskComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 pub fn UIRender(self: *MaskComponent, ui: *Inspector.Builder) !void {
     try ui.Enum(SDFProgram.MaskOp, &self.mOp, "Op", .{});

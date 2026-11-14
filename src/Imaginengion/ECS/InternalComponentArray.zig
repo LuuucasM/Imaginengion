@@ -10,30 +10,35 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         pub const SparseSetT = SparseSet(entity_t, u20, component_type, track_free_ids);
 
         mComponents: SparseSetT = .empty,
+        /// The Keep of whoever owns the ECS this array is in (the engine, or one world): the array's storage, and every
+        /// component's own memory, handed to the component's Deinit and Clone
+        mKeep: std.mem.Allocator,
 
         /// Runs every component's Deinit without freeing the storage. A component's Deinit can reach into
         /// other arrays of the same ECS (a ThemeAsset releasing its font handle), so the ComponentManager
         /// calls this on every array before any of them are freed.
         pub fn DeinitComponents(self: *Self, engine_context: *EngineContext) void {
             for (self.mComponents.mValues.items) |*component| {
-                component.Deinit(engine_context);
+                component.Deinit(engine_context, self.mKeep);
             }
         }
         /// Frees the storage only, DeinitComponents has to have run first
-        pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
-            self.mComponents.Deinit(engine_context.Keep());
+        pub fn Deinit(self: *Self) void {
+            self.mComponents.Deinit(self.mKeep);
         }
         /// A copy of the entity's component in `arena`, for DuplicateEntity to stage onto the copy
         pub fn StageDuplicate(self: *Self, engine_context: *EngineContext, arena: std.mem.Allocator, original_entity_id: entity_t) !*anyopaque {
             std.debug.assert(self.mComponents.HasSparse(original_entity_id));
-            return try CloneStaged(engine_context, arena, self.mComponents.GetValueBySparse(original_entity_id));
+            return try CloneStaged(self, engine_context, arena, self.mComponents.GetValueBySparse(original_entity_id));
         }
-        /// A copy of `source` in `arena`: a component that owns memory copies itself, anything else is a plain value copy
-        pub fn CloneStaged(engine_context: *EngineContext, arena: std.mem.Allocator, source: *const anyopaque) !*anyopaque {
+        /// A copy of `source` in `arena`: a component that owns memory copies itself, anything else is a plain value copy.
+        /// Erased like CommitCopy, for Transaction.CopyFns.mClone through ComponentArray
+        pub fn CloneStaged(erased: *anyopaque, engine_context: *EngineContext, arena: std.mem.Allocator, source: *const anyopaque) !*anyopaque {
+            const self: *Self = @ptrCast(@alignCast(erased));
             const source_component: *const component_type = @ptrCast(@alignCast(source));
             const staged_component = try arena.create(component_type);
             staged_component.* = if (@hasDecl(component_type, "Clone"))
-                try source_component.Clone(engine_context)
+                try source_component.Clone(engine_context, self.mKeep)
             else
                 source_component.*;
             return staged_component;
@@ -41,7 +46,7 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         /// Deep copies this array into `other`, which must be empty.
         /// Entity ids and the free id list carry over, so the copy is addressed by the same ids.
         pub fn CopyInto(self: *Self, engine_context: *EngineContext, other: *Self) !void {
-            try self.mComponents.CopyInto(engine_context.Keep(), &other.mComponents);
+            try self.mComponents.CopyInto(other.mKeep, &other.mComponents);
 
             // a component that owns memory is still aliasing this array's copy, so it is replaced
             // by a real clone. anything else is already a finished value copy
@@ -51,12 +56,12 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
             errdefer {
                 // only the finished clones own anything, the rest still alias this array
                 for (other.mComponents.mValues.items[0..cloned]) |*component| {
-                    component.Deinit(engine_context);
+                    component.Deinit(engine_context, other.mKeep);
                 }
-                other.mComponents.clearAndFree(engine_context.Keep());
+                other.mComponents.clearAndFree(other.mKeep);
             }
             while (cloned < other.mComponents.mValues.items.len) : (cloned += 1) {
-                other.mComponents.mValues.items[cloned] = try self.mComponents.mValues.items[cloned].Clone(engine_context);
+                other.mComponents.mValues.items[cloned] = try self.mComponents.mValues.items[cloned].Clone(engine_context, other.mKeep);
             }
         }
         pub fn AddComponent(self: *Self, keep_allocator: std.mem.Allocator, entity_id: entity_t, component: component_type) !*component_type {
@@ -67,7 +72,7 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entityID: entity_t) void {
             std.debug.assert(self.mComponents.HasSparse(entityID));
             const component = self.mComponents.GetValueBySparse(entityID);
-            component.Deinit(engine_context);
+            component.Deinit(engine_context, self.mKeep);
             self.mComponents.Remove(entityID);
         }
         pub fn HasComponent(self: Self, entityID: entity_t) bool {
@@ -85,7 +90,7 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         }
         pub fn ResetComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component: component_type) void {
             const old_component = self.mComponents.GetValueBySparse(entity_id);
-            old_component.Deinit(engine_context);
+            old_component.Deinit(engine_context, self.mKeep);
             old_component.* = component;
         }
         pub fn NumOfComponents(self: *Self) usize {
@@ -97,8 +102,8 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
             return entity_set;
         }
         /// Frees the storage only, DeinitComponents has to have run first
-        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
-            self.mComponents.clearAndFree(engine_context.Keep());
+        pub fn clearAndFree(self: *Self) void {
+            self.mComponents.clearAndFree(self.mKeep);
         }
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) void {
             std.debug.assert(self.mComponents.HasSparse(entity_id));
@@ -116,10 +121,10 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
             const self: *Self = @ptrCast(@alignCast(erased));
             const typed_copy: *component_type = @ptrCast(@alignCast(copy));
             const component = self.GetComponent(@intCast(entity_id)) orelse {
-                typed_copy.Deinit(engine_context);
+                typed_copy.Deinit(engine_context, self.mKeep);
                 return;
             };
-            component.Deinit(engine_context);
+            component.Deinit(engine_context, self.mKeep);
             component.* = typed_copy.*;
         }
         /// The value at `source` moved into `arena`: a plain copy, and the value at `source` is no longer owned by anyone
@@ -129,9 +134,11 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
             moved.* = source_component.*;
             return moved;
         }
-        pub fn DeinitStaged(engine_context: *EngineContext, staged: *anyopaque) void {
+        /// Erased like CommitCopy, for Transaction.CopyFns.mDiscard through ComponentArray
+        pub fn DeinitStaged(erased: *anyopaque, engine_context: *EngineContext, staged: *anyopaque) void {
+            const self: *Self = @ptrCast(@alignCast(erased));
             const staged_component: *component_type = @ptrCast(@alignCast(staged));
-            staged_component.Deinit(engine_context);
+            staged_component.Deinit(engine_context, self.mKeep);
         }
     };
 }

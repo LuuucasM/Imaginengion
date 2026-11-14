@@ -8,4 +8,4 @@ pub const Name: []const u8 = "EntitySceneComponent";
 
 mScene: SceneLayer = undefined,
 
-pub fn Deinit(_: *EntitySceneComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *EntitySceneComponent, _: *EngineContext, _: std.mem.Allocator) void {}

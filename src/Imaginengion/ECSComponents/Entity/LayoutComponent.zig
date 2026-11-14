@@ -22,7 +22,7 @@ mCrossAlign: Layout.CrossAlign = .Start,
 /// only used by a grid
 mColumns: Layout.Columns = .Auto,
 
-pub fn Deinit(_: *LayoutComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *LayoutComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 /// What the layout algorithm needs of it
 pub fn ToContainer(self: LayoutComponent) Layout.Container {

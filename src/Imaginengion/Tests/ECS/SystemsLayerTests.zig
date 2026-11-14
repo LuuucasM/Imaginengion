@@ -10,35 +10,35 @@ const Position = struct {
     pub const Name: []const u8 = "Position";
     pub const Ind: usize = ECS.BuiltinComponentCount;
     x: f32 = 0,
-    pub fn Deinit(_: *Position, _: *EngineContext) void {}
+    pub fn Deinit(_: *Position, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 const Velocity = struct {
     pub const Name: []const u8 = "Velocity";
     pub const Ind: usize = ECS.BuiltinComponentCount + 1;
     x: f32 = 0,
-    pub fn Deinit(_: *Velocity, _: *EngineContext) void {}
+    pub fn Deinit(_: *Velocity, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 const Health = struct {
     pub const Name: []const u8 = "Health";
     pub const Ind: usize = ECS.BuiltinComponentCount + 2;
     mHP: u32 = 100,
-    pub fn Deinit(_: *Health, _: *EngineContext) void {}
+    pub fn Deinit(_: *Health, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 const Gravity = struct {
     pub const Name: []const u8 = "Gravity";
     pub const Ind: usize = ECS.BuiltinComponentCount;
     y: f32 = -9.8,
-    pub fn Deinit(_: *Gravity, _: *EngineContext) void {}
+    pub fn Deinit(_: *Gravity, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 const Weather = struct {
     pub const Name: []const u8 = "Weather";
     pub const Ind: usize = ECS.BuiltinComponentCount + 1;
     mRain: bool = false,
-    pub fn Deinit(_: *Weather, _: *EngineContext) void {}
+    pub fn Deinit(_: *Weather, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// what the systems below go through: bodies, and the scenes they are in

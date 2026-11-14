@@ -108,7 +108,7 @@ fn Unload(world: *TestWorld, asset: anytype) !void {
     var child_iter = loaded.GetIterator(.Child);
     const child = child_iter.next().?;
 
-    asset.Deinit(engine_context);
+    asset.Deinit(engine_context, engine_context.Keep());
     try world.EndFrame();
 
     try std.testing.expect(!loaded.IsActive());
@@ -116,7 +116,7 @@ fn Unload(world: *TestWorld, asset: anytype) !void {
     try std.testing.expect(engine_context.mAssetWorld.GetObjectByUUID(obj_t, uuid) == null);
 
     //unloading again, like the asset manager's shutdown does after the world was emptied, does nothing
-    asset.Deinit(engine_context);
+    asset.Deinit(engine_context, engine_context.Keep());
 }
 
 test "an entity asset loads into the asset world's entity scene and unloads with its children" {

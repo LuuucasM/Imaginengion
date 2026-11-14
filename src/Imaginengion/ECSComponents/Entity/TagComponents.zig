@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 //The three body types. A rigid body carries exactly one, and the tag is the record of its type: it is saved,
@@ -10,7 +11,7 @@ pub const StaticBodyTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "StaticBodyTag";
 
-    pub fn Deinit(_: *StaticBodyTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *StaticBodyTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// Moved by code, through its velocity alone: paddles, moving platforms, doors. No gravity or forces, and
@@ -19,7 +20,7 @@ pub const KinematicBodyTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "KinematicBodyTag";
 
-    pub fn Deinit(_: *KinematicBodyTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *KinematicBodyTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// Moved by physics: gravity, forces and collisions
@@ -27,7 +28,7 @@ pub const DynamicBodyTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "DynamicBodyTag";
 
-    pub fn Deinit(_: *DynamicBodyTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *DynamicBodyTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// Marks an entity whose layout needs working out again: something it or its tree is sized or placed by has
@@ -38,7 +39,7 @@ pub const LayoutDirtyTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "LayoutDirtyTag";
 
-    pub fn Deinit(_: *LayoutDirtyTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *LayoutDirtyTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// Marks an entity folded away by a collapsed layout item: the item itself and everything under it. The tag is the
@@ -49,7 +50,7 @@ pub const LayoutHiddenTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "LayoutHiddenTag";
 
-    pub fn Deinit(_: *LayoutHiddenTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *LayoutHiddenTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// On an entity while the pointer is over it or over something inside it (see Pointer/PointerSystem.zig). A state to
@@ -59,7 +60,7 @@ pub const HoveredTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "HoveredTag";
 
-    pub fn Deinit(_: *HoveredTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *HoveredTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// On an entity while a mouse button that went down on it (or on something inside it) is still held, even once the
@@ -68,7 +69,7 @@ pub const PressedTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "PressedTag";
 
-    pub fn Deinit(_: *PressedTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *PressedTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// On the one entity that has the keyboard: a text input (TextInputComponent) being typed into. For a "being edited"
@@ -77,7 +78,7 @@ pub const FocusedTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "FocusedTag";
 
-    pub fn Deinit(_: *FocusedTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *FocusedTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// On an entity that is selected: the selected row of a list, a selected unit, the open tab. What selects it is up to
@@ -87,7 +88,7 @@ pub const SelectedTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "SelectedTag";
 
-    pub fn Deinit(_: *SelectedTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *SelectedTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// On an entity that can't be used right now, along with everything inside it: a greyed out menu item or button, a
@@ -99,7 +100,7 @@ pub const DisabledTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "DisabledTag";
 
-    pub fn Deinit(_: *DisabledTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *DisabledTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// On a drop target (DropTargetComponent) while a drag source it takes is held over it: for a "drop here" look. The
@@ -108,7 +109,7 @@ pub const DropHoverTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "DropHoverTag";
 
-    pub fn Deinit(_: *DropHoverTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *DropHoverTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };
 
 /// On every drop target (DropTargetComponent) that takes the drag source being carried, wherever the pointer is, for as
@@ -117,5 +118,5 @@ pub const DropReadyTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "DropReadyTag";
 
-    pub fn Deinit(_: *DropReadyTag, _: *EngineContext) void {}
+    pub fn Deinit(_: *DropReadyTag, _: *EngineContext, _: std.mem.Allocator) void {}
 };

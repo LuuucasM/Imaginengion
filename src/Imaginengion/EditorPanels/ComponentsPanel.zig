@@ -234,7 +234,7 @@ pub fn OnUIEvent(self: *const ComponentsPanel, engine_context: *EngineContext, e
 
 /// Rows of its own under a component's (see Inspector.RenderComponentWith), for what needs the object
 pub fn After(self: *ComponentsPanel, comptime component_type: type, ui: *Inspector.Builder, component: *component_type, object: anytype) !void {
-    const keep_allocator = ui.mEngineContext.Keep();
+    const keep_allocator = ui.mEngineContext.mEditorWorld.Keep();
     const Object = @TypeOf(object);
     if (comptime component_type == RigidBodyComponent and Object == Entity) {
         //which of the body type tags it has, picked like an enum
@@ -260,7 +260,7 @@ pub fn After(self: *ComponentsPanel, comptime component_type: type, ui: *Inspect
     }
     if (comptime component_type == SceneComponent and Object == Scene) {
         //shown, not edited: the scene stack slots a scene by its layer when it is made
-        try ui.Note(try std.fmt.allocPrint(ui.mEngineContext.Scratch(), "Layer: {s}", .{@tagName(object.GetLayer())}));
+        try ui.Note(try std.fmt.allocPrint(ui.mEngineContext.mEditorWorld.Scratch(), "Layer: {s}", .{@tagName(object.GetLayer())}));
     }
     if (comptime component_type == AudioComponent) {
         const buttons = try ui.Buttons(&.{ "Preview", "Stop" });

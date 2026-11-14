@@ -46,11 +46,11 @@ mEnumName: ShortName = .{},
 /// The value's name, empty for none picked yet
 mValue: ShortName = .{},
 
-pub fn Deinit(self: *EnumComponent, _: *EngineContext) void {
+pub fn Deinit(self: *EnumComponent, _: *EngineContext, _: std.mem.Allocator) void {
     self.mEnumFile.ReleaseAsset();
 }
 
-pub fn Clone(self: *const EnumComponent, _: *EngineContext) !EnumComponent {
+pub fn Clone(self: *const EnumComponent, _: *EngineContext, _: std.mem.Allocator) !EnumComponent {
     //the copy releases the file itself, so it needs its own reference
     self.mEnumFile.RetainAsset();
     return self.*;
@@ -126,7 +126,7 @@ const VALUE_ACCESS = Inspector.Access{
         }
     }.Read,
     .Write = struct {
-        fn Write(_: *EngineContext, field: *anyopaque, written: Inspector.Value) anyerror!void {
+        fn Write(_: *EngineContext, _: std.mem.Allocator, field: *anyopaque, written: Inspector.Value) anyerror!void {
             const self: *EnumComponent = @ptrCast(@alignCast(field));
             const enum_asset = LoadedEnumAsset(self) orelse return;
             if (written.Choice >= enum_asset.mNames.items.len) return;

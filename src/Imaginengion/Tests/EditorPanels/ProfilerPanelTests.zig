@@ -23,7 +23,7 @@ test "the profiler window shows a row per node under its parent's, with numbers 
     try engine_context.mEditorWorld.Init(engine_context);
     var panel: ProfilerPanel = .{};
     defer {
-        panel.Deinit(engine_context.Keep());
+        panel.Deinit(engine_context.mEditorWorld.Keep());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
         _ = engine_context._Internal.KeepHeap.deinit();
@@ -73,4 +73,17 @@ test "the profiler window shows a row per node under its parent's, with numbers 
     try std.testing.expectEqual(@as(usize, 4), panel.mRows.items.len);
     //Inner starts folded, so the row under it is left as it was made
     try std.testing.expectEqualStrings("Later", TextOf(panel.mRows.items[3].Title));
+
+    //a zone run on a world has the world's name in front, and the line above the tree adds up its time
+    var run: Profiler.Site = .{ .mName = "Run" };
+    _ = profiler.Begin(&loop);
+    const outer = profiler.EnterWorld(engine_context.WorldTag(&engine_context.mGameWorld));
+    _ = profiler.Begin(&run);
+    profiler.End();
+    profiler.LeaveWorld(outer);
+    profiler.End();
+    profiler.EndLoop();
+    try panel.Update(engine_context, &profiler);
+    try std.testing.expect(std.mem.startsWith(u8, TextOf(panel.mRows.items[4].Title), "[Game] Run   "));
+    try std.testing.expect(std.mem.startsWith(u8, TextOf(panel.mWorlds), "Each world, a pass on average: Game "));
 }

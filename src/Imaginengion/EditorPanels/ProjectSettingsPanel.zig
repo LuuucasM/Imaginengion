@@ -157,11 +157,11 @@ pub fn ActionOf(self: *const ProjectSettingsPanel, button: Entity) ?Action {
 pub fn Run(engine_context: *EngineContext, action: Action) !void {
     switch (action) {
         .BrowseEntry => |entry| {
-            const abs_path = try PlatformUtils.OpenFile(engine_context.Scratch(), entry.FileExtension());
+            const abs_path = try PlatformUtils.OpenFile(engine_context.mEditorWorld.Scratch(), entry.FileExtension());
             if (abs_path.len > 0) try SetEntry(engine_context, entry, abs_path);
         },
         .BrowseIcon => {
-            const abs_path = try PlatformUtils.OpenFile(engine_context.Scratch(), ICON_EXTENSION);
+            const abs_path = try PlatformUtils.OpenFile(engine_context.mEditorWorld.Scratch(), ICON_EXTENSION);
             if (abs_path.len > 0) try SetWindowIcon(engine_context, abs_path);
         },
         .ClearIcon => try SetWindowIcon(engine_context, ""),
@@ -174,12 +174,12 @@ pub fn OnDrop(self: *const ProjectSettingsPanel, engine_context: *EngineContext,
     const rel_path = file_ref.mRelPath.items;
     if (Same(self.mIcon.Box, on)) {
         if (file_ref.mPathType != .Prj) return std.log.warn("The window icon has to be a file inside the project folder, not {s}", .{rel_path});
-        return try SetWindowIcon(engine_context, try engine_context.mProject.GetAbsPath(engine_context.Scratch(), rel_path));
+        return try SetWindowIcon(engine_context, try engine_context.mProject.GetAbsPath(engine_context.mEditorWorld.Scratch(), rel_path));
     }
     for (std.enums.values(Project.Entry)) |entry| {
         if (!Same(self.mEntries.get(entry).Box, on)) continue;
         if (file_ref.mPathType != .Prj) return std.log.warn("The project's entry {s} has to be a file inside the project folder, not {s}", .{ EntryName(entry), rel_path });
-        return try SetEntry(engine_context, entry, try engine_context.mProject.GetAbsPath(engine_context.Scratch(), rel_path));
+        return try SetEntry(engine_context, entry, try engine_context.mProject.GetAbsPath(engine_context.mEditorWorld.Scratch(), rel_path));
     }
 }
 

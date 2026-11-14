@@ -52,12 +52,12 @@ pub fn StopVoices(self: *AudioComponent) void {
 
 /// The ECS deinits a component however it goes: removed, its object deleted, or its whole world cleared, so this is
 /// where its attached voices find out
-pub fn Deinit(self: *AudioComponent, _: *EngineContext) void {
+pub fn Deinit(self: *AudioComponent, _: *EngineContext, _: std.mem.Allocator) void {
     self.StopVoices();
     self.mAudioAsset.ReleaseAsset();
 }
 
-pub fn Clone(self: *const AudioComponent, _: *EngineContext) !AudioComponent {
+pub fn Clone(self: *const AudioComponent, _: *EngineContext, _: std.mem.Allocator) !AudioComponent {
     var new_component = self.*;
 
     // the copy releases the asset itself, so it needs its own reference
@@ -125,7 +125,7 @@ const BUS_ACCESS = Inspector.Access{
         }
     }.Read,
     .Write = struct {
-        fn Write(engine_context: *EngineContext, field: *anyopaque, written: Inspector.Value) anyerror!void {
+        fn Write(engine_context: *EngineContext, _: std.mem.Allocator, field: *anyopaque, written: Inspector.Value) anyerror!void {
             const bus: *Bus = @ptrCast(@alignCast(field));
             var next: usize = 0;
             if (BusAt(engine_context.mAudioManager.GetMasterBus(), written.Choice, &next)) |picked| bus.* = picked;

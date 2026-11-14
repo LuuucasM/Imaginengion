@@ -38,7 +38,7 @@ _Scale: Vec3(f32) = .{ .x = 1.0, .y = 1.0, .z = 1.0 },
 
 _InternalData: InternalData = .{},
 
-pub fn Deinit(_: *TransformComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *TransformComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 pub fn GetTranslation(self: TransformComponent) Vec3(f32) {
     return self._Translation;

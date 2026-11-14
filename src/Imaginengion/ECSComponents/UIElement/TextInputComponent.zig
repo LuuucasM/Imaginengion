@@ -1,3 +1,4 @@
+const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Inspector = @import("../../UI/Inspector.zig");
@@ -20,7 +21,7 @@ pub const FocusOn = enum {
     DoubleClick,
 };
 
-pub fn Deinit(_: *TextInputComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *TextInputComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 pub fn UIRender(self: *TextInputComponent, ui: *Inspector.Builder) !void {
     try ui.Enum(FocusOn, &self.mFocusOn, "Focus On", .{});

@@ -344,7 +344,7 @@ pub fn CopyElement(self: *UIManager, engine_context: *EngineContext, original: U
     if (!original.IsActive()) return copy;
     inline for (UIComponents.SerializeList) |component_type| {
         if (original.GetComponent(component_type)) |component| {
-            const value = if (@hasDecl(component_type, "Clone")) try component.Clone(engine_context) else component.*;
+            const value = if (@hasDecl(component_type, "Clone")) try component.Clone(engine_context, self.mECSManager.Keep()) else component.*;
             _ = try copy.AddComponent(engine_context, value);
         }
     }
@@ -377,7 +377,7 @@ pub fn Adopt(self: *UIManager, engine_context: *EngineContext, owner: Entity) !v
 pub fn AdoptWorld(self: *UIManager, engine_context: *EngineContext, world: *WorldManager) !void {
     const zone = Tracy.ZoneInit("UIManager::AdoptWorld", @src());
     defer zone.Deinit();
-    const entity_ids = try world.GetEntityGroup(engine_context.Scratch(), .{ .Component = UIElementComponent });
+    const entity_ids = try world.GetEntityGroup(world.Scratch(), .{ .Component = UIElementComponent });
     for (entity_ids.items) |entity_id| try self.Adopt(engine_context, world.GetEntity(entity_id));
 }
 
@@ -455,9 +455,10 @@ pub fn Style(engine_context: *EngineContext, entity: Entity, style_name: []const
     if (!entity.HasComponent(UIElementComponent)) _ = try entity.AddComponent(engine_context, UIElementComponent{});
     const element = ElementOf(entity).?;
     var style = try UIComponents.StyleComponent.Init(engine_context, style_name);
-    errdefer style.Deinit(engine_context);
+    //UI land is the engine's, so its components' memory is the engine's Keep
+    errdefer style.Deinit(engine_context, engine_context.Keep());
     if (element.GetComponentMut(UIComponents.StyleComponent)) |existing| {
-        existing.Deinit(engine_context);
+        existing.Deinit(engine_context, engine_context.Keep());
         existing.* = style;
         try engine_context.mUIManager.MarkElementStyleDirty(engine_context, element);
     } else {

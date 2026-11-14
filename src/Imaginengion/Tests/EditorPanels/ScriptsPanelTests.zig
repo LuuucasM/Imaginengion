@@ -37,7 +37,7 @@ const TestPanel = struct {
 
     fn Deinit(self: *TestPanel) void {
         const engine_context = self.mEngineContext;
-        self.mPanel.Deinit(engine_context.Keep());
+        self.mPanel.Deinit(engine_context.mEditorWorld.Keep());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
         _ = engine_context._Internal.KeepHeap.deinit();

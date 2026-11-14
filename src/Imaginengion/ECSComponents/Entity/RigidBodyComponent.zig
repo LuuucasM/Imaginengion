@@ -31,7 +31,7 @@ _Force: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
 //where MoveTo asked a kinematic body to be by the end of the next physics step, which then lets go of it
 _MoveTarget: ?Vec3(f32) = null,
 
-pub fn Deinit(_: *RigidBodyComponent, _: *EngineContext) void {}
+pub fn Deinit(_: *RigidBodyComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 pub fn UIRender(self: *RigidBodyComponent, ui: *Inspector.Builder) !void {
     //an edit keeps the mass at its minimum or above and the inverse mass in step (the inspector's after-edit)

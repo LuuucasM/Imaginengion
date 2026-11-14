@@ -105,7 +105,7 @@ test "entities under their parents, scenes top layer first, and rows following r
     try sword.SetName(engine_context, "Sword");
 
     var entities = try world.Panel(Entity);
-    defer entities.Deinit(engine_context.Keep());
+    defer entities.Deinit(engine_context.mEditorWorld.Keep());
     try entities.Update(engine_context, game_world, null);
     var names: [8][]const u8 = undefined;
     try std.testing.expectEqual(@as(usize, 2), Names(entities, &names));
@@ -128,7 +128,7 @@ test "entities under their parents, scenes top layer first, and rows following r
     try hud.SetName(engine_context, "HUD");
     try level.SetName(engine_context, "Level");
     var scenes = try world.Panel(Scene);
-    defer scenes.Deinit(engine_context.Keep());
+    defer scenes.Deinit(engine_context.mEditorWorld.Keep());
     try scenes.Update(engine_context, game_world, null);
     try std.testing.expectEqual(@as(usize, 2), Names(scenes, &names));
     try std.testing.expectEqualStrings("HUD", names[0]);
@@ -144,7 +144,7 @@ test "a new object builds the tree again with open nodes still open, and rows ca
     const hero = try level.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try hero.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     var entities = try world.Panel(Entity);
-    defer entities.Deinit(engine_context.Keep());
+    defer entities.Deinit(engine_context.mEditorWorld.Keep());
     try entities.Update(engine_context, game_world, null);
 
     //Hero's node opened, then another entity made
@@ -170,7 +170,7 @@ test "a click selects, and the selected object's row is highlighted however it w
     const hero = try level.CreateEntity(engine_context, Entity.DefaultConfig);
     const villain = try level.CreateEntity(engine_context, Entity.DefaultConfig);
     var entities = try world.Panel(Entity);
-    defer entities.Deinit(engine_context.Keep());
+    defer entities.Deinit(engine_context.mEditorWorld.Keep());
     try entities.Update(engine_context, game_world, null);
 
     var selected: ?SelectedObject = null;
@@ -201,7 +201,7 @@ test "a click a script kept, as a tree node's arrow does, doesn't select the row
     defer std.heap.page_allocator.destroy(editor_program);
     editor_program.* = .{ .mActiveWorld = game_world, .mSelectedObj = .{ .scene_layer = level } };
     editor_program.mEntityPanel = try world.Panel(Entity);
-    defer editor_program.mEntityPanel.Deinit(engine_context.Keep());
+    defer editor_program.mEntityPanel.Deinit(engine_context.mEditorWorld.Keep());
     try editor_program.mEntityPanel.Update(engine_context, game_world, null);
 
     const row = editor_program.mEntityPanel.mRows.items[0];
@@ -227,7 +227,7 @@ test "clicking a top level entity's stripe selects its scene, and a child row ha
     const hero = try level.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try hero.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     var entities = try world.Panel(Entity);
-    defer entities.Deinit(engine_context.Keep());
+    defer entities.Deinit(engine_context.mEditorWorld.Keep());
     try entities.Update(engine_context, game_world, null);
 
     const hero_row = entities.mRows.items[0];
@@ -248,7 +248,7 @@ test "the row menu acts on the row it was opened on, and the panel's menu makes 
     const level = try game_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const hero = try level.CreateEntity(engine_context, Entity.DefaultConfig);
     var entities = try world.Panel(Entity);
-    defer entities.Deinit(engine_context.Keep());
+    defer entities.Deinit(engine_context.mEditorWorld.Keep());
     var selected: ?SelectedObject = null;
     try entities.Update(engine_context, game_world, selected);
 
@@ -271,7 +271,7 @@ test "the row menu acts on the row it was opened on, and the panel's menu makes 
     try std.testing.expectEqual(@as(usize, 3), entities.mRows.items.len);
 
     var scenes = try world.Panel(Scene);
-    defer scenes.Deinit(engine_context.Keep());
+    defer scenes.Deinit(engine_context.mEditorWorld.Keep());
     try scenes.Run(engine_context, .NewOverlay, game_world, &selected);
     try scenes.Update(engine_context, game_world, selected);
     try std.testing.expectEqual(@as(usize, 2), scenes.mRows.items.len);
@@ -289,7 +289,7 @@ test "Duplicate copies the row's object next to it with UUIDs of its own, and se
     const sword = try hero.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     try sword.SetName(engine_context, "Sword");
     var entities = try world.Panel(Entity);
-    defer entities.Deinit(engine_context.Keep());
+    defer entities.Deinit(engine_context.mEditorWorld.Keep());
     var selected: ?SelectedObject = null;
     try entities.Update(engine_context, game_world, selected);
 
@@ -314,7 +314,7 @@ test "Duplicate copies the row's object next to it with UUIDs of its own, and se
 
     //a scene: its entities come along, pointing at the copy, and it gets a place of its own in the stack
     var scenes = try world.Panel(Scene);
-    defer scenes.Deinit(engine_context.Keep());
+    defer scenes.Deinit(engine_context.mEditorWorld.Keep());
     try scenes.Update(engine_context, game_world, selected);
     try scenes.OnRightClick(engine_context, scenes.mRows.items[0].Header);
     try scenes.Run(engine_context, .Duplicate, game_world, &selected);
@@ -336,7 +336,7 @@ test "a template's own root can't be duplicated" {
     const root = try level.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try root.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     var roots = try HierarchyPanel(Entity).BuildForRoots(engine_context, world.mPage, .{ .StockScripts = false });
-    defer roots.Deinit(engine_context.Keep());
+    defer roots.Deinit(engine_context.mEditorWorld.Keep());
     try roots.UpdateRoots(engine_context, &.{root}, null);
 
     for (roots.mRows.items) |row| {
@@ -355,7 +355,7 @@ test "the UI menus make ready-made UI entities: in the selected scene, under an 
     const level = try game_world.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const hero = try level.CreateEntity(engine_context, Entity.DefaultConfig);
     var entities = try world.Panel(Entity);
-    defer entities.Deinit(engine_context.Keep());
+    defer entities.Deinit(engine_context.mEditorWorld.Keep());
     var selected: ?SelectedObject = null;
     try entities.Update(engine_context, game_world, selected);
 
@@ -391,7 +391,7 @@ test "the UI menus make ready-made UI entities: in the selected scene, under an 
 
     //a panel at the top of the scene, from the scene's row
     var scenes = try world.Panel(Scene);
-    defer scenes.Deinit(engine_context.Keep());
+    defer scenes.Deinit(engine_context.mEditorWorld.Keep());
     try scenes.Update(engine_context, game_world, selected);
     try scenes.OnRightClick(engine_context, scenes.mRows.items[0].Header);
     try scenes.Run(engine_context, .{ .NewUIChild = .Panel }, game_world, &selected);
@@ -410,7 +410,7 @@ test "a ready-made UI entity in a game scene is built in world units, and stretc
     const game_world = &engine_context.mGameWorld;
     const level = try game_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     var entities = try world.Panel(Entity);
-    defer entities.Deinit(engine_context.Keep());
+    defer entities.Deinit(engine_context.mEditorWorld.Keep());
     var selected: ?SelectedObject = .{ .scene_layer = level };
     try entities.Run(engine_context, .{ .NewUI = .Button }, game_world, &selected);
     try entities.Update(engine_context, game_world, selected);
@@ -456,7 +456,7 @@ test "a ready-made UI entity in a game's overlay starts menu sized, the editor's
     const game_world = &engine_context.mGameWorld;
     const menu = try game_world.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     var entities = try world.Panel(Entity);
-    defer entities.Deinit(engine_context.Keep());
+    defer entities.Deinit(engine_context.mEditorWorld.Keep());
     var selected: ?SelectedObject = .{ .scene_layer = menu };
     try entities.Run(engine_context, .{ .NewUI = .Button }, game_world, &selected);
     try entities.Update(engine_context, game_world, selected);
@@ -477,7 +477,7 @@ test "a ready-made checkbox shows a check mark only while it is checked" {
     const game_world = &engine_context.mGameWorld;
     const level = try game_world.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     var entities = try world.Panel(Entity);
-    defer entities.Deinit(engine_context.Keep());
+    defer entities.Deinit(engine_context.mEditorWorld.Keep());
     var selected: ?SelectedObject = .{ .scene_layer = level };
     try entities.Run(engine_context, .{ .NewUI = .Checkbox }, game_world, &selected);
     try entities.Update(engine_context, game_world, selected);
@@ -507,18 +507,18 @@ test "a file dropped on the panel: another type's file not taken, an entity file
     const game_world = &engine_context.mGameWorld;
     _ = try game_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     var scenes = try world.Panel(Scene);
-    defer scenes.Deinit(engine_context.Keep());
+    defer scenes.Deinit(engine_context.mEditorWorld.Keep());
     var entities = try world.Panel(Entity);
-    defer entities.Deinit(engine_context.Keep());
+    defer entities.Deinit(engine_context.mEditorWorld.Keep());
     try std.testing.expect(scenes.mArea.HasComponent(DropTargetComponent));
     //a template's tree takes no drops
     var roots = try HierarchyPanel(Entity).BuildForRoots(engine_context, world.mPage, .{ .StockScripts = false });
-    defer roots.Deinit(engine_context.Keep());
+    defer roots.Deinit(engine_context.mEditorWorld.Keep());
     try std.testing.expect(!roots.mArea.HasComponent(DropTargetComponent));
 
     const ui_scene = world.mPage.GetComponent(EntityComponents.EntitySceneComponent).?.mScene;
     const goblin_file = try ui_scene.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try goblin_file.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "goblin.imen", .Prj));
+    _ = try goblin_file.AddComponent(engine_context, try FileRefComponent.Init(goblin_file.Keep(), "goblin.imen", .Prj));
 
     //an entity file is for the Entities panel, not the Scenes panel
     try std.testing.expect(!PointerSystem.Takes(scenes.mArea.GetComponent(DropTargetComponent).?.*, goblin_file));

@@ -68,6 +68,13 @@ pub const ObjectRef = union(enum) {
             else => @compileError("Not an object type: " ++ @typeName(@TypeOf(object))),
         };
     }
+
+    /// The Keep of the ECS the object is in (Entity.Keep and the like)
+    pub fn Keep(self: ObjectRef) std.mem.Allocator {
+        return switch (self) {
+            inline else => |object| object.Keep(),
+        };
+    }
 };
 
 /// A field's value as a widget shows it
@@ -89,7 +96,8 @@ pub const Value = union(enum) {
 /// Reading and writing a field of one type, as a Value
 pub const Access = struct {
     Read: *const fn (field: *anyopaque) Value,
-    Write: *const fn (engine_context: *EngineContext, field: *anyopaque, value: Value) anyerror!void,
+    /// `keep_allocator` is the Keep of the object the field is on (ObjectRef.Keep), for what the field owns
+    Write: *const fn (engine_context: *EngineContext, keep_allocator: std.mem.Allocator, field: *anyopaque, value: Value) anyerror!void,
 };
 
 /// How a number is shown when it is kept as something else, e.g. an angle kept in radians and shown in degrees
@@ -683,7 +691,7 @@ pub fn AccessFor(comptime T: type) *const Access {
             };
         }
 
-        fn Write(engine_context: *EngineContext, field: *anyopaque, written: Value) anyerror!void {
+        fn Write(_: *EngineContext, keep_allocator: std.mem.Allocator, field: *anyopaque, written: Value) anyerror!void {
             const value: *T = @ptrCast(@alignCast(field));
             switch (T) {
                 f32 => value.* = @floatCast(written.Number),
@@ -700,7 +708,7 @@ pub fn AccessFor(comptime T: type) *const Access {
                 },
                 std.ArrayList(u8) => {
                     value.clearRetainingCapacity();
-                    try value.appendSlice(engine_context.Keep(), written.Text);
+                    try value.appendSlice(keep_allocator, written.Text);
                 },
                 else => {
                     const values = comptime std.enums.values(T);
@@ -738,7 +746,7 @@ fn UnionCaseAccess(comptime U: type) *const Access {
             return .{ .Choice = CaseIndex(std.meta.activeTag(value.*)) };
         }
 
-        fn Write(_: *EngineContext, field: *anyopaque, written: Value) anyerror!void {
+        fn Write(_: *EngineContext, _: std.mem.Allocator, field: *anyopaque, written: Value) anyerror!void {
             const value: *U = @ptrCast(@alignCast(field));
             if (written.Choice == CaseIndex(std.meta.activeTag(value.*))) return;
             const names = comptime @typeInfo(U).@"union".field_names;
@@ -797,7 +805,7 @@ fn BitAccess(comptime bit: usize) *const Access {
             return .{ .Bool = bytes[bit / 8] & MASK != 0 };
         }
 
-        fn Write(_: *EngineContext, field: *anyopaque, written: Value) anyerror!void {
+        fn Write(_: *EngineContext, _: std.mem.Allocator, field: *anyopaque, written: Value) anyerror!void {
             const bytes: [*]u8 = @ptrCast(field);
             if (written.Bool) bytes[bit / 8] |= MASK else bytes[bit / 8] &= ~MASK;
         }
@@ -816,7 +824,7 @@ fn ReadoutAccess(comptime T: type, comptime show: anytype) *const Access {
             return .{ .Text = show(value.*, &buffer) };
         }
 
-        fn Write(_: *EngineContext, _: *anyopaque, _: Value) anyerror!void {}
+        fn Write(_: *EngineContext, _: std.mem.Allocator, _: *anyopaque, _: Value) anyerror!void {}
     }.access;
 }
 
@@ -829,7 +837,7 @@ const OPTIONAL_SET = Access{
         }
     }.Read,
     .Write = struct {
-        fn Write(_: *EngineContext, field: *anyopaque, written: Value) anyerror!void {
+        fn Write(_: *EngineContext, _: std.mem.Allocator, field: *anyopaque, written: Value) anyerror!void {
             const value: *?f32 = @ptrCast(@alignCast(field));
             if (written.Bool == (value.* != null)) return;
             value.* = if (written.Bool) 0 else null;
@@ -846,7 +854,7 @@ const OPTIONAL_VALUE = Access{
         }
     }.Read,
     .Write = struct {
-        fn Write(_: *EngineContext, field: *anyopaque, written: Value) anyerror!void {
+        fn Write(_: *EngineContext, _: std.mem.Allocator, field: *anyopaque, written: Value) anyerror!void {
             const value: *?f32 = @ptrCast(@alignCast(field));
             if (value.* != null) value.* = @floatCast(written.Number);
         }
@@ -864,7 +872,7 @@ fn NameAccess(comptime T: type, comptime overlay_only: bool) *const Access {
             return .{ .Text = NameOf(object.*) };
         }
 
-        fn Write(_: *EngineContext, field: *anyopaque, written: Value) anyerror!void {
+        fn Write(_: *EngineContext, _: std.mem.Allocator, field: *anyopaque, written: Value) anyerror!void {
             const object: *T = @ptrCast(@alignCast(field));
             const ref = switch (written) {
                 .Ref => |ref| ref,

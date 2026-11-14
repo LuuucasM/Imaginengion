@@ -104,11 +104,12 @@ const InternalData = struct {
         .DefaultEnumAsset = .{},
     };
     pub fn Deinit(self: *InternalData, engine_context: *EngineContext) void {
-        self.DefaultFileMetaData.Deinit(engine_context);
-        self.DefaultTexture2D.Deinit(engine_context);
-        self.DefaultTextAsset.Deinit(engine_context);
-        self.DefaultAudioAsset.Deinit(engine_context);
-        self.DefaultEnumAsset.Deinit(engine_context);
+        const keep_allocator = engine_context.Keep();
+        self.DefaultFileMetaData.Deinit(engine_context, keep_allocator);
+        self.DefaultTexture2D.Deinit(engine_context, keep_allocator);
+        self.DefaultTextAsset.Deinit(engine_context, keep_allocator);
+        self.DefaultAudioAsset.Deinit(engine_context, keep_allocator);
+        self.DefaultEnumAsset.Deinit(engine_context, keep_allocator);
     }
     DefaultFileMetaData: FileMetaData,
     DefaultTexture2D: Texture2D,
