@@ -24,7 +24,7 @@ pub fn Write(engine_context: *EngineContext, dump: Dump) !void {
     const zone = Tracy.ZoneInit("BVHDump::Write", @src());
     defer zone.Deinit();
 
-    var out: std.Io.Writer.Allocating = .init(engine_context.FrameAllocator());
+    var out: std.Io.Writer.Allocating = .init(engine_context.Scratch());
     defer out.deinit();
     try std.json.Stringify.value(dump, .{}, &out.writer);
     try std.Io.Dir.cwd().writeFile(engine_context.Io(), .{ .sub_path = FILE_NAME, .data = out.written() });

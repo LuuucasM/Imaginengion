@@ -67,11 +67,11 @@ pub fn Build(engine_context: *EngineContext, page: Entity, options: Widgets.Opti
     };
 }
 
-pub fn Deinit(self: *ScriptsPanel, engine_allocator: std.mem.Allocator) void {
-    self.mMenus.deinit(engine_allocator);
-    self.mItems.deinit(engine_allocator);
-    self.mBuiltScripts.deinit(engine_allocator);
-    self.mBuiltVersions.deinit(engine_allocator);
+pub fn Deinit(self: *ScriptsPanel, keep_allocator: std.mem.Allocator) void {
+    self.mMenus.deinit(keep_allocator);
+    self.mItems.deinit(keep_allocator);
+    self.mBuiltScripts.deinit(keep_allocator);
+    self.mBuiltVersions.deinit(keep_allocator);
 }
 
 /// Whether it is shown in its tab (the Window menu's Scripts)
@@ -92,7 +92,7 @@ pub fn Update(self: *ScriptsPanel, engine_context: *EngineContext, selected: ?Se
     defer zone.Deinit();
     if (!self.IsOpen()) return;
 
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
     var title: []const u8 = "";
     var message: []const u8 = "";
     var scripts: std.ArrayList(SelectedObject) = .empty;
@@ -101,7 +101,7 @@ pub fn Update(self: *ScriptsPanel, engine_context: *EngineContext, selected: ?Se
         if (IsActive(object)) {
             title = NameOf(object);
             listed = object;
-            try ScriptsOf(frame_allocator, object, &scripts);
+            try ScriptsOf(scratch_allocator, object, &scripts);
             if (scripts.items.len == 0) message = "No scripts yet";
         }
     } else {
@@ -193,7 +193,7 @@ fn Version(script: SelectedObject) u32 {
 fn Rebuild(self: *ScriptsPanel, engine_context: *EngineContext, listed: ?SelectedObject, scripts: []const SelectedObject) !void {
     const zone = Tracy.ZoneInit("ScriptsPanel::Rebuild", @src());
     defer zone.Deinit();
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
     //each row's menu goes with it
     if (self.mRows) |rows| try Widgets.Remove(engine_context, rows, &.{});
     self.mRows = null;
@@ -201,8 +201,8 @@ fn Rebuild(self: *ScriptsPanel, engine_context: *EngineContext, listed: ?Selecte
     self.mItems.clearRetainingCapacity();
     self.mBuiltScripts.clearRetainingCapacity();
     self.mBuiltVersions.clearRetainingCapacity();
-    try self.mBuiltScripts.appendSlice(engine_allocator, scripts);
-    for (scripts) |script| try self.mBuiltVersions.append(engine_allocator, Version(script));
+    try self.mBuiltScripts.appendSlice(keep_allocator, scripts);
+    for (scripts) |script| try self.mBuiltVersions.append(keep_allocator, Version(script));
     self.mBuiltFor = listed;
     self.mBuiltLayerNames = engine_context.mCollisionLayers.mVersion;
     try self.mArea.MarkLayoutDirty(engine_context);
@@ -214,9 +214,9 @@ fn Rebuild(self: *ScriptsPanel, engine_context: *EngineContext, listed: ?Selecte
         //a plain row: it only has its menu, clicking it does nothing
         const row = try Widgets.SelectableRow(engine_context, .{ .Entity = rows }, NameOf(script), .{ .StockScripts = false });
         const menu = try Widgets.ContextMenu(engine_context, row, self.mOptions);
-        try self.mMenus.append(engine_allocator, menu);
+        try self.mMenus.append(keep_allocator, menu);
         const item = try Widgets.MenuItem(engine_context, menu, "Delete Script", .{ .StockScripts = self.mOptions.StockScripts });
-        try self.mItems.append(engine_allocator, .{ .Item = item, .Script = script });
+        try self.mItems.append(keep_allocator, .{ .Item = item, .Script = script });
 
         //its variables under it, for one that has some
         if (Version(script) == std.math.maxInt(u32)) continue;
@@ -231,11 +231,11 @@ fn Rebuild(self: *ScriptsPanel, engine_context: *EngineContext, listed: ?Selecte
 }
 
 /// An entity's or scene's scripts, in order
-fn ScriptsOf(frame_allocator: std.mem.Allocator, object: SelectedObject, scripts: *std.ArrayList(SelectedObject)) !void {
+fn ScriptsOf(scratch_allocator: std.mem.Allocator, object: SelectedObject, scripts: *std.ArrayList(SelectedObject)) !void {
     switch (object) {
         inline else => |typed, tag| {
             var iter = typed.GetIterator(.Script);
-            while (iter.next()) |script| try scripts.append(frame_allocator, @unionInit(SelectedObject, @tagName(tag), script));
+            while (iter.next()) |script| try scripts.append(scratch_allocator, @unionInit(SelectedObject, @tagName(tag), script));
         },
     }
 }

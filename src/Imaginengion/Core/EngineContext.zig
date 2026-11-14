@@ -34,23 +34,26 @@ const PointerSystem = @import("../Pointer/PointerSystem.zig");
 
 pub const WorldEventCallback = WorldManager.EventManagerT.EventCallback;
 
-const MakeAllocatorVTable = @import("Allocators.zig").MakeAllocatorVTable;
+const Allocators = @import("Allocators.zig");
+const MakeAllocatorVTable = Allocators.MakeAllocatorVTable;
 const MakeIoVTable = @import("Ios.zig").MakeIoVTable;
 const JobGroup = @import("JobGroup.zig");
 
 const InternalData = struct {
-    EngineGPA: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
-    FrameArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
-    /// The job pool's threads' own frame arenas (Allocators.FrameArenaOf), emptied with FrameArena
-    ThreadFrameArenas: @import("Allocators.zig").ThreadFrameArenas = .{},
+    /// Where Keep's memory comes from, picked by build mode (Allocators.KeepHeap)
+    KeepHeap: Allocators.KeepHeap = .{},
+    /// The main thread's scratch arena, emptied at the end of every pass of the loop
+    ScratchArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+    /// The job pool's threads' own scratch arenas (Allocators.ScratchArenaOf), emptied with ScratchArena
+    ThreadScratchArenas: Allocators.ThreadScratchArenas = .{},
 
-    // Stored rather than taken straight from MakeAllocatorVTable inside EngineAllocator/FrameAllocator,
+    // Stored rather than taken straight from MakeAllocatorVTable inside Keep/Scratch,
     // because a script DLL compiles its own copy of those functions: taking the address there would give
     // the DLL's copy of the vtable. These defaults are filled in by the engine binary when the context is
     // created, so a script reading them through the context always runs the engine's allocator code, the
     // same code (and the same Tracy memory tracking) that later frees or grows that memory.
-    EngineAllocVTable: *const std.mem.Allocator.VTable = &MakeAllocatorVTable(.Engine).vtable,
-    FrameAllocVTable: *const std.mem.Allocator.VTable = &MakeAllocatorVTable(.Frame).vtable,
+    KeepVTable: *const std.mem.Allocator.VTable = &MakeAllocatorVTable(.Keep).vtable,
+    ScratchVTable: *const std.mem.Allocator.VTable = &MakeAllocatorVTable(.Scratch).vtable,
 
     /// The engine's thread pool, under both its Ios (Io, AriaIo): the file calls they pass on run on the thread that
     /// makes them, and its workers (one fewer than the machine has cores) run their groups' tasks (mJobPool)
@@ -69,9 +72,13 @@ pub const IoType = enum {
     Aria,
 };
 
+/// The engine's allocators, each named for what its memory is for (see Allocators.zig):
+///   - Keep (Keep()): memory that lasts until it is freed, like an ECS's storage or a loaded asset
+///   - Scratch (Scratch()): memory for the current pass of the loop only, all of it emptied at the end of the pass, so
+///     nothing taken from it is freed by hand. Each thread has its own
 pub const AllocType = enum {
-    Engine,
-    Frame,
+    Keep,
+    Scratch,
 };
 
 pub const WorldType = enum {
@@ -148,10 +155,10 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     defer zone.Deinit();
     self.mEnviron = environ;
     //async left at its default, one worker fewer than the machine has cores, the thread waiting on a group being the last
-    self._Internal.ThreadPool = std.Io.Threaded.init(self._Internal.EngineGPA.allocator(), .{
+    self._Internal.ThreadPool = std.Io.Threaded.init(self._Internal.KeepHeap.allocator(), .{
         .concurrent_limit = .nothing,
     });
-    self._Internal.ThreadFrameArenas.mMainThread = std.Thread.getCurrentId();
+    self._Internal.ThreadScratchArenas.mMainThread = std.Thread.getCurrentId();
     const cores = std.Thread.getCpuCount() catch 1;
     self.mJobPool = .{ .mIo = self._Internal.ThreadPool.io(), .mWorkers = cores -| 1 };
 
@@ -207,13 +214,13 @@ pub fn DeInit(self: *EngineContext) void {
     //the world itself is freed after the asset manager, whose object assets look at it on their way out
     self.mAssetWorld.clearAndFree(self, .All);
     //holds handles to the files objects were saved to / loaded from
-    self.mSerializer.Deinit(self.EngineAllocator());
+    self.mSerializer.Deinit(self.Keep());
 
-    self.mEditorEventManager.Deinit(self.EngineAllocator());
-    self.mSystemEventManager.Deinit(self.EngineAllocator());
-    self.mPointerEventManager.Deinit(self.EngineAllocator());
+    self.mEditorEventManager.Deinit(self.Keep());
+    self.mSystemEventManager.Deinit(self.Keep());
+    self.mPointerEventManager.Deinit(self.Keep());
     self.mUIManager.Deinit(self);
-    self.mPointerSystem.Deinit(self.EngineAllocator());
+    self.mPointerSystem.Deinit(self.Keep());
 
     self.mAudioManager.Deinit(self);
     self.mAssetManager.Deinit(self);
@@ -225,28 +232,31 @@ pub fn DeInit(self: *EngineContext) void {
     self.mAppWindow.Deinit();
 
     //empty already once every ECS has unregistered in its Deinit, this is for any left registered
-    self.mSystems.Deinit(self.EngineAllocator());
-    self.mTransactions.Deinit(self.EngineAllocator());
+    self.mSystems.Deinit(self.Keep());
+    self.mTransactions.Deinit(self.Keep());
     self.mJobPool = .{};
     self._Internal.ThreadPool.deinit();
-    self._Internal.ThreadFrameArenas.Deinit();
+    self._Internal.ThreadScratchArenas.Deinit();
 
-    //anything still live in the Engine pool here is a real leak and is left for Tracy to show as one
-    _ = self._Internal.EngineGPA.deinit();
-    Tracy.MemDiscard(.Frame);
-    self._Internal.FrameArena.deinit();
+    //anything still live in the Keep pool here is a real leak and is left for Tracy to show as one
+    _ = self._Internal.KeepHeap.deinit();
+    Tracy.MemDiscard(.Scratch);
+    self._Internal.ScratchArena.deinit();
 }
-pub fn EngineAllocator(self: *EngineContext) std.mem.Allocator {
+
+/// Memory that lasts until it is freed (AllocType.Keep)
+pub fn Keep(self: *EngineContext) std.mem.Allocator {
     return .{
         .ptr = self,
-        .vtable = self._Internal.EngineAllocVTable,
+        .vtable = self._Internal.KeepVTable,
     };
 }
 
-pub fn FrameAllocator(self: *EngineContext) std.mem.Allocator {
+/// Memory for this pass of the loop only, emptied at its end (AllocType.Scratch). Never freed by hand
+pub fn Scratch(self: *EngineContext) std.mem.Allocator {
     return .{
         .ptr = self,
-        .vtable = self._Internal.FrameAllocVTable,
+        .vtable = self._Internal.ScratchVTable,
     };
 }
 

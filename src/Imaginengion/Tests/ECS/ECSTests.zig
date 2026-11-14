@@ -23,11 +23,11 @@ const Label = struct {
     mText: std.ArrayList(u8) = .empty,
 
     pub fn Deinit(self: *Label, engine_context: *EngineContext) void {
-        self.mText.deinit(engine_context.EngineAllocator());
+        self.mText.deinit(engine_context.Keep());
     }
 
     pub fn Clone(self: *const Label, engine_context: *EngineContext) !Label {
-        return .{ .mText = try self.mText.clone(engine_context.EngineAllocator()) };
+        return .{ .mText = try self.mText.clone(engine_context.Keep()) };
     }
 };
 
@@ -46,7 +46,7 @@ const TestECSManager = ECS.ECSManager(u32, &TestComponentsList, "TestECS");
 const NullEntity = std.math.maxInt(u32);
 
 /// An ECS plus the minimal EngineContext it needs. The context is not Init'd, which would bring up the
-/// window and the rest of the engine: the ECS only ever asks it for the engine allocator.
+/// window and the rest of the engine: the ECS only ever asks it for the Keep allocator.
 const TestECS = struct {
     mEngineContext: *EngineContext,
     mECSManager: TestECSManager,
@@ -73,7 +73,7 @@ const TestECS = struct {
         };
         self.mEngineContext.* = .{};
 
-        try self.mECSManager.Init(self.mEngineContext.EngineAllocator());
+        try self.mECSManager.Init(self.mEngineContext.Keep());
 
         return self;
     }
@@ -83,7 +83,7 @@ const TestECS = struct {
 
         self.mECSManager.Deinit(engine_context);
 
-        const leak_check = engine_context._Internal.EngineGPA.deinit();
+        const leak_check = engine_context._Internal.KeepHeap.deinit();
 
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -92,7 +92,7 @@ const TestECS = struct {
     }
 
     fn Allocator(self: *TestECS) std.mem.Allocator {
-        return self.mEngineContext.EngineAllocator();
+        return self.mEngineContext.Keep();
     }
 
     /// end of frame: drains whatever is still queued (see ECSManager.Lock)
@@ -1130,7 +1130,7 @@ test "ECS a copy's queued adds are freed if it is torn down before processing th
 }
 
 /// A second, empty ECS sharing the first one's EngineContext, which is what Copy needs:
-/// both sides are allocated and freed through the same engine allocator.
+/// both sides are allocated and freed through the same keep allocator.
 const OtherECS = struct {
     mECSManager: *TestECSManager,
 

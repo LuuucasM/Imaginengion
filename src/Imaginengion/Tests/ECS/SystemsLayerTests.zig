@@ -46,7 +46,7 @@ const BodyECS = ECS.ECSManager(u32, &[_]type{ Position, Velocity, Health }, "Sys
 const SceneECS = ECS.ECSManager(u32, &[_]type{ Gravity, Weather }, "SystemsLayerSceneECS");
 
 /// Two body ECSs and two scene ECSs, the layer, and the minimal EngineContext they need (not Init'd: the ECSs only ask
-/// it for the engine allocator)
+/// it for the Keep allocator)
 const TestLayer = struct {
     mEngineContext: *EngineContext,
     mSystems: Systems = .empty,
@@ -59,33 +59,33 @@ const TestLayer = struct {
         const self = try std.heap.page_allocator.create(TestLayer);
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         self.mEngineContext.* = .{};
-        const engine_allocator = self.mEngineContext.EngineAllocator();
-        try self.mBodies.Init(engine_allocator);
-        try self.mOtherBodies.Init(engine_allocator);
-        try self.mScene.Init(engine_allocator);
-        try self.mOtherScene.Init(engine_allocator);
-        try self.mSystems.Register(engine_allocator, &self.mBodies);
-        try self.mSystems.Register(engine_allocator, &self.mOtherBodies);
-        try self.mSystems.Register(engine_allocator, &self.mScene);
-        try self.mSystems.Register(engine_allocator, &self.mOtherScene);
+        const keep_allocator = self.mEngineContext.Keep();
+        try self.mBodies.Init(keep_allocator);
+        try self.mOtherBodies.Init(keep_allocator);
+        try self.mScene.Init(keep_allocator);
+        try self.mOtherScene.Init(keep_allocator);
+        try self.mSystems.Register(keep_allocator, &self.mBodies);
+        try self.mSystems.Register(keep_allocator, &self.mOtherBodies);
+        try self.mSystems.Register(keep_allocator, &self.mScene);
+        try self.mSystems.Register(keep_allocator, &self.mOtherScene);
         return self;
     }
 
     fn Deinit(self: *TestLayer) !void {
         const engine_context = self.mEngineContext;
-        self.mSystems.Deinit(engine_context.EngineAllocator());
+        self.mSystems.Deinit(engine_context.Keep());
         self.mBodies.Deinit(engine_context);
         self.mOtherBodies.Deinit(engine_context);
         self.mScene.Deinit(engine_context);
         self.mOtherScene.Deinit(engine_context);
-        const leak_check = engine_context._Internal.EngineGPA.deinit();
+        const leak_check = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
         try std.testing.expect(leak_check == .ok);
     }
 
     fn NewBody(self: *TestLayer) !u32 {
-        return try self.mBodies.CreateEntity(self.mEngineContext.EngineAllocator());
+        return try self.mBodies.CreateEntity(self.mEngineContext.Keep());
     }
 };
 
@@ -102,7 +102,7 @@ const AddsPositions = struct {
     pub const Name = "AddsPositions";
 
     pub fn Run(engine_context: *EngineContext, bodies: *BodyECS, seen: *Seen) !void {
-        const entity_id = try bodies.CreateEntity(engine_context.EngineAllocator());
+        const entity_id = try bodies.CreateEntity(engine_context.Keep());
         _ = try bodies.AddComponent(engine_context, entity_id, Position{ .x = 3 });
         seen.mStagedVisible = bodies.HasComponent(Position, entity_id);
         seen.mPositionsDuring = bodies.mComponentManager.NumWithComponent(Position);
@@ -133,7 +133,7 @@ const FailsAfterAdding = struct {
     pub const Name = "FailsAfterAdding";
 
     pub fn Run(engine_context: *EngineContext, bodies: *BodyECS) !u32 {
-        const entity_id = try bodies.CreateEntity(engine_context.EngineAllocator());
+        const entity_id = try bodies.CreateEntity(engine_context.Keep());
         _ = try bodies.AddComponent(engine_context, entity_id, Position{});
         return error.SystemFailed;
     }
@@ -196,10 +196,10 @@ const HoldsEverywhere = struct {
 test "while a run goes on every ECS holds its adds, and they land when it ends" {
     const layer = try TestLayer.Init();
     defer layer.Deinit() catch unreachable;
-    const engine_allocator = layer.mEngineContext.EngineAllocator();
+    const keep_allocator = layer.mEngineContext.Keep();
     const body = try layer.NewBody();
-    const other_body = try layer.mOtherBodies.CreateEntity(engine_allocator);
-    const scene = try layer.mScene.CreateEntity(engine_allocator);
+    const other_body = try layer.mOtherBodies.CreateEntity(keep_allocator);
+    const scene = try layer.mScene.CreateEntity(keep_allocator);
 
     try layer.mSystems.RunSystem(HoldsEverywhere, layer.mEngineContext, .{ layer, body, other_body, scene });
 
@@ -297,7 +297,7 @@ test "what landing sets off lands too, even in an ECS it has already been past" 
     defer layer.Deinit() catch unreachable;
     const engine_context = layer.mEngineContext;
     const body = try layer.NewBody();
-    const scene = try layer.mScene.CreateEntity(engine_context.EngineAllocator());
+    const scene = try layer.mScene.CreateEntity(engine_context.Keep());
     _ = try layer.mScene.AddComponent(engine_context, scene, Gravity{});
 
     var chain = LandingChain{ .mLayer = layer, .mBody = body };
@@ -335,7 +335,7 @@ const QueriesWhileHolding = struct {
     pub const Name = "QueriesWhileHolding";
 
     pub fn Run(engine_context: *EngineContext, bodies: *BodyECS, landed: u32, waiting: u32) !void {
-        const allocator = engine_context.EngineAllocator();
+        const allocator = engine_context.Keep();
         //`landed` has a Position in storage, and gets a Velocity staged. `waiting` only has a Position staged
         _ = try bodies.AddComponent(engine_context, waiting, Position{});
         _ = try bodies.AddComponent(engine_context, landed, Velocity{});

@@ -22,13 +22,13 @@ mBounds: Vec2(f32) = .{ .x = 8, .y = 8 },
 
 pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) void {
     self.mTextAssetHandle.ReleaseAsset();
-    self.mText.deinit(engine_context.EngineAllocator());
+    self.mText.deinit(engine_context.Keep());
 }
 
 pub fn Clone(self: *const TextComponent, engine_context: *EngineContext) !TextComponent {
     var new_component = self.*;
 
-    new_component.mText = try self.mText.clone(engine_context.EngineAllocator());
+    new_component.mText = try self.mText.clone(engine_context.Keep());
 
     // the copy releases it itself, so it needs its own reference
     new_component.mTextAssetHandle.RetainAsset();
@@ -42,12 +42,12 @@ pub fn Clone(self: *const TextComponent, engine_context: *EngineContext) !TextCo
 /// the font or the font size
 pub fn SetText(self: *TextComponent, engine_context: *EngineContext, text: []const u8) !void {
     self.mText.clearRetainingCapacity();
-    try self.mText.appendSlice(engine_context.EngineAllocator(), text);
+    try self.mText.appendSlice(engine_context.Keep(), text);
 }
 
 /// Adds to the end of the text. Same as SetText, the caller marks this entity's layout dirty if it is in one
 pub fn AppendText(self: *TextComponent, engine_context: *EngineContext, text: []const u8) !void {
-    try self.mText.appendSlice(engine_context.EngineAllocator(), text);
+    try self.mText.appendSlice(engine_context.Keep(), text);
 }
 
 pub fn UIRender(self: *TextComponent, ui: *Inspector.Builder) !void {

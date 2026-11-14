@@ -38,7 +38,7 @@ const TestWorld = struct {
         engine_context.mTmplEditWorld.Deinit(engine_context);
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -55,7 +55,7 @@ test "a tree of only the roots it is handed, with no menu of its own and no Dele
     _ = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
 
     var tree = try HierarchyPanel(Entity).BuildForRoots(engine_context, world.mPage, .{ .StockScripts = false });
-    defer tree.Deinit(engine_context.EngineAllocator());
+    defer tree.Deinit(engine_context.Keep());
     var selected: ?SelectedObject = null;
     try tree.UpdateRoots(engine_context, &.{root}, selected);
     try std.testing.expectEqual(@as(usize, 2), tree.mRows.items.len);

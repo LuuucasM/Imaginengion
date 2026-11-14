@@ -18,8 +18,8 @@ pub fn Init(size: usize) VertexBuffer {
     };
 }
 
-pub fn Deinit(self: *VertexBuffer, engine_allocator: std.mem.Allocator) void {
-    self.mImpl.Deinit(engine_allocator);
+pub fn Deinit(self: *VertexBuffer, keep_allocator: std.mem.Allocator) void {
+    self.mImpl.Deinit(keep_allocator);
 }
 
 pub fn Bind(self: VertexBuffer) void {
@@ -34,8 +34,8 @@ pub fn SetData(self: *VertexBuffer, data: *anyopaque, size: usize, offset: u32) 
     self.mImpl.SetData(data, size, offset);
 }
 
-pub fn SetLayout(self: *VertexBuffer, engine_allocator: std.mem.Allocator, layout: std.ArrayList(VertexBufferElement)) !void {
-    try self.mImpl.SetLayout(engine_allocator, layout);
+pub fn SetLayout(self: *VertexBuffer, keep_allocator: std.mem.Allocator, layout: std.ArrayList(VertexBufferElement)) !void {
+    try self.mImpl.SetLayout(keep_allocator, layout);
 }
 
 pub fn SetStride(self: *VertexBuffer, stride: usize) void {

@@ -41,7 +41,7 @@ const TestWorld = struct {
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -53,28 +53,28 @@ const TestWorld = struct {
 
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
-        const engine_allocator = engine_context.EngineAllocator();
+        const keep_allocator = engine_context.Keep();
         engine_context.mEditorWorld.Deinit(engine_context);
         const asset_manager = &engine_context.mAssetManager;
         asset_manager.mECSManager.Deinit(engine_context);
-        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-        asset_manager.mEventManager.Deinit(engine_allocator);
-        asset_manager.mCWDPath.deinit(engine_allocator);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+        asset_manager.mEventManager.Deinit(keep_allocator);
+        asset_manager.mCWDPath.deinit(keep_allocator);
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
 };
 
 /// A renderer with only its CPU side used: nothing on it is set up for a GPU, and its lists are freed by FreeCPU
-fn FreeCPU(renderer: *Renderer, engine_allocator: std.mem.Allocator) void {
-    renderer.mR2D.mOverlayData.Reset(engine_allocator, .ClearAndFree);
-    renderer.mR2D.mGameData.Reset(engine_allocator, .ClearAndFree);
-    renderer.mR2D.mOverlayData.mMaskBufferBase.deinit(engine_allocator);
-    renderer.mR2D.mGameData.mMaskBufferBase.deinit(engine_allocator);
-    renderer.mR2D.mWarnedMerges.deinit(engine_allocator);
-    renderer.mSDFShading.Reset(engine_allocator, .ClearAndFree);
-    renderer.mShownCopies.deinit(engine_allocator);
+fn FreeCPU(renderer: *Renderer, keep_allocator: std.mem.Allocator) void {
+    renderer.mR2D.mOverlayData.Reset(keep_allocator, .ClearAndFree);
+    renderer.mR2D.mGameData.Reset(keep_allocator, .ClearAndFree);
+    renderer.mR2D.mOverlayData.mMaskBufferBase.deinit(keep_allocator);
+    renderer.mR2D.mGameData.mMaskBufferBase.deinit(keep_allocator);
+    renderer.mR2D.mWarnedMerges.deinit(keep_allocator);
+    renderer.mSDFShading.Reset(keep_allocator, .ClearAndFree);
+    renderer.mShownCopies.deinit(keep_allocator);
 }
 
 //==================================the view and its rays==================================
@@ -187,16 +187,16 @@ const Covered = struct {
 /// one has to come out the same color. How many pixels hit something in each layer, so a test can be sure it saw some
 fn ExpectSamePictures(engine_context: *EngineContext, random: std.Random, view_scenes: Renderer.ViewScenes, show_colliders: bool, pixels: usize) !Covered {
     const world = &engine_context.mEditorWorld;
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
     var stats: RenderStats = .{};
 
     var from_tree: Renderer = .{};
-    defer FreeCPU(&from_tree, engine_allocator);
+    defer FreeCPU(&from_tree, keep_allocator);
     from_tree.mShowColliders = show_colliders;
     try engine_context.mSystems.RunSystem(Renderer.Fill, engine_context, .{ &from_tree, world, view_scenes, VIEW, &stats });
 
     var one_view: Renderer = .{};
-    defer FreeCPU(&one_view, engine_allocator);
+    defer FreeCPU(&one_view, keep_allocator);
     one_view.mShowColliders = show_colliders;
     try engine_context.mSystems.RunSystem(Renderer.FillView, engine_context, .{ &one_view, world, view_scenes, VIEW, &stats });
 
@@ -364,7 +364,7 @@ test "a shape hidden or deleted after the tree was built isn't drawn, and the re
     try engine_context.mEditorWorld.BuildBVH(engine_context);
 
     //a few of each folded away, switched off and deleted mid frame, while the tree still has them
-    const quads = try engine_context.mEditorWorld.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = SurfaceComponent });
+    const quads = try engine_context.mEditorWorld.GetEntityGroup(engine_context.Scratch(), .{ .Component = SurfaceComponent });
     for (quads.items, 0..) |entity_id, i| {
         const entity = engine_context.mEditorWorld.GetEntity(entity_id);
         if (entity.HasComponent(MaskComponent) or entity.GetComponent(@import("../../ECS/Components.zig").ChildComponent(Entity.Type)) != null) continue;
@@ -389,7 +389,7 @@ test "a mask taken off after the tree was built stops cutting what is under it, 
     const scenes = try BuildScenes(engine_context, random);
     try engine_context.mEditorWorld.BuildBVH(engine_context);
 
-    const masks = try engine_context.mEditorWorld.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = MaskComponent });
+    const masks = try engine_context.mEditorWorld.GetEntityGroup(engine_context.Scratch(), .{ .Component = MaskComponent });
     try std.testing.expect(masks.items.len > 0);
     for (masks.items) |entity_id| try engine_context.mEditorWorld.GetEntity(entity_id).RemoveComponent(engine_context, MaskComponent);
 
@@ -417,7 +417,7 @@ fn FadedOverRed(front: Vec4(f32)) !Vec4(f32) {
 
     var stats: RenderStats = .{};
     var renderer: Renderer = .{};
-    defer FreeCPU(&renderer, engine_context.EngineAllocator());
+    defer FreeCPU(&renderer, engine_context.Keep());
     try engine_context.mSystems.RunSystem(Renderer.Fill, engine_context, .{ &renderer, &engine_context.mEditorWorld, Renderer.ViewScenes{ .Overlays = &.{} }, VIEW, &stats });
     return TracePass(&renderer, &renderer.mR2D.mGameData, ViewPushConstants(), GAME_BACKGROUND, .{ .x = WIDTH / 2, .y = HEIGHT / 2 }, .BVH);
 }
@@ -443,7 +443,7 @@ test "a tree item's surface is put at its place before the build, so a tie at th
 
     var stats: RenderStats = .{};
     var renderer: Renderer = .{};
-    defer FreeCPU(&renderer, engine_context.EngineAllocator());
+    defer FreeCPU(&renderer, engine_context.Keep());
     try engine_context.mSystems.RunSystem(Renderer.Fill, engine_context, .{ &renderer, &engine_context.mEditorWorld, Renderer.ViewScenes{ .Overlays = &.{} }, VIEW, &stats });
 
     const tree = engine_context.mEditorWorld.mBVH.Tree(.GameLayer);

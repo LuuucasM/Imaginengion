@@ -39,27 +39,27 @@ pub fn EventManager(EventData: type) type {
         /// is a member of Application, so it outlives this manager and never needs unregistering.
         mSyncCallback: ?EventCallback = null,
 
-        pub fn Deinit(self: *Self, engine_allocator: std.mem.Allocator) void {
+        pub fn Deinit(self: *Self, keep_allocator: std.mem.Allocator) void {
             var iter = self.mEventsArray.iterator();
             while (iter.next()) |entry| {
-                entry.value.deinit(engine_allocator);
+                entry.value.deinit(keep_allocator);
             }
         }
 
-        pub fn Insert(self: *Self, engine_allocator: std.mem.Allocator, comptime category: EventData.EventCategories, event: EventData.EventT) !void {
-            try self.mEventsArray.getPtr(category).append(engine_allocator, event);
+        pub fn Insert(self: *Self, keep_allocator: std.mem.Allocator, comptime category: EventData.EventCategories, event: EventData.EventT) !void {
+            try self.mEventsArray.getPtr(category).append(keep_allocator, event);
         }
 
         /// Copies every queued event into `other`, which must be empty.
         /// Events are plain values, so this only makes sense when the copy shares the ids they name.
-        pub fn CopyInto(self: *Self, engine_allocator: std.mem.Allocator, other: *Self) !void {
-            errdefer other.EventsReset(engine_allocator, .ClearAndFree);
+        pub fn CopyInto(self: *Self, keep_allocator: std.mem.Allocator, other: *Self) !void {
+            errdefer other.EventsReset(keep_allocator, .ClearAndFree);
 
             var iter = self.mEventsArray.iterator();
             while (iter.next()) |entry| {
                 const other_events = other.mEventsArray.getPtr(entry.key);
                 std.debug.assert(other_events.items.len == 0);
-                try other_events.appendSlice(engine_allocator, entry.value.items);
+                try other_events.appendSlice(keep_allocator, entry.value.items);
             }
         }
 
@@ -117,18 +117,18 @@ pub fn EventManager(EventData: type) type {
         }
 
         /// Same as EventsReset but for a single category, for managers that process one category at a time.
-        pub fn ClearCategory(self: *Self, engine_allocator: std.mem.Allocator, comptime category: EventData.EventCategories, clear_mode: ClearMode) void {
+        pub fn ClearCategory(self: *Self, keep_allocator: std.mem.Allocator, comptime category: EventData.EventCategories, clear_mode: ClearMode) void {
             switch (clear_mode) {
-                .ClearAndFree => self.mEventsArray.getPtr(category).clearAndFree(engine_allocator),
+                .ClearAndFree => self.mEventsArray.getPtr(category).clearAndFree(keep_allocator),
                 .ClearRetainingCapacity => self.mEventsArray.getPtr(category).clearRetainingCapacity(),
             }
         }
 
-        pub fn EventsReset(self: *Self, engine_allocator: std.mem.Allocator, clear_mode: ClearMode) void {
+        pub fn EventsReset(self: *Self, keep_allocator: std.mem.Allocator, clear_mode: ClearMode) void {
             var iter = self.mEventsArray.iterator();
             while (iter.next()) |entry| {
                 switch (clear_mode) {
-                    .ClearAndFree => entry.value.clearAndFree(engine_allocator),
+                    .ClearAndFree => entry.value.clearAndFree(keep_allocator),
                     .ClearRetainingCapacity => entry.value.clearRetainingCapacity(),
                 }
             }

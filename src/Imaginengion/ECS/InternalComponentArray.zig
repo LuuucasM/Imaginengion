@@ -21,7 +21,7 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         }
         /// Frees the storage only, DeinitComponents has to have run first
         pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
-            self.mComponents.Deinit(engine_context.EngineAllocator());
+            self.mComponents.Deinit(engine_context.Keep());
         }
         /// A copy of the entity's component in `arena`, for DuplicateEntity to stage onto the copy
         pub fn StageDuplicate(self: *Self, engine_context: *EngineContext, arena: std.mem.Allocator, original_entity_id: entity_t) !*anyopaque {
@@ -41,7 +41,7 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         /// Deep copies this array into `other`, which must be empty.
         /// Entity ids and the free id list carry over, so the copy is addressed by the same ids.
         pub fn CopyInto(self: *Self, engine_context: *EngineContext, other: *Self) !void {
-            try self.mComponents.CopyInto(engine_context.EngineAllocator(), &other.mComponents);
+            try self.mComponents.CopyInto(engine_context.Keep(), &other.mComponents);
 
             // a component that owns memory is still aliasing this array's copy, so it is replaced
             // by a real clone. anything else is already a finished value copy
@@ -53,16 +53,16 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
                 for (other.mComponents.mValues.items[0..cloned]) |*component| {
                     component.Deinit(engine_context);
                 }
-                other.mComponents.clearAndFree(engine_context.EngineAllocator());
+                other.mComponents.clearAndFree(engine_context.Keep());
             }
             while (cloned < other.mComponents.mValues.items.len) : (cloned += 1) {
                 other.mComponents.mValues.items[cloned] = try self.mComponents.mValues.items[cloned].Clone(engine_context);
             }
         }
-        pub fn AddComponent(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component: component_type) !*component_type {
+        pub fn AddComponent(self: *Self, keep_allocator: std.mem.Allocator, entity_id: entity_t, component: component_type) !*component_type {
             std.debug.assert(!self.mComponents.HasSparse(entity_id));
 
-            return try self.mComponents.AddValue(engine_allocator, entity_id, component);
+            return try self.mComponents.AddValue(keep_allocator, entity_id, component);
         }
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entityID: entity_t) void {
             std.debug.assert(self.mComponents.HasSparse(entityID));
@@ -98,7 +98,7 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         }
         /// Frees the storage only, DeinitComponents has to have run first
         pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
-            self.mComponents.clearAndFree(engine_context.EngineAllocator());
+            self.mComponents.clearAndFree(engine_context.Keep());
         }
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) void {
             std.debug.assert(self.mComponents.HasSparse(entity_id));
@@ -106,9 +106,9 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         }
         /// Copies the staged value in. The value now belongs to this array, so the staged copy is left as is and
         /// goes when the staging arena is reset.
-        pub fn AddStaged(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, staged: *anyopaque) !void {
+        pub fn AddStaged(self: *Self, keep_allocator: std.mem.Allocator, entity_id: entity_t, staged: *anyopaque) !void {
             const staged_component: *component_type = @ptrCast(@alignCast(staged));
-            _ = try self.AddComponent(engine_allocator, entity_id, staged_component.*);
+            _ = try self.AddComponent(keep_allocator, entity_id, staged_component.*);
         }
         /// Puts a transaction's copy of the entity's component (Transaction.Copy) in its place, the old one deinitialized.
         /// One the entity no longer has takes the copy with it. Transaction.CopyFns.mCommit, through ComponentArray

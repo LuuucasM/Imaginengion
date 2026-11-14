@@ -63,13 +63,13 @@ fn WriteObjectFile(engine_context: *EngineContext, object: anytype, abs_path: []
     defer zone.Deinit();
     zone.Text(abs_path);
 
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
-    var out: std.Io.Writer.Allocating = .init(frame_allocator);
+    var out: std.Io.Writer.Allocating = .init(scratch_allocator);
     defer out.deinit();
 
     var write_stream: std.json.Stringify = .{ .writer = &out.writer, .options = STRINGIFY_OPTIONS };
-    try SerializeObject(&write_stream, frame_allocator, object, tmpl_root);
+    try SerializeObject(&write_stream, scratch_allocator, object, tmpl_root);
 
     //write the whole file at once so a failed serialize never leaves a half written file behind
     try std.Io.Dir.cwd().writeFile(engine_context.Io(), .{ .sub_path = abs_path, .data = out.written() });
@@ -77,12 +77,12 @@ fn WriteObjectFile(engine_context: *EngineContext, object: anytype, abs_path: []
 
 /// Writes object and everything under it as one value into a stream the caller owns, for objects that are saved as
 /// part of another file rather than in one of their own (e.g. the bus tree in the project's audio settings)
-pub fn WriteObject(write_stream: *std.json.Stringify, frame_allocator: std.mem.Allocator, object: anytype) !void {
-    try SerializeObject(write_stream, frame_allocator, object, null);
+pub fn WriteObject(write_stream: *std.json.Stringify, scratch_allocator: std.mem.Allocator, object: anytype) !void {
+    try SerializeObject(write_stream, scratch_allocator, object, null);
 }
 
 /// tmpl_root is only set for the root of a template file, never for what is under it
-fn SerializeObject(write_stream: *std.json.Stringify, frame_allocator: std.mem.Allocator, object: anytype, tmpl_root: ?TmplRoot) anyerror!void {
+fn SerializeObject(write_stream: *std.json.Stringify, scratch_allocator: std.mem.Allocator, object: anytype, tmpl_root: ?TmplRoot) anyerror!void {
     const obj_t = @TypeOf(object);
 
     try write_stream.beginObject();
@@ -119,25 +119,25 @@ fn SerializeObject(write_stream: *std.json.Stringify, frame_allocator: std.mem.A
     if (child_iter.next()) |first_child| {
         try write_stream.objectField("Children");
         try write_stream.beginArray();
-        try SerializeObject(write_stream, frame_allocator, first_child, null);
+        try SerializeObject(write_stream, scratch_allocator, first_child, null);
         while (child_iter.next()) |child| {
-            try SerializeObject(write_stream, frame_allocator, child, null);
+            try SerializeObject(write_stream, scratch_allocator, child, null);
         }
         try write_stream.endArray();
     }
 
     if (obj_t == Scene) {
-        try SerializeSceneEntities(write_stream, frame_allocator, object);
+        try SerializeSceneEntities(write_stream, scratch_allocator, object);
     }
 
     try write_stream.endObject();
 }
 
-fn SerializeSceneEntities(write_stream: *std.json.Stringify, frame_allocator: std.mem.Allocator, scene: Scene) !void {
+fn SerializeSceneEntities(write_stream: *std.json.Stringify, scratch_allocator: std.mem.Allocator, scene: Scene) !void {
     //only the top level entities, children are written by their parent
     const EntitySceneQuery = GroupQuery{ .Component = EntitySceneComponent };
     const EntityChildQuery = GroupQuery{ .Component = EntityChildComponent };
-    const entity_list = try scene.GetEntityGroup(frame_allocator, .{
+    const entity_list = try scene.GetEntityGroup(scratch_allocator, .{
         .Not = .{
             .mFirst = &EntitySceneQuery,
             .mSecond = &EntityChildQuery,
@@ -149,7 +149,7 @@ fn SerializeSceneEntities(write_stream: *std.json.Stringify, frame_allocator: st
     try write_stream.objectField("Entities");
     try write_stream.beginArray();
     for (entity_list.items) |entity_id| {
-        try SerializeObject(write_stream, frame_allocator, scene.GetEntity(entity_id), null);
+        try SerializeObject(write_stream, scratch_allocator, scene.GetEntity(entity_id), null);
     }
     try write_stream.endArray();
 }
@@ -161,11 +161,11 @@ pub fn DeserializeECSObj(engine_context: *EngineContext, object: anytype, abs_pa
     defer zone.Deinit();
     zone.Text(abs_path);
 
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
-    const contents = try std.Io.Dir.cwd().readFileAlloc(engine_context.Io(), abs_path, frame_allocator, .unlimited);
+    const contents = try std.Io.Dir.cwd().readFileAlloc(engine_context.Io(), abs_path, scratch_allocator, .unlimited);
 
-    var scanner = std.json.Scanner.initCompleteInput(frame_allocator, contents);
+    var scanner = std.json.Scanner.initCompleteInput(scratch_allocator, contents);
     defer scanner.deinit();
 
     try DeserializeObject(engine_context, &scanner, object);
@@ -187,7 +187,7 @@ fn DeserializeObject(engine_context: *EngineContext, scanner: *std.json.Scanner,
     if (.object_begin != try scanner.next()) return error.UnexpectedToken;
 
     while (true) {
-        const key = switch (try scanner.nextAlloc(engine_context.FrameAllocator(), .alloc_if_needed)) {
+        const key = switch (try scanner.nextAlloc(engine_context.Scratch(), .alloc_if_needed)) {
             .object_end => return,
             inline .string, .allocated_string => |slice| slice,
             else => return error.UnexpectedToken,
@@ -222,7 +222,7 @@ fn DeserializeComponent(engine_context: *EngineContext, scanner: *std.json.Scann
             engine_context.mSerializer.mCurrDeserialize = .{ .requester = .Init(object) };
 
             //parse first then add, so AddComponent can hook up the manager pointers of the parsed value
-            const parsed = try std.json.innerParse(component_type, engine_context.FrameAllocator(), scanner, PARSE_OPTIONS);
+            const parsed = try std.json.innerParse(component_type, engine_context.Scratch(), scanner, PARSE_OPTIONS);
             const new_component = try object.AddComponent(engine_context, parsed);
             if (@hasDecl(component_type, "PostParse")) {
                 try new_component.PostParse(engine_context, object);
@@ -243,7 +243,7 @@ const ScriptEntry = struct {
 fn DeserializeScripts(engine_context: *EngineContext, scanner: *std.json.Scanner, object: anytype) !void {
     if (.array_begin != try scanner.next()) return error.UnexpectedToken;
     while (try scanner.peekNextTokenType() != .array_end) {
-        const entry = try std.json.innerParse(ScriptEntry, engine_context.FrameAllocator(), scanner, PARSE_OPTIONS);
+        const entry = try std.json.innerParse(ScriptEntry, engine_context.Scratch(), scanner, PARSE_OPTIONS);
         if (!entry.Script.IsIDValid()) continue; //the script asset could not be found
         //AddScript creates the script child, its variables and the tags for its hooks from the asset
         const script = try ECSObject.Core(@TypeOf(object)).AddScript(object, engine_context, entry.Script);

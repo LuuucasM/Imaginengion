@@ -87,7 +87,7 @@ pub const Linear = struct {
     pub fn Run(engine_context: *EngineContext, world: *WorldManager, shape: CastShape, ray: Ray, options: QueryOptions) !?PhysicsHit {
         try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{world});
         const filter = Filter.Init(options);
-        const colliders = try world.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
+        const colliders = try world.GetEntityGroup(engine_context.Scratch(), .{ .Component = ColliderComponent });
         var nearest: RayIntersect.NearestHit(Entity) = .{};
         for (colliders.items) |collider_id| {
             const entity = world.GetEntity(collider_id);

@@ -29,7 +29,7 @@ const TestEngine = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //UUIDs and file reads/writes go through the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -43,8 +43,8 @@ const TestEngine = struct {
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mAudioManager.DeinitMixer(engine_context);
         engine_context.mProject.Deinit(engine_context);
-        engine_context.mSerializer.Deinit(engine_context.EngineAllocator());
-        _ = engine_context._Internal.EngineGPA.deinit();
+        engine_context.mSerializer.Deinit(engine_context.Keep());
+        _ = engine_context._Internal.KeepHeap.deinit();
         self.mTmpDir.cleanup();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -56,19 +56,19 @@ const TestEngine = struct {
 
     /// This test's temporary folder as an absolute path, which is what a project is opened with
     fn TmpDirAbsPath(self: *TestEngine) ![]const u8 {
-        return try self.mTmpDir.dir.realPathFileAlloc(self.mEngineContext.Io(), ".", self.mEngineContext.FrameAllocator());
+        return try self.mTmpDir.dir.realPathFileAlloc(self.mEngineContext.Io(), ".", self.mEngineContext.Scratch());
     }
 
     /// A path in this test's temporary folder, relative to the working directory like the serializer expects
     fn FilePath(self: *TestEngine, file_name: []const u8) ![]const u8 {
-        return std.fmt.allocPrint(self.mEngineContext.FrameAllocator(), ".zig-cache/tmp/{s}/{s}", .{ self.mTmpDir.sub_path, file_name });
+        return std.fmt.allocPrint(self.mEngineContext.Scratch(), ".zig-cache/tmp/{s}/{s}", .{ self.mTmpDir.sub_path, file_name });
     }
 };
 
 /// The audio settings as they would be written to ProjectSettings/Audio.json
 fn SaveAudioSettings(engine: *TestEngine) ![]const u8 {
     const engine_context = engine.mEngineContext;
-    var out: std.Io.Writer.Allocating = .init(engine_context.FrameAllocator());
+    var out: std.Io.Writer.Allocating = .init(engine_context.Scratch());
     var write_stream: std.json.Stringify = .{ .writer = &out.writer };
     try engine.AudioManager().SaveProjectSettings(engine_context, &write_stream);
     return out.written();
@@ -76,7 +76,7 @@ fn SaveAudioSettings(engine: *TestEngine) ![]const u8 {
 
 fn LoadAudioSettings(engine: *TestEngine, contents: []const u8) !void {
     const engine_context = engine.mEngineContext;
-    var scanner = std.json.Scanner.initCompleteInput(engine_context.FrameAllocator(), contents);
+    var scanner = std.json.Scanner.initCompleteInput(engine_context.Scratch(), contents);
     defer scanner.deinit();
     try engine.AudioManager().LoadProjectSettings(engine_context, &scanner);
 }
@@ -86,7 +86,7 @@ fn NewBus(engine: *TestEngine, parent: Bus, name: []const u8, volume: f32) !Bus 
     const bus = try parent.CreateChild(engine_context, .Entity, Bus.DefaultConfig);
     const name_component = bus.GetComponentMut(VComponents.NameComponent).?;
     name_component.mName.clearRetainingCapacity();
-    try name_component.mName.appendSlice(engine_context.EngineAllocator(), name);
+    try name_component.mName.appendSlice(engine_context.Keep(), name);
     bus.SetVolume(volume);
     return bus;
 }
@@ -224,9 +224,9 @@ test "an AudioComponent saved before its bus is loaded keeps it, and a bus delet
     try TextSerializer.DeserializeECSObj(loaded_context, loaded, path);
     try std.testing.expect(!loaded.GetComponent(AudioComponent).?.mBus.IsIDValid());
 
-    const frame_allocator = loaded_context.FrameAllocator();
-    const saved_again = try std.json.Stringify.valueAlloc(frame_allocator, loaded.GetComponent(AudioComponent).?.*, .{});
-    const bus_field = try std.fmt.allocPrint(frame_allocator, "\"Bus\":{d}", .{sfx_uuid});
+    const scratch_allocator = loaded_context.Scratch();
+    const saved_again = try std.json.Stringify.valueAlloc(scratch_allocator, loaded.GetComponent(AudioComponent).?.*, .{});
+    const bus_field = try std.fmt.allocPrint(scratch_allocator, "\"Bus\":{d}", .{sfx_uuid});
     try std.testing.expect(std.mem.indexOf(u8, saved_again, bus_field) != null);
 
     try LoadAudioSettings(loaded_engine, settings);
@@ -292,14 +292,14 @@ test "a project saves its buses and opening it in a fresh engine brings them bac
     try saved_context.mProject.Save(saved_context);
 
     //the project file is named after the folder, and each owner has its own settings file
-    const project_file_name = try std.fmt.allocPrint(saved_context.FrameAllocator(), "{s}{s}", .{ std.fs.path.basename(project_folder), Project.FILE_EXTENSION });
+    const project_file_name = try std.fmt.allocPrint(saved_context.Scratch(), "{s}{s}", .{ std.fs.path.basename(project_folder), Project.FILE_EXTENSION });
     try saved_engine.mTmpDir.dir.access(saved_context.Io(), project_file_name, .{});
     try saved_engine.mTmpDir.dir.access(saved_context.Io(), Project.SETTINGS_FOLDER ++ "/Audio.json", .{});
 
     const loaded_engine = try TestEngine.Init();
     defer loaded_engine.Deinit();
     const loaded_context = loaded_engine.mEngineContext;
-    const project_file_path = try std.fs.path.join(loaded_context.FrameAllocator(), &.{ project_folder, project_file_name });
+    const project_file_path = try std.fs.path.join(loaded_context.Scratch(), &.{ project_folder, project_file_name });
     try loaded_context.mProject.Open(loaded_context, project_file_path);
 
     try std.testing.expect(loaded_context.mProject.IsOpen());

@@ -14,14 +14,14 @@ mPathType: PathType = .Prj,
 
 pub fn Init(engine_context: *EngineContext, rel_path: []const u8, path_type: PathType) !FileRefComponent {
     var file_ref = FileRefComponent{ .mPathType = path_type };
-    try file_ref.mRelPath.appendSlice(engine_context.EngineAllocator(), rel_path);
+    try file_ref.mRelPath.appendSlice(engine_context.Keep(), rel_path);
     return file_ref;
 }
 
 pub fn Deinit(self: *FileRefComponent, engine_context: *EngineContext) void {
-    self.mRelPath.deinit(engine_context.EngineAllocator());
+    self.mRelPath.deinit(engine_context.Keep());
 }
 
 pub fn Clone(self: *const FileRefComponent, engine_context: *EngineContext) !FileRefComponent {
-    return .{ .mRelPath = try self.mRelPath.clone(engine_context.EngineAllocator()), .mPathType = self.mPathType };
+    return .{ .mRelPath = try self.mRelPath.clone(engine_context.Keep()), .mPathType = self.mPathType };
 }

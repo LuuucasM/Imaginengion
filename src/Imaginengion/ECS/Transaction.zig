@@ -173,9 +173,9 @@ pub const WriteSet = struct {
     mWrites: std.AutoHashMapUnmanaged(Key, void) = .empty,
     mTypeWrites: std.AutoHashMapUnmanaged(TypeKey, void) = .empty,
 
-    pub fn Deinit(self: *WriteSet, engine_allocator: std.mem.Allocator) void {
-        self.mWrites.deinit(engine_allocator);
-        self.mTypeWrites.deinit(engine_allocator);
+    pub fn Deinit(self: *WriteSet, keep_allocator: std.mem.Allocator) void {
+        self.mWrites.deinit(keep_allocator);
+        self.mTypeWrites.deinit(keep_allocator);
     }
 
     pub fn Clear(self: *WriteSet) void {
@@ -184,11 +184,11 @@ pub const WriteSet = struct {
     }
 
     /// Adds what `transaction` wrote
-    pub fn Add(self: *WriteSet, engine_allocator: std.mem.Allocator, transaction: *const Transaction) !void {
+    pub fn Add(self: *WriteSet, keep_allocator: std.mem.Allocator, transaction: *const Transaction) !void {
         var writes = transaction.mWrites.keyIterator();
-        while (writes.next()) |key| try self.mWrites.put(engine_allocator, key.*, {});
+        while (writes.next()) |key| try self.mWrites.put(keep_allocator, key.*, {});
         var type_writes = transaction.mTypeWrites.keyIterator();
-        while (type_writes.next()) |key| try self.mTypeWrites.put(engine_allocator, key.*, {});
+        while (type_writes.next()) |key| try self.mTypeWrites.put(keep_allocator, key.*, {});
     }
 };
 
@@ -199,9 +199,9 @@ pub const Reservations = struct {
     mKeys: std.AutoHashMapUnmanaged(Key, usize) = .empty,
     mTypes: std.AutoHashMapUnmanaged(TypeKey, usize) = .empty,
 
-    pub fn Deinit(self: *Reservations, engine_allocator: std.mem.Allocator) void {
-        self.mKeys.deinit(engine_allocator);
-        self.mTypes.deinit(engine_allocator);
+    pub fn Deinit(self: *Reservations, keep_allocator: std.mem.Allocator) void {
+        self.mKeys.deinit(keep_allocator);
+        self.mTypes.deinit(keep_allocator);
     }
 
     pub fn Clear(self: *Reservations) void {
@@ -211,15 +211,15 @@ pub const Reservations = struct {
 
     /// ReserveWrite: every key `transaction`, at place `index` in the batch, writes is reserved by the lowest place
     /// writing it
-    pub fn Reserve(self: *Reservations, engine_allocator: std.mem.Allocator, transaction: *const Transaction, index: usize) !void {
+    pub fn Reserve(self: *Reservations, keep_allocator: std.mem.Allocator, transaction: *const Transaction, index: usize) !void {
         var writes = transaction.mWrites.keyIterator();
-        while (writes.next()) |key| try _ReserveMin(&self.mKeys, engine_allocator, key.*, index);
+        while (writes.next()) |key| try _ReserveMin(&self.mKeys, keep_allocator, key.*, index);
         var type_writes = transaction.mTypeWrites.keyIterator();
-        while (type_writes.next()) |key| try _ReserveMin(&self.mTypes, engine_allocator, key.*, index);
+        while (type_writes.next()) |key| try _ReserveMin(&self.mTypes, keep_allocator, key.*, index);
     }
 
-    fn _ReserveMin(map: anytype, engine_allocator: std.mem.Allocator, key: anytype, index: usize) !void {
-        const entry = try map.getOrPut(engine_allocator, key);
+    fn _ReserveMin(map: anytype, keep_allocator: std.mem.Allocator, key: anytype, index: usize) !void {
+        const entry = try map.getOrPut(keep_allocator, key);
         if (!entry.found_existing or index < entry.value_ptr.*) entry.value_ptr.* = index;
     }
 
@@ -229,21 +229,21 @@ pub const Reservations = struct {
     }
 };
 
-pub fn Deinit(self: *Transaction, engine_allocator: std.mem.Allocator) void {
+pub fn Deinit(self: *Transaction, keep_allocator: std.mem.Allocator) void {
     std.debug.assert(self._IsEmpty());
-    self.mEntries.deinit(engine_allocator);
-    self.mLookup.deinit(engine_allocator);
-    self.mArena.promote(engine_allocator).deinit();
-    self.mOps.deinit(engine_allocator);
-    self.mPresence.deinit(engine_allocator);
-    self.mCreated.deinit(engine_allocator);
-    self.mOnCommit.deinit(engine_allocator);
-    self.mOnDiscard.deinit(engine_allocator);
-    self.mReads.deinit(engine_allocator);
-    self.mWrites.deinit(engine_allocator);
-    self.mTypeReads.deinit(engine_allocator);
-    self.mTypeWrites.deinit(engine_allocator);
-    self.mNames.deinit(engine_allocator);
+    self.mEntries.deinit(keep_allocator);
+    self.mLookup.deinit(keep_allocator);
+    self.mArena.promote(keep_allocator).deinit();
+    self.mOps.deinit(keep_allocator);
+    self.mPresence.deinit(keep_allocator);
+    self.mCreated.deinit(keep_allocator);
+    self.mOnCommit.deinit(keep_allocator);
+    self.mOnDiscard.deinit(keep_allocator);
+    self.mReads.deinit(keep_allocator);
+    self.mWrites.deinit(keep_allocator);
+    self.mTypeReads.deinit(keep_allocator);
+    self.mTypeWrites.deinit(keep_allocator);
+    self.mNames.deinit(keep_allocator);
     self.* = .empty;
 }
 
@@ -267,11 +267,11 @@ pub fn Find(self: *const Transaction, key: Key) ?*anyopaque {
 pub fn Copy(self: *Transaction, key: Key, source: *const anyopaque, fns: CopyFns) !*anyopaque {
     std.debug.assert(!self.mLookup.contains(key));
     const engine_context = self.mEngineContext.?;
-    const engine_allocator = engine_context.EngineAllocator();
-    try self.mEntries.ensureUnusedCapacity(engine_allocator, 1);
-    try self.mLookup.ensureUnusedCapacity(engine_allocator, 1);
+    const keep_allocator = engine_context.Keep();
+    try self.mEntries.ensureUnusedCapacity(keep_allocator, 1);
+    try self.mLookup.ensureUnusedCapacity(keep_allocator, 1);
 
-    var arena = self.mArena.promote(engine_allocator);
+    var arena = self.mArena.promote(keep_allocator);
     defer self.mArena = arena.state;
     // a component that owns memory copies itself, so the copy can change it without touching the original's
     const copy = try fns.mClone(engine_context, arena.allocator(), source);
@@ -285,17 +285,17 @@ pub fn Copy(self: *Transaction, key: Key, source: *const anyopaque, fns: CopyFns
 
 /// Room for a value of `T` in the transaction's arena, good until it ends: for an add's value (Op.mData)
 pub fn Create(self: *Transaction, comptime T: type) !*T {
-    var arena = self.mArena.promote(self.mEngineContext.?.EngineAllocator());
+    var arena = self.mArena.promote(self.mEngineContext.?.Keep());
     defer self.mArena = arena.state;
     return try arena.allocator().create(T);
 }
 
 /// Holds a structural change until the transaction ends. An add or a tag becomes what reads of that component see
 pub fn AddOp(self: *Transaction, op: Op) !void {
-    const engine_allocator = self.mEngineContext.?.EngineAllocator();
-    try self.mOps.ensureUnusedCapacity(engine_allocator, 1);
+    const keep_allocator = self.mEngineContext.?.Keep();
+    try self.mOps.ensureUnusedCapacity(keep_allocator, 1);
     if (op.mKind == .Add or op.mKind == .Tag) {
-        try self.mPresence.put(engine_allocator, .{ .mArray = op.mArray.?, .mEntityID = op.mEntityID }, self.mOps.items.len);
+        try self.mPresence.put(keep_allocator, .{ .mArray = op.mArray.?, .mEntityID = op.mEntityID }, self.mOps.items.len);
     }
     self.mOps.appendAssumeCapacity(op);
 }
@@ -311,7 +311,7 @@ pub fn Presence(self: *Transaction, key: Key) ?*Op {
 
 /// Makes room to write down an object about to be made (AddCreated), so that once it is made writing it down can't fail
 pub fn ReserveCreated(self: *Transaction) !void {
-    try self.mCreated.ensureUnusedCapacity(self.mEngineContext.?.EngineAllocator(), 1);
+    try self.mCreated.ensureUnusedCapacity(self.mEngineContext.?.Keep(), 1);
 }
 
 /// Writes down an object just made, after ReserveCreated
@@ -344,7 +344,7 @@ pub fn OnDiscard(self: *Transaction, data: anytype, comptime run: fn (*EngineCon
 
 /// A copy of `bytes` in the transaction's arena, good until the transaction ends: for an action's data with a slice in it
 pub fn Dupe(self: *Transaction, bytes: []const u8) ![]u8 {
-    var arena = self.mArena.promote(self.mEngineContext.?.EngineAllocator());
+    var arena = self.mArena.promote(self.mEngineContext.?.Keep());
     defer self.mArena = arena.state;
     return try arena.allocator().dupe(u8, bytes);
 }
@@ -359,10 +359,10 @@ pub fn MarkIrrevocable(self: *Transaction, reason: []const u8) error{RunSerially
 
 fn _AddAction(self: *Transaction, list: *std.ArrayList(Action), data: anytype, comptime run: fn (*EngineContext, *@TypeOf(data)) void) !void {
     const T = @TypeOf(data);
-    const engine_allocator = self.mEngineContext.?.EngineAllocator();
-    try list.ensureUnusedCapacity(engine_allocator, 1);
+    const keep_allocator = self.mEngineContext.?.Keep();
+    try list.ensureUnusedCapacity(keep_allocator, 1);
 
-    var arena = self.mArena.promote(engine_allocator);
+    var arena = self.mArena.promote(keep_allocator);
     defer self.mArena = arena.state;
     const stored = try arena.allocator().create(T);
     stored.* = data;
@@ -399,14 +399,14 @@ pub fn NoteTypeRead(self: *Transaction, array: *anyopaque, access: TypeAccess, n
 }
 
 fn _Note(self: *Transaction, set: anytype, key: anytype, array: *anyopaque, name: []const u8) void {
-    const engine_allocator = self.mEngineContext.?.EngineAllocator();
-    set.put(engine_allocator, key, {}) catch {
+    const keep_allocator = self.mEngineContext.?.Keep();
+    set.put(keep_allocator, key, {}) catch {
         self.mMeasureLost = true;
         return;
     };
     // an array's name never changes, so once it is in there is nothing to put
     if (self.mLastNamed == array) return;
-    self.mNames.put(engine_allocator, array, name) catch {
+    self.mNames.put(keep_allocator, array, name) catch {
         self.mMeasureLost = true;
         return;
     };
@@ -462,7 +462,7 @@ pub fn Commit(self: *Transaction, engine_context: *EngineContext) void {
     for (self.mEntries.items) |entry| entry.mFns.mCommit(entry.mKey.mArray, engine_context, entry.mKey.mEntityID, entry.mCopy);
     for (self.mOps.items) |*op| self._Apply(engine_context, op);
     for (self.mOnCommit.items) |action| action.mRun(engine_context, action.mData);
-    self._Reset(engine_context.EngineAllocator());
+    self._Reset(engine_context.Keep());
 }
 
 /// Drops everything, leaving the ECSs as they were before the transaction, and empties it. The order matters:
@@ -507,7 +507,7 @@ pub fn Discard(self: *Transaction, engine_context: *EngineContext) void {
     }
 
     for (self.mEntries.items) |entry| entry.mFns.mDiscard(engine_context, entry.mCopy);
-    self._Reset(engine_context.EngineAllocator());
+    self._Reset(engine_context.Keep());
 }
 
 fn _Apply(_: *Transaction, engine_context: *EngineContext, op: *Op) void {
@@ -528,11 +528,11 @@ fn _IsEmpty(self: *const Transaction) bool {
         self.mOnCommit.items.len == 0 and self.mOnDiscard.items.len == 0 and self.mIrrevocable == null;
 }
 
-fn _Reset(self: *Transaction, engine_allocator: std.mem.Allocator) void {
+fn _Reset(self: *Transaction, keep_allocator: std.mem.Allocator) void {
     self.mEngineContext = null;
     self.mEntries.clearRetainingCapacity();
     self.mLookup.clearRetainingCapacity();
-    var arena = self.mArena.promote(engine_allocator);
+    var arena = self.mArena.promote(keep_allocator);
     _ = arena.reset(.retain_capacity);
     self.mArena = arena.state;
     self.mOps.clearRetainingCapacity();

@@ -30,7 +30,7 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //UUIDs and file reads/writes go through the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -45,8 +45,8 @@ const TestWorld = struct {
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mSimulateWorld.Deinit(engine_context);
         //loading an overlay reference queues a UUID resolve in here
-        engine_context.mSerializer.Deinit(engine_context.EngineAllocator());
-        _ = engine_context._Internal.EngineGPA.deinit();
+        engine_context.mSerializer.Deinit(engine_context.Keep());
+        _ = engine_context._Internal.KeepHeap.deinit();
         self.mTmpDir.cleanup();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -54,7 +54,7 @@ const TestWorld = struct {
 
     /// A path in this test's temporary folder, relative to the working directory like the serializer expects
     fn FilePath(self: *TestWorld, file_name: []const u8) ![]const u8 {
-        return std.fmt.allocPrint(self.mEngineContext.FrameAllocator(), ".zig-cache/tmp/{s}/{s}", .{ self.mTmpDir.sub_path, file_name });
+        return std.fmt.allocPrint(self.mEngineContext.Scratch(), ".zig-cache/tmp/{s}/{s}", .{ self.mTmpDir.sub_path, file_name });
     }
 
     /// EditorProgram.OnUpdate's end of frame for the editor world, where deletes happen
@@ -77,7 +77,7 @@ fn NewScene(engine_context: *EngineContext, layer: Scene.LayerType, name: []cons
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, layer, Scene.DefaultConfig);
     const name_list = &scene.GetComponentMut(NameComponent).?.mName;
     name_list.clearRetainingCapacity();
-    try name_list.appendSlice(engine_context.EngineAllocator(), name);
+    try name_list.appendSlice(engine_context.Keep(), name);
     return scene;
 }
 
@@ -180,8 +180,8 @@ test "a copied world's overlays point at the copy's scenes" {
     try std.testing.expectEqual(&engine_context.mSimulateWorld, copied_scene.mManager);
 }
 
-fn ExpectScenes(player: Player, frame_allocator: std.mem.Allocator, expected: []const Scene) !void {
-    const scenes = try player.GetOverlayScenes(frame_allocator);
+fn ExpectScenes(player: Player, scratch_allocator: std.mem.Allocator, expected: []const Scene) !void {
+    const scenes = try player.GetOverlayScenes(scratch_allocator);
     try std.testing.expectEqual(expected.len, scenes.items.len);
     for (expected) |scene| {
         try std.testing.expect(std.mem.indexOfScalar(Scene.Type, scenes.items, scene.mID) != null);
@@ -198,14 +198,14 @@ test "a player with no overlays sees none" {
     _ = try NewScene(engine_context, .OverlayLayer, "HUD");
     _ = try player.CreateChild(engine_context, .Entity, Player.DefaultConfig);
 
-    try ExpectScenes(player, engine_context.FrameAllocator(), &.{});
+    try ExpectScenes(player, engine_context.Scratch(), &.{});
 }
 
 test "a player sees the overlays on itself and everywhere below it" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
     const player = try NewPlayer(engine_context);
     const hud = try NewScene(engine_context, .OverlayLayer, "HUD");
@@ -219,16 +219,16 @@ test "a player sees the overlays on itself and everywhere below it" {
     const plane_ui = try player.AddOverlay(engine_context, cockpit);
     _ = try plane_ui.AddOverlay(engine_context, radar);
 
-    try ExpectScenes(player, frame_allocator, &.{ hud, pause, cockpit, radar });
+    try ExpectScenes(player, scratch_allocator, &.{ hud, pause, cockpit, radar });
     //the plane's group on its own only sees what's under it
-    try ExpectScenes(plane_ui, frame_allocator, &.{ cockpit, radar });
+    try ExpectScenes(plane_ui, scratch_allocator, &.{ cockpit, radar });
 }
 
 test "a scene shown twice is listed once, and a deleted one is left out" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
     const player = try NewPlayer(engine_context);
     const hud = try NewScene(engine_context, .OverlayLayer, "HUD");
@@ -237,11 +237,11 @@ test "a scene shown twice is listed once, and a deleted one is left out" {
     _ = try player.AddOverlay(engine_context, hud);
     _ = try player.AddOverlay(engine_context, pause);
 
-    try ExpectScenes(player, frame_allocator, &.{ hud, pause });
+    try ExpectScenes(player, scratch_allocator, &.{ hud, pause });
 
     try pause.Delete(engine_context);
     try world.EndFrame();
-    try ExpectScenes(player, frame_allocator, &.{hud});
+    try ExpectScenes(player, scratch_allocator, &.{hud});
 }
 
 test "a game layer scene put straight into an overlay component is not seen" {
@@ -254,5 +254,5 @@ test "a game layer scene put straight into an overlay component is not seen" {
     //AddOverlay and the editor refuse this, but the field can still be written
     _ = try player.AddComponent(engine_context, OverlayComponent{ .mScene = level });
 
-    try ExpectScenes(player, engine_context.FrameAllocator(), &.{});
+    try ExpectScenes(player, engine_context.Scratch(), &.{});
 }

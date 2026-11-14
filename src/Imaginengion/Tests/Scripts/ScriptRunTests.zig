@@ -38,7 +38,7 @@ const Spawner = struct {
         gSeen.mSpawnStaged = gSeen.mSpawn.HasComponent(TransformComponent) and
             entity_ecs.mComponentManager.NumWithComponent(TransformComponent) == transforms_before;
         //and a query finds it, the way it does once it lands
-        const in_scene = try scene.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntityComponents.EntitySceneComponent });
+        const in_scene = try scene.GetEntityGroup(engine_context.Scratch(), .{ .Component = EntityComponents.EntitySceneComponent });
         gSeen.mSpawnFound = std.mem.indexOfScalar(Entity.Type, in_scene.items, gSeen.mSpawn.mID) != null;
         return .Continue;
     }
@@ -78,7 +78,7 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //UUIDs are drawn from the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -92,19 +92,19 @@ const TestWorld = struct {
 
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
-        const engine_allocator = engine_context.EngineAllocator();
+        const keep_allocator = engine_context.Keep();
         //the scripts give their variables back to the assets first
         engine_context.mGameWorld.Deinit(engine_context);
-        engine_context.mSerializer.Deinit(engine_allocator);
+        engine_context.mSerializer.Deinit(keep_allocator);
 
         const asset_manager = &engine_context.mAssetManager;
         asset_manager.mECSManager.Deinit(engine_context);
-        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-        asset_manager.mEventManager.Deinit(engine_allocator);
-        asset_manager.mCWDPath.deinit(engine_allocator);
+        asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+        asset_manager.mEventManager.Deinit(keep_allocator);
+        asset_manager.mCWDPath.deinit(keep_allocator);
         engine_context.mUIManager.Deinit(engine_context);
 
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -113,11 +113,11 @@ const TestWorld = struct {
     fn ScriptAssetFor(self: *TestWorld, info: *const ScriptABI.ScriptInfo) !AssetHandle {
         const engine_context = self.mEngineContext;
         const asset_manager = &engine_context.mAssetManager;
-        const engine_allocator = engine_context.EngineAllocator();
-        const asset_id = try asset_manager.mECSManager.CreateEntity(engine_allocator);
+        const keep_allocator = engine_context.Keep();
+        const asset_id = try asset_manager.mECSManager.CreateEntity(keep_allocator);
         _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, Assets.AssetMetaData{ .mRefs = 1 });
         var file_meta_data = Assets.FileMetaData{ .mPathType = .Prj };
-        _ = try file_meta_data.mRelPath.print(engine_allocator, "scripts/Test.zig", .{});
+        _ = try file_meta_data.mRelPath.print(keep_allocator, "scripts/Test.zig", .{});
         _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, file_meta_data);
         _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, ScriptAsset{ ._Info = info });
         return .{ .mID = asset_id, .mManager = asset_manager };
@@ -181,7 +181,7 @@ test "a scene's group holds its entities, not the script children on them" {
     const entity = try world.EntityWithScript(handle);
 
     //a script child has a transform too, but no scene
-    const with_transforms = try world.mScene.GetEntityGroup(world.mEngineContext.FrameAllocator(), .{ .Component = TransformComponent });
+    const with_transforms = try world.mScene.GetEntityGroup(world.mEngineContext.Scratch(), .{ .Component = TransformComponent });
     try std.testing.expectEqualSlices(Entity.Type, &.{entity.mID}, with_transforms.items);
 }
 
@@ -238,7 +238,7 @@ test "an object a failed hook made is gone after, out of the UUID map and its sc
 
     try std.testing.expect(!gFailedSpawn.IsActive());
     try std.testing.expect(world.mEngineContext.mGameWorld.mEManager.GetWorldID(gFailedSpawnUUID) == null);
-    const in_scene = try world.mScene.GetEntityGroup(world.mEngineContext.FrameAllocator(), .{ .Component = EntityComponents.EntitySceneComponent });
+    const in_scene = try world.mScene.GetEntityGroup(world.mEngineContext.Scratch(), .{ .Component = EntityComponents.EntitySceneComponent });
     try std.testing.expectEqualSlices(Entity.Type, &.{entity.mID}, in_scene.items);
 }
 
@@ -281,12 +281,12 @@ test "a component a failed hook added is gone after, and so is what adding it ma
     var handle = try world.ScriptAssetFor(&AddsUIThenFailsExports.info);
     defer handle.ReleaseAsset();
     const entity = try world.EntityWithScript(handle);
-    const elements_before = (try ui_ecs.GetAllEntities(world.mEngineContext.FrameAllocator())).items.len;
+    const elements_before = (try ui_ecs.GetAllEntities(world.mEngineContext.Scratch())).items.len;
 
     try world.RunUpdateScripts();
 
     try std.testing.expect(!entity.HasComponent(EntityComponents.UIElementComponent));
-    try std.testing.expectEqual(elements_before, (try ui_ecs.GetAllEntities(world.mEngineContext.FrameAllocator())).items.len);
+    try std.testing.expectEqual(elements_before, (try ui_ecs.GetAllEntities(world.mEngineContext.Scratch())).items.len);
 }
 
 //----------------what a failed hook changed outside the ECSs----------------
@@ -520,10 +520,10 @@ test "a hook in a batch asking for an asset that isn't loaded is refused, and ru
     gFirstLoadError = null;
 
     const asset_manager = &engine_context.mAssetManager;
-    const asset_id = try asset_manager.mECSManager.CreateEntity(engine_context.EngineAllocator());
+    const asset_id = try asset_manager.mECSManager.CreateEntity(engine_context.Keep());
     _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, Assets.AssetMetaData{ .mRefs = 1 });
     var file_meta_data = Assets.FileMetaData{ .mPathType = .Prj };
-    _ = try file_meta_data.mRelPath.print(engine_context.EngineAllocator(), "never/loaded.txt", .{});
+    _ = try file_meta_data.mRelPath.print(engine_context.Keep(), "never/loaded.txt", .{});
     _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, file_meta_data);
     gUnloaded = .{ .mID = asset_id, .mManager = asset_manager };
 

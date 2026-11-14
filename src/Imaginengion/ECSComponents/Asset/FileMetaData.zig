@@ -14,12 +14,12 @@ mSize: u64 = 0,
 mHash: u64 = 0,
 
 pub fn Deinit(self: *FileMetaData, engine_context: *EngineContext) void {
-    self.mRelPath.deinit(engine_context.EngineAllocator());
+    self.mRelPath.deinit(engine_context.Keep());
 }
 
 pub fn Clone(self: *const FileMetaData, engine_context: *EngineContext) !FileMetaData {
     var new_component = self.*;
-    new_component.mRelPath = try self.mRelPath.clone(engine_context.EngineAllocator());
+    new_component.mRelPath = try self.mRelPath.clone(engine_context.Keep());
     return new_component;
 }
 
@@ -33,7 +33,7 @@ pub fn Eql(self: *FileMetaData, engine_context: *EngineContext, file: std.Io.Fil
 
     var file_hasher = std.hash.Fnv1a_64.init();
     var file_reader = file.reader(engine_context.Io(), &.{});
-    const contents = try file_reader.interface.allocRemaining(engine_context.FrameAllocator(), std.Io.Limit.unlimited);
+    const contents = try file_reader.interface.allocRemaining(engine_context.Scratch(), std.Io.Limit.unlimited);
     file_hasher.update(contents);
 
     if (self.mHash != file_hasher.final()) {
@@ -49,7 +49,7 @@ pub fn UpdateMetaData(self: *FileMetaData, engine_context: *EngineContext, file:
 
     var file_hasher = std.hash.Fnv1a_64.init();
     var file_reader = file.reader(engine_context.Io(), &.{});
-    const contents = try file_reader.interface.allocRemaining(engine_context.FrameAllocator(), std.Io.Limit.unlimited);
+    const contents = try file_reader.interface.allocRemaining(engine_context.Scratch(), std.Io.Limit.unlimited);
     file_hasher.update(contents);
 
     self.mHash = file_hasher.final();

@@ -62,8 +62,8 @@ pub const empty: PopupSystem = .{};
 /// The open popups, from the bottom of the stack to the top
 mOpen: std.ArrayList(OpenPopup) = .empty,
 
-pub fn Deinit(self: *PopupSystem, engine_allocator: std.mem.Allocator) void {
-    self.mOpen.deinit(engine_allocator);
+pub fn Deinit(self: *PopupSystem, keep_allocator: std.mem.Allocator) void {
+    self.mOpen.deinit(keep_allocator);
     self.* = .empty;
 }
 
@@ -108,12 +108,12 @@ pub fn Open(self: *PopupSystem, engine_context: *EngineContext, popup: Entity, a
 
     //what it opens on top of: the topmost open popup the opener is inside
     const keep = switch (at) {
-        .Opener => |opener| self.TopmostContaining((try PointerSystem.ChainOf(engine_context.FrameAllocator(), opener)).items),
+        .Opener => |opener| self.TopmostContaining((try PointerSystem.ChainOf(engine_context.Scratch(), opener)).items),
         .Point => null,
     };
     try self.CloseAbove(engine_context, if (keep) |index| index + 1 else 0);
 
-    try self.mOpen.append(engine_context.EngineAllocator(), .{ .mPopup = popup, .mAt = at });
+    try self.mOpen.append(engine_context.Keep(), .{ .mPopup = popup, .mAt = at });
     try SetCollapsed(engine_context, popup, false);
     try Send(engine_context, popup, at, .PopupOpened);
 }
@@ -223,7 +223,7 @@ pub const Update = struct {
         }
 
         const ui_manager = &engine_context.mUIManager;
-        const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = PopupComponent });
+        const element_ids = try ui_manager.GetGroup(engine_context.Scratch(), .{ .Component = PopupComponent });
         for (element_ids.items) |element_id| {
             const popup = (UIElement{ .mID = element_id, .mManager = ui_manager }).GetOwner();
             //an element no entity has taken yet has nothing to compare
@@ -333,7 +333,7 @@ fn CloseAbove(self: *PopupSystem, engine_context: *EngineContext, index: usize) 
         //a text input in it can't be typed into once it is hidden: its edit ends, kept
         const focus = &engine_context.mUIManager.mFocusSystem;
         if (focus.Focused()) |focused| {
-            const chain = try PointerSystem.ChainOf(engine_context.FrameAllocator(), focused);
+            const chain = try PointerSystem.ChainOf(engine_context.Scratch(), focused);
             if (Contains(chain.items, popup)) try focus.EndEdit(engine_context, .Submit);
         }
 
@@ -374,7 +374,7 @@ fn Send(engine_context: *EngineContext, popup: Entity, at: At, comptime kind: st
         .Opener => |entity| entity,
         .Point => null,
     };
-    const chain = try PointerSystem.ChainOf(engine_context.FrameAllocator(), popup);
+    const chain = try PointerSystem.ChainOf(engine_context.Scratch(), popup);
     for (chain.items) |entity| {
         try engine_context.mUIManager.Send(engine_context, entity, @unionInit(UIEvent, @tagName(kind), .{ .mTarget = popup, .mOpener = opener }));
     }

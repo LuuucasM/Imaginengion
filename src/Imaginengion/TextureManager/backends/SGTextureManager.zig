@@ -103,7 +103,7 @@ pub fn Init(self: *SGTextureManager, engine_context: *EngineContext, vram_bytes_
         return error.InitFailed;
     };
 
-    try self.mLayers.ensureTotalCapacityPrecise(engine_context.EngineAllocator(), self.mMaxLayers);
+    try self.mLayers.ensureTotalCapacityPrecise(engine_context.Keep(), self.mMaxLayers);
     for (0..self.mMaxLayers) |i| {
         _ = i;
         self.mLayers.appendAssumeCapacity(.NoSkip);
@@ -111,15 +111,15 @@ pub fn Init(self: *SGTextureManager, engine_context: *EngineContext, vram_bytes_
 
     for (0..NUM_BINS) |i| {
         _ = i;
-        try self.mBins.append(engine_context.EngineAllocator(), .AllSkip);
+        try self.mBins.append(engine_context.Keep(), .AllSkip);
     }
 }
 
 pub fn Deinit(self: *SGTextureManager, engine_context: *EngineContext) void {
     const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
     _ = sdl.SDL_WaitForGPUIdle(device);
-    self.mBins.deinit(engine_context.EngineAllocator());
-    self.mLayers.deinit(engine_context.EngineAllocator());
+    self.mBins.deinit(engine_context.Keep());
+    self.mLayers.deinit(engine_context.Keep());
 
     if (self.mSampler) |s| sdl.SDL_ReleaseGPUSampler(device, s);
     if (self.mTexture) |t| sdl.SDL_ReleaseGPUTexture(device, t);

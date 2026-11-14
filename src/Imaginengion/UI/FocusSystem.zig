@@ -76,8 +76,8 @@ mBlinkTime: f32 = 0,
 /// a script calls into its own copy of the engine, which can't reach the window's library
 mTextInputOn: bool = false,
 
-pub fn Deinit(self: *FocusSystem, engine_allocator: std.mem.Allocator) void {
-    self.mOriginal.deinit(engine_allocator);
+pub fn Deinit(self: *FocusSystem, keep_allocator: std.mem.Allocator) void {
+    self.mOriginal.deinit(keep_allocator);
     self.* = .empty;
 }
 
@@ -190,7 +190,7 @@ pub fn Focus(self: *FocusSystem, engine_context: *EngineContext, entity: Entity)
     self.mCaret = text.mText.items.len;
     self.mBlinkTime = 0;
     self.mOriginal.clearRetainingCapacity();
-    try self.mOriginal.appendSlice(engine_context.EngineAllocator(), text.mText.items);
+    try self.mOriginal.appendSlice(engine_context.Keep(), text.mText.items);
 
     if (!entity.HasComponent(FocusedTag)) _ = try entity.AddComponent(engine_context, FocusedTag{});
     //typed text is turned on by the next Update
@@ -248,7 +248,7 @@ pub const OnKeyPressed = struct {
             .RETURN, .RETURN2, .KP_ENTER => try self.EndEdit(engine_context, .Submit),
             .ESCAPE => try self.EndEdit(engine_context, .Revert),
             .V => if (ctrl) {
-                const clipboard = try engine_context.mAppWindow.GetClipboardText(engine_context.FrameAllocator());
+                const clipboard = try engine_context.mAppWindow.GetClipboardText(engine_context.Scratch());
                 try self.Type(engine_context, clipboard);
             },
             else => {},
@@ -261,7 +261,7 @@ pub const OnTextTyped = struct {
     pub const Name = "FocusOnTextTyped";
 
     pub fn Run(engine_context: *EngineContext, self: *FocusSystem, typed: []const u8) !void {
-        const copy = try engine_context.FrameAllocator().dupe(u8, typed);
+        const copy = try engine_context.Scratch().dupe(u8, typed);
         try self.Type(engine_context, copy);
     }
 };
@@ -275,7 +275,7 @@ fn Type(self: *FocusSystem, engine_context: *EngineContext, bytes: []u8) !void {
 
     self.mCaret = @min(self.mCaret, text.mText.items.len);
     self.mBlinkTime = 0;
-    try TextEdit.Insert(engine_context.EngineAllocator(), &text.mText, &self.mCaret, line);
+    try TextEdit.Insert(engine_context.Keep(), &text.mText, &self.mCaret, line);
     try self.Changed(engine_context, focused);
 }
 
@@ -331,7 +331,7 @@ fn CaretEntity(self: *FocusSystem, engine_context: *EngineContext, focused: Enti
     const caret = try focused.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     if (caret.GetComponentMut(NameComponent)) |name| {
         name.mName.clearRetainingCapacity();
-        try name.mName.appendSlice(engine_context.EngineAllocator(), "Caret");
+        try name.mName.appendSlice(engine_context.Keep(), "Caret");
     }
     try Widgets.AddQuad(engine_context, caret, .{}, .{});
     //its color is the theme's
@@ -417,7 +417,7 @@ fn SyncTextInput(self: *FocusSystem, engine_context: *EngineContext) void {
 
 /// One event of `kind` to the text input and to everything it is inside
 fn Send(engine_context: *EngineContext, text_input: Entity, comptime kind: std.meta.Tag(UIEvent)) !void {
-    const chain = try PointerSystem.ChainOf(engine_context.FrameAllocator(), text_input);
+    const chain = try PointerSystem.ChainOf(engine_context.Scratch(), text_input);
     for (chain.items) |entity| {
         try engine_context.mUIManager.Send(engine_context, entity, @unionInit(UIEvent, @tagName(kind), .{ .mTarget = text_input }));
     }

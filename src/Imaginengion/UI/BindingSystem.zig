@@ -34,8 +34,8 @@ pub const empty: BindingSystem = .{};
 /// The inspectors asked to be built again, by a field that decides what else they show
 mRebuild: std.ArrayList(Entity) = .empty,
 
-pub fn Deinit(self: *BindingSystem, engine_allocator: std.mem.Allocator) void {
-    self.mRebuild.deinit(engine_allocator);
+pub fn Deinit(self: *BindingSystem, keep_allocator: std.mem.Allocator) void {
+    self.mRebuild.deinit(keep_allocator);
 }
 
 /// Whether the inspector `root` was asked to be built again, which it no longer is once this has said so
@@ -55,7 +55,7 @@ pub const Update = struct {
 
     pub fn Run(engine_context: *EngineContext, _: *BindingSystem) !void {
         const ui_manager = &engine_context.mUIManager;
-        const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = FieldBindingComponent });
+        const element_ids = try ui_manager.GetGroup(engine_context.Scratch(), .{ .Component = FieldBindingComponent });
         for (element_ids.items) |element_id| {
             const element = UIElement{ .mID = element_id, .mManager = ui_manager };
             const widget = element.GetOwner();
@@ -129,7 +129,7 @@ fn Write(self: *BindingSystem, engine_context: *EngineContext, binding: FieldBin
         for (self.mRebuild.items) |asked| {
             if (asked.mID == root.mID and asked.mManager == root.mManager) return;
         }
-        try self.mRebuild.append(engine_context.EngineAllocator(), root);
+        try self.mRebuild.append(engine_context.Keep(), root);
     }
 }
 
@@ -137,7 +137,7 @@ fn Write(self: *BindingSystem, engine_context: *EngineContext, binding: FieldBin
 fn Copy(engine_context: *EngineContext, binding: FieldBindingComponent) !void {
     const field = FieldOf(binding) orelse return;
     switch (binding.mAccess.Read(field)) {
-        .Text => |text| try engine_context.mAppWindow.SetClipboardText(engine_context.FrameAllocator(), text),
+        .Text => |text| try engine_context.mAppWindow.SetClipboardText(engine_context.Scratch(), text),
         else => {},
     }
 }

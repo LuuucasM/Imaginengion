@@ -36,15 +36,15 @@ mPaused: bool = false,
 _CollisionManager: CollisionManager = .empty,
 _InternalData: InternalData = .empty,
 
-pub fn Init(self: *PhysicsManager, engine_allocator: std.mem.Allocator) !void {
-    try self._CollisionManager.Init(engine_allocator);
+pub fn Init(self: *PhysicsManager, keep_allocator: std.mem.Allocator) !void {
+    try self._CollisionManager.Init(keep_allocator);
 }
 
-pub fn Deinit(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
+pub fn Deinit(self: *PhysicsManager, keep_allocator: std.mem.Allocator) void {
     const zone = Tracy.ZoneInit("PhysicsManager::Deinit", @src());
     defer zone.Deinit();
-    self._CollisionManager.Deinit(engine_allocator);
-    self.mEventManager.Deinit(engine_allocator);
+    self._CollisionManager.Deinit(keep_allocator);
+    self.mEventManager.Deinit(keep_allocator);
 }
 
 /// Points this manager's events at the engine-wide synchronous listener
@@ -55,7 +55,7 @@ pub fn SetSyncCallback(self: *PhysicsManager, ctx: anytype, comptime handler: an
 /// Hands the events queued in a category to the caller's listeners, then empties it
 pub fn ProcessEvents(self: *PhysicsManager, comptime event_category: EventData.EventCategories, engine_context: *EngineContext, callback_list: *std.DoublyLinkedList) !void {
     try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
-    self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
+    self.mEventManager.ClearCategory(engine_context.Keep(), event_category, .ClearRetainingCapacity);
 }
 
 /// Pauses or carries on the world's physics, e.g. from a pause menu's script. While paused there are no physics steps:
@@ -74,11 +74,11 @@ pub fn IsPaused(self: PhysicsManager) bool {
 /// and any events not processed yet. For when the owning world's entities are cleared out or replaced,
 /// since their ids then mean different objects. Unpauses too: pressing play copies a world through this, and a game
 /// quit while paused starts running the next time
-pub fn Reset(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
+pub fn Reset(self: *PhysicsManager, keep_allocator: std.mem.Allocator) void {
     self.mPaused = false;
     self._InternalData = .empty;
-    self._CollisionManager.Reset(engine_allocator);
-    self.mEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);
+    self._CollisionManager.Reset(keep_allocator);
+    self.mEventManager.EventsReset(keep_allocator, .ClearRetainingCapacity);
 }
 
 /// world_manager is the world that owns this PhysicsManager, see WorldManager.OnPhysicsUpdate

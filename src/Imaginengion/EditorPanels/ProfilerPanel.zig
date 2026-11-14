@@ -59,8 +59,8 @@ pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Opti
     return self;
 }
 
-pub fn Deinit(self: *ProfilerPanel, engine_allocator: std.mem.Allocator) void {
-    self.mRows.deinit(engine_allocator);
+pub fn Deinit(self: *ProfilerPanel, keep_allocator: std.mem.Allocator) void {
+    self.mRows.deinit(keep_allocator);
 }
 
 pub fn IsOpen(self: ProfilerPanel) bool {
@@ -102,12 +102,12 @@ pub fn Update(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *c
 /// The row of each node met since the last refresh, under its parent's row. Nodes come after their parents, so the
 /// parent's row is always there already. The top ones start open, the rest folded
 fn AddRows(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *const Profiler) !void {
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
     if (self.mTree == null) {
         //the root's row is the tree itself, so the top nodes go in it like any other node goes in its parent's content
         const tree = try Widgets.Tree(engine_context, .{ .Entity = self.mContent });
         self.mTree = tree;
-        try self.mRows.append(engine_allocator, .{ .Node = .{ .Node = tree, .Header = tree, .Content = tree }, .Title = .uninit });
+        try self.mRows.append(keep_allocator, .{ .Node = .{ .Node = tree, .Header = tree, .Content = tree }, .Title = .uninit });
     }
     for (self.mRows.items.len..profiler.NodeCount()) |node_ind| {
         const node: Profiler.NodeIndex = @intCast(node_ind);
@@ -116,14 +116,14 @@ fn AddRows(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *cons
             .Open = parent == Profiler.ROOT,
             .StockScripts = self.mOptions.StockScripts,
         });
-        try self.mRows.append(engine_allocator, .{ .Node = fold, .Title = UIManager.LabelOf(fold.Header).? });
+        try self.mRows.append(keep_allocator, .{ .Node = fold, .Title = UIManager.LabelOf(fold.Header).? });
     }
 }
 
 /// The numbers on every row whose parents are all open
 fn Refresh(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *const Profiler) !void {
     const rows = self.mRows.items;
-    const shown = try engine_context.FrameAllocator().alloc(bool, rows.len);
+    const shown = try engine_context.Scratch().alloc(bool, rows.len);
     shown[Profiler.ROOT] = true;
     for (rows[1..], 1..) |row, node_ind| {
         const parent = profiler.GetNode(@intCast(node_ind)).mParent;
@@ -159,5 +159,5 @@ fn Micros(duration: std.Io.Duration) f64 {
 
 /// Puts a formatted line on a label, if it doesn't say that already
 fn SetLine(engine_context: *EngineContext, label: Entity, comptime format: []const u8, args: anytype) !void {
-    try WidgetActions.SetText(engine_context, label, try std.fmt.allocPrint(engine_context.FrameAllocator(), format, args));
+    try WidgetActions.SetText(engine_context, label, try std.fmt.allocPrint(engine_context.Scratch(), format, args));
 }

@@ -45,9 +45,9 @@ const TestWorld = struct {
 
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
-        self.mPrograms.Deinit(engine_context.EngineAllocator());
+        self.mPrograms.Deinit(engine_context.Keep());
         engine_context.mEditorWorld.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -84,7 +84,7 @@ const TestWorld = struct {
     fn Compile(self: *TestWorld, root: Entity) !SDFCompiler.Compiled {
         const engine_context = self.mEngineContext;
         try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mEditorWorld});
-        return SDFCompiler.Compile(engine_context.EngineAllocator(), root, null, &self.mPrograms);
+        return SDFCompiler.Compile(engine_context.Keep(), root, null, &self.mPrograms);
     }
 
     /// The program at (x, y), each part colored by the surface that paints it, white for none

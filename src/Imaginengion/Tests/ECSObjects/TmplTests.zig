@@ -68,7 +68,7 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //UUIDs and file reads/writes go through the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -89,24 +89,24 @@ const TestWorld = struct {
 
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
-        const engine_allocator = engine_context.EngineAllocator();
+        const keep_allocator = engine_context.Keep();
         //everything that holds asset handles goes while the asset manager is still alive, as in EngineContext.DeInit
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mSimulateWorld.Deinit(engine_context);
         engine_context.mTmplEditWorld.Deinit(engine_context);
         engine_context.mAssetWorld.clearAndFree(engine_context, .All);
         //loading a template with a SpawnPoss queues a UUID resolve in here
-        engine_context.mSerializer.Deinit(engine_allocator);
+        engine_context.mSerializer.Deinit(keep_allocator);
         //the asset manager, minus the default assets Init never set up and the working directory handle it does not own
         const asset_manager = &engine_context.mAssetManager;
         asset_manager.mECSManager.Deinit(engine_context);
-        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-        asset_manager.mEventManager.Deinit(engine_allocator);
-        asset_manager.mCWDPath.deinit(engine_allocator);
+        asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+        asset_manager.mEventManager.Deinit(keep_allocator);
+        asset_manager.mCWDPath.deinit(keep_allocator);
         engine_context.mAssetWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
 
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         self.mTmpDir.cleanup();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -138,14 +138,14 @@ const TestWorld = struct {
 
     /// A path in this test's temporary folder, relative to the working directory like an engine asset path
     fn TmpPath(self: *TestWorld, file_name: []const u8) ![]const u8 {
-        return std.fmt.allocPrint(self.mEngineContext.FrameAllocator(), ".zig-cache/tmp/{s}/{s}", .{ self.mTmpDir.sub_path, file_name });
+        return std.fmt.allocPrint(self.mEngineContext.Scratch(), ".zig-cache/tmp/{s}/{s}", .{ self.mTmpDir.sub_path, file_name });
     }
 
     /// The top level keys of a saved file, i.e. which components (and Children/Scripts/Entities) it has
     fn FileKeys(self: *TestWorld, rel_path: []const u8) !std.json.Parsed(std.json.Value) {
         const engine_context = self.mEngineContext;
-        const contents = try std.Io.Dir.cwd().readFileAlloc(engine_context.Io(), rel_path, engine_context.FrameAllocator(), .unlimited);
-        return try std.json.parseFromSlice(std.json.Value, engine_context.FrameAllocator(), contents, .{});
+        const contents = try std.Io.Dir.cwd().readFileAlloc(engine_context.Io(), rel_path, engine_context.Scratch(), .unlimited);
+        return try std.json.parseFromSlice(std.json.Value, engine_context.Scratch(), contents, .{});
     }
 
     fn Refs(self: *TestWorld, handle: AssetHandle) usize {
@@ -167,7 +167,7 @@ const TestWorld = struct {
 fn SetName(engine_context: *EngineContext, object: anytype, name: []const u8) !void {
     const name_list = &object.GetComponentMut(NameComponent).?.mName;
     name_list.clearRetainingCapacity();
-    try name_list.appendSlice(engine_context.EngineAllocator(), name);
+    try name_list.appendSlice(engine_context.Keep(), name);
 }
 
 fn FirstChild(object: anytype) @TypeOf(object) {
@@ -370,7 +370,7 @@ test "a scene template read in and spawned in the middle of a run lands whole" {
 }
 
 fn Named(engine_context: *EngineContext, scene: Scene, name: []const u8) !Entity {
-    const ids = try scene.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = NameComponent });
+    const ids = try scene.GetEntityGroup(engine_context.Scratch(), .{ .Component = NameComponent });
     for (ids.items) |id| {
         const entity = scene.mManager.GetEntity(id);
         if (std.mem.eql(u8, entity.GetName(), name)) return entity;
@@ -410,7 +410,7 @@ test "spawned scenes copy their entities, take a stack slot and point their spaw
     try std.testing.expectEqual(@as(usize, 2), b.GetComponent(StackPosComponent).?.mPosition);
 
     //button, label and the spawn point, all in the copy and without UUIDs
-    const a_entities = try a.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntitySceneComponent });
+    const a_entities = try a.GetEntityGroup(engine_context.Scratch(), .{ .Component = EntitySceneComponent });
     try std.testing.expectEqual(@as(usize, 3), a_entities.items.len);
     for (a_entities.items) |entity_id| {
         try std.testing.expect(!a.GetEntity(entity_id).HasComponent(UUIDComponent));
@@ -520,7 +520,7 @@ fn ChildNamed(object: anytype, name: []const u8) !@TypeOf(object) {
 }
 
 fn EntityNamed(engine_context: *EngineContext, scene: Scene, name: []const u8) !Entity {
-    const entity_ids = try scene.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntitySceneComponent });
+    const entity_ids = try scene.GetEntityGroup(engine_context.Scratch(), .{ .Component = EntitySceneComponent });
     for (entity_ids.items) |entity_id| {
         const entity = scene.GetEntity(entity_id);
         if (std.mem.eql(u8, entity.GetName(), name)) return entity;
@@ -719,7 +719,7 @@ fn ExpectLoopSpawn(world: *TestWorld, scene: Scene, tmpl: AssetHandle) !void {
     try std.testing.expectError(error.TmplLoop, scene.Spawn(engine_context, tmpl));
     try world.EndFrame(world.GameWorld());
     try std.testing.expectEqual(refs, world.Refs(tmpl));
-    const left_over = try scene.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntitySceneComponent });
+    const left_over = try scene.GetEntityGroup(engine_context.Scratch(), .{ .Component = EntitySceneComponent });
     try std.testing.expectEqual(@as(usize, 0), left_over.items.len);
 }
 
@@ -838,7 +838,7 @@ test "an entity shell saves and loads as just its shell, unfilled" {
     //and loads back as the same shell, still unfilled, pointing at the same template
     const loaded_scene = try world.GameWorld().mSManager.CreateBlankScene(engine_context);
     try TextSerializer.DeserializeECSObj(engine_context, loaded_scene, level_path);
-    const loaded_entities = try loaded_scene.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntitySceneComponent });
+    const loaded_entities = try loaded_scene.GetEntityGroup(engine_context.Scratch(), .{ .Component = EntitySceneComponent });
     try std.testing.expectEqual(@as(usize, 1), loaded_entities.items.len);
     const loaded_goblin = loaded_scene.GetEntity(loaded_entities.items[0]);
     try ExpectShell(loaded_goblin, goblin.GetUUID(), "Goblin");
@@ -865,7 +865,7 @@ test "making a scene a template leaves a shell that keeps its stack slot" {
     try std.testing.expectEqual(.OverlayLayer, hud.GetLayer());
     try std.testing.expect(!hud.HasComponent(SpawnPossComponent));
     try std.testing.expect(!button.IsActive());
-    const hud_entities = try hud.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntitySceneComponent });
+    const hud_entities = try hud.GetEntityGroup(engine_context.Scratch(), .{ .Component = EntitySceneComponent });
     try std.testing.expectEqual(@as(usize, 0), hud_entities.items.len);
     //still in the stack where it was
     try std.testing.expectEqual(@as(usize, 2), world.GameWorld().mSManager.mNumofLayers);
@@ -874,7 +874,7 @@ test "making a scene a template leaves a shell that keeps its stack slot" {
 
     //spawning from it gives the entities back
     const copy = try world.GameWorld().Spawn(Scene, engine_context, hud.GetComponent(TmplRefComponent).?.mTmpl);
-    const copy_entities = try copy.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntitySceneComponent });
+    const copy_entities = try copy.GetEntityGroup(engine_context.Scratch(), .{ .Component = EntitySceneComponent });
     try std.testing.expectEqual(@as(usize, 2), copy_entities.items.len);
     try std.testing.expect(copy.HasComponent(SpawnPossComponent));
 }
@@ -1084,8 +1084,8 @@ test "two open entity templates are in scenes of their own, so each preview only
 
     //the same query RenderScene draws
     const shapes_query = ShapeGeometry.VISUALS_QUERY;
-    const goblin_shapes = try goblin_panel.mEntityScene.?.GetEntityGroup(engine_context.FrameAllocator(), shapes_query);
-    const tree_shapes = try tree_panel.mEntityScene.?.GetEntityGroup(engine_context.FrameAllocator(), shapes_query);
+    const goblin_shapes = try goblin_panel.mEntityScene.?.GetEntityGroup(engine_context.Scratch(), shapes_query);
+    const tree_shapes = try tree_panel.mEntityScene.?.GetEntityGroup(engine_context.Scratch(), shapes_query);
     try std.testing.expectEqual(@as(usize, 2), goblin_shapes.items.len);
     try std.testing.expectEqual(@as(usize, 1), tree_shapes.items.len);
 

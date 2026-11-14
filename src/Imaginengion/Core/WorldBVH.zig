@@ -70,10 +70,10 @@ pub const LayerTree = struct {
     mBVHItems: std.ArrayList(BVH.Item) = .empty,
     mNodes: std.ArrayList(BVH.Node) = .empty,
 
-    fn Deinit(self: *LayerTree, engine_allocator: std.mem.Allocator) void {
-        self.mItems.deinit(engine_allocator);
-        self.mBVHItems.deinit(engine_allocator);
-        self.mNodes.deinit(engine_allocator);
+    fn Deinit(self: *LayerTree, keep_allocator: std.mem.Allocator) void {
+        self.mItems.deinit(keep_allocator);
+        self.mBVHItems.deinit(keep_allocator);
+        self.mNodes.deinit(keep_allocator);
     }
 
     fn Clear(self: *LayerTree) void {
@@ -82,22 +82,22 @@ pub const LayerTree = struct {
         self.mNodes.clearRetainingCapacity();
     }
 
-    pub fn Add(self: *LayerTree, engine_allocator: std.mem.Allocator, item: WorldItem, bounds: Aabb, mask: u4) !void {
-        try self.mBVHItems.append(engine_allocator, .{ .Id = @intCast(self.mItems.items.len), .Bounds = bounds, .Mask = mask });
-        try self.mItems.append(engine_allocator, item);
+    pub fn Add(self: *LayerTree, keep_allocator: std.mem.Allocator, item: WorldItem, bounds: Aabb, mask: u4) !void {
+        try self.mBVHItems.append(keep_allocator, .{ .Id = @intCast(self.mItems.items.len), .Bounds = bounds, .Mask = mask });
+        try self.mItems.append(keep_allocator, item);
     }
 
     /// The tree over what was added, and the items put in its order
-    pub fn Build(self: *LayerTree, engine_allocator: std.mem.Allocator, frame_allocator: std.mem.Allocator) !void {
+    pub fn Build(self: *LayerTree, keep_allocator: std.mem.Allocator, scratch_allocator: std.mem.Allocator) !void {
         const zone = Tracy.ZoneInit("WorldBVH::LayerTree::Build", @src());
         defer zone.Deinit();
         zone.Value(self.mItems.items.len);
 
-        try BVH.Build(engine_allocator, self.mBVHItems.items, &self.mNodes);
+        try BVH.Build(keep_allocator, self.mBVHItems.items, &self.mNodes);
 
         const reorder_zone = Tracy.ZoneInit("WorldBVH::LayerTree::Reorder", @src());
         defer reorder_zone.Deinit();
-        const added = try frame_allocator.dupe(WorldItem, self.mItems.items);
+        const added = try scratch_allocator.dupe(WorldItem, self.mItems.items);
         for (self.mBVHItems.items, self.mItems.items, 0..) |*bvh_item, *item, i| {
             item.* = added[bvh_item.Id];
             item.Order = bvh_item.Id;
@@ -119,12 +119,12 @@ mTexts: std.ArrayList(TextLayout.Metrics) = .empty,
 /// the scenes items are in, each one's place here its SceneSlot
 mScenes: std.ArrayList(Scene.Type) = .empty,
 
-pub fn Deinit(self: *WorldBVH, engine_allocator: std.mem.Allocator) void {
-    self.mGame.Deinit(engine_allocator);
-    self.mOverlay.Deinit(engine_allocator);
-    self.mGlyphs.deinit(engine_allocator);
-    self.mTexts.deinit(engine_allocator);
-    self.mScenes.deinit(engine_allocator);
+pub fn Deinit(self: *WorldBVH, keep_allocator: std.mem.Allocator) void {
+    self.mGame.Deinit(keep_allocator);
+    self.mOverlay.Deinit(keep_allocator);
+    self.mGlyphs.deinit(keep_allocator);
+    self.mTexts.deinit(keep_allocator);
+    self.mScenes.deinit(keep_allocator);
 }
 
 /// Holds nothing, its memory kept: for when the entities it names are gone
@@ -179,9 +179,9 @@ pub fn ColliderBounds(entity: Entity) ?Aabb {
 }
 
 /// A merge's box, compiled the way the renderer and picking compile it, or null when it has no parts
-pub fn MergeBounds(frame_allocator: std.mem.Allocator, root: Entity) !?Aabb {
+pub fn MergeBounds(scratch_allocator: std.mem.Allocator, root: Entity) !?Aabb {
     var programs: SDFCompiler.Programs = .{};
-    const compiled = try SDFCompiler.Compile(frame_allocator, root, null, &programs);
+    const compiled = try SDFCompiler.Compile(scratch_allocator, root, null, &programs);
     if (compiled.Parts.Count == 0) return null;
     return BoxBounds(ShapeGeometry.MergeBox(compiled));
 }

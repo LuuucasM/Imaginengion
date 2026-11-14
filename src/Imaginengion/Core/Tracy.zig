@@ -108,10 +108,10 @@ pub fn Plot(comptime name: [*:0]const u8, comptime config: PlotConfig, value: an
     }
 }
 
-/// The named memory pools Tracy shows allocations under, one per engine allocator.
+/// The named memory pools Tracy shows allocations under, one per engine allocator (EngineContext.AllocType).
 pub const MemoryPool = enum {
-    Engine,
-    Frame,
+    Keep,
+    Scratch,
 };
 
 /// How many frames of call stack to capture with each memory event, set with -Dtracy-callstack=N.
@@ -123,8 +123,8 @@ const callstack_depth: i32 = debug_build_options.tracy_callstack;
 // pointer; the switch returns the same literal every time.
 fn PoolName(comptime pool: MemoryPool) [*:0]const u8 {
     return switch (pool) {
-        .Engine => "Engine",
-        .Frame => "Frame",
+        .Keep => "Keep",
+        .Scratch => "Scratch",
     };
 }
 

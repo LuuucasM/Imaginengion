@@ -86,11 +86,11 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime
         }
 
         fn NewInstance(engine_context: *EngineContext, id: u32, copy_from: ?*const anyopaque) callconv(.c) bool {
-            const engine_allocator = engine_context.EngineAllocator();
-            const instance = engine_allocator.create(Script) catch return false;
+            const keep_allocator = engine_context.Keep();
+            const instance = keep_allocator.create(Script) catch return false;
             instance.* = if (copy_from) |from| @as(*const Script, @ptrCast(@alignCast(from))).* else .{};
-            _ = gInstances.AddValue(engine_allocator, id, instance) catch {
-                engine_allocator.destroy(instance);
+            _ = gInstances.AddValue(keep_allocator, id, instance) catch {
+                keep_allocator.destroy(instance);
                 return false;
             };
             return true;
@@ -98,7 +98,7 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime
 
         fn FreeInstance(engine_context: *EngineContext, id: u32) callconv(.c) void {
             if (!gInstances.HasSparse(id)) return;
-            engine_context.EngineAllocator().destroy(gInstances.GetValueBySparse(id).*);
+            engine_context.Keep().destroy(gInstances.GetValueBySparse(id).*);
             gInstances.Remove(id);
         }
 
@@ -108,9 +108,9 @@ pub fn Exports(comptime Script: type, comptime script_name: []const u8, comptime
         }
 
         fn Deinit(engine_context: *EngineContext) callconv(.c) void {
-            const engine_allocator = engine_context.EngineAllocator();
-            for (gInstances.mValues.items) |instance| engine_allocator.destroy(instance);
-            gInstances.Deinit(engine_allocator);
+            const keep_allocator = engine_context.Keep();
+            for (gInstances.mValues.items) |instance| keep_allocator.destroy(instance);
+            gInstances.Deinit(keep_allocator);
             gInstances = .empty;
         }
 

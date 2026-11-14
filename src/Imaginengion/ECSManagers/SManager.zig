@@ -162,7 +162,7 @@ pub fn ProcessEvents(self: *SManager, comptime event_data: type, comptime event_
         callback_list.append(&callback.mNode);
         defer callback_list.remove(&callback.mNode);
         try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
-        self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
+        self.mEventManager.ClearCategory(engine_context.Keep(), event_category, .ClearRetainingCapacity);
     } else if (event_data == ECSEventData) {
         try self.mECSManager.ProcessEvents(engine_context);
     } else {
@@ -178,7 +178,7 @@ pub fn DestroyScene(self: *SManager, engine_context: *EngineContext, scene: Scen
     //only the top level ones are deleted here, the ECS takes everything below them along
     const EntitySceneQuery = GroupQuery{ .Component = EntitySceneComponent };
     const EntityChildQuery = GroupQuery{ .Component = EntityChildComponent };
-    const root_entities = try scene.GetEntityGroup(engine_context.FrameAllocator(), .{
+    const root_entities = try scene.GetEntityGroup(engine_context.Scratch(), .{
         .Not = .{
             .mFirst = &EntitySceneQuery,
             .mSecond = &EntityChildQuery,
@@ -189,7 +189,7 @@ pub fn DestroyScene(self: *SManager, engine_context: *EngineContext, scene: Scen
     }
 
     //while the scene still has its stack position to close the gap with
-    try self.RemoveScene(engine_context.FrameAllocator(), scene);
+    try self.RemoveScene(engine_context.Scratch(), scene);
     try self.mECSManager.DestroyEntity(engine_context, scene.mID);
 }
 
@@ -200,7 +200,7 @@ pub fn OnManagerEvents(_: *SManager, _: *EngineContext, event: EventData.EventT)
     return .Continue;
 }
 
-pub fn MoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_layer: Scene, move_to_pos: usize) !void {
+pub fn MoveScene(self: *SManager, scratch_allocator: std.mem.Allocator, scene_layer: Scene, move_to_pos: usize) !void {
     const layer = scene_layer.GetLayer();
     const stack_pos_component = scene_layer.GetComponentMut(SceneStackPos).?;
     const current_pos = stack_pos_component.mPosition;
@@ -218,7 +218,7 @@ pub fn MoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_laye
         return;
     } else if (new_pos < current_pos) {
         //we are moving the scene down in position so we need to move everything between new_pos and current_pos up 1 position
-        const scene_stack_pos_list = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
+        const scene_stack_pos_list = try self.mECSManager.GetGroup(scratch_allocator, .{ .Component = SceneStackPos });
 
         for (scene_stack_pos_list.items) |list_scene_id| {
             const scene_stack_pos_component = self.mECSManager.GetComponentMut(SceneStackPos, list_scene_id).?;
@@ -228,7 +228,7 @@ pub fn MoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_laye
         }
     } else {
         //we are moving the scene up in position so we need to move everything between current_pos and new_pos down 1 position
-        const scene_stack_pos_list = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
+        const scene_stack_pos_list = try self.mECSManager.GetGroup(scratch_allocator, .{ .Component = SceneStackPos });
 
         for (scene_stack_pos_list.items) |list_scene_id| {
             const scene_stack_pos_component = self.mECSManager.GetComponentMut(SceneStackPos, list_scene_id).?;
@@ -244,8 +244,8 @@ pub fn MoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_laye
 
 /// Scenes ordered for display: highest stack position first, so the topmost layer
 /// renders at the top of the list.
-pub fn GetSceneStackIDs(self: *SManager, frame_allocator: std.mem.Allocator) !std.ArrayList(Scene.Type) {
-    const stack_pos_scenes = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
+pub fn GetSceneStackIDs(self: *SManager, scratch_allocator: std.mem.Allocator) !std.ArrayList(Scene.Type) {
+    const stack_pos_scenes = try self.mECSManager.GetGroup(scratch_allocator, .{ .Component = SceneStackPos });
     std.sort.insertion(Scene.Type, stack_pos_scenes.items, &self.mECSManager, SManager.SortScenesFunc);
     return stack_pos_scenes;
 }
@@ -262,7 +262,7 @@ pub fn InsertScene(self: *SManager, engine_context: *EngineContext, scene_layer:
     if (scene_layer.GetLayer() == .GameLayer) {
         //shift the overlays up before adding, otherwise the new scene is in the group too
         //and shifts itself past the slot it was just given
-        const stack_pos_group = try self.mECSManager.GetGroup(engine_context.FrameAllocator(), .{ .Component = SceneStackPos });
+        const stack_pos_group = try self.mECSManager.GetGroup(engine_context.Scratch(), .{ .Component = SceneStackPos });
         for (stack_pos_group.items) |scene_id| {
             const stack_pos = self.mECSManager.GetComponentMut(SceneStackPos, scene_id).?;
             if (stack_pos.mPosition >= self.mGameLayerInsertIndex) {
@@ -278,12 +278,12 @@ pub fn InsertScene(self: *SManager, engine_context: *EngineContext, scene_layer:
     self.StackChanged();
 }
 
-fn RemoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_layer: Scene) !void {
+fn RemoveScene(self: *SManager, scratch_allocator: std.mem.Allocator, scene_layer: Scene) !void {
     //next realign the scene stack so that everything is in the right position after this one is destroyed
     const destroy_stack_pos = scene_layer.GetComponent(SceneStackPos).?;
 
-    var stack_pos_group = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
-    defer stack_pos_group.deinit(frame_allocator);
+    var stack_pos_group = try self.mECSManager.GetGroup(scratch_allocator, .{ .Component = SceneStackPos });
+    defer stack_pos_group.deinit(scratch_allocator);
 
     for (stack_pos_group.items) |pos_scene_id| {
         const stack_pos = self.mECSManager.GetComponentMut(SceneStackPos, pos_scene_id).?;
@@ -302,13 +302,13 @@ fn RemoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_layer:
 pub fn ApplyConfig(self: *SManager, engine_context: *EngineContext, player_id: Scene.Type, config: Scene.CreateConfig) !void {
     if (config.bAddSceneName) {
         var name_component: NameComponent = .empty;
-        try name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Scene");
+        try name_component.mName.appendSlice(engine_context.Keep(), "New Scene");
         _ = try self.AddComponent(engine_context, player_id, name_component);
     }
     if (config.bAddSceneUUID) {
         const io_source = std.Random.IoSource{ .io = engine_context.Io() };
         const new_random = io_source.interface();
         const new_uuid_component = try self.AddComponent(engine_context, player_id, UUIDComponent{ .ID = new_random.int(u64) });
-        try self.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, player_id);
+        try self.AddUUID(engine_context.Keep(), new_uuid_component.ID, player_id);
     }
 }

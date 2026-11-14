@@ -27,7 +27,7 @@ test "the stats window starts closed, opens and closes, and shows the loop, the 
     defer {
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
     }
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
 
@@ -86,7 +86,7 @@ test "the stats window starts closed, opens and closes, and shows the loop, the 
     engine_context.mDT = 0;
     try panel.Update(engine_context, &engine_context.mEngineStats);
     try panel.Toggle(engine_context);
-    const shown_before = try engine_context.FrameAllocator().dupe(u8, TextOf(panel.mLoopTime));
+    const shown_before = try engine_context.Scratch().dupe(u8, TextOf(panel.mLoopTime));
     try panel.Update(engine_context, &engine_context.mEngineStats);
     try std.testing.expect(!std.mem.eql(u8, shown_before, TextOf(panel.mLoopTime)));
 }
@@ -100,7 +100,7 @@ test "ticking Measure turns conflict measuring on from fresh counts, and the sec
     defer {
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
     }
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const conflicts = &engine_context.mTransactions.mConflicts;
@@ -118,7 +118,7 @@ test "ticking Measure turns conflict measuring on from fresh counts, and the sec
 
     //a batch found by measuring: 4 hooks of a loop, 1 of which would conflict, on a transform
     {
-        const allocator = engine_context.EngineAllocator();
+        const allocator = engine_context.Keep();
         const entry = try conflicts.mSystems.getOrPut(allocator, "ScriptsProcessor::RunScript(Entity, OnUpdateScript, Game)");
         entry.key_ptr.* = try allocator.dupe(u8, entry.key_ptr.*);
         entry.value_ptr.* = .{ .mBatches = 2, .mHooks = 4, .mConflicts = 1 };

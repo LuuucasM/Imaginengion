@@ -28,7 +28,7 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //UUIDs and file reads/writes go through the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -43,23 +43,23 @@ const TestWorld = struct {
         engine_context.mSimulateWorld.Deinit(engine_context);
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
-        engine_context.mSerializer.Deinit(engine_context.EngineAllocator());
-        _ = engine_context._Internal.EngineGPA.deinit();
+        engine_context.mSerializer.Deinit(engine_context.Keep());
+        _ = engine_context._Internal.KeepHeap.deinit();
         self.mTmpDir.cleanup();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
 
     fn FilePath(self: *TestWorld, file_name: []const u8) ![]const u8 {
-        return std.fmt.allocPrint(self.mEngineContext.FrameAllocator(), ".zig-cache/tmp/{s}/{s}", .{ self.mTmpDir.sub_path, file_name });
+        return std.fmt.allocPrint(self.mEngineContext.Scratch(), ".zig-cache/tmp/{s}/{s}", .{ self.mTmpDir.sub_path, file_name });
     }
 
     /// Whether the file at `path` has `field` saved as `uuid`
     fn Saved(self: *TestWorld, path: []const u8, field: []const u8, uuid: u64) !bool {
         const engine_context = self.mEngineContext;
-        const frame_allocator = engine_context.FrameAllocator();
-        const contents = try std.Io.Dir.cwd().readFileAlloc(engine_context.Io(), path, frame_allocator, .unlimited);
-        const line = try std.fmt.allocPrint(frame_allocator, "\"{s}\": {d}", .{ field, uuid });
+        const scratch_allocator = engine_context.Scratch();
+        const contents = try std.Io.Dir.cwd().readFileAlloc(engine_context.Io(), path, scratch_allocator, .unlimited);
+        const line = try std.fmt.allocPrint(scratch_allocator, "\"{s}\": {d}", .{ field, uuid });
         return std.mem.indexOf(u8, contents, line) != null;
     }
 };
@@ -183,7 +183,7 @@ test "a waiting reference in a world Play copies links in the copy" {
     try std.testing.expectEqual(sim_world, sim_player.GetComponent(OverlayComponent).?.mScene.mManager);
 
     const hud = try sim_world.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
-    try sim_world.mSManager.AddUUID(engine_context.EngineAllocator(), 123456, hud.mID);
+    try sim_world.mSManager.AddUUID(engine_context.Keep(), 123456, hud.mID);
     try sim_world.RelinkRefs(engine_context);
 
     try std.testing.expectEqual(hud.mID, sim_player.GetComponent(OverlayComponent).?.GetScene().?.mID);

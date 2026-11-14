@@ -20,7 +20,7 @@ const TestEngine = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //UUIDs and file reads/writes go through the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -35,31 +35,31 @@ const TestEngine = struct {
         try engine_context.mSimulateWorld.Init(engine_context);
         try engine_context.mGameWorld.Init(engine_context);
 
-        const project_folder = try self.mTmpDir.dir.realPathFileAlloc(engine_context.Io(), ".", engine_context.FrameAllocator());
+        const project_folder = try self.mTmpDir.dir.realPathFileAlloc(engine_context.Io(), ".", engine_context.Scratch());
         try engine_context.mProject.New(engine_context, project_folder);
         return self;
     }
 
     fn Deinit(self: *TestEngine) void {
         const engine_context = self.mEngineContext;
-        const engine_allocator = engine_context.EngineAllocator();
+        const keep_allocator = engine_context.Keep();
         //everything that holds asset handles goes while the asset manager is still alive, as in EngineContext.DeInit
         engine_context.mGameWorld.Deinit(engine_context);
         engine_context.mSimulateWorld.Deinit(engine_context);
         engine_context.mAssetWorld.clearAndFree(engine_context, .All);
-        engine_context.mSerializer.Deinit(engine_allocator);
+        engine_context.mSerializer.Deinit(keep_allocator);
         engine_context.mAudioManager.DeinitMixer(engine_context);
         engine_context.mProject.Deinit(engine_context);
         //the asset manager, minus the default assets Init never set up and the working directory handle it does not own
         const asset_manager = &engine_context.mAssetManager;
         asset_manager.mECSManager.Deinit(engine_context);
-        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-        asset_manager.mEventManager.Deinit(engine_allocator);
-        asset_manager.mCWDPath.deinit(engine_allocator);
+        asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+        asset_manager.mEventManager.Deinit(keep_allocator);
+        asset_manager.mCWDPath.deinit(keep_allocator);
         engine_context.mAssetWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
 
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         self.mTmpDir.cleanup();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -68,7 +68,7 @@ const TestEngine = struct {
     /// Saves `object` into the project folder as `file_name`, which is then its path under .Prj
     fn Save(self: *TestEngine, object: anytype, file_name: []const u8) !void {
         const engine_context = self.mEngineContext;
-        const abs_path = try engine_context.mProject.GetAbsPath(engine_context.FrameAllocator(), file_name);
+        const abs_path = try engine_context.mProject.GetAbsPath(engine_context.Scratch(), file_name);
         try TextSerializer.SerializeECSObject(engine_context, object, abs_path);
     }
 };

@@ -32,16 +32,16 @@ const Node = struct {
     mLand: *const fn (ecs: *anyopaque, engine_context: *EngineContext) anyerror!bool,
 };
 
-pub fn Deinit(self: *Systems, engine_allocator: std.mem.Allocator) void {
-    self.mNodes.deinit(engine_allocator);
+pub fn Deinit(self: *Systems, keep_allocator: std.mem.Allocator) void {
+    self.mNodes.deinit(keep_allocator);
     self.mNodes = .empty;
 }
 
 /// Makes `ecs` (a pointer to an ECSManager) hold its changes while a run goes on
-pub fn Register(self: *Systems, engine_allocator: std.mem.Allocator, ecs: anytype) !void {
+pub fn Register(self: *Systems, keep_allocator: std.mem.Allocator, ecs: anytype) !void {
     const Kind = @typeInfo(@TypeOf(ecs)).pointer.child;
     std.debug.assert(!self.IsRegistered(ecs));
-    try self.mNodes.append(engine_allocator, .{ .mECS = ecs, .mLand = struct {
+    try self.mNodes.append(keep_allocator, .{ .mECS = ecs, .mLand = struct {
         fn Land(erased: *anyopaque, engine_context: *EngineContext) anyerror!bool {
             const typed: *Kind = @ptrCast(@alignCast(erased));
             return typed.LandQueued(engine_context);
@@ -52,12 +52,12 @@ pub fn Register(self: *Systems, engine_allocator: std.mem.Allocator, ecs: anytyp
 
 /// Forgets `ecs`. Once the last one is gone the layer lets go of its memory too, so what registers in its Init and
 /// unregisters in its Deinit leaves nothing behind
-pub fn Unregister(self: *Systems, engine_allocator: std.mem.Allocator, ecs: anytype) void {
+pub fn Unregister(self: *Systems, keep_allocator: std.mem.Allocator, ecs: anytype) void {
     for (self.mNodes.items, 0..) |node, node_ind| {
         if (node.mECS != @as(*anyopaque, ecs)) continue;
         ecs.SetRunDepth(null);
         _ = self.mNodes.swapRemove(node_ind);
-        if (self.mNodes.items.len == 0) self.Deinit(engine_allocator);
+        if (self.mNodes.items.len == 0) self.Deinit(keep_allocator);
         return;
     }
 }
@@ -86,9 +86,9 @@ pub fn RunSystem(self: *Systems, comptime S: type, engine_context: *EngineContex
     self.mRunDepth += 1;
     //the conflict report counts each run's transactions as a batch of its own (Transactions.mConflicts)
     const conflicts = &engine_context.mTransactions.mConflicts;
-    const measured = conflicts.PushBatch(engine_context.EngineAllocator(), S.Name);
+    const measured = conflicts.PushBatch(engine_context.Keep(), S.Name);
     const result = @call(.auto, S.Run, .{engine_context} ++ args);
-    if (measured) conflicts.PopBatch(engine_context.EngineAllocator());
+    if (measured) conflicts.PopBatch(engine_context.Keep());
     self.mRunDepth -= 1;
     const landing_err = if (self.mRunDepth == 0) self._Land(engine_context) else null;
 

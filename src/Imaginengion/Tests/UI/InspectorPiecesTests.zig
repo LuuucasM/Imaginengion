@@ -40,7 +40,7 @@ const TestWorld = struct {
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -55,16 +55,16 @@ const TestWorld = struct {
 
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
-        const engine_allocator = engine_context.EngineAllocator();
+        const keep_allocator = engine_context.Keep();
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
         //the asset manager, minus the default assets Init never set up (see PendingDeleteTests)
         const asset_manager = &engine_context.mAssetManager;
         asset_manager.mECSManager.Deinit(engine_context);
-        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-        asset_manager.mEventManager.Deinit(engine_allocator);
-        asset_manager.mCWDPath.deinit(engine_allocator);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+        asset_manager.mEventManager.Deinit(keep_allocator);
+        asset_manager.mCWDPath.deinit(keep_allocator);
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }

@@ -28,7 +28,7 @@ const TestWorld = struct {
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
         engine_context.mEditorWorld.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -51,7 +51,7 @@ test "a new scene carries the tag of its layer and nothing else" {
     try std.testing.expectEqual(.OverlayLayer, overlay.GetLayer());
 
     //the tag is the query for a layer's scenes too
-    const overlay_scenes = try engine_context.mEditorWorld.GetSceneGroup(engine_context.FrameAllocator(), .{ .Component = SceneComponents.OverlayLayerTag });
+    const overlay_scenes = try engine_context.mEditorWorld.GetSceneGroup(engine_context.Scratch(), .{ .Component = SceneComponents.OverlayLayerTag });
     try std.testing.expectEqual(@as(usize, 1), overlay_scenes.items.len);
     try std.testing.expectEqual(overlay.mID, overlay_scenes.items[0]);
 }
@@ -93,14 +93,14 @@ test "a layer query only finds that layer's shapes" {
     //no shape, so neither query should find it
     _ = try overlay.CreateEntity(engine_context, Entity.DefaultConfig);
 
-    const game_quads = try engine_context.mEditorWorld.GetEntityGroup(engine_context.FrameAllocator(), .{ .And = &.{
+    const game_quads = try engine_context.mEditorWorld.GetEntityGroup(engine_context.Scratch(), .{ .And = &.{
         .{ .Component = ShapeComponent },
         .{ .Component = GameLayerTag },
     } });
     try std.testing.expectEqual(@as(usize, 1), game_quads.items.len);
     try std.testing.expectEqual(rock.mID, game_quads.items[0]);
 
-    const overlay_quads = try engine_context.mEditorWorld.GetEntityGroup(engine_context.FrameAllocator(), .{ .And = &.{
+    const overlay_quads = try engine_context.mEditorWorld.GetEntityGroup(engine_context.Scratch(), .{ .And = &.{
         .{ .Component = ShapeComponent },
         .{ .Component = OverlayLayerTag },
     } });

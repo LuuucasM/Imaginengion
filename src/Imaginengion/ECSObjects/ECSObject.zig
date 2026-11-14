@@ -247,7 +247,7 @@ pub fn Core(comptime Self: type) type {
         pub fn SetName(self: Self, engine_context: *EngineContext, name: []const u8) !void {
             const name_component = GetComponentMut(self, NameComponent) orelse return;
             name_component.mName.clearRetainingCapacity();
-            try name_component.mName.appendSlice(engine_context.EngineAllocator(), name);
+            try name_component.mName.appendSlice(engine_context.Keep(), name);
         }
 
         /// Plays the object's AudioComponent from the start. Keep the returned voice to stop that one sound later, or
@@ -392,7 +392,7 @@ pub fn Core(comptime Self: type) type {
             if (Self == AssetHandle) @compileError("an asset handle can not be made a template");
             if (HasComponent(self, TmplRefComponent)) return error.AlreadyATmplCopy;
 
-            const abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.FrameAllocator(), rel_path, path_type);
+            const abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.Scratch(), rel_path, path_type);
             try TextSerializer.SerializeTmpl(engine_context, self, abs_path);
 
             var tmpl = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = path_type } });
@@ -415,9 +415,9 @@ pub fn Core(comptime Self: type) type {
             //collected before any goes: each delete takes its object out of the list being walked
             var to_delete: std.ArrayList(Self) = .empty;
             var script_iter = self.GetIterator(.Script);
-            while (script_iter.next()) |script| try to_delete.append(engine_context.FrameAllocator(), script);
+            while (script_iter.next()) |script| try to_delete.append(engine_context.Scratch(), script);
             var child_iter = self.GetIterator(.Child);
-            while (child_iter.next()) |child| try to_delete.append(engine_context.FrameAllocator(), child);
+            while (child_iter.next()) |child| try to_delete.append(engine_context.Scratch(), child);
             for (to_delete.items) |object| try object.Delete(engine_context);
 
             if (Self == Scene) {
@@ -470,7 +470,7 @@ pub fn Core(comptime Self: type) type {
                     return error.TmplLoop;
                 }
             }
-            try tmpl_path.append(engine_context.FrameAllocator(), tmpl_handle.mID);
+            try tmpl_path.append(engine_context.Scratch(), tmpl_handle.mID);
             defer _ = tmpl_path.pop();
 
             const tmpl = (try tmpl_handle.GetAsset(engine_context, AComponents.ObjectAssetFor(Self))).mObject;
@@ -521,7 +521,7 @@ pub fn Core(comptime Self: type) type {
         /// Copies the object `tmpl` onto `target`: its components, then its scripts, children and a scene's entities.
         /// `uuids` is what a copy of something with a UUID gets: none (a template's copy), or a new one (Duplicate)
         fn _CopyObject(tmpl: Self, target: Self, engine_context: *EngineContext, ref_map: *RefMap, uuids: CopyUUIDs) anyerror!void {
-            if (Self == Entity) try ref_map.mEntities.put(engine_context.FrameAllocator(), tmpl.mID, target);
+            if (Self == Entity) try ref_map.mEntities.put(engine_context.Scratch(), tmpl.mID, target);
 
             inline for (comptime _SerializeList()) |component_type| {
                 if (component_type == UUIDComponent) {
@@ -606,7 +606,7 @@ pub fn Core(comptime Self: type) type {
         fn _SceneRootEntities(scene: Scene, engine_context: *EngineContext) !std.ArrayList(Entity.Type) {
             const EntitySceneQuery = GroupQuery{ .Component = EntitySceneComponent };
             const EntityChildQuery = GroupQuery{ .Component = ChildComponent(Entity.Type) };
-            return try scene.GetEntityGroup(engine_context.FrameAllocator(), .{
+            return try scene.GetEntityGroup(engine_context.Scratch(), .{
                 .Not = .{
                     .mFirst = &EntitySceneQuery,
                     .mSecond = &EntityChildQuery,

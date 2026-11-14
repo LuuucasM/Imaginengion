@@ -58,7 +58,7 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //file paths go through the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -73,7 +73,7 @@ const TestWorld = struct {
             .mPlaneMin = .{ .x = 0, .y = 0.7 },
             .mPlaneMax = .{ .x = 0.6, .y = 0 },
             .mAdvance = 0.6,
-            .mKernings = .init(engine_context.EngineAllocator()),
+            .mKernings = .init(engine_context.Keep()),
         };
         font.mLineHeight = 1.2;
         font.mAscender = 0.9;
@@ -92,16 +92,16 @@ const TestWorld = struct {
         engine_context.mUIManager.Deinit(engine_context);
         //after the world: its texts let go of the font as they go
         if (self.mFont != null) {
-            const engine_allocator = engine_context.EngineAllocator();
+            const keep_allocator = engine_context.Keep();
             const asset_manager = &engine_context.mAssetManager;
             for (&asset_manager._internal.DefaultTextAsset.mGlyphs) |*glyph| glyph.mKernings.deinit();
             //the asset manager, minus the default assets Setup never made and the working directory it does not own
             asset_manager.mECSManager.Deinit(engine_context);
-            asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-            asset_manager.mEventManager.Deinit(engine_allocator);
-            asset_manager.mCWDPath.deinit(engine_allocator);
+            asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+            asset_manager.mEventManager.Deinit(keep_allocator);
+            asset_manager.mCWDPath.deinit(keep_allocator);
         }
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -735,7 +735,7 @@ test "a child laid out in a panel in the world is gathered for drawing where lay
     try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{&engine_context.mEditorWorld});
 
     //the panel has no quad, so the child is all there is to draw: filling the panel, at its middle
-    const shapes = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), &engine_context.mEditorWorld, ViewOf(1600, 900, 1), .{ .Overlays = &.{} }, ShapeGeometry.VISUALS_QUERY);
+    const shapes = try ShapeGeometry.GatherViewShapes(engine_context.Scratch(), &engine_context.mEditorWorld, ViewOf(1600, 900, 1), .{ .Overlays = &.{} }, ShapeGeometry.VISUALS_QUERY);
     try std.testing.expectEqual(@as(usize, 1), shapes.Shapes.items.len);
     try std.testing.expectEqual(child.mID, shapes.Shapes.items[0].Entity.mID);
     const box = ShapeGeometry.QuadBox(child.GetComponent(TransformComponent).?, child.GetComponent(ShapeComponent).?.GetQuad().?.*, 0, null);

@@ -48,21 +48,21 @@ pub const Counts = struct {
     mTypes: std.StringArrayHashMapUnmanaged(u64) = .empty,
 };
 
-pub fn Deinit(self: *ConflictReport, engine_allocator: std.mem.Allocator) void {
+pub fn Deinit(self: *ConflictReport, keep_allocator: std.mem.Allocator) void {
     std.debug.assert(self.mDepth == 0);
-    for (self.mBatches.items) |*batch| batch.mWritten.Deinit(engine_allocator);
-    self.mBatches.deinit(engine_allocator);
-    self.Clear(engine_allocator);
-    self.mSystems.deinit(engine_allocator);
+    for (self.mBatches.items) |*batch| batch.mWritten.Deinit(keep_allocator);
+    self.mBatches.deinit(keep_allocator);
+    self.Clear(keep_allocator);
+    self.mSystems.deinit(keep_allocator);
     self.* = .empty;
 }
 
 /// Forgets what has been found
-pub fn Clear(self: *ConflictReport, engine_allocator: std.mem.Allocator) void {
+pub fn Clear(self: *ConflictReport, keep_allocator: std.mem.Allocator) void {
     for (self.mSystems.keys(), self.mSystems.values()) |name, *counts| {
-        for (counts.mTypes.keys()) |type_name| engine_allocator.free(type_name);
-        counts.mTypes.deinit(engine_allocator);
-        engine_allocator.free(name);
+        for (counts.mTypes.keys()) |type_name| keep_allocator.free(type_name);
+        counts.mTypes.deinit(keep_allocator);
+        keep_allocator.free(name);
     }
     self.mSystems.clearRetainingCapacity();
 }
@@ -73,10 +73,10 @@ pub fn InBatch(self: *const ConflictReport) bool {
 }
 
 /// Starts the batch of a run of the system `name`, if measuring is on. Whether it did, for PopBatch
-pub fn PushBatch(self: *ConflictReport, engine_allocator: std.mem.Allocator, name: []const u8) bool {
+pub fn PushBatch(self: *ConflictReport, keep_allocator: std.mem.Allocator, name: []const u8) bool {
     if (!self.mOn) return false;
     if (self.mDepth == self.mBatches.items.len) {
-        self.mBatches.append(engine_allocator, .{}) catch return false;
+        self.mBatches.append(keep_allocator, .{}) catch return false;
     }
     const batch = &self.mBatches.items[self.mDepth];
     batch.mName = name;
@@ -88,12 +88,12 @@ pub fn PushBatch(self: *ConflictReport, engine_allocator: std.mem.Allocator, nam
 }
 
 /// Ends the innermost batch, adding what it found to the report
-pub fn PopBatch(self: *ConflictReport, engine_allocator: std.mem.Allocator) void {
+pub fn PopBatch(self: *ConflictReport, keep_allocator: std.mem.Allocator) void {
     std.debug.assert(self.mDepth > 0);
     self.mDepth -= 1;
     const batch = &self.mBatches.items[self.mDepth];
     if (batch.mCounts.mHooks == 0) return;
-    const counts = self._CountsOf(engine_allocator, batch.mName) orelse return;
+    const counts = self._CountsOf(keep_allocator, batch.mName) orelse return;
     counts.mBatches += 1;
     counts.mHooks += batch.mCounts.mHooks;
     counts.mConflicts += batch.mCounts.mConflicts;
@@ -104,7 +104,7 @@ pub fn PopBatch(self: *ConflictReport, engine_allocator: std.mem.Allocator) void
 
 /// Checks an outermost transaction that has just ended against its run's batch, before it is kept or dropped. `kept`:
 /// whether it will be kept
-pub fn Check(self: *ConflictReport, engine_allocator: std.mem.Allocator, transaction: *const Transaction, kept: bool) void {
+pub fn Check(self: *ConflictReport, keep_allocator: std.mem.Allocator, transaction: *const Transaction, kept: bool) void {
     if (self.mDepth == 0) return;
     const batch = &self.mBatches.items[self.mDepth - 1];
     batch.mCounts.mHooks += 1;
@@ -119,11 +119,11 @@ pub fn Check(self: *ConflictReport, engine_allocator: std.mem.Allocator, transac
     }
     if (transaction.ConflictOn(&batch.mWritten)) |array| {
         batch.mCounts.mConflicts += 1;
-        self._CountType(engine_allocator, batch.mName, transaction.NameOf(array));
+        self._CountType(keep_allocator, batch.mName, transaction.NameOf(array));
         return;
     }
     if (!kept) return;
-    batch.mWritten.Add(engine_allocator, transaction) catch {
+    batch.mWritten.Add(keep_allocator, transaction) catch {
         batch.mLost = true;
     };
 }
@@ -140,7 +140,7 @@ pub const BatchOutcome = enum {
 
 /// Counts a hook of a real batch in the run it is in, while measuring: each conflict it had on the way, and the hook
 /// itself once it is done. `type_name`: for a conflict, what it was on
-pub fn CountBatchHook(self: *ConflictReport, engine_allocator: std.mem.Allocator, outcome: BatchOutcome, type_name: []const u8) void {
+pub fn CountBatchHook(self: *ConflictReport, keep_allocator: std.mem.Allocator, outcome: BatchOutcome, type_name: []const u8) void {
     if (self.mDepth == 0) return;
     const batch = &self.mBatches.items[self.mDepth - 1];
     switch (outcome) {
@@ -148,16 +148,16 @@ pub fn CountBatchHook(self: *ConflictReport, engine_allocator: std.mem.Allocator
         .Serial => batch.mCounts.mSerial += 1,
         .Conflict => {
             batch.mCounts.mConflicts += 1;
-            if (type_name.len > 0) self._CountType(engine_allocator, batch.mName, type_name);
+            if (type_name.len > 0) self._CountType(keep_allocator, batch.mName, type_name);
         },
     }
 }
 
 // the counts for a system, made the first time with a copy of its name. Null if there was no room
-fn _CountsOf(self: *ConflictReport, engine_allocator: std.mem.Allocator, name: []const u8) ?*Counts {
-    const entry = self.mSystems.getOrPut(engine_allocator, name) catch return null;
+fn _CountsOf(self: *ConflictReport, keep_allocator: std.mem.Allocator, name: []const u8) ?*Counts {
+    const entry = self.mSystems.getOrPut(keep_allocator, name) catch return null;
     if (!entry.found_existing) {
-        entry.key_ptr.* = engine_allocator.dupe(u8, name) catch {
+        entry.key_ptr.* = keep_allocator.dupe(u8, name) catch {
             _ = self.mSystems.swapRemove(name);
             return null;
         };
@@ -166,11 +166,11 @@ fn _CountsOf(self: *ConflictReport, engine_allocator: std.mem.Allocator, name: [
     return entry.value_ptr;
 }
 
-fn _CountType(self: *ConflictReport, engine_allocator: std.mem.Allocator, system_name: []const u8, type_name: []const u8) void {
-    const counts = self._CountsOf(engine_allocator, system_name) orelse return;
-    const entry = counts.mTypes.getOrPut(engine_allocator, type_name) catch return;
+fn _CountType(self: *ConflictReport, keep_allocator: std.mem.Allocator, system_name: []const u8, type_name: []const u8) void {
+    const counts = self._CountsOf(keep_allocator, system_name) orelse return;
+    const entry = counts.mTypes.getOrPut(keep_allocator, type_name) catch return;
     if (!entry.found_existing) {
-        entry.key_ptr.* = engine_allocator.dupe(u8, type_name) catch {
+        entry.key_ptr.* = keep_allocator.dupe(u8, type_name) catch {
             _ = counts.mTypes.swapRemove(type_name);
             return;
         };

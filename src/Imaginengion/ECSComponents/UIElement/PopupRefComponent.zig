@@ -48,13 +48,13 @@ pub fn jsonStringify(self: *const PopupRefComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!PopupRefComponent {
+pub fn jsonParse(scratch_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!PopupRefComponent {
     const FileData = struct { Popup: ?u64 = null };
-    const file_data = try std.json.innerParse(FileData, frame_allocator, reader, options);
+    const file_data = try std.json.innerParse(FileData, scratch_allocator, reader, options);
 
     const popup_uuid = file_data.Popup orelse return .{};
     //read as part of its entity's UIElementComponent, so the entity is what is being read
-    const requester = JsonUtils.EngineContextFromAllocator(frame_allocator).mSerializer.mCurrDeserialize.requester;
+    const requester = JsonUtils.EngineContextFromAllocator(scratch_allocator).mSerializer.mCurrDeserialize.requester;
     std.debug.assert(requester == .Entity);
     return .{ .mPopup = ObjectLink.Waiting(Entity, requester.Entity.mManager), .mWantedUUID = popup_uuid };
 }

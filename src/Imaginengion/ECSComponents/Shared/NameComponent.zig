@@ -14,11 +14,11 @@ pub const empty: NameComponent = .{
 mName: std.ArrayList(u8) = .empty,
 
 pub fn Deinit(self: *NameComponent, engine_context: *EngineContext) void {
-    self.mName.deinit(engine_context.EngineAllocator());
+    self.mName.deinit(engine_context.Keep());
 }
 
 pub fn Clone(self: *const NameComponent, engine_context: *EngineContext) !NameComponent {
-    return .{ .mName = try self.mName.clone(engine_context.EngineAllocator()) };
+    return .{ .mName = try self.mName.clone(engine_context.Keep()) };
 }
 
 pub fn UIRender(self: *NameComponent, ui: *Inspector.Builder) !void {

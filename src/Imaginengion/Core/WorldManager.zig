@@ -110,16 +110,16 @@ pub fn GetScene(self: *WorldManager, scene_id: Scene.Type) Scene {
 /// Sets up the world, and makes its four ECSs (an entity's, a game context's, a player's, a scene's) known to the
 /// systems layer
 pub fn Init(self: *WorldManager, engine_context: *EngineContext) !void {
-    const engine_allocator = engine_context.EngineAllocator();
-    try self.mEManager.Init(engine_allocator);
-    try self.mGCManager.Init(engine_allocator);
-    try self.mPManager.Init(engine_allocator);
-    try self.mSManager.Init(engine_allocator);
-    try self.mPhysicsManager.Init(engine_allocator);
+    const keep_allocator = engine_context.Keep();
+    try self.mEManager.Init(keep_allocator);
+    try self.mGCManager.Init(keep_allocator);
+    try self.mPManager.Init(keep_allocator);
+    try self.mSManager.Init(keep_allocator);
+    try self.mPhysicsManager.Init(keep_allocator);
 
     const systems = &engine_context.mSystems;
     inline for (self._ECSs()) |ecs| {
-        try systems.Register(engine_allocator, ecs);
+        try systems.Register(keep_allocator, ecs);
         //templates load into the asset world on demand, in the middle of a run, and are read straight back. Nor is a
         //template loaded during a hook part of the hook's transaction: the hook failing mustn't undo the load
         if (self == &engine_context.mAssetWorld) {
@@ -157,22 +157,22 @@ pub fn RelinkRefs(self: *WorldManager, engine_context: *EngineContext) !void {
     defer zone.Deinit();
 
     try ScriptValues.Relink(engine_context, self);
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
-    const scene_ids = try self.GetSceneGroup(frame_allocator, .{ .Component = SpawnPossComponent });
+    const scene_ids = try self.GetSceneGroup(scratch_allocator, .{ .Component = SpawnPossComponent });
     for (scene_ids.items) |scene_id| {
         const scene = Scene{ .mID = scene_id, .mManager = self };
         if (scene.GetComponentMut(SpawnPossComponent)) |spawn_poss| spawn_poss.Relink();
     }
 
-    const player_ids = try self.GetPlayerGroup(frame_allocator, .{ .Component = OverlayComponent });
+    const player_ids = try self.GetPlayerGroup(scratch_allocator, .{ .Component = OverlayComponent });
     for (player_ids.items) |player_id| {
         const player = Player{ .mID = player_id, .mManager = self };
         if (player.GetComponentMut(OverlayComponent)) |overlay| overlay.Relink();
     }
 
     //a popup reference is on its entity's UI element, in the UIManager's ECS that every world shares
-    const entity_ids = try self.GetEntityGroup(frame_allocator, .{ .Component = UIElementComponent });
+    const entity_ids = try self.GetEntityGroup(scratch_allocator, .{ .Component = UIElementComponent });
     for (entity_ids.items) |entity_id| {
         if (UIManager.GetUIComponentMut(self.GetEntity(entity_id), PopupRefComponent)) |popup_ref| popup_ref.Relink();
     }
@@ -180,22 +180,22 @@ pub fn RelinkRefs(self: *WorldManager, engine_context: *EngineContext) !void {
 
 /// Asks to quit the game this world is playing, handled at the end of the frame (see WorldEventData.QuitGameEvent)
 pub fn QuitGame(self: *WorldManager, engine_context: *EngineContext) !void {
-    try self.mEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .QuitGame = .{ .mWorld = self } });
+    try self.mEventManager.Insert(engine_context.Keep(), .EndOfFrame, .{ .QuitGame = .{ .mWorld = self } });
 }
 
 pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
     inline for (self._ECSs()) |ecs| {
-        engine_context.mSystems.Unregister(engine_context.EngineAllocator(), ecs);
-        if (self != &engine_context.mAssetWorld) engine_context.mTransactions.Unregister(engine_context.EngineAllocator(), ecs);
+        engine_context.mSystems.Unregister(engine_context.Keep(), ecs);
+        if (self != &engine_context.mAssetWorld) engine_context.mTransactions.Unregister(engine_context.Keep(), ecs);
     }
     self.mEManager.Deinit(engine_context);
     self.mGCManager.Deinit(engine_context);
     self.mPManager.Deinit(engine_context);
     self.mSManager.Deinit(engine_context);
-    self.mPhysicsManager.Deinit(engine_context.EngineAllocator());
-    self.mEventManager.Deinit(engine_context.EngineAllocator());
-    self.mGameEventManager.Deinit(engine_context.EngineAllocator());
-    self.mBVH.Deinit(engine_context.EngineAllocator());
+    self.mPhysicsManager.Deinit(engine_context.Keep());
+    self.mEventManager.Deinit(engine_context.Keep());
+    self.mGameEventManager.Deinit(engine_context.Keep());
+    self.mBVH.Deinit(engine_context.Keep());
 }
 
 /// Sends the game event `event` (an instance of an event file's struct, see Scripts/GameEvents.zig) in this world: every
@@ -214,7 +214,7 @@ pub fn Emit(self: *WorldManager, engine_context: *EngineContext, event: anytype)
         }, HeldEvent.Send);
         return;
     }
-    try self.mGameEventManager.Insert(engine_context.EngineAllocator(), GameEvents.PhaseOf(T), GameEvents.IdOf(T), std.mem.asBytes(&event));
+    try self.mGameEventManager.Insert(engine_context.Keep(), GameEvents.PhaseOf(T), GameEvents.IdOf(T), std.mem.asBytes(&event));
 }
 
 /// A game event sent inside a transaction, waiting for it to be kept (Emit)
@@ -225,7 +225,7 @@ const HeldEvent = struct {
     mBytes: []const u8,
 
     fn Send(engine_context: *EngineContext, self: *HeldEvent) void {
-        self.mWorld.mGameEventManager.Insert(engine_context.EngineAllocator(), self.mPhase, self.mId, self.mBytes) catch |err| {
+        self.mWorld.mGameEventManager.Insert(engine_context.Keep(), self.mPhase, self.mId, self.mBytes) catch |err| {
             std.log.err("A game event a kept transaction sent was lost: {s}", .{@errorName(err)});
         };
     }
@@ -248,13 +248,13 @@ pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options
     defer zone.Deinit();
 
     //the physics state names entities by id, so it goes whenever they do
-    if (options == .All or options == .EManager) self.mPhysicsManager.Reset(engine_context.EngineAllocator());
+    if (options == .All or options == .EManager) self.mPhysicsManager.Reset(engine_context.Keep());
     //so does the tree
     if (options == .All or options == .EManager) self.mBVH.Clear();
     //asks about the world that is going. Safe from inside this world's own ProcessEvents: its loop sees the list empty
-    if (options == .All) self.mEventManager.EventsReset(engine_context.EngineAllocator(), .ClearAndFree);
+    if (options == .All) self.mEventManager.EventsReset(engine_context.Keep(), .ClearAndFree);
     //game events too, which can name the entities going
-    if (options == .All) self.mGameEventManager.ClearAndFree(engine_context.EngineAllocator());
+    if (options == .All) self.mGameEventManager.ClearAndFree(engine_context.Keep());
 
     switch (options) {
         .All => {
@@ -291,9 +291,9 @@ pub fn Copy(self: *WorldManager, engine_context: *EngineContext, other_world: *W
     other_world.mOverlayScaleMode = self.mOverlayScaleMode;
 
     //physics state is not copied: the copy starts its own stepping, so nothing in it has touched yet
-    other_world.mPhysicsManager.Reset(engine_context.EngineAllocator());
+    other_world.mPhysicsManager.Reset(engine_context.Keep());
     //nor are game events waiting here: they were sent in this world, the copy starts with none
-    other_world.mGameEventManager.ClearAndFree(engine_context.EngineAllocator());
+    other_world.mGameEventManager.ClearAndFree(engine_context.Keep());
 }
 
 /// Points every object handle (Entity, GameContext, Player, Scene) held in this world's components at
@@ -361,7 +361,7 @@ pub fn ProcessEvents(self: *WorldManager, comptime event_data: type, comptime ev
         try self.mPhysicsManager.ProcessEvents(event_category, engine_context, callback_list);
     } else if (event_data == WorldEventData) {
         try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
-        self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
+        self.mEventManager.ClearCategory(engine_context.Keep(), event_category, .ClearRetainingCapacity);
     } else if (event_data == ECSEventData) {
         try self.mEManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
         try self.mGCManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
@@ -464,26 +464,26 @@ pub fn DestroyScene(self: *WorldManager, engine_context: *EngineContext, destroy
     try self.mSManager.DeleteScene(engine_context, destroy_scene.mID);
 }
 
-pub fn MoveScene(self: *WorldManager, frame_allocator: std.mem.Allocator, scene: Scene, move_to_pos: usize) !void {
-    try self.mSManager.MoveScene(frame_allocator, scene, move_to_pos);
+pub fn MoveScene(self: *WorldManager, scratch_allocator: std.mem.Allocator, scene: Scene, move_to_pos: usize) !void {
+    try self.mSManager.MoveScene(scratch_allocator, scene, move_to_pos);
 }
 
-pub fn GetSceneGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Scene.Type) {
-    return try self.mSManager.GetGroup(frame_allocator, query);
+pub fn GetSceneGroup(self: *WorldManager, scratch_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Scene.Type) {
+    return try self.mSManager.GetGroup(scratch_allocator, query);
 }
 
-pub fn GetSceneStackIDs(self: *WorldManager, frame_allocator: std.mem.Allocator) !std.ArrayList(Scene.Type) {
-    return try self.mSManager.GetSceneStackIDs(frame_allocator);
+pub fn GetSceneStackIDs(self: *WorldManager, scratch_allocator: std.mem.Allocator) !std.ArrayList(Scene.Type) {
+    return try self.mSManager.GetSceneStackIDs(scratch_allocator);
 }
 
-pub fn RmSceneComp(self: *WorldManager, engine_allocator: std.mem.Allocator, scene_id: Scene.Type, component_ind: ESceneComponents) !void {
-    _ = .{ self, engine_allocator, scene_id, component_ind };
+pub fn RmSceneComp(self: *WorldManager, keep_allocator: std.mem.Allocator, scene_id: Scene.Type, component_ind: ESceneComponents) !void {
+    _ = .{ self, keep_allocator, scene_id, component_ind };
     @panic("not implemented yet");
 }
 
 //===============================Entities==============================================
-pub fn GetEntityGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Entity.Type) {
-    return try self.mEManager.GetGroup(frame_allocator, query);
+pub fn GetEntityGroup(self: *WorldManager, scratch_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Entity.Type) {
+    return try self.mEManager.GetGroup(scratch_allocator, query);
 }
 
 /// How many entities in this world have `component_type`, without building a group.
@@ -496,8 +496,8 @@ pub fn CreatePlayer(self: *WorldManager, engine_context: *EngineContext, config:
     return try self.mPManager.CreatePlayer(engine_context, config);
 }
 
-pub fn GetPlayerGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Player.Type) {
-    return try self.mPManager.GetGroup(frame_allocator, query);
+pub fn GetPlayerGroup(self: *WorldManager, scratch_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Player.Type) {
+    return try self.mPManager.GetGroup(scratch_allocator, query);
 }
 
 //===============================Game Contexts==============================================
@@ -505,8 +505,8 @@ pub fn CreateGameContext(self: *WorldManager, engine_context: *EngineContext, co
     return try self.mGCManager.CreateGameContext(engine_context, config);
 }
 
-pub fn GetGameContextGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(GameContext.Type) {
-    return try self.mGCManager.GetGroup(frame_allocator, query);
+pub fn GetGameContextGroup(self: *WorldManager, scratch_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(GameContext.Type) {
+    return try self.mGCManager.GetGroup(scratch_allocator, query);
 }
 
 //===============================UUIDs==============================================

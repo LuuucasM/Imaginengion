@@ -137,14 +137,14 @@ fn SyncMeasuring(self: *StatsPanel, engine_context: *EngineContext) !void {
     const conflicts = &engine_context.mTransactions.mConflicts;
     const ticked = self.mMeasureBox.HasComponent(SelectedTag);
     if (ticked == conflicts.mOn) return;
-    if (ticked) conflicts.Clear(engine_context.EngineAllocator());
+    if (ticked) conflicts.Clear(engine_context.Keep());
     conflicts.mOn = ticked;
 }
 
 /// The total and a line for each of the systems with the most hooks: how many of its hooks would conflict, how many
 /// would run on their own, and the type most of its conflicts were on
 fn SetConflicts(self: *StatsPanel, engine_context: *EngineContext, conflicts: *const ConflictReport) !void {
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
     var hooks: u64 = 0;
     var conflicting: u64 = 0;
     var serial: u64 = 0;
@@ -161,7 +161,7 @@ fn SetConflicts(self: *StatsPanel, engine_context: *EngineContext, conflicts: *c
     }
 
     //the systems with the most hooks first
-    const order = try frame_allocator.alloc(usize, conflicts.mSystems.count());
+    const order = try scratch_allocator.alloc(usize, conflicts.mSystems.count());
     for (order, 0..) |*index, i| index.* = i;
     const values = conflicts.mSystems.values();
     std.mem.sort(usize, order, values, struct {
@@ -260,5 +260,5 @@ fn SetWorld(engine_context: *EngineContext, lines: WorldLines, stats: EngineStat
 
 /// Puts a formatted line on a label, if it doesn't say that already
 fn SetLine(engine_context: *EngineContext, label: Entity, comptime format: []const u8, args: anytype) !void {
-    try WidgetActions.SetText(engine_context, label, try std.fmt.allocPrint(engine_context.FrameAllocator(), format, args));
+    try WidgetActions.SetText(engine_context, label, try std.fmt.allocPrint(engine_context.Scratch(), format, args));
 }

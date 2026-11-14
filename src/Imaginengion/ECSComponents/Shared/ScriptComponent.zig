@@ -34,7 +34,7 @@ pub fn Deinit(self: *ScriptComponent, engine_context: *EngineContext) void {
     }
     self.mInstance = null;
     self.mScriptAssetHandle.ReleaseAsset();
-    self.mLinks.deinit(engine_context.EngineAllocator());
+    self.mLinks.deinit(engine_context.Keep());
 }
 
 /// The UUID the variable called `name` wants, null if it wants none
@@ -54,7 +54,7 @@ pub fn SetLink(self: *ScriptComponent, engine_context: *EngineContext, name: []c
             return;
         }
     }
-    try self.mLinks.append(engine_context.EngineAllocator(), .{ .mNameHash = hash, .mUUID = uuid });
+    try self.mLinks.append(engine_context.Keep(), .{ .mNameHash = hash, .mUUID = uuid });
 }
 
 pub fn RemoveLink(self: *ScriptComponent, name: []const u8) void {
@@ -70,7 +70,7 @@ pub fn RemoveLink(self: *ScriptComponent, name: []const u8) void {
 /// Wants what `from` wants, instead of what it wanted
 pub fn CopyLinks(self: *ScriptComponent, engine_context: *EngineContext, from: *const ScriptComponent) !void {
     self.mLinks.clearRetainingCapacity();
-    try self.mLinks.appendSlice(engine_context.EngineAllocator(), from.mLinks.items);
+    try self.mLinks.appendSlice(engine_context.Keep(), from.mLinks.items);
 }
 
 pub fn Clone(self: *const ScriptComponent, engine_context: *EngineContext) !ScriptComponent {
@@ -81,8 +81,8 @@ pub fn Clone(self: *const ScriptComponent, engine_context: *EngineContext) !Scri
     errdefer new_component.mScriptAssetHandle.ReleaseAsset();
 
     // and its own list of what its variables want
-    new_component.mLinks = try self.mLinks.clone(engine_context.EngineAllocator());
-    errdefer new_component.mLinks.deinit(engine_context.EngineAllocator());
+    new_component.mLinks = try self.mLinks.clone(engine_context.Keep());
+    errdefer new_component.mLinks.deinit(engine_context.Keep());
 
     // and its own variables, starting as these are
     new_component.mInstance = null;

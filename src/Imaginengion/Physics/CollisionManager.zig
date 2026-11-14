@@ -52,8 +52,8 @@ pub const ColliderGroups = struct {
 /// collider's own entity when that is a convenience child, which one group query can not ask about: so each
 /// collider is walked up to its main object instead. A body with no rigid body, or a static one, is static: a
 /// collider with no rigid body anywhere above it still collides, as a static body would
-pub fn QueryColliderGroups(world_manager: *WorldManager, frame_allocator: std.mem.Allocator) !ColliderGroups {
-    const colliders = try world_manager.GetEntityGroup(frame_allocator, ColliderQuery);
+pub fn QueryColliderGroups(world_manager: *WorldManager, scratch_allocator: std.mem.Allocator) !ColliderGroups {
+    const colliders = try world_manager.GetEntityGroup(scratch_allocator, ColliderQuery);
 
     var dynamic: std.ArrayList(BodyCollider) = .empty;
     var kinematic: std.ArrayList(BodyCollider) = .empty;
@@ -64,11 +64,11 @@ pub fn QueryColliderGroups(world_manager: *WorldManager, frame_allocator: std.me
         const body_collider: BodyCollider = .{ .mCollider = collider_id, .mBody = body.mID };
 
         if (body.HasComponent(DynamicBodyTag)) {
-            try dynamic.append(frame_allocator, body_collider);
+            try dynamic.append(scratch_allocator, body_collider);
         } else if (body.HasComponent(KinematicBodyTag)) {
-            try kinematic.append(frame_allocator, body_collider);
+            try kinematic.append(scratch_allocator, body_collider);
         } else {
-            try static.append(frame_allocator, body_collider);
+            try static.append(scratch_allocator, body_collider);
         }
     }
 
@@ -167,7 +167,7 @@ pub const empty: CollisionManager = .{
 };
 
 //the pairs touching on the last substep and on this one, both sorted by key. They outlive the frame,
-//which is why they are on the engine allocator and not the frame one
+//which is why they are on the Keep allocator and not the Scratch one
 _TouchingLast: std.ArrayList(Touch),
 _TouchingNow: std.ArrayList(Touch),
 _BlockingContacts: std.ArrayList(Contact),
@@ -175,20 +175,20 @@ _OverlapContacts: std.ArrayList(Contact),
 
 pub fn Init(_: *CollisionManager, _: std.mem.Allocator) !void {}
 
-pub fn Deinit(self: *CollisionManager, engine_allocator: std.mem.Allocator) void {
-    self._TouchingLast.deinit(engine_allocator);
-    self._TouchingNow.deinit(engine_allocator);
-    self._BlockingContacts.deinit(engine_allocator);
-    self._OverlapContacts.deinit(engine_allocator);
+pub fn Deinit(self: *CollisionManager, keep_allocator: std.mem.Allocator) void {
+    self._TouchingLast.deinit(keep_allocator);
+    self._TouchingNow.deinit(keep_allocator);
+    self._BlockingContacts.deinit(keep_allocator);
+    self._OverlapContacts.deinit(keep_allocator);
 }
 
 /// Forgets which pairs were touching too, so whatever is touching on the next substep counts as new
-pub fn Reset(self: *CollisionManager, engine_allocator: std.mem.Allocator) void {
+pub fn Reset(self: *CollisionManager, keep_allocator: std.mem.Allocator) void {
     self._TouchingLast.clearRetainingCapacity();
     self._TouchingNow.clearRetainingCapacity();
     self._BlockingContacts.clearRetainingCapacity();
     self._OverlapContacts.clearRetainingCapacity();
-    _ = engine_allocator;
+    _ = keep_allocator;
 }
 
 /// How a collider's body moves, which decides what the broad pass pairs it with
@@ -214,9 +214,9 @@ pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_
     defer zone.Deinit();
 
     //what each collider the tree can hand back is, by id
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
     var pairables: std.AutoHashMapUnmanaged(Entity.Type, Pairable) = .empty;
-    try pairables.ensureTotalCapacity(frame_allocator, @intCast(groups.mDynamic.len + groups.mKinematic.len + groups.mStatic.len));
+    try pairables.ensureTotalCapacity(scratch_allocator, @intCast(groups.mDynamic.len + groups.mKinematic.len + groups.mStatic.len));
     for (groups.mDynamic) |body_collider| pairables.putAssumeCapacity(body_collider.mCollider, .{ .mBodyCollider = body_collider, .mKind = .Dynamic });
     for (groups.mKinematic) |body_collider| pairables.putAssumeCapacity(body_collider.mCollider, .{ .mBodyCollider = body_collider, .mKind = .Kinematic });
     for (groups.mStatic) |body_collider| pairables.putAssumeCapacity(body_collider.mCollider, .{ .mBodyCollider = body_collider, .mKind = .Static });
@@ -345,8 +345,8 @@ fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_m
     };
 
     switch (collision_type) {
-        .Block => try self._BlockingContacts.append(engine_context.EngineAllocator(), contact),
-        .Overlap => try self._OverlapContacts.append(engine_context.EngineAllocator(), contact),
+        .Block => try self._BlockingContacts.append(engine_context.Keep(), contact),
+        .Overlap => try self._OverlapContacts.append(engine_context.Keep(), contact),
         .Ignore => unreachable,
     }
 }
@@ -424,10 +424,10 @@ fn SpeculativeReach(contact: Contact, dt: f32) f32 {
 /// A pair the broad pass no longer builds (filtered out, collider removed, entity deleted) is not touching either,
 /// so it ends too. Nothing of a pair that ends is read from the ECS here, its entities may be gone
 pub fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext, event_manager: *PhysicsEventManager) !void {
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
     self._TouchingNow.clearRetainingCapacity();
-    try self._TouchingNow.ensureTotalCapacity(engine_allocator, self._BlockingContacts.items.len + self._OverlapContacts.items.len);
+    try self._TouchingNow.ensureTotalCapacity(keep_allocator, self._BlockingContacts.items.len + self._OverlapContacts.items.len);
     for (self._BlockingContacts.items, 0..) |contact, contact_ind| {
         if (contact.mImpulse <= 0.0 and contact.mSeparation > SLOP) continue;
         self._TouchingNow.appendAssumeCapacity(Touch.Init(contact, contact_ind, false));
@@ -446,7 +446,7 @@ pub fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext, e
     for (self._TouchingNow.items) |touch| {
         //keys in last below this one were touching and no longer are
         while (last_ind < last.len and last[last_ind].mKey < touch.mKey) : (last_ind += 1) {
-            try QueueCollisionEnd(engine_allocator, event_manager, last[last_ind]);
+            try QueueCollisionEnd(keep_allocator, event_manager, last[last_ind]);
         }
 
         if (last_ind < last.len and last[last_ind].mKey == touch.mKey) {
@@ -456,7 +456,7 @@ pub fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext, e
         }
 
         const contact = if (touch.mIsTrigger) self._OverlapContacts.items[touch.mContactInd] else self._BlockingContacts.items[touch.mContactInd];
-        try event_manager.Insert(engine_allocator, .PostPhysics, .{ .CollisionBegin = .{
+        try event_manager.Insert(keep_allocator, .PostPhysics, .{ .CollisionBegin = .{
             .mOrigin = contact.mOriginBody,
             .mTarget = contact.mTargetBody,
             .mOriginCollider = contact.mOrigin,
@@ -467,7 +467,7 @@ pub fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext, e
     }
     //whatever is left of last is past every key touching now
     for (last[last_ind..]) |touch| {
-        try QueueCollisionEnd(engine_allocator, event_manager, touch);
+        try QueueCollisionEnd(keep_allocator, event_manager, touch);
     }
 
     //swapped rather than copied: this substep's list is the next one's last, and the old last's
@@ -476,8 +476,8 @@ pub fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext, e
 }
 
 /// A pair from the last substep that is not touching on this one
-fn QueueCollisionEnd(engine_allocator: std.mem.Allocator, event_manager: *PhysicsEventManager, touch: Touch) !void {
-    try event_manager.Insert(engine_allocator, .PostPhysics, .{ .CollisionEnd = .{
+fn QueueCollisionEnd(keep_allocator: std.mem.Allocator, event_manager: *PhysicsEventManager, touch: Touch) !void {
+    try event_manager.Insert(keep_allocator, .PostPhysics, .{ .CollisionEnd = .{
         .mOrigin = touch.mOriginBody,
         .mTarget = touch.mTargetBody,
         .mOriginCollider = touch.mOrigin,

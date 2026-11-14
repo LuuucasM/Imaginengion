@@ -101,12 +101,12 @@ pub fn Build(engine_context: *EngineContext, page: Entity, options: Widgets.Opti
     };
 }
 
-pub fn Deinit(self: *ComponentsPanel, engine_allocator: std.mem.Allocator) void {
-    self.mEntityList.Deinit(engine_allocator);
-    self.mSceneList.Deinit(engine_allocator);
-    self.mPlayerList.Deinit(engine_allocator);
-    self.mGameContextList.Deinit(engine_allocator);
-    self.mButtons.deinit(engine_allocator);
+pub fn Deinit(self: *ComponentsPanel, keep_allocator: std.mem.Allocator) void {
+    self.mEntityList.Deinit(keep_allocator);
+    self.mSceneList.Deinit(keep_allocator);
+    self.mPlayerList.Deinit(keep_allocator);
+    self.mGameContextList.Deinit(keep_allocator);
+    self.mButtons.deinit(keep_allocator);
 }
 
 /// Whether it is shown in its tab (the Window menu's Components)
@@ -188,7 +188,7 @@ pub fn Run(self: *const ComponentsPanel, engine_context: *EngineContext, action:
             if (!tmpl_ref.mTmpl.IsIDValid()) return;
             //the event carries a reference of its own, which the editor takes over
             tmpl_ref.mTmpl.RetainAsset();
-            try engine_context.mEditorEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .OpenTmplEvent = .{ .mTmpl = tmpl_ref.mTmpl } });
+            try engine_context.mEditorEventManager.Insert(engine_context.Keep(), .EndOfFrame, .{ .OpenTmplEvent = .{ .mTmpl = tmpl_ref.mTmpl } });
         },
         .EditUIElement => {},
         .Unpossess => if (built == .player) {
@@ -234,7 +234,7 @@ pub fn OnUIEvent(self: *const ComponentsPanel, engine_context: *EngineContext, e
 
 /// Rows of its own under a component's (see Inspector.RenderComponentWith), for what needs the object
 pub fn After(self: *ComponentsPanel, comptime component_type: type, ui: *Inspector.Builder, component: *component_type, object: anytype) !void {
-    const engine_allocator = ui.mEngineContext.EngineAllocator();
+    const keep_allocator = ui.mEngineContext.Keep();
     const Object = @TypeOf(object);
     if (comptime component_type == RigidBodyComponent and Object == Entity) {
         //which of the body type tags it has, picked like an enum
@@ -256,21 +256,21 @@ pub fn After(self: *ComponentsPanel, comptime component_type: type, ui: *Inspect
         self.mPossessBox = box;
         const menu = try Widgets.ContextMenu(ui.mEngineContext, box, self.mOptions);
         const clear = try Widgets.MenuItem(ui.mEngineContext, menu, "Clear", .{ .StockScripts = self.mOptions.StockScripts });
-        try self.mButtons.append(engine_allocator, .{ .Button = clear, .Action = .Unpossess });
+        try self.mButtons.append(keep_allocator, .{ .Button = clear, .Action = .Unpossess });
     }
     if (comptime component_type == SceneComponent and Object == Scene) {
         //shown, not edited: the scene stack slots a scene by its layer when it is made
-        try ui.Note(try std.fmt.allocPrint(ui.mEngineContext.FrameAllocator(), "Layer: {s}", .{@tagName(object.GetLayer())}));
+        try ui.Note(try std.fmt.allocPrint(ui.mEngineContext.Scratch(), "Layer: {s}", .{@tagName(object.GetLayer())}));
     }
     if (comptime component_type == AudioComponent) {
         const buttons = try ui.Buttons(&.{ "Preview", "Stop" });
-        try self.mButtons.append(engine_allocator, .{ .Button = buttons[0], .Action = .Preview });
-        try self.mButtons.append(engine_allocator, .{ .Button = buttons[1], .Action = .Stop });
+        try self.mButtons.append(keep_allocator, .{ .Button = buttons[0], .Action = .Preview });
+        try self.mButtons.append(keep_allocator, .{ .Button = buttons[1], .Action = .Stop });
     }
     if (comptime component_type == TmplRefComponent) {
         if (object.GetComponent(TmplRefComponent).?.mTmpl.IsIDValid()) {
             const buttons = try ui.Buttons(&.{"Edit Template"});
-            try self.mButtons.append(engine_allocator, .{ .Button = buttons[0], .Action = .EditTemplate });
+            try self.mButtons.append(keep_allocator, .{ .Button = buttons[0], .Action = .EditTemplate });
         }
     }
     if (comptime component_type == UIElementComponent and Object == Entity) {
@@ -285,7 +285,7 @@ pub fn After(self: *ComponentsPanel, comptime component_type: type, ui: *Inspect
         }
         if (count == 0) try ui.Note("No UI components yet");
         const buttons = try ui.Buttons(&.{"Edit UI Element"});
-        try self.mButtons.append(engine_allocator, .{ .Button = buttons[0], .Action = .EditUIElement });
+        try self.mButtons.append(keep_allocator, .{ .Button = buttons[0], .Action = .EditUIElement });
     }
 }
 

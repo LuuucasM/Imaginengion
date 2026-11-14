@@ -66,7 +66,7 @@ pub fn Deinit(self: *ScriptAsset, engine_context: *EngineContext) void {
     //every script child gives its instance back first (ScriptComponent.Deinit holds a reference to this asset)
     if (self._Info) |info| info.mDeinit(engine_context);
     self._Lib.Close(engine_context);
-    self._Live.deinit(engine_context.EngineAllocator());
+    self._Live.deinit(engine_context.Keep());
     self.ReleaseDependencies(engine_context);
 }
 
@@ -154,7 +154,7 @@ fn WatchDependencies(self: *ScriptAsset, engine_context: *EngineContext) !void {
             std.log.warn("couldn't watch {s}, a file a script imports: {s}", .{ abs_path, @errorName(err) });
             continue;
         };
-        try self._Dependencies.append(engine_context.EngineAllocator(), handle);
+        try self._Dependencies.append(engine_context.Keep(), handle);
     }
 }
 
@@ -179,7 +179,7 @@ fn IsSeparator(c: u8) bool {
 
 fn ReleaseDependencies(self: *ScriptAsset, engine_context: *EngineContext) void {
     for (self._Dependencies.items) |*dependency| dependency.ReleaseAsset();
-    self._Dependencies.deinit(engine_context.EngineAllocator());
+    self._Dependencies.deinit(engine_context.Keep());
     self._Dependencies = .empty;
 }
 
@@ -198,11 +198,11 @@ pub fn HasHook(self: *const ScriptAsset, hook: Hook) bool {
 
 /// A new instance of the script's variables: a copy of instance `copy_from`'s, or the script's defaults when null
 pub fn NewInstance(self: *ScriptAsset, engine_context: *EngineContext, copy_from: ?u32) !u32 {
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
     var free_ids = self._Live.iterator(.{ .kind = .unset });
     const id = free_ids.next() orelse blk: {
         const old_len = self._Live.bit_length;
-        try self._Live.resize(engine_allocator, @max(16, old_len * 2), false);
+        try self._Live.resize(keep_allocator, @max(16, old_len * 2), false);
         break :blk old_len;
     };
     self._Live.set(id);

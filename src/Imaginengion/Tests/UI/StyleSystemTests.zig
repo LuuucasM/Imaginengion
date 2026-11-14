@@ -66,7 +66,7 @@ const TestWorld = struct {
         self.mTheme.Deinit(engine_context);
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -366,16 +366,16 @@ test "the engine's default theme reads, with every style the editor's look needs
     const engine_context = try std.heap.page_allocator.create(EngineContext);
     defer std.heap.page_allocator.destroy(engine_context);
     engine_context.* = .{};
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
     //file reads go through the context's Io, which forwards to this
-    engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+    engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
         .concurrent_limit = .nothing,
         .async_limit = .nothing,
     });
     //no Setup: its default assets need the GPU. The theme's fonts are only looked up, not loaded
     try engine_context.mAssetManager.Init(engine_context);
 
-    const contents = try std.Io.Dir.cwd().readFileAlloc(engine_context.Io(), UIManager.DEFAULT_THEME_PATH, engine_context.FrameAllocator(), .unlimited);
+    const contents = try std.Io.Dir.cwd().readFileAlloc(engine_context.Io(), UIManager.DEFAULT_THEME_PATH, engine_context.Scratch(), .unlimited);
     var theme: ThemeAsset = .{};
     try theme.FromJson(engine_context, contents);
     for ([_][]const u8{ "Window", "Header", "Button", "Field", "Tab", "Title", "Popup", "Text", "Caret", "Scrollbar", "AxisX", "AxisY", "AxisZ", "AxisW", "Checkbox", "Separator", "Swatch", "TextDim", "MenuBar", "MenuCheck", "Arrow" }) |name| {
@@ -393,10 +393,10 @@ test "the engine's default theme reads, with every style the editor's look needs
     //the asset manager, minus the default assets Init never set up and the working directory handle it does not own
     const asset_manager = &engine_context.mAssetManager;
     asset_manager.mECSManager.Deinit(engine_context);
-    asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-    asset_manager.mEventManager.Deinit(engine_allocator);
-    asset_manager.mCWDPath.deinit(engine_allocator);
-    _ = engine_context._Internal.EngineGPA.deinit();
+    asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+    asset_manager.mEventManager.Deinit(keep_allocator);
+    asset_manager.mCWDPath.deinit(keep_allocator);
+    _ = engine_context._Internal.KeepHeap.deinit();
 }
 
 test "a style names a theme file of its own, and is taken out of it instead of the editor's theme" {
@@ -405,8 +405,8 @@ test "a style names a theme file of its own, and is taken out of it instead of t
     const engine_context = try std.heap.page_allocator.create(EngineContext);
     defer std.heap.page_allocator.destroy(engine_context);
     engine_context.* = .{};
-    const engine_allocator = engine_context.EngineAllocator();
-    engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+    const keep_allocator = engine_context.Keep();
+    engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
         .concurrent_limit = .nothing,
         .async_limit = .nothing,
     });
@@ -422,17 +422,17 @@ test "a style names a theme file of its own, and is taken out of it instead of t
         engine_context.mUIManager.Deinit(engine_context);
         const asset_manager = &engine_context.mAssetManager;
         asset_manager.mECSManager.Deinit(engine_context);
-        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-        asset_manager.mEventManager.Deinit(engine_allocator);
-        asset_manager.mCWDPath.deinit(engine_allocator);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+        asset_manager.mEventManager.Deinit(keep_allocator);
+        asset_manager.mCWDPath.deinit(keep_allocator);
+        _ = engine_context._Internal.KeepHeap.deinit();
     }
 
     //a game's own theme, with its own "Button"
     try tmp_dir.dir.writeFile(engine_context.Io(), .{ .sub_path = "Game.imtheme", .data =
         \\{ "Styles": { "Button": { "Background": { "Normal": [1, 0, 0, 1] } } } }
     });
-    const rel_path = try std.fmt.allocPrint(engine_context.FrameAllocator(), ".zig-cache/tmp/{s}/Game.imtheme", .{tmp_dir.sub_path});
+    const rel_path = try std.fmt.allocPrint(engine_context.Scratch(), ".zig-cache/tmp/{s}/Game.imtheme", .{tmp_dir.sub_path});
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const entity = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try entity.AddComponent(engine_context, ShapeComponent{});
@@ -495,7 +495,7 @@ test "the default theme has a DropTarget style with a border" {
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     const contents = @embedFile("../../EngineAssets/themes/Default.imtheme");
-    const parsed = try std.json.parseFromSliceLeaky(std.json.Value, engine_context.FrameAllocator(), contents, .{});
+    const parsed = try std.json.parseFromSliceLeaky(std.json.Value, engine_context.Scratch(), contents, .{});
     const drop_style = parsed.object.get("Styles").?.object.get("DropTarget").?.object;
     try std.testing.expect(drop_style.get("BorderWidth").?.integer > 0);
     try std.testing.expect(drop_style.get("Border").?.object.get("Hovered") != null);

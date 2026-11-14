@@ -55,7 +55,7 @@ const TestWorld = struct {
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
         engine_context.mEditorWorld.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -98,7 +98,7 @@ fn RunCollisionPasses(collision_manager: *CollisionManager, engine_context: *Eng
     const world_manager = &engine_context.mEditorWorld;
     try world_manager.BuildBVH(engine_context);
 
-    const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.FrameAllocator());
+    const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.Scratch());
     try collision_manager.BroadPass(engine_context, world_manager, groups);
     collision_manager.NarrowPass(SUBSTEP_DT);
     try collision_manager.PreSolverPass(engine_context, &world_manager.mPhysicsManager.mEventManager);
@@ -129,8 +129,8 @@ test "a collider with no rigid body blocks like a static body" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     //a default box spans 0.5 each way from the origin, so a radius 0.5 ball at -0.9 is 0.1 into it
     const wall = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
@@ -148,8 +148,8 @@ test "a static rigid body blocks the same way" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     const wall = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try wall.AddComponent(engine_context, CollidingShape(.Box));
@@ -194,8 +194,8 @@ test "restitution 1 sends the ball straight back at the same speed" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     const pair = try WallAndBall(engine_context, scene, .{ .x = 5, .y = 0, .z = 0 });
     SetRestitution(pair.ball, 1.0);
@@ -212,8 +212,8 @@ test "restitution 1 at an angle reflects about the normal and keeps the sideways
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     //no friction, so nothing touches the y part: it comes out as a mirror image, the pong bounce
     const pair = try WallAndBall(engine_context, scene, .{ .x = 5, .y = 3, .z = 0 });
@@ -234,8 +234,8 @@ test "partial restitution hands back that fraction of the closing speed" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     const pair = try WallAndBall(engine_context, scene, .{ .x = 4, .y = 0, .z = 0 });
     SetRestitution(pair.ball, 0.5);
@@ -251,8 +251,8 @@ test "the bouncier surface wins" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     //a default, dead ball against a static wall with restitution 1 still bounces fully
     const pair = try WallAndBall(engine_context, scene, .{ .x = 5, .y = 0, .z = 0 });
@@ -271,8 +271,8 @@ test "a slow hit does not bounce" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     //under the restitution threshold, so even a perfectly bouncy ball just stops, the way a resting one should
     const pair = try WallAndBall(engine_context, scene, .{ .x = 0.5, .y = 0, .z = 0 });
@@ -306,7 +306,7 @@ fn QueuedCount(engine_context: *EngineContext, kind: std.meta.Tag(PhysicsEvent))
 fn QueuedEnds(engine_context: *EngineContext) ![]const CollisionEndEvent {
     var ends: std.ArrayList(CollisionEndEvent) = .empty;
     for (QueuedCollisions(engine_context)) |event| {
-        if (event == .CollisionEnd) try ends.append(engine_context.FrameAllocator(), event.CollisionEnd);
+        if (event == .CollisionEnd) try ends.append(engine_context.Scratch(), event.CollisionEnd);
     }
     return ends.items;
 }
@@ -334,8 +334,8 @@ test "a collision begins once, and again only after the pair has come apart" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     const pair = try WallAndBall(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 });
 
@@ -372,8 +372,8 @@ test "a trigger pair begins once too, and is not pushed apart" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     const pair = try WallAndBall(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 });
     pair.wall.GetComponentMut(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
@@ -393,8 +393,8 @@ test "a collision ends once when the pair comes apart, naming the pair that bega
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     const pair = try WallAndBall(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 });
 
@@ -424,8 +424,8 @@ test "a trigger pair ends once the ball leaves it" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     const pair = try WallAndBall(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 });
     pair.wall.GetComponentMut(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
@@ -446,8 +446,8 @@ test "a pair whose filter stops it colliding ends, though the two still overlap"
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     //a trigger, so nothing pushes the ball out and it stays overlapping throughout
     const pair = try WallAndBall(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 });
@@ -469,8 +469,8 @@ test "deleting one side ends its collisions, and only the side still there runs 
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     const pair = try WallAndBall(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 });
     //an end script with no asset on the ball: the per type wrapper loads the script to read its type, which
@@ -627,7 +627,7 @@ test "a frictionless surface makes the contact frictionless whatever touches it"
     //ice under a grippy box: the floor gets a static rigid body so it has a material of its own
     const box = try BoxOnFloor(engine_context, scene, .{ .x = 3, .y = 0, .z = 0 });
     SetFriction(box, 1.0, 1.0);
-    const floors = try engine_context.mEditorWorld.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
+    const floors = try engine_context.mEditorWorld.GetEntityGroup(engine_context.Scratch(), .{ .Component = ColliderComponent });
     for (floors.items) |id| {
         const entity = engine_context.mEditorWorld.GetEntity(id);
         if (entity.mID == box.mID) continue;
@@ -795,8 +795,8 @@ test "a kinematic body pushes a dynamic one and is not pushed back" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     //a paddle-like box at the origin moving right into a ball at rest that is 0.1 into its right face
     const paddle = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
@@ -1247,8 +1247,8 @@ test "two colliders of one main object never collide with each other" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     //a collider on the object and another on its child, overlapping each other: one body, nothing to collide
     const parts = try MakeBodyWithChildCollider(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, CollidingShape(.Box), .{ .x = 0.3, .y = 0, .z = 0 });
@@ -1300,8 +1300,8 @@ test "a child tagged MainObjectComponent is a main object of its own" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     //the same overlapping pair as two colliders of one object, but the child is its own main object: a static
     //one, having no rigid body, so the two are a pair like any other
@@ -1372,8 +1372,8 @@ test "a contact switched off before the solver passes through, and does not touc
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     var listener: PreSolveListener = .{ .mRule = .DropAll };
     engine_context.mEditorWorld.mPhysicsManager.SetSyncCallback(&listener, PreSolveListener.OnEvent);
@@ -1398,8 +1398,8 @@ test "only contacts whose collider asks for it are handed to pre-solve, and kept
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     var listener: PreSolveListener = .{ .mRule = .KeepAll };
     engine_context.mEditorWorld.mPhysicsManager.SetSyncCallback(&listener, PreSolveListener.OnEvent);

@@ -67,11 +67,11 @@ const TestWorld = struct {
 
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
-        engine_context.mPointerSystem.Deinit(engine_context.EngineAllocator());
-        engine_context.mPointerEventManager.Deinit(engine_context.EngineAllocator());
+        engine_context.mPointerSystem.Deinit(engine_context.Keep());
+        engine_context.mPointerEventManager.Deinit(engine_context.Keep());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -109,7 +109,7 @@ const TestWorld = struct {
                 else => continue,
             };
             switch (entity_event.mEvent) {
-                .FocusGained, .FocusLost, .TextChanged, .TextSubmitted => try taken.append(engine_context.FrameAllocator(), entity_event),
+                .FocusGained, .FocusLost, .TextChanged, .TextSubmitted => try taken.append(engine_context.Scratch(), entity_event),
                 else => {},
             }
         }

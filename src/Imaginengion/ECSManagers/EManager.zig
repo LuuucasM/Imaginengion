@@ -89,7 +89,7 @@ pub fn ProcessEvents(self: *EManager, comptime event_data: type, comptime event_
         callback_list.append(&callback.mNode);
         defer callback_list.remove(&callback.mNode);
         try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
-        self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
+        self.mEventManager.ClearCategory(engine_context.Keep(), event_category, .ClearRetainingCapacity);
     } else if (event_data == ECSEventData) {
         try self.mECSManager.ProcessEvents(engine_context);
     } else {
@@ -107,14 +107,14 @@ pub fn OnManagerEvents(_: *EManager, _: *EngineContext, event: EventData.EventT)
 pub fn ApplyConfig(self: *EManager, engine_context: *EngineContext, entity_id: Entity.Type, config: Entity.CreateConfig) !void {
     if (config.bAddName) {
         var name_component: NameComponent = .empty;
-        try name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Entity");
+        try name_component.mName.appendSlice(engine_context.Keep(), "New Entity");
         _ = try self.AddComponent(engine_context, entity_id, name_component);
     }
     if (config.bAddUUID) {
         const io_source = std.Random.IoSource{ .io = engine_context.Io() };
         const new_random = io_source.interface();
         const new_uuid_component = try self.AddComponent(engine_context, entity_id, UUIDComponent{ .ID = new_random.int(u64) });
-        try self.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, entity_id);
+        try self.AddUUID(engine_context.Keep(), new_uuid_component.ID, entity_id);
     }
     if (config.bAddTransform) {
         _ = try self.AddComponent(engine_context, entity_id, TransformComponent.empty);

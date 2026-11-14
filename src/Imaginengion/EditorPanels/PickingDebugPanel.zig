@@ -99,11 +99,11 @@ pub fn Update(self: *const PickingDebugPanel, engine_context: *EngineContext, ed
     const zone = Tracy.ZoneInit("PickingDebugPanel::Update", @src());
     defer zone.Deinit();
     if (!self.IsOpen()) return;
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
     const mouse_pos = engine_context.mInputManager.GetMousePosition();
 
     if (self.mWindowSection.IsOpen()) {
-        var lines = Lines{ .mAllocator = frame_allocator };
+        var lines = Lines{ .mAllocator = scratch_allocator };
         try lines.Add("Mouse (window): {d:.1}, {d:.1}", .{ mouse_pos.x, mouse_pos.y });
         try lines.Add("Pixel density: {d:.2}   Display scale: {d:.2}", .{ engine_context.mAppWindow.GetPixelDensity(), engine_context.mAppWindow.GetDisplayScale() });
         try lines.Add("Views drawn: Viewport {d}, Play {d}", .{ editor_program.mViewportQuads.items.len, editor_program.mPlayQuads.items.len });
@@ -111,16 +111,16 @@ pub fn Update(self: *const PickingDebugPanel, engine_context: *EngineContext, ed
     }
 
     if (self.mPointer.IsOpen()) {
-        var lines = Lines{ .mAllocator = frame_allocator };
+        var lines = Lines{ .mAllocator = scratch_allocator };
         try self.PointerLines(engine_context, editor_program, &lines);
         try Widgets.SyncLines(engine_context, self.mPointer.Lines, lines.mLines.items);
     }
 
     //the rest all need the view under the mouse, so it is only looked for when one of them is open
     if (!self.mView.IsOpen() and !self.mCasts.IsOpen() and !self.mOverlays.IsOpen()) return;
-    var view_lines = Lines{ .mAllocator = frame_allocator };
-    var cast_lines = Lines{ .mAllocator = frame_allocator };
-    var overlay_lines = Lines{ .mAllocator = frame_allocator };
+    var view_lines = Lines{ .mAllocator = scratch_allocator };
+    var cast_lines = Lines{ .mAllocator = scratch_allocator };
+    var overlay_lines = Lines{ .mAllocator = scratch_allocator };
     try self.ViewLines(engine_context, editor_program, mouse_pos, &view_lines, &cast_lines, &overlay_lines);
     if (self.mView.IsOpen()) try Widgets.SyncLines(engine_context, self.mView.Lines, view_lines.mLines.items);
     if (self.mCasts.IsOpen()) try Widgets.SyncLines(engine_context, self.mCasts.Lines, cast_lines.mLines.items);
@@ -198,7 +198,7 @@ fn ViewLines(_: *const PickingDebugPanel, engine_context: *EngineContext, editor
         .Simulate => &engine_context.mSimulateWorld,
     };
     //the overlays this view shows, as the renderer drew it
-    const view_scenes = try editor_program.ViewScenesFor(engine_context.FrameAllocator(), view.Camera, world);
+    const view_scenes = try editor_program.ViewScenesFor(engine_context.Scratch(), view.Camera, world);
 
     //exactly what a left click here would do
     try cast_lines.Add("A click here selects:", .{});

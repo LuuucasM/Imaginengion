@@ -151,14 +151,14 @@ pub fn CollectFrameStart(self: *EngineStats, engine_context: *EngineContext) voi
 }
 
 /// Sends this frame's stats to Tracy as plots. Runs once at the very end of the frame, before the
-/// frame arena and the stats are reset, so it sees everything the frame did.
+/// scratch arena and the stats are reset, so it sees everything the frame did.
 pub fn EmitPlots(self: EngineStats, engine_context: *EngineContext) void {
     //the counts below are cheap but not free, so skip them outright when there is nowhere to send them
     if (!Tracy.enable_tracy) return;
 
     //the arena keeps its memory between frames (retain_capacity), so this is the largest any frame
     //has needed so far: it only grows, and a jump marks the frame that set a new high
-    Tracy.Plot("Frame Arena Capacity", .{ .format = .Memory }, engine_context._Internal.FrameArena.queryCapacity());
+    Tracy.Plot("Frame Arena Capacity", .{ .format = .Memory }, engine_context._Internal.ScratchArena.queryCapacity());
 
     //the editor world only holds editor objects like the viewport camera and is never rendered as a
     //world of its own, so its render stats would be a flat zero

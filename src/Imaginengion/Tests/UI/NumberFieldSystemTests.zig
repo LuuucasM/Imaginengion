@@ -39,10 +39,10 @@ const TestWorld = struct {
 
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
-        engine_context.mPointerSystem.Deinit(engine_context.EngineAllocator());
+        engine_context.mPointerSystem.Deinit(engine_context.Keep());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -102,7 +102,7 @@ const TestWorld = struct {
                 return .Continue;
             }
         };
-        var collector = Collector{ .mAllocator = self.mEngineContext.FrameAllocator() };
+        var collector = Collector{ .mAllocator = self.mEngineContext.Scratch() };
         var callback = UIManager.EventManagerT.MakeCallback(Collector, Collector.OnEvent, &collector);
         var callback_list: std.DoublyLinkedList = .{};
         callback_list.append(&callback.mNode);

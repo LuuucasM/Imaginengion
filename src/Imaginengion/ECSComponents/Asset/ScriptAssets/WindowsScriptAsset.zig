@@ -19,12 +19,12 @@ pub fn Build(engine_context: *EngineContext, abs_path: []const u8, rel_path: []c
     defer zone.Deinit();
 
     const name = std.fs.path.basename(abs_path);
-    const path_arg = try std.fmt.allocPrint(engine_context.FrameAllocator(), "-Dscript_path={s}", .{abs_path});
-    const name_arg = try std.fmt.allocPrint(engine_context.FrameAllocator(), "-Dscript_name={s}", .{name});
-    const environ_map = try engine_context.mEnviron.createMap(engine_context.FrameAllocator());
+    const path_arg = try std.fmt.allocPrint(engine_context.Scratch(), "-Dscript_path={s}", .{abs_path});
+    const name_arg = try std.fmt.allocPrint(engine_context.Scratch(), "-Dscript_name={s}", .{name});
+    const environ_map = try engine_context.mEnviron.createMap(engine_context.Scratch());
 
     var argv: std.ArrayList([]const u8) = .empty;
-    try argv.appendSlice(engine_context.FrameAllocator(), &.{
+    try argv.appendSlice(engine_context.Scratch(), &.{
         "zig",
         "build",
         "script",
@@ -37,7 +37,7 @@ pub fn Build(engine_context: *EngineContext, abs_path: []const u8, rel_path: []c
     //a project's script can import the project's files by their names (see build_script.zig)
     const project = &engine_context.mProject;
     if (project.IsOpen() and std.mem.startsWith(u8, abs_path, project.mPath.items)) {
-        try argv.append(engine_context.FrameAllocator(), try std.fmt.allocPrint(engine_context.FrameAllocator(), "-Dproject_path={s}", .{project.mPath.items}));
+        try argv.append(engine_context.Scratch(), try std.fmt.allocPrint(engine_context.Scratch(), "-Dproject_path={s}", .{project.mPath.items}));
     }
 
     var child = try std.process.spawn(engine_context.Io(), .{
@@ -62,21 +62,21 @@ pub fn Build(engine_context: *EngineContext, abs_path: []const u8, rel_path: []c
 
 /// Loads the last build of the script at abs_path, as copy number `generation`, and hands back what it exports
 pub fn Open(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path: []const u8, _: []const u8, generation: u32) !*const ScriptABI.ScriptInfo {
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
     const name = std.fs.path.basename(abs_path);
-    const built_path = try std.fmt.allocPrint(frame_allocator, "zig-out/bin/{s}.dll", .{name});
+    const built_path = try std.fmt.allocPrint(scratch_allocator, "zig-out/bin/{s}.dll", .{name});
 
-    const load_path = try std.fmt.allocPrint(frame_allocator, "zig-out/bin/{s}.{d}.dll", .{ name, generation });
-    const built_w = try std.unicode.utf8ToUtf16LeAllocZ(frame_allocator, built_path);
-    const copy_w = try std.unicode.utf8ToUtf16LeAllocZ(frame_allocator, load_path);
+    const load_path = try std.fmt.allocPrint(scratch_allocator, "zig-out/bin/{s}.{d}.dll", .{ name, generation });
+    const built_w = try std.unicode.utf8ToUtf16LeAllocZ(scratch_allocator, built_path);
+    const copy_w = try std.unicode.utf8ToUtf16LeAllocZ(scratch_allocator, load_path);
     if (!CopyFileW(built_w.ptr, copy_w.ptr, .FALSE).toBool()) {
         std.log.err("Failed to copy {s} to {s} to load it", .{ built_path, load_path });
         return error.AssetInitFailed;
     }
-    try self.mLoadedPath.appendSlice(engine_context.EngineAllocator(), load_path);
+    try self.mLoadedPath.appendSlice(engine_context.Keep(), load_path);
     errdefer self.Close(engine_context);
 
-    const load_path_w = try std.unicode.utf8ToUtf16LeAllocZ(frame_allocator, load_path);
+    const load_path_w = try std.unicode.utf8ToUtf16LeAllocZ(scratch_allocator, load_path);
     self.mLib = LoadLibraryExW(load_path_w.ptr, null, 0) orelse {
         std.log.err("Failed to load DLL: {s}", .{load_path});
         return error.AssetInitFailed;
@@ -95,11 +95,11 @@ pub fn Close(self: *WindowsScriptAsset, engine_context: *EngineContext) void {
     self.mLib = null;
     if (self.mLoadedPath.items.len != 0) {
         //best effort: a copy left behind is written over by the next one with its number
-        if (std.unicode.utf8ToUtf16LeAllocZ(engine_context.FrameAllocator(), self.mLoadedPath.items)) |path_w| {
+        if (std.unicode.utf8ToUtf16LeAllocZ(engine_context.Scratch(), self.mLoadedPath.items)) |path_w| {
             _ = DeleteFileW(path_w.ptr);
         } else |_| {}
     }
-    self.mLoadedPath.deinit(engine_context.EngineAllocator());
+    self.mLoadedPath.deinit(engine_context.Keep());
     self.mLoadedPath = .empty;
 }
 

@@ -27,7 +27,7 @@ mEngineContext: EngineContext = .{},
 ///
 /// Parameters:
 /// - `self`: A pointer to the `Application` instance to initialize.
-/// - `engine_allocator`: Allocator used for setting up subsystems.
+/// - `keep_allocator`: Allocator used for setting up subsystems.
 ///
 /// Returns:
 /// - `!void` on failure to initialize any core system returns the error else returns nothing.
@@ -75,10 +75,10 @@ pub fn Run(self: *Application) !void {
     self.mEngineContext.mEngineStats.CollectFrameStart(&self.mEngineContext);
     try self.mProgram.OnUpdate(&self.mEngineContext);
     self.mEngineContext.mEngineStats.EmitPlots(&self.mEngineContext);
-    //the arena empties all at once, so Tracy is told the whole Frame pool is gone rather than each allocation
-    Tracy.MemDiscard(.Frame);
-    _ = self.mEngineContext._Internal.FrameArena.reset(.retain_capacity);
-        self.mEngineContext._Internal.ThreadFrameArenas.Reset();
+    //the arena empties all at once, so Tracy is told the whole Scratch pool is gone rather than each allocation
+    Tracy.MemDiscard(.Scratch);
+    _ = self.mEngineContext._Internal.ScratchArena.reset(.retain_capacity);
+        self.mEngineContext._Internal.ThreadScratchArenas.Reset();
     self.mEngineContext.mEngineStats.ResetStats();
     first_zone.Deinit();
     Profiler.gMain.EndLoop();
@@ -104,10 +104,10 @@ pub fn Run(self: *Application) !void {
         self.mEngineContext.mEngineStats.CollectFrameStart(&self.mEngineContext);
         try self.mProgram.OnUpdate(&self.mEngineContext);
         self.mEngineContext.mEngineStats.EmitPlots(&self.mEngineContext);
-        //the arena empties all at once, so Tracy is told the whole Frame pool is gone rather than each allocation
-        Tracy.MemDiscard(.Frame);
-        _ = self.mEngineContext._Internal.FrameArena.reset(.retain_capacity);
-        self.mEngineContext._Internal.ThreadFrameArenas.Reset();
+        //the arena empties all at once, so Tracy is told the whole Scratch pool is gone rather than each allocation
+        Tracy.MemDiscard(.Scratch);
+        _ = self.mEngineContext._Internal.ScratchArena.reset(.retain_capacity);
+        self.mEngineContext._Internal.ThreadScratchArenas.Reset();
         self.mEngineContext.mEngineStats.ResetStats();
 
         t1 = .now(run_io, .awake);

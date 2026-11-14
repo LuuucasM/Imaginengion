@@ -156,10 +156,10 @@ pub const RenderBuffers = struct {
 
     pub fn Init(self: *RenderBuffers, engine_context: *EngineContext) !void {
         self.mShapeBuffer.Init(engine_context, @sizeOf(ShapeData) * 100, 2, .Compute);
-        self.mShapeBufferBase = try std.ArrayList(ShapeData).initCapacity(engine_context.EngineAllocator(), 100);
+        self.mShapeBufferBase = try std.ArrayList(ShapeData).initCapacity(engine_context.Keep(), 100);
 
         self.mSurfaceBuffer.Init(engine_context, @sizeOf(ShapeSurface) * 100, 3, .Compute);
-        self.mSurfaceBufferBase = try std.ArrayList(ShapeSurface).initCapacity(engine_context.EngineAllocator(), 100);
+        self.mSurfaceBufferBase = try std.ArrayList(ShapeSurface).initCapacity(engine_context.Keep(), 100);
 
         self.mMaskBuffer.Init(engine_context, @sizeOf(SDFProgram.MaskData) * 16, 4, .Compute);
 
@@ -172,29 +172,29 @@ pub const RenderBuffers = struct {
     }
     pub fn Deinit(self: *RenderBuffers, engine_context: *EngineContext) void {
         self.mShapeBuffer.Deinit(engine_context);
-        self.mShapeBufferBase.deinit(engine_context.EngineAllocator());
+        self.mShapeBufferBase.deinit(engine_context.Keep());
 
         self.mSurfaceBuffer.Deinit(engine_context);
-        self.mSurfaceBufferBase.deinit(engine_context.EngineAllocator());
+        self.mSurfaceBufferBase.deinit(engine_context.Keep());
 
         self.mMaskBuffer.Deinit(engine_context);
-        self.mMaskBufferBase.deinit(engine_context.EngineAllocator());
-        self.mPrograms.Deinit(engine_context.EngineAllocator());
+        self.mMaskBufferBase.deinit(engine_context.Keep());
+        self.mPrograms.Deinit(engine_context.Keep());
         self.mInstrBuffer.Deinit(engine_context);
         self.mPartBuffer.Deinit(engine_context);
 
-        self.mBVHNodes.deinit(engine_context.EngineAllocator());
+        self.mBVHNodes.deinit(engine_context.Keep());
         self.mNodeBuffer.Deinit(engine_context);
     }
-    pub fn Reset(self: *RenderBuffers, engine_allocator: std.mem.Allocator, reset_options: ResetOptions) void {
+    pub fn Reset(self: *RenderBuffers, keep_allocator: std.mem.Allocator, reset_options: ResetOptions) void {
         switch (reset_options) {
             .ClearAndFree => {
-                self.mShapeBufferBase.clearAndFree(engine_allocator);
-                self.mSurfaceBufferBase.clearAndFree(engine_allocator);
-                self.mMaskBufferBase.clearAndFree(engine_allocator);
-                self.mPrograms.Deinit(engine_allocator);
+                self.mShapeBufferBase.clearAndFree(keep_allocator);
+                self.mSurfaceBufferBase.clearAndFree(keep_allocator);
+                self.mMaskBufferBase.clearAndFree(keep_allocator);
+                self.mPrograms.Deinit(keep_allocator);
                 self.mPrograms = .{};
-                self.mBVHNodes.clearAndFree(engine_allocator);
+                self.mBVHNodes.clearAndFree(keep_allocator);
             },
             .ClearRetainingCapacity => {
                 self.mShapeBufferBase.clearRetainingCapacity();
@@ -246,20 +246,20 @@ pub const RenderBuffers = struct {
 
     /// The masks every shape added after points into by its MaskIndex (ShapeGeometry.ViewMasks). First, while the
     /// programs are empty, so the masks' program ranges stay right
-    pub fn SetMasks(self: *RenderBuffers, engine_allocator: std.mem.Allocator, masks: *const ShapeGeometry.ViewMasks) !void {
+    pub fn SetMasks(self: *RenderBuffers, keep_allocator: std.mem.Allocator, masks: *const ShapeGeometry.ViewMasks) !void {
         std.debug.assert(self.mPrograms.mInstrs.items.len == 0);
-        try self.mMaskBufferBase.appendSlice(engine_allocator, masks.mMasks.items);
-        try self.mPrograms.mInstrs.appendSlice(engine_allocator, masks.mPrograms.mInstrs.items);
-        try self.mPrograms.mParts.appendSlice(engine_allocator, masks.mPrograms.mParts.items);
-        try self.mPrograms.mPartSurfaces.appendSlice(engine_allocator, masks.mPrograms.mPartSurfaces.items);
+        try self.mMaskBufferBase.appendSlice(keep_allocator, masks.mMasks.items);
+        try self.mPrograms.mInstrs.appendSlice(keep_allocator, masks.mPrograms.mInstrs.items);
+        try self.mPrograms.mParts.appendSlice(keep_allocator, masks.mPrograms.mParts.items);
+        try self.mPrograms.mPartSurfaces.appendSlice(keep_allocator, masks.mPrograms.mPartSurfaces.items);
     }
 
     /// Adds a shape and its surface, pointing the shape at it. The shape's SurfaceIndex is filled in here
-    fn AddShape(self: *RenderBuffers, engine_allocator: std.mem.Allocator, shape: ShapeData, surface: ShapeSurface) !void {
+    fn AddShape(self: *RenderBuffers, keep_allocator: std.mem.Allocator, shape: ShapeData, surface: ShapeSurface) !void {
         var added = shape;
         added.SurfaceIndex = @intCast(self.mSurfaceBufferBase.items.len);
-        try self.mSurfaceBufferBase.append(engine_allocator, surface);
-        try self.mShapeBufferBase.append(engine_allocator, added);
+        try self.mSurfaceBufferBase.append(keep_allocator, surface);
+        try self.mShapeBufferBase.append(keep_allocator, added);
         switch (shape.Type) {
             .Quad => self.mQuadCount += 1,
             .Glyph => self.mGlyphCount += 1,
@@ -271,9 +271,9 @@ pub const RenderBuffers = struct {
     /// A shape that is never drawn, which a ray test always misses: a tree item with nothing to draw this render (a
     /// text's click box, a see-through quad, something hidden or in a scene the view doesn't show), so every other
     /// item stays at its place in the tree's leaves
-    pub fn AddNone(self: *RenderBuffers, engine_allocator: std.mem.Allocator) !void {
+    pub fn AddNone(self: *RenderBuffers, keep_allocator: std.mem.Allocator) !void {
         const zero = [4]f32{ 0, 0, 0, 0 };
-        try self.AddShape(engine_allocator, .{
+        try self.AddShape(keep_allocator, .{
             .AxisX = zero,
             .AxisY = zero,
             .AxisZ = zero,
@@ -289,15 +289,15 @@ pub const RenderBuffers = struct {
     /// Done adding one shape for each of `tree`'s items, in its order: the tree's nodes are this layer's BVH, every
     /// shape is direct, and each shape's SurfaceIndex, which is what a tie at exactly the same depth goes by
     /// (SDFRayMarcher.HitOrder), becomes its item's Order, so the tie goes the same way whatever shape the tree is in
-    pub fn FinishTree(self: *RenderBuffers, engine_allocator: std.mem.Allocator, frame_allocator: std.mem.Allocator, tree: *const WorldBVH.LayerTree) !void {
+    pub fn FinishTree(self: *RenderBuffers, keep_allocator: std.mem.Allocator, scratch_allocator: std.mem.Allocator, tree: *const WorldBVH.LayerTree) !void {
         const items = tree.mItems.items;
         std.debug.assert(self.mShapeBufferBase.items.len == items.len);
-        const added = try frame_allocator.dupe(ShapeSurface, self.mSurfaceBufferBase.items);
+        const added = try scratch_allocator.dupe(ShapeSurface, self.mSurfaceBufferBase.items);
         for (self.mShapeBufferBase.items, items) |*shape, item| {
             self.mSurfaceBufferBase.items[item.Order] = added[shape.SurfaceIndex];
             shape.SurfaceIndex = item.Order;
         }
-        try self.mBVHNodes.appendSlice(engine_allocator, tree.mNodes.items);
+        try self.mBVHNodes.appendSlice(keep_allocator, tree.mNodes.items);
         self.mDirectCount = @intCast(items.len);
     }
 
@@ -321,12 +321,12 @@ pub fn Init(self: *Renderer2D, engine_context: *EngineContext) !void {
 pub fn Deinit(self: *Renderer2D, engine_context: *EngineContext) void {
     self.mGameData.Deinit(engine_context);
     self.mOverlayData.Deinit(engine_context);
-    self.mWarnedMerges.deinit(engine_context.EngineAllocator());
+    self.mWarnedMerges.deinit(engine_context.Keep());
 }
 
-pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
-    self.mGameData.Reset(engine_allocator, .ClearRetainingCapacity);
-    self.mOverlayData.Reset(engine_allocator, .ClearRetainingCapacity);
+pub fn StartBatch(self: *Renderer2D, keep_allocator: std.mem.Allocator) void {
+    self.mGameData.Reset(keep_allocator, .ClearRetainingCapacity);
+    self.mOverlayData.Reset(keep_allocator, .ClearRetainingCapacity);
 }
 
 pub fn SetBuffers(self: *Renderer2D, stats: *RenderStats, engine_context: *EngineContext, copy_pass: *anyopaque, pipeline_t: PipelineType) !void {
@@ -407,10 +407,10 @@ pub fn DrawQuad(
     const texture_asset = try surface.mTexture.GetAsset(engine_context, Texture2D);
 
     const shading_handle = if (shown) |target|
-        try shading_buff.AddSurfaceSlot(engine_context.EngineAllocator(), &surface.mTexOptions, target.Handle, target.Width, target.Height)
+        try shading_buff.AddSurfaceSlot(engine_context.Keep(), &surface.mTexOptions, target.Handle, target.Width, target.Height)
     else
         try shading_buff.AddSurface(
-            engine_context.EngineAllocator(),
+            engine_context.Keep(),
             &surface.mTexOptions,
             texture_asset,
         );
@@ -423,12 +423,12 @@ pub fn DrawQuad(
     if (box.BorderWidth > 0) {
         var border_options: Texture2D.TexOptions = .default;
         border_options.mColor = surface.mBorderColor;
-        border_shading_handle = try shading_buff.AddSurface(engine_context.EngineAllocator(), &border_options, texture_asset);
+        border_shading_handle = try shading_buff.AddSurface(engine_context.Keep(), &border_options, texture_asset);
         if (surface.mBorderColor.w < 1.0) shading_flag |= ShapeData.FLAG_TRANSPARENT;
     }
 
     const axes = ShapeAxes(box.Center, box.Rotation);
-    try buffers.AddShape(engine_context.EngineAllocator(), .{
+    try buffers.AddShape(engine_context.Keep(), .{
         .AxisX = axes[0],
         .AxisY = axes[1],
         .AxisZ = axes[2],
@@ -460,11 +460,11 @@ pub fn DrawMerge(
 ) !void {
     const zone = Tracy.ZoneInit("Renderer2D::DrawMerge", @src());
     defer zone.Deinit();
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
-    const compiled = SDFCompiler.Compile(engine_allocator, root, canvas, &buffers.mPrograms) catch |err| switch (err) {
+    const compiled = SDFCompiler.Compile(keep_allocator, root, canvas, &buffers.mPrograms) catch |err| switch (err) {
         error.MergeTooDeep => {
-            const warned = try self.mWarnedMerges.getOrPut(engine_allocator, root.mID);
+            const warned = try self.mWarnedMerges.getOrPut(keep_allocator, root.mID);
             if (!warned.found_existing) std.log.warn("merge on entity {d} isn't drawn: merges subtracted or intersected inside each other need more than {d} stack slots", .{ root.mID, SDFProgram.MAX_STACK });
             return;
         },
@@ -481,13 +481,13 @@ pub fn DrawMerge(
     plain.mTexture.mManager = &engine_context.mAssetManager;
     const surface = root.GetComponent(SurfaceComponent) orelse &plain;
     const texture_asset = try surface.mTexture.GetAsset(engine_context, Texture2D);
-    const shading_handle = try shading_buff.AddSurface(engine_allocator, &surface.mTexOptions, texture_asset);
+    const shading_handle = try shading_buff.AddSurface(keep_allocator, &surface.mTexOptions, texture_asset);
 
     //each part's shading, from the surface that paints it, added once for every part it paints. See-through where any
     //of them is, the way a quad's surface is
     var shading_flag: u32 = 0;
     var painters: std.AutoHashMapUnmanaged(Entity.Type, u32) = .empty;
-    defer painters.deinit(engine_allocator);
+    defer painters.deinit(keep_allocator);
     var plain_shading: ?u32 = null;
     const first = compiled.Parts.First;
     for (buffers.mPrograms.mParts.items[first..][0..compiled.Parts.Count], buffers.mPrograms.mPartSurfaces.items[first..][0..compiled.Parts.Count]) |*part, painter| {
@@ -496,11 +496,11 @@ pub fn DrawMerge(
             part.Shading = plain_shading.?;
             continue;
         };
-        const known = try painters.getOrPut(engine_allocator, painter_entity.mID);
+        const known = try painters.getOrPut(keep_allocator, painter_entity.mID);
         if (!known.found_existing) {
             const painter_surface = painter_entity.GetComponent(SurfaceComponent).?;
             const painter_texture = try painter_surface.mTexture.GetAsset(engine_context, Texture2D);
-            known.value_ptr.* = @intCast(try shading_buff.AddSurface(engine_allocator, &painter_surface.mTexOptions, painter_texture));
+            known.value_ptr.* = @intCast(try shading_buff.AddSurface(keep_allocator, &painter_surface.mTexOptions, painter_texture));
             if (painter_surface.mTexOptions.IsSeeThrough()) shading_flag |= ShapeData.FLAG_TRANSPARENT;
         }
         part.Shading = known.value_ptr.*;
@@ -514,12 +514,12 @@ pub fn DrawMerge(
         border_width = surface.mBorderWidth * @min(world_scale.x, world_scale.y) * if (canvas) |c| c.Scale else 1.0;
         var border_options: Texture2D.TexOptions = .default;
         border_options.mColor = surface.mBorderColor;
-        border_shading_handle = try shading_buff.AddSurface(engine_allocator, &border_options, texture_asset);
+        border_shading_handle = try shading_buff.AddSurface(keep_allocator, &border_options, texture_asset);
         if (surface.mBorderColor.w < 1.0) shading_flag |= ShapeData.FLAG_TRANSPARENT;
     }
 
     const axes = ShapeAxes(box.Center, box.Rotation);
-    try buffers.AddShape(engine_allocator, .{
+    try buffers.AddShape(keep_allocator, .{
         .AxisX = axes[0],
         .AxisY = axes[1],
         .AxisZ = axes[2],
@@ -559,8 +559,8 @@ pub fn AddColliderShadings(engine_context: *EngineContext, shading_buff: *Shadin
     var edge: Texture2D.TexOptions = .default;
     edge.mColor = COLLIDER_EDGE;
     return .{
-        .Fill = @intCast(try shading_buff.AddSurface(engine_context.EngineAllocator(), &fill, texture_asset)),
-        .Edge = @intCast(try shading_buff.AddSurface(engine_context.EngineAllocator(), &edge, texture_asset)),
+        .Fill = @intCast(try shading_buff.AddSurface(engine_context.Keep(), &fill, texture_asset)),
+        .Edge = @intCast(try shading_buff.AddSurface(engine_context.Keep(), &edge, texture_asset)),
     };
 }
 
@@ -577,7 +577,7 @@ pub fn DrawCollider(
 ) !void {
     _ = self;
     const drawn = ColliderShape(transform_component, collider, canvas, camera_view);
-    try buffers.AddShape(engine_context.EngineAllocator(), drawn.Shape, .{
+    try buffers.AddShape(engine_context.Keep(), drawn.Shape, .{
         .ShadingHandle = shadings.Fill,
         .BorderShadingHandle = shadings.Edge,
         .BorderWidth = drawn.EdgeWidth,
@@ -631,7 +631,7 @@ pub fn ColliderShape(transform_component: *const EntityTransformComponent, colli
 /// A plain white surface's shading, for a merge's parts that nothing paints
 fn PlainShading(engine_context: *EngineContext, shading_buff: *ShadingBuffers, plain: *SurfaceComponent) !usize {
     const texture_asset = try plain.mTexture.GetAsset(engine_context, Texture2D);
-    return shading_buff.AddSurface(engine_context.EngineAllocator(), &plain.mTexOptions, texture_asset);
+    return shading_buff.AddSurface(engine_context.Keep(), &plain.mTexOptions, texture_asset);
 }
 
 pub fn DrawText(
@@ -667,7 +667,7 @@ pub const TextFill = struct {
     pub fn Of(engine_context: *EngineContext, text_component: *const TextComponent, surface: *const SurfaceComponent, shading_buff: *ShadingBuffers) !TextFill {
         const font = try text_component.mTextAssetHandle.GetAsset(engine_context, TextAsset);
         const texture_asset = try surface.mTexture.GetAsset(engine_context, Texture2D);
-        const shading = try shading_buff.AddSurface(engine_context.EngineAllocator(), &surface.mTexOptions, texture_asset);
+        const shading = try shading_buff.AddSurface(engine_context.Keep(), &surface.mTexOptions, texture_asset);
         return .{
             .Shading = @intCast(shading),
             .Flags = if (surface.mTexOptions.IsSeeThrough()) ShapeData.FLAG_TRANSPARENT else 0,
@@ -700,7 +700,7 @@ pub fn DrawGlyph(
     //where the letter is in the font atlas, shared with every other glyph of the same letter this render
     const atlas_asset = &fill.Font.mAtlas;
     const atlas_shading_handle = try shading_buff.GlyphSurface(
-        engine_context.EngineAllocator(),
+        engine_context.Keep(),
         .{ .AtlasTexture = @intCast(atlas_asset.GetTextureHandle()), .Glyph = glyph.AtlasIndex },
         atlas_asset.GetWidth(),
         atlas_asset.GetHeight(),
@@ -708,7 +708,7 @@ pub fn DrawGlyph(
     );
 
     const axes = ShapeAxes(glyph_box.Center, glyph_box.Rotation);
-    try buffers.AddShape(engine_context.EngineAllocator(), .{
+    try buffers.AddShape(engine_context.Keep(), .{
         .AxisX = axes[0],
         .AxisY = axes[1],
         .AxisZ = axes[2],

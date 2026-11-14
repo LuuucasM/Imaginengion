@@ -102,20 +102,20 @@ pub const GameEventManager = struct {
 
     mQueues: std.EnumArray(GamePhase, Queue) = .initFill(.{}),
 
-    pub fn Deinit(self: *GameEventManager, engine_allocator: std.mem.Allocator) void {
+    pub fn Deinit(self: *GameEventManager, keep_allocator: std.mem.Allocator) void {
         for (&self.mQueues.values) |*queue| {
-            queue.mBytes.deinit(engine_allocator);
-            queue.mEntries.deinit(engine_allocator);
+            queue.mBytes.deinit(keep_allocator);
+            queue.mEntries.deinit(keep_allocator);
         }
     }
 
     /// Queues an event of id `id` for `phase`
-    pub fn Insert(self: *GameEventManager, engine_allocator: std.mem.Allocator, phase: GamePhase, id: u64, bytes: []const u8) !void {
+    pub fn Insert(self: *GameEventManager, keep_allocator: std.mem.Allocator, phase: GamePhase, id: u64, bytes: []const u8) !void {
         const queue = self.mQueues.getPtr(phase);
         const offset = queue.mBytes.items.len;
-        try queue.mBytes.appendSlice(engine_allocator, bytes);
+        try queue.mBytes.appendSlice(keep_allocator, bytes);
         errdefer queue.mBytes.shrinkRetainingCapacity(offset);
-        try queue.mEntries.append(engine_allocator, .{ .mId = id, .mOffset = @intCast(offset), .mSize = @intCast(bytes.len) });
+        try queue.mEntries.append(keep_allocator, .{ .mId = id, .mOffset = @intCast(offset), .mSize = @intCast(bytes.len) });
     }
 
     pub fn GetQueue(self: *GameEventManager, phase: GamePhase) *Queue {
@@ -130,8 +130,8 @@ pub const GameEventManager = struct {
     }
 
     /// Empties every queue and frees them, with the world they are about
-    pub fn ClearAndFree(self: *GameEventManager, engine_allocator: std.mem.Allocator) void {
-        self.Deinit(engine_allocator);
+    pub fn ClearAndFree(self: *GameEventManager, keep_allocator: std.mem.Allocator) void {
+        self.Deinit(keep_allocator);
         self.* = .empty;
     }
 };

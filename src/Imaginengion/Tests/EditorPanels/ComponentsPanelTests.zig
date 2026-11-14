@@ -36,7 +36,7 @@ const TestPanel = struct {
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -57,18 +57,18 @@ const TestPanel = struct {
 
     fn Deinit(self: *TestPanel) void {
         const engine_context = self.mEngineContext;
-        const engine_allocator = engine_context.EngineAllocator();
-        self.mPanel.Deinit(engine_allocator);
+        const keep_allocator = engine_context.Keep();
+        self.mPanel.Deinit(keep_allocator);
         engine_context.mGameWorld.Deinit(engine_context);
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
         engine_context.mAudioManager.DeinitMixer(engine_context);
         const asset_manager = &engine_context.mAssetManager;
         asset_manager.mECSManager.Deinit(engine_context);
-        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-        asset_manager.mEventManager.Deinit(engine_allocator);
-        asset_manager.mCWDPath.deinit(engine_allocator);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+        asset_manager.mEventManager.Deinit(keep_allocator);
+        asset_manager.mCWDPath.deinit(keep_allocator);
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }

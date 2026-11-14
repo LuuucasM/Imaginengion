@@ -128,14 +128,14 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
         switch (event.type) {
             sdl.SDL_EVENT_WINDOW_CLOSE_REQUESTED => {
                 try engine_context.mSystemEventManager.Insert(
-                    engine_context.EngineAllocator(),
+                    engine_context.Keep(),
                     .WindowEvent,
                     .{ .WindowClose = .{ ._Window = self } },
                 );
             },
             sdl.SDL_EVENT_WINDOW_RESIZED => {
                 try engine_context.mSystemEventManager.Insert(
-                    engine_context.EngineAllocator(),
+                    engine_context.Keep(),
                     .WindowEvent,
                     .{ .WindowResize = .{ ._Width = @intCast(event.window.data1), ._Height = @intCast(event.window.data2) } },
                 );
@@ -147,13 +147,13 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
                 input_manager.SetKeyPressed(@enumFromInt(event.key.scancode));
                 if (event.key.repeat) {
                     try engine_context.mSystemEventManager.Insert(
-                        engine_context.EngineAllocator(),
+                        engine_context.Keep(),
                         .InputEvent,
                         .{ .KeyboardPressed = .{ ._InputCode = @enumFromInt(event.key.scancode), ._Repeat = 1 } },
                     );
                 } else {
                     try engine_context.mSystemEventManager.Insert(
-                        engine_context.EngineAllocator(),
+                        engine_context.Keep(),
                         .InputEvent,
                         .{ .KeyboardPressed = .{ ._InputCode = @enumFromInt(event.key.scancode), ._Repeat = 0 } },
                     );
@@ -162,7 +162,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
             sdl.SDL_EVENT_KEY_UP => {
                 input_manager.SetKeyReleased(@enumFromInt(event.key.scancode));
                 try engine_context.mSystemEventManager.Insert(
-                    engine_context.EngineAllocator(),
+                    engine_context.Keep(),
                     .InputEvent,
                     .{ .KeyboardReleased = .{ ._InputCode = @enumFromInt(event.key.scancode) } },
                 );
@@ -170,7 +170,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
             sdl.SDL_EVENT_MOUSE_BUTTON_DOWN => {
                 input_manager.SetMousePressed(@enumFromInt(event.button.button), .{ .x = event.button.x, .y = event.button.y });
                 try engine_context.mSystemEventManager.Insert(
-                    engine_context.EngineAllocator(),
+                    engine_context.Keep(),
                     .InputEvent,
                     .{ .MousePressed = .{
                         ._ButtonCode = @enumFromInt(event.button.button),
@@ -180,7 +180,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
             sdl.SDL_EVENT_MOUSE_BUTTON_UP => {
                 const was_click = input_manager.SetMouseReleased(@enumFromInt(event.button.button), .{ .x = event.button.x, .y = event.button.y });
                 try engine_context.mSystemEventManager.Insert(
-                    engine_context.EngineAllocator(),
+                    engine_context.Keep(),
                     .InputEvent,
                     .{ .MouseReleased = .{
                         ._ButtonCode = @enumFromInt(event.button.button),
@@ -190,7 +190,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
                 //double click) but can't tell a click from a drag, so the input manager decides that
                 if (was_click) {
                     try engine_context.mSystemEventManager.Insert(
-                        engine_context.EngineAllocator(),
+                        engine_context.Keep(),
                         .InputEvent,
                         .{ .MouseClicked = .{
                             ._ButtonCode = @enumFromInt(event.button.button),
@@ -204,7 +204,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
             sdl.SDL_EVENT_MOUSE_MOTION => {
                 final_mouse_pos = .{ .x = event.motion.x, .y = event.motion.y };
                 try engine_context.mSystemEventManager.Insert(
-                    engine_context.EngineAllocator(),
+                    engine_context.Keep(),
                     .InputEvent,
                     .{ .MouseMoved = .{ ._MouseX = event.motion.x, ._MouseY = event.motion.y } },
                 );
@@ -219,14 +219,14 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
                     while (end < text.len and end > start and text[end] & 0b1100_0000 == 0b1000_0000) end -= 1;
                     var typed = TextTypedEvent{ ._Bytes = undefined, ._Len = @intCast(end - start) };
                     @memcpy(typed._Bytes[0..typed._Len], text[start..end]);
-                    try engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .InputEvent, .{ .TextTyped = typed });
+                    try engine_context.mSystemEventManager.Insert(engine_context.Keep(), .InputEvent, .{ .TextTyped = typed });
                     start = end;
                 }
             },
             sdl.SDL_EVENT_MOUSE_WHEEL => {
                 final_mouse_scroll = .{ .x = event.wheel.x, .y = event.wheel.y };
                 try engine_context.mSystemEventManager.Insert(
-                    engine_context.EngineAllocator(),
+                    engine_context.Keep(),
                     .InputEvent,
                     .{ .MouseScrolled = .{ ._XOffset = event.wheel.x, ._YOffset = event.wheel.y } },
                 );

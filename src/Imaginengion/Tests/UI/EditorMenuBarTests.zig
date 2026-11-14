@@ -35,7 +35,7 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -52,7 +52,7 @@ test "each item has its action, and the editor's state shows as check marks and 
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     var menu_bar = try EditorMenuBar.Build(engine_context, world.mBar, .{ .StockScripts = false });
-    defer menu_bar.Deinit(engine_context.EngineAllocator());
+    defer menu_bar.Deinit(engine_context.Keep());
 
     try std.testing.expectEqual(EditorMenuBar.Action.SaveProject, menu_bar.ActionOf(menu_bar.mSaveProject).?);
     try std.testing.expectEqual(EditorMenuBar.Action.ToggleProjectSettings, menu_bar.ActionOf(menu_bar.mProjectSettings).?);
@@ -75,7 +75,7 @@ test "Save and Save As... need something selected, Export Entity... an entity" {
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     var menu_bar = try EditorMenuBar.Build(engine_context, world.mBar, .{ .StockScripts = false });
-    defer menu_bar.Deinit(engine_context.EngineAllocator());
+    defer menu_bar.Deinit(engine_context.Keep());
 
     try std.testing.expectEqual(EditorMenuBar.Action.Save, menu_bar.ActionOf(menu_bar.mSave).?);
     try std.testing.expectEqual(EditorMenuBar.Action.SaveAs, menu_bar.ActionOf(menu_bar.mSaveAs).?);
@@ -101,7 +101,7 @@ test "the VSync item toggles vsync, and is checked while it is on" {
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     var menu_bar = try EditorMenuBar.Build(engine_context, world.mBar, .{ .StockScripts = false });
-    defer menu_bar.Deinit(engine_context.EngineAllocator());
+    defer menu_bar.Deinit(engine_context.Keep());
 
     try std.testing.expectEqual(EditorMenuBar.Action.ToggleVSync, menu_bar.ActionOf(menu_bar.mVSync).?);
 
@@ -118,7 +118,7 @@ test "the Shader Heatmap items pick what it counts, Off draws the picture again,
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     var menu_bar = try EditorMenuBar.Build(engine_context, world.mBar, .{ .StockScripts = false });
-    defer menu_bar.Deinit(engine_context.EngineAllocator());
+    defer menu_bar.Deinit(engine_context.Keep());
 
     try std.testing.expectEqual(@as(?HeatMetric, null), menu_bar.ActionOf(menu_bar.mHeatmapOff).?.SetHeatmap);
     try std.testing.expectEqual(@as(?HeatMetric, .AcceptChecks), menu_bar.ActionOf(menu_bar.mHeatmapItems.get(.AcceptChecks)).?.SetHeatmap);
@@ -140,7 +140,7 @@ test "the players to follow are listed, checked when followed, and listed again 
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     var menu_bar = try EditorMenuBar.Build(engine_context, world.mBar, .{ .StockScripts = false });
-    defer menu_bar.Deinit(engine_context.EngineAllocator());
+    defer menu_bar.Deinit(engine_context.Keep());
 
     const alice = try engine_context.mEditorWorld.CreatePlayer(engine_context, Player.DefaultConfig);
     const bob = try engine_context.mEditorWorld.CreatePlayer(engine_context, Player.DefaultConfig);

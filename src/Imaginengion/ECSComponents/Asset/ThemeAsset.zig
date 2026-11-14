@@ -80,7 +80,7 @@ const File = struct {
 
 pub fn Init(self: *ThemeAsset, engine_context: *EngineContext, _: []const u8, rel_path: []const u8, asset_file: std.Io.File) !void {
     var file_reader = asset_file.reader(engine_context.Io(), &.{});
-    const contents = try file_reader.interface.allocRemaining(engine_context.FrameAllocator(), .unlimited);
+    const contents = try file_reader.interface.allocRemaining(engine_context.Scratch(), .unlimited);
     self.FromJson(engine_context, contents) catch |err| {
         std.log.err("Theme {s} could not be read: {s}", .{ rel_path, @errorName(err) });
         self.Deinit(engine_context);
@@ -103,8 +103,8 @@ fn LoadFonts(self: *ThemeAsset, engine_context: *EngineContext) void {
 
 /// Reads a theme's styles from the text of a theme file
 pub fn FromJson(self: *ThemeAsset, engine_context: *EngineContext, contents: []const u8) !void {
-    const engine_allocator = engine_context.EngineAllocator();
-    const file = try std.json.parseFromSliceLeaky(File, engine_context.FrameAllocator(), contents, .{});
+    const keep_allocator = engine_context.Keep();
+    const file = try std.json.parseFromSliceLeaky(File, engine_context.Scratch(), contents, .{});
 
     var iter = file.Styles.map.iterator();
     while (iter.next()) |entry| {
@@ -122,20 +122,20 @@ pub fn FromJson(self: *ThemeAsset, engine_context: *EngineContext, contents: []c
         }
         errdefer style.Font.ReleaseAsset();
 
-        const name = try engine_allocator.dupe(u8, entry.key_ptr.*);
-        errdefer engine_allocator.free(name);
-        try self.mStyles.put(engine_allocator, name, style);
+        const name = try keep_allocator.dupe(u8, entry.key_ptr.*);
+        errdefer keep_allocator.free(name);
+        try self.mStyles.put(keep_allocator, name, style);
     }
 }
 
 pub fn Deinit(self: *ThemeAsset, engine_context: *EngineContext) void {
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
     var iter = self.mStyles.iterator();
     while (iter.next()) |entry| {
         entry.value_ptr.Font.ReleaseAsset();
-        engine_allocator.free(entry.key_ptr.*);
+        keep_allocator.free(entry.key_ptr.*);
     }
-    self.mStyles.deinit(engine_allocator);
+    self.mStyles.deinit(keep_allocator);
 }
 
 /// The style called `name`, null if the theme has none by that name

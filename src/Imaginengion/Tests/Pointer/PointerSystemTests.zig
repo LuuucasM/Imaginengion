@@ -60,10 +60,10 @@ const TestWorld = struct {
 
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
-        engine_context.mPointerSystem.Deinit(engine_context.EngineAllocator());
-        engine_context.mPointerEventManager.Deinit(engine_context.EngineAllocator());
+        engine_context.mPointerSystem.Deinit(engine_context.Keep());
+        engine_context.mPointerEventManager.Deinit(engine_context.Keep());
         engine_context.mEditorWorld.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -81,7 +81,7 @@ const TestWorld = struct {
     fn TakeEvents(self: *TestWorld) ![]EntityPointerEvent {
         const engine_context = self.mEngineContext;
         const queued = engine_context.mPointerEventManager.mEventsArray.getPtr(.Pointer);
-        const taken = try engine_context.FrameAllocator().dupe(EntityPointerEvent, queued.items);
+        const taken = try engine_context.Scratch().dupe(EntityPointerEvent, queued.items);
         queued.clearRetainingCapacity();
         return taken;
     }

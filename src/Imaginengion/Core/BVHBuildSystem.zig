@@ -59,29 +59,29 @@ pub const AssetFonts = struct {
 pub fn Run(engine_context: *EngineContext, world: *WorldManager, fonts: anytype) anyerror!void {
     engine_context.mTransactions.CheckMainThread("Building the BVH");
     const bvh = &world.mBVH;
-    const engine_allocator = engine_context.EngineAllocator();
-    const frame_allocator = engine_context.FrameAllocator();
+    const keep_allocator = engine_context.Keep();
+    const scratch_allocator = engine_context.Scratch();
     bvh.Clear();
 
     var builder = Builder{
         .mBVH = bvh,
-        .mEngineAllocator = engine_allocator,
-        .mFrameAllocator = frame_allocator,
-        .mAncestry = try Ancestry.Init(frame_allocator, world),
+        .mKeepAllocator = keep_allocator,
+        .mScratchAllocator = scratch_allocator,
+        .mAncestry = try Ancestry.Init(scratch_allocator, world),
     };
 
     try builder.AddVisuals(world, fonts);
     try builder.AddColliders(world);
 
-    try bvh.mGame.Build(engine_allocator, frame_allocator);
-    try bvh.mOverlay.Build(engine_allocator, frame_allocator);
+    try bvh.mGame.Build(keep_allocator, scratch_allocator);
+    try bvh.mOverlay.Build(keep_allocator, scratch_allocator);
 }
 
 /// Fills a WorldBVH's two layers during a build
 const Builder = struct {
     mBVH: *WorldBVH,
-    mEngineAllocator: std.mem.Allocator,
-    mFrameAllocator: std.mem.Allocator,
+    mKeepAllocator: std.mem.Allocator,
+    mScratchAllocator: std.mem.Allocator,
     /// each scene's SceneSlot so far
     mSlots: std.AutoHashMapUnmanaged(Scene.Type, u8) = .empty,
     /// the merges already added, so each is one item however many of its parts there are
@@ -100,13 +100,13 @@ const Builder = struct {
         const hidden = GroupQuery{ .Component = LayoutHiddenTag };
         const surfaces = GroupQuery{ .Component = SurfaceComponent };
         const visuals_query = GroupQuery{ .Not = .{ .mFirst = &surfaces, .mSecond = &hidden } };
-        const visuals = try world.GetEntityGroup(self.mFrameAllocator, visuals_query);
+        const visuals = try world.GetEntityGroup(self.mScratchAllocator, visuals_query);
         zone.Value(visuals.items.len);
         for (visuals.items) |entity_id| {
             const entity = world.GetEntity(entity_id);
             //a part of a merge is its root's one item
             if (try self.mAncestry.MergeRootOf(entity)) |root| {
-                const seen = try self.mMerges.getOrPut(self.mFrameAllocator, root.mID);
+                const seen = try self.mMerges.getOrPut(self.mScratchAllocator, root.mID);
                 if (!seen.found_existing) try self.AddMerge(root);
                 continue;
             }
@@ -152,12 +152,12 @@ const Builder = struct {
             var box = ShapeGeometry.QuadBox(transform.?, quad.?.*, 0, null);
             box.HalfExtents.x *= 1 + 2 * CULL_MARGIN;
             box.HalfExtents.y *= 1 + 2 * CULL_MARGIN;
-            const boxes = try self.mFrameAllocator.alloc(ShapeGeometry.Box, outer.len + 1);
+            const boxes = try self.mScratchAllocator.alloc(ShapeGeometry.Box, outer.len + 1);
             boxes[0] = box;
             @memcpy(boxes[1..], outer);
             room = boxes;
         }
-        try self.mRooms.put(self.mFrameAllocator, mask_entity.mID, room);
+        try self.mRooms.put(self.mScratchAllocator, mask_entity.mID, room);
         return room;
     }
 
@@ -166,7 +166,7 @@ const Builder = struct {
         const zone = Tracy.ZoneInit("WorldBVH::AddColliders", @src());
         defer zone.Deinit();
 
-        const colliders = try world.GetEntityGroup(self.mFrameAllocator, .{ .Component = ColliderComponent });
+        const colliders = try world.GetEntityGroup(self.mScratchAllocator, .{ .Component = ColliderComponent });
         zone.Value(colliders.items.len);
         for (colliders.items) |entity_id| {
             const entity = world.GetEntity(entity_id);
@@ -200,7 +200,7 @@ const Builder = struct {
     }
 
     fn AddTo(self: *Builder, placement: Placement, entity: Entity, kind: ItemKind, index: u32, bounds: Aabb, mask: u4) !void {
-        try placement.Tree.Add(self.mEngineAllocator, .{
+        try placement.Tree.Add(self.mKeepAllocator, .{
             .Entity = entity.mID,
             .Kind = kind,
             .SceneSlot = placement.SceneSlot,
@@ -216,7 +216,7 @@ const Builder = struct {
     }
 
     fn SceneSlot(self: *Builder, scene_id: Scene.Type) !u8 {
-        const entry = try self.mSlots.getOrPut(self.mFrameAllocator, scene_id);
+        const entry = try self.mSlots.getOrPut(self.mScratchAllocator, scene_id);
         if (!entry.found_existing) {
             const scenes = &self.mBVH.mScenes;
             if (scenes.items.len >= MAX_SCENES) {
@@ -224,7 +224,7 @@ const Builder = struct {
                 return error.TooManyScenes;
             }
             entry.value_ptr.* = @intCast(scenes.items.len);
-            try scenes.append(self.mEngineAllocator, scene_id);
+            try scenes.append(self.mKeepAllocator, scene_id);
         }
         return entry.value_ptr.*;
     }
@@ -234,7 +234,7 @@ const Builder = struct {
         const zone = Tracy.ZoneInit("WorldBVH::AddMerge", @src());
         defer zone.Deinit();
 
-        const found = MergeBounds(self.mFrameAllocator, root) catch |err| switch (err) {
+        const found = MergeBounds(self.mScratchAllocator, root) catch |err| switch (err) {
             error.MergeTooDeep => return,
             else => return err,
         };
@@ -259,7 +259,7 @@ const Builder = struct {
         var ink_min = Vec2(f32){ .x = std.math.inf(f32), .y = std.math.inf(f32) };
         var ink_max = Vec2(f32){ .x = -std.math.inf(f32), .y = -std.math.inf(f32) };
         while (layout.Next()) |glyph| {
-            try glyphs.append(self.mEngineAllocator, glyph);
+            try glyphs.append(self.mKeepAllocator, glyph);
             const center = glyph.Pen.AddVec(glyph.PlaneCenter);
             ink_min = .{ .x = @min(ink_min.x, center.x - glyph.HalfExtents.x), .y = @min(ink_min.y, center.y - glyph.HalfExtents.y) };
             ink_max = .{ .x = @max(ink_max.x, center.x + glyph.HalfExtents.x), .y = @max(ink_max.y, center.y + glyph.HalfExtents.y) };
@@ -285,7 +285,7 @@ const Builder = struct {
         if (CutOff(room, click_box)) return;
         const texts = &self.mBVH.mTexts;
         const text_ind: u32 = @intCast(texts.items.len);
-        try texts.append(self.mEngineAllocator, metrics);
+        try texts.append(self.mKeepAllocator, metrics);
         try self.AddTo(placement, entity, .Text, text_ind, BoxBounds(click_box), BVH.Mask.PICK);
     }
 };

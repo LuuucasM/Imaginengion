@@ -386,12 +386,12 @@ pub fn RaiseWindow(engine_context: *EngineContext, window: Entity) !void {
     //the scene's other windows, back to front
     var others: std.ArrayList(Entity) = .empty;
     const ui_manager = &engine_context.mUIManager;
-    const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = FloatingWindowComponent });
+    const element_ids = try ui_manager.GetGroup(engine_context.Scratch(), .{ .Component = FloatingWindowComponent });
     for (element_ids.items) |element_id| {
         const other = (UIElement{ .mID = element_id, .mManager = ui_manager }).GetOwner();
         if (!other.IsIDValid() or !other.IsActive() or other.mManager != window.mManager or other.mID == window.mID) continue;
         if (other.GetComponent(EntitySceneComponent).?.mScene.mID != scene.mID) continue;
-        try others.append(engine_context.FrameAllocator(), other);
+        try others.append(engine_context.Scratch(), other);
     }
     std.mem.sort(Entity, others.items, {}, struct {
         fn Behind(_: void, a: Entity, b: Entity) bool {

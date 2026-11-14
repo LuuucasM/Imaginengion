@@ -30,7 +30,7 @@ pub fn Run(engine_context: *EngineContext, world_manager: *WorldManager) !void {
     //query and so costs O(dirty) rather than the whole world. Every write goes through Entity's
     //transform setters, which is what puts the tag on.
     const dirty_arr = try world_manager.GetEntityGroup(
-        engine_context.FrameAllocator(),
+        engine_context.Scratch(),
         .{ .Component = TransformDirtyTag },
     );
 

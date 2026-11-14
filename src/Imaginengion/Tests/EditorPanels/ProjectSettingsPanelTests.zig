@@ -30,7 +30,7 @@ const TestEngine = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //the project's files go through the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -41,7 +41,7 @@ const TestEngine = struct {
         self.mScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         self.mPanel = try ProjectSettingsPanel.Build(engine_context, self.mScene, .{ .StockScripts = false });
 
-        const project_folder = try self.mTmpDir.dir.realPathFileAlloc(engine_context.Io(), ".", engine_context.FrameAllocator());
+        const project_folder = try self.mTmpDir.dir.realPathFileAlloc(engine_context.Io(), ".", engine_context.Scratch());
         try engine_context.mProject.New(engine_context, project_folder);
         return self;
     }
@@ -52,8 +52,8 @@ const TestEngine = struct {
         engine_context.mUIManager.Deinit(engine_context);
         engine_context.mAudioManager.DeinitMixer(engine_context);
         engine_context.mProject.Deinit(engine_context);
-        engine_context.mSerializer.Deinit(engine_context.EngineAllocator());
-        _ = engine_context._Internal.EngineGPA.deinit();
+        engine_context.mSerializer.Deinit(engine_context.Keep());
+        _ = engine_context._Internal.KeepHeap.deinit();
         self.mTmpDir.cleanup();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -85,7 +85,7 @@ test "the fields show the project's settings, Not set for a file that isn't, and
     try std.testing.expectEqualStrings("Not set", TestEngine.Shown(panel.mIcon.Box));
     for (panel.mEntries.values) |row| try std.testing.expectEqualStrings("Not set", TestEngine.Shown(row.Box));
 
-    const scene_path = try engine_context.mProject.GetAbsPath(engine_context.FrameAllocator(), "Scenes/Main.imsc");
+    const scene_path = try engine_context.mProject.GetAbsPath(engine_context.Scratch(), "Scenes/Main.imsc");
     try engine_context.mProject.SetEntry(engine_context, .Scene, scene_path);
     try panel.Update(engine_context);
     try std.testing.expectEqualStrings("Scenes/Main.imsc", TestEngine.Shown(panel.mEntries.get(.Scene).Box));

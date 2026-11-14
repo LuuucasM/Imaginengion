@@ -57,22 +57,22 @@ pub fn jsonStringify(self: *const UIElementComponent, jw: anytype) !void {
 
 /// Makes the element as it reads it, so its components have somewhere to go. Which entity it belongs to is set once
 /// the component is on one
-pub fn jsonParse(frame_allocator: std.mem.Allocator, source: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(source.*))!UIElementComponent {
-    const engine_context = JsonUtils.EngineContextFromAllocator(frame_allocator);
+pub fn jsonParse(scratch_allocator: std.mem.Allocator, source: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(source.*))!UIElementComponent {
+    const engine_context = JsonUtils.EngineContextFromAllocator(scratch_allocator);
     const element = engine_context.mUIManager.NewElement(engine_context) catch return error.OutOfMemory;
     //a file that fails to read part way leaves no element behind that nothing would ever delete
     errdefer element.Delete(engine_context) catch {};
 
     if (.object_begin != try source.next()) return error.UnexpectedToken;
     while (true) {
-        const key = switch (try source.nextAllocMax(frame_allocator, .alloc_if_needed, options.max_value_len.?)) {
+        const key = switch (try source.nextAllocMax(scratch_allocator, .alloc_if_needed, options.max_value_len.?)) {
             .object_end => break,
             inline .string, .allocated_string => |slice| slice,
             else => return error.UnexpectedToken,
         };
         inline for (UIComponents.SerializeList) |component_type| {
             if (std.mem.eql(u8, key, component_type.Name)) {
-                const component = try std.json.innerParse(component_type, frame_allocator, source, options);
+                const component = try std.json.innerParse(component_type, scratch_allocator, source, options);
                 _ = element.AddComponent(engine_context, component) catch return error.OutOfMemory;
                 break;
             }

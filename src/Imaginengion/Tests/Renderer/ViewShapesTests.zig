@@ -42,7 +42,7 @@ const TestWorld = struct {
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
         engine_context.mEditorWorld.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -78,7 +78,7 @@ fn AddQuad(engine_context: *EngineContext, scene: Scene) !Entity {
 }
 
 fn GatherView(engine_context: *EngineContext, view_scenes: ShapeGeometry.ViewScenes) !ShapeGeometry.ViewShapes {
-    return ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), &engine_context.mEditorWorld, VIEW, view_scenes, ShapeGeometry.VISUALS_QUERY);
+    return ShapeGeometry.GatherViewShapes(engine_context.Scratch(), &engine_context.mEditorWorld, VIEW, view_scenes, ShapeGeometry.VISUALS_QUERY);
 }
 
 fn Gather(engine_context: *EngineContext, view_scenes: ShapeGeometry.ViewScenes) ![]const ShapeGeometry.ViewShape {
@@ -204,7 +204,7 @@ test "only entities matching the query are gathered" {
     const visuals = try Gather(engine_context, .{ .Overlays = &.{} });
     try std.testing.expect(Contains(visuals, rock) and !Contains(visuals, wall) and !Contains(visuals, empty));
 
-    const colliders = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), &engine_context.mEditorWorld, VIEW, .{ .Overlays = &.{} }, .{ .Component = ColliderComponent });
+    const colliders = try ShapeGeometry.GatherViewShapes(engine_context.Scratch(), &engine_context.mEditorWorld, VIEW, .{ .Overlays = &.{} }, .{ .Component = ColliderComponent });
     try std.testing.expectEqual(@as(usize, 1), colliders.Shapes.items.len);
     try std.testing.expectEqual(wall.mID, colliders.Shapes.items[0].Entity.mID);
 }
@@ -393,7 +393,7 @@ test "a merge is gathered once, as its root, in place of its parts, but not text
 
     //a collider on a part is still its own
     _ = try part.AddComponent(engine_context, ColliderComponent{});
-    const colliders = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), &engine_context.mEditorWorld, VIEW, .{ .Overlays = &.{} }, .{ .Component = ColliderComponent });
+    const colliders = try ShapeGeometry.GatherViewShapes(engine_context.Scratch(), &engine_context.mEditorWorld, VIEW, .{ .Overlays = &.{} }, .{ .Component = ColliderComponent });
     try std.testing.expectEqual(part.mID, colliders.Shapes.items[0].Entity.mID);
 }
 

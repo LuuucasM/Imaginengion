@@ -104,11 +104,11 @@ mDropTarget: ?Entity = null,
 /// The drop targets with DropReadyTag: everywhere the held drag source could be dropped
 mDropReady: Chain = .empty,
 
-pub fn Deinit(self: *PointerSystem, engine_allocator: std.mem.Allocator) void {
-    self.mHovered.deinit(engine_allocator);
-    self.mDropReady.deinit(engine_allocator);
-    for (&self.mHeld.values) |*held| held.mChain.deinit(engine_allocator);
-    for (&self.mReleased.values) |*chain| chain.deinit(engine_allocator);
+pub fn Deinit(self: *PointerSystem, keep_allocator: std.mem.Allocator) void {
+    self.mHovered.deinit(keep_allocator);
+    self.mDropReady.deinit(keep_allocator);
+    for (&self.mHeld.values) |*held| held.mChain.deinit(keep_allocator);
+    for (&self.mReleased.values) |*chain| chain.deinit(keep_allocator);
     self.* = .empty;
 }
 
@@ -168,12 +168,12 @@ fn SetDropReady(self: *PointerSystem, engine_context: *EngineContext, carrying: 
 
     var ready: Chain = .empty;
     if (carrying) |source| {
-        const frame_allocator = engine_context.FrameAllocator();
-        const targets = try source.mManager.mEManager.GetGroup(frame_allocator, .{ .Component = DropTargetComponent });
+        const scratch_allocator = engine_context.Scratch();
+        const targets = try source.mManager.mEManager.GetGroup(scratch_allocator, .{ .Component = DropTargetComponent });
         for (targets.items) |target_id| {
             const target = Entity{ .mID = target_id, .mManager = source.mManager };
             if (Same(target, source) or IsDisabled(target)) continue;
-            if (Takes(target.GetComponent(DropTargetComponent).?.*, source)) try ready.append(frame_allocator, target);
+            if (Takes(target.GetComponent(DropTargetComponent).?.*, source)) try ready.append(scratch_allocator, target);
         }
     }
 
@@ -184,7 +184,7 @@ fn SetDropReady(self: *PointerSystem, engine_context: *EngineContext, carrying: 
     for (ready.items) |entity| {
         if (!entity.HasComponent(DropReadyTag)) _ = try entity.AddComponent(engine_context, DropReadyTag{});
     }
-    try Assign(&self.mDropReady, engine_context.EngineAllocator(), ready.items);
+    try Assign(&self.mDropReady, engine_context.Keep(), ready.items);
 }
 
 fn SetDropTarget(self: *PointerSystem, engine_context: *EngineContext, new_target: ?Entity) !void {
@@ -243,7 +243,7 @@ fn HasExtension(extensions: []const []const u8, path: []const u8) bool {
 }
 
 fn UpdateHover(self: *PointerSystem, engine_context: *EngineContext) !void {
-    const new_chain = try EnabledChainOf(engine_context.FrameAllocator(), self.mInput.Target);
+    const new_chain = try EnabledChainOf(engine_context.Scratch(), self.mInput.Target);
 
     //left: in the old chain and not the new one. The ones that are gone altogether have nothing left to tell
     for (self.mHovered.items) |entity| {
@@ -258,7 +258,7 @@ fn UpdateHover(self: *PointerSystem, engine_context: *EngineContext) !void {
         try Send(engine_context, entity, .{ .PointerEnter = .{} });
     }
 
-    try Assign(&self.mHovered, engine_context.EngineAllocator(), new_chain.items);
+    try Assign(&self.mHovered, engine_context.Keep(), new_chain.items);
 }
 
 /// A held button becomes a drag once the mouse is CLICK_DRAG_THRESHOLD from where it went down, the same distance
@@ -332,7 +332,7 @@ pub fn OnPressed(self: *PointerSystem, engine_context: *EngineContext, button: M
     const zone = Tracy.ZoneInit("PointerSystem::OnPressed", @src());
     defer zone.Deinit();
     const held = self.mHeld.getPtr(button);
-    try Assign(&held.mChain, engine_context.EngineAllocator(), self.mHovered.items);
+    try Assign(&held.mChain, engine_context.Keep(), self.mHovered.items);
     held.mPressPixel = self.mInput.Pixel;
     held.mGrabPosition = self.mInput.Position;
     held.mIsDragging = false;
@@ -358,7 +358,7 @@ pub fn OnReleased(self: *PointerSystem, engine_context: *EngineContext, button: 
     defer zone.Deinit();
     const held = self.mHeld.getPtr(button);
     //kept for the click that follows a release in place
-    try Assign(self.mReleased.getPtr(button), engine_context.EngineAllocator(), held.mChain.items);
+    try Assign(self.mReleased.getPtr(button), engine_context.Keep(), held.mChain.items);
     const released = self.mReleased.get(button).items;
     const was_dragging = held.mIsDragging;
     const total = if (held.mStartPoint != null and held.mLastPoint != null) held.mLastPoint.?.SubVec(held.mStartPoint.?) else ZERO;
@@ -421,12 +421,12 @@ fn IsHeld(self: *const PointerSystem, entity: Entity) bool {
 }
 
 /// `entity` and then each thing it is inside, up to the top of its hierarchy. Empty for null
-pub fn ChainOf(frame_allocator: std.mem.Allocator, entity: ?Entity) !Chain {
+pub fn ChainOf(scratch_allocator: std.mem.Allocator, entity: ?Entity) !Chain {
     var chain: Chain = .empty;
     var current = entity orelse return chain;
     if (!current.IsActive()) return chain;
     while (true) {
-        try chain.append(frame_allocator, current);
+        try chain.append(scratch_allocator, current);
         const child_component = current.GetComponent(EntityChildComponent) orelse break;
         current = Entity{ .mID = child_component.mParent, .mManager = current.mManager };
     }
@@ -435,14 +435,14 @@ pub fn ChainOf(frame_allocator: std.mem.Allocator, entity: ?Entity) !Chain {
 
 /// ChainOf, starting from the first entity that isn't disabled or inside a disabled one: what the pointer is over when
 /// `entity` is under it
-fn EnabledChainOf(frame_allocator: std.mem.Allocator, entity: ?Entity) !Chain {
-    var chain = try ChainOf(frame_allocator, entity);
+fn EnabledChainOf(scratch_allocator: std.mem.Allocator, entity: ?Entity) !Chain {
+    var chain = try ChainOf(scratch_allocator, entity);
     //everything up to the outermost disabled entity goes, that one included
     var outermost: ?usize = null;
     for (chain.items, 0..) |link, i| {
         if (link.HasComponent(DisabledTag)) outermost = i;
     }
-    if (outermost) |index| try chain.replaceRange(frame_allocator, 0, index + 1, &.{});
+    if (outermost) |index| try chain.replaceRange(scratch_allocator, 0, index + 1, &.{});
     return chain;
 }
 
@@ -467,11 +467,11 @@ fn Same(a: Entity, b: Entity) bool {
     return a.mID == b.mID and a.mManager == b.mManager;
 }
 
-fn Assign(chain: *Chain, engine_allocator: std.mem.Allocator, entities: []const Entity) !void {
+fn Assign(chain: *Chain, keep_allocator: std.mem.Allocator, entities: []const Entity) !void {
     chain.clearRetainingCapacity();
-    try chain.appendSlice(engine_allocator, entities);
+    try chain.appendSlice(keep_allocator, entities);
 }
 
 fn Send(engine_context: *EngineContext, entity: Entity, event: PointerEvent) !void {
-    try engine_context.mPointerEventManager.Insert(engine_context.EngineAllocator(), .Pointer, .{ .mEntity = entity, .mEvent = event });
+    try engine_context.mPointerEventManager.Insert(engine_context.Keep(), .Pointer, .{ .mEntity = entity, .mEvent = event });
 }

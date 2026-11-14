@@ -47,15 +47,15 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
     defer zone.Deinit();
     zone.Text(rel_path);
 
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
     //the generated files sit next to the font, so they are built from the absolute path: the rel path is
     //relative to the project (or engine) folder, not the working directory the files are opened from
     const ext = std.fs.path.extension(abs_path);
     const base_path = abs_path[0 .. abs_path.len - ext.len];
 
-    const name_png = try std.fmt.allocPrint(frame_allocator, "{s}.png", .{base_path});
-    const name_json = try std.fmt.allocPrint(frame_allocator, "{s}.json", .{base_path});
+    const name_png = try std.fmt.allocPrint(scratch_allocator, "{s}.png", .{base_path});
+    const name_json = try std.fmt.allocPrint(scratch_allocator, "{s}.json", .{base_path});
 
     //test to see if both of the files are present already
     var file_json: ?std.Io.File = std.Io.Dir.cwd().openFile(engine_context.Io(), name_json, .{}) catch |err| switch (err) {
@@ -118,7 +118,7 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
     defer file_png.?.close(engine_context.Io());
 
     //every slot starts as no glyph (mAdvance -1), so one the font has no glyph for is never read as garbage
-    for (&self.mGlyphs) |*glyph| glyph.* = .{ .mKernings = KerningsT.init(engine_context.EngineAllocator()) };
+    for (&self.mGlyphs) |*glyph| glyph.* = .{ .mKernings = KerningsT.init(engine_context.Keep()) };
     try self.ProcessTextJson(engine_context, file_json.?);
     //the charset has codepoints no font draws (unassigned ones, U+3130 and U+318F): they draw the box, the same as any
     //codepoint outside the charset
@@ -126,11 +126,11 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
     for (&self.mGlyphs) |*glyph| {
         if (glyph.mAdvance >= 0) continue;
         glyph.* = box;
-        glyph.mKernings = KerningsT.init(engine_context.EngineAllocator());
+        glyph.mKernings = KerningsT.init(engine_context.Keep());
     }
 
     const rel_ext = std.fs.path.extension(rel_path);
-    const atlas_rel_path = try std.fmt.allocPrint(frame_allocator, "{s}.png", .{rel_path[0 .. rel_path.len - rel_ext.len]});
+    const atlas_rel_path = try std.fmt.allocPrint(scratch_allocator, "{s}.png", .{rel_path[0 .. rel_path.len - rel_ext.len]});
     try self.mAtlas.Init(engine_context, name_png, atlas_rel_path, file_png.?);
 }
 
@@ -149,14 +149,14 @@ pub fn Deinit(self: *TextAsset, engine_context: *EngineContext) void {
 }
 
 fn ProcessTextJson(self: *TextAsset, engine_context: *EngineContext, text_json: std.Io.File) !void {
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
     var file_reader = text_json.reader(engine_context.Io(), &.{});
-    const contents = try file_reader.interface.allocRemaining(frame_allocator, .unlimited);
+    const contents = try file_reader.interface.allocRemaining(scratch_allocator, .unlimited);
 
     var the_reader: std.Io.Reader = .fixed(contents);
 
-    var reader = std.json.Reader.init(frame_allocator, &the_reader);
+    var reader = std.json.Reader.init(scratch_allocator, &the_reader);
     defer reader.deinit();
 
     //deserialize
@@ -172,22 +172,22 @@ fn ProcessTextJson(self: *TextAsset, engine_context: *EngineContext, text_json: 
             else => error.NotExpected,
         };
 
-        const actual_value = try frame_allocator.dupe(u8, token_value);
-        defer frame_allocator.free(actual_value);
+        const actual_value = try scratch_allocator.dupe(u8, token_value);
+        defer scratch_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "atlas")) {
-            try self.ProcessAtlas(&reader, frame_allocator);
+            try self.ProcessAtlas(&reader, scratch_allocator);
         } else if (std.mem.eql(u8, actual_value, "metrics")) {
-            try self.ProcessMetrics(&reader, frame_allocator);
+            try self.ProcessMetrics(&reader, scratch_allocator);
         } else if (std.mem.eql(u8, actual_value, "glyphs")) {
-            try self.ProcessGlyphs(engine_context.EngineAllocator(), &reader, frame_allocator);
+            try self.ProcessGlyphs(engine_context.Keep(), &reader, scratch_allocator);
         } else if (std.mem.eql(u8, actual_value, "kerning")) {
-            try self.ProcessKerning(&reader, frame_allocator);
+            try self.ProcessKerning(&reader, scratch_allocator);
         }
     }
 }
 
-fn ProcessAtlas(self: *TextAsset, reader: *std.json.Reader, frame_allocator: std.mem.Allocator) !void {
+fn ProcessAtlas(self: *TextAsset, reader: *std.json.Reader, scratch_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin object for the atlas
     while (true) {
         const token = try reader.next();
@@ -199,26 +199,26 @@ fn ProcessAtlas(self: *TextAsset, reader: *std.json.Reader, frame_allocator: std
             else => error.NotExpected,
         };
 
-        const actual_value = try frame_allocator.dupe(u8, token_value);
-        defer frame_allocator.free(actual_value);
+        const actual_value = try scratch_allocator.dupe(u8, token_value);
+        defer scratch_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "distanceRange")) {
-            const parsed_value = try std.json.innerParse(u32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(u32, scratch_allocator, reader, PARSE_OPTIONS);
             self.mDistanceRange = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "size")) {
-            const parsed_value = try std.json.innerParse(u32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(u32, scratch_allocator, reader, PARSE_OPTIONS);
             self.mSize = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "width")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             self.mAtlasSize.x = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "height")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             self.mAtlasSize.y = parsed_value;
         }
     }
 }
 
-fn ProcessMetrics(self: *TextAsset, reader: *std.json.Reader, frame_allocator: std.mem.Allocator) !void {
+fn ProcessMetrics(self: *TextAsset, reader: *std.json.Reader, scratch_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin object for the metrics
     while (true) {
         const token = try reader.next();
@@ -230,25 +230,25 @@ fn ProcessMetrics(self: *TextAsset, reader: *std.json.Reader, frame_allocator: s
             else => error.NotExpected,
         };
 
-        const actual_value = try frame_allocator.dupe(u8, token_value);
-        defer frame_allocator.free(actual_value);
+        const actual_value = try scratch_allocator.dupe(u8, token_value);
+        defer scratch_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "emSize")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             self.mEmsize = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "lineHeight")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             self.mLineHeight = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "ascender")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             self.mAscender = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "descender")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             self.mDescender = parsed_value;
         }
     }
 }
-fn ProcessGlyphs(self: *TextAsset, engine_allocator: std.mem.Allocator, reader: *std.json.Reader, frame_allocator: std.mem.Allocator) !void {
+fn ProcessGlyphs(self: *TextAsset, keep_allocator: std.mem.Allocator, reader: *std.json.Reader, scratch_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin array
 
     while (true) {
@@ -259,17 +259,17 @@ fn ProcessGlyphs(self: *TextAsset, engine_allocator: std.mem.Allocator, reader: 
             else => return error.NotExpected,
         }
         var new_glyph = GlyphInfo{
-            .mKernings = KerningsT.init(engine_allocator),
+            .mKernings = KerningsT.init(keep_allocator),
         };
         var glyph_ind: usize = 0;
-        try SingleGlyph(reader, &glyph_ind, &new_glyph, frame_allocator);
+        try SingleGlyph(reader, &glyph_ind, &new_glyph, scratch_allocator);
         if (glyph_ind > -1) {
             self.mGlyphs[@intCast(glyph_ind)] = new_glyph;
         }
     }
 }
 
-fn SingleGlyph(reader: *std.json.Reader, glyph_ind: *usize, new_glyph: *GlyphInfo, frame_allocator: std.mem.Allocator) !void {
+fn SingleGlyph(reader: *std.json.Reader, glyph_ind: *usize, new_glyph: *GlyphInfo, scratch_allocator: std.mem.Allocator) !void {
     while (true) {
         const token = try reader.next();
         const token_value = try switch (token) {
@@ -279,24 +279,24 @@ fn SingleGlyph(reader: *std.json.Reader, glyph_ind: *usize, new_glyph: *GlyphInf
 
             else => error.NotExpected,
         };
-        const actual_value = try frame_allocator.dupe(u8, token_value);
-        defer frame_allocator.free(actual_value);
+        const actual_value = try scratch_allocator.dupe(u8, token_value);
+        defer scratch_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "unicode")) {
-            const parsed_value = try std.json.innerParse(usize, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(usize, scratch_allocator, reader, PARSE_OPTIONS);
             glyph_ind.* = ToArrayIndex(parsed_value);
         } else if (std.mem.eql(u8, actual_value, "advance")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             new_glyph.mAdvance = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "planeBounds")) {
-            try ProcessPlaneBounds(reader, new_glyph, frame_allocator);
+            try ProcessPlaneBounds(reader, new_glyph, scratch_allocator);
         } else if (std.mem.eql(u8, actual_value, "atlasBounds")) {
-            try ProcessAtlasBounds(reader, new_glyph, frame_allocator);
+            try ProcessAtlasBounds(reader, new_glyph, scratch_allocator);
         }
     }
 }
 
-fn ProcessPlaneBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, frame_allocator: std.mem.Allocator) !void {
+fn ProcessPlaneBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, scratch_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin object token
     while (true) {
         const token = try reader.next();
@@ -308,26 +308,26 @@ fn ProcessPlaneBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, frame_all
             else => error.NotExpected,
         };
 
-        const actual_value = try frame_allocator.dupe(u8, token_value);
-        defer frame_allocator.free(actual_value);
+        const actual_value = try scratch_allocator.dupe(u8, token_value);
+        defer scratch_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "left")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             new_glyph.mPlaneMin.x = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "bottom")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             new_glyph.mPlaneMax.y = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "right")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             new_glyph.mPlaneMax.x = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "top")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             new_glyph.mPlaneMin.y = parsed_value;
         }
     }
 }
 
-fn ProcessAtlasBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, frame_allocator: std.mem.Allocator) !void {
+fn ProcessAtlasBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, scratch_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin object token
     while (true) {
         const token = try reader.next();
@@ -339,26 +339,26 @@ fn ProcessAtlasBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, frame_all
             else => error.NotExpected,
         };
 
-        const actual_value = try frame_allocator.dupe(u8, token_value);
-        defer frame_allocator.free(actual_value);
+        const actual_value = try scratch_allocator.dupe(u8, token_value);
+        defer scratch_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "left")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             new_glyph.mAtlasTexel0.x = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "bottom")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             new_glyph.mAtlasTexel1.y = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "right")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             new_glyph.mAtlasTexel1.x = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "top")) {
-            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
             new_glyph.mAtlasTexel0.y = parsed_value;
         }
     }
 }
 
-fn ProcessKerning(self: *TextAsset, reader: *std.json.Reader, frame_allocator: std.mem.Allocator) !void {
+fn ProcessKerning(self: *TextAsset, reader: *std.json.Reader, scratch_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin array
 
     while (true) {
@@ -369,11 +369,11 @@ fn ProcessKerning(self: *TextAsset, reader: *std.json.Reader, frame_allocator: s
             else => return error.NotExpected,
         }
 
-        try self.SingleKerning(reader, frame_allocator);
+        try self.SingleKerning(reader, scratch_allocator);
     }
 }
 
-fn SingleKerning(self: *TextAsset, reader: *std.json.Reader, frame_allocator: std.mem.Allocator) !void {
+fn SingleKerning(self: *TextAsset, reader: *std.json.Reader, scratch_allocator: std.mem.Allocator) !void {
 
     //unicode1
     const token1 = try reader.next();
@@ -384,10 +384,10 @@ fn SingleKerning(self: *TextAsset, reader: *std.json.Reader, frame_allocator: st
         else => error.NotExpected,
     };
 
-    const actual_value1 = try frame_allocator.dupe(u8, token_value1);
-    defer frame_allocator.free(actual_value1);
+    const actual_value1 = try scratch_allocator.dupe(u8, token_value1);
+    defer scratch_allocator.free(actual_value1);
 
-    const unicode1 = try std.json.innerParse(u16, frame_allocator, reader, PARSE_OPTIONS);
+    const unicode1 = try std.json.innerParse(u16, scratch_allocator, reader, PARSE_OPTIONS);
     const glyph_ind1 = ToArrayIndex(unicode1);
 
     //unicode2
@@ -399,10 +399,10 @@ fn SingleKerning(self: *TextAsset, reader: *std.json.Reader, frame_allocator: st
         else => error.NotExpected,
     };
 
-    const actual_value2 = try frame_allocator.dupe(u8, token_value2);
-    defer frame_allocator.free(actual_value2);
+    const actual_value2 = try scratch_allocator.dupe(u8, token_value2);
+    defer scratch_allocator.free(actual_value2);
 
-    const unicode2 = try std.json.innerParse(u16, frame_allocator, reader, PARSE_OPTIONS);
+    const unicode2 = try std.json.innerParse(u16, scratch_allocator, reader, PARSE_OPTIONS);
 
     const token3 = try reader.next();
     const token_value3 = try switch (token3) {
@@ -412,10 +412,10 @@ fn SingleKerning(self: *TextAsset, reader: *std.json.Reader, frame_allocator: st
         else => error.NotExpected,
     };
 
-    const actual_value3 = try frame_allocator.dupe(u8, token_value3);
-    defer frame_allocator.free(actual_value3);
+    const actual_value3 = try scratch_allocator.dupe(u8, token_value3);
+    defer scratch_allocator.free(actual_value3);
 
-    const advance = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
+    const advance = try std.json.innerParse(f32, scratch_allocator, reader, PARSE_OPTIONS);
 
     try self.mGlyphs[glyph_ind1].mKernings.put(unicode2, advance);
     try SkipToken(reader); //skip the end object token

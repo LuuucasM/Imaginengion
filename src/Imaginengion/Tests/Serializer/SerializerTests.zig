@@ -34,7 +34,7 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //UUIDs and file reads/writes go through the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -45,7 +45,7 @@ const TestWorld = struct {
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
         engine_context.mEditorWorld.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         self.mTmpDir.cleanup();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -53,7 +53,7 @@ const TestWorld = struct {
 
     /// A path in this test's temporary folder, relative to the working directory like the serializer expects
     fn FilePath(self: *TestWorld, file_name: []const u8) ![]const u8 {
-        return std.fmt.allocPrint(self.mEngineContext.FrameAllocator(), ".zig-cache/tmp/{s}/{s}", .{ self.mTmpDir.sub_path, file_name });
+        return std.fmt.allocPrint(self.mEngineContext.Scratch(), ".zig-cache/tmp/{s}/{s}", .{ self.mTmpDir.sub_path, file_name });
     }
 };
 
@@ -68,10 +68,10 @@ test "an entity tree round trips, children included" {
 
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const goblin = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
-    try goblin.GetComponentMut(EntityComponents.NameComponent).?.mName.replaceRange(engine_context.EngineAllocator(), 0, goblin.GetName().len, "Goblin");
+    try goblin.GetComponentMut(EntityComponents.NameComponent).?.mName.replaceRange(engine_context.Keep(), 0, goblin.GetName().len, "Goblin");
     try goblin.SetTranslation(engine_context, .{ .x = 4.0, .y = 5.0, .z = 6.0 });
     const sword = try goblin.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
-    try sword.GetComponentMut(EntityComponents.NameComponent).?.mName.replaceRange(engine_context.EngineAllocator(), 0, sword.GetName().len, "Sword");
+    try sword.GetComponentMut(EntityComponents.NameComponent).?.mName.replaceRange(engine_context.Keep(), 0, sword.GetName().len, "Sword");
     _ = try sword.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
 
     const path = try world.FilePath("goblin.imen");
@@ -125,7 +125,7 @@ test "a scene round trips with its entities and takes its slot in the scene stac
 
     //both top level entities, and the child under the first, belong to the loaded scene, and are in
     //its layer: the tag isn't saved on them, they take it from the scene
-    const loaded_entities = try loaded.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntitySceneComponent });
+    const loaded_entities = try loaded.GetEntityGroup(engine_context.Scratch(), .{ .Component = EntitySceneComponent });
     try std.testing.expectEqual(@as(usize, 3), loaded_entities.items.len);
     for (loaded_entities.items) |entity_id| {
         try std.testing.expectEqual(.OverlayLayer, loaded.GetEntity(entity_id).GetLayer());

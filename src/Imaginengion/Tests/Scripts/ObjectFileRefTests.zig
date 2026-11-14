@@ -86,7 +86,7 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //UUIDs and file reads/writes go through the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -106,22 +106,22 @@ const TestWorld = struct {
 
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
-        const engine_allocator = engine_context.EngineAllocator();
+        const keep_allocator = engine_context.Keep();
         //everything that holds asset handles goes while the asset manager is still alive, as in EngineContext.DeInit
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mSimulateWorld.Deinit(engine_context);
         engine_context.mGameWorld.Deinit(engine_context);
         engine_context.mAssetWorld.clearAndFree(engine_context, .All);
-        engine_context.mSerializer.Deinit(engine_allocator);
+        engine_context.mSerializer.Deinit(keep_allocator);
         const asset_manager = &engine_context.mAssetManager;
         asset_manager.mECSManager.Deinit(engine_context);
-        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-        asset_manager.mEventManager.Deinit(engine_allocator);
-        asset_manager.mCWDPath.deinit(engine_allocator);
+        asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+        asset_manager.mEventManager.Deinit(keep_allocator);
+        asset_manager.mCWDPath.deinit(keep_allocator);
         engine_context.mAssetWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
 
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         self.mTmpDir.cleanup();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -137,7 +137,7 @@ const TestWorld = struct {
 
     /// A path in this test's temporary folder, relative to the working directory like an engine asset path
     fn TmpPath(self: *TestWorld, file_name: []const u8) ![]const u8 {
-        return std.fmt.allocPrint(self.mEngineContext.FrameAllocator(), ".zig-cache/tmp/{s}/{s}", .{ self.mTmpDir.sub_path, file_name });
+        return std.fmt.allocPrint(self.mEngineContext.Scratch(), ".zig-cache/tmp/{s}/{s}", .{ self.mTmpDir.sub_path, file_name });
     }
 
     /// Saves `object` to a file and returns a handle to it, which is the caller's reference
@@ -156,11 +156,11 @@ const TestWorld = struct {
     fn ScriptAssetFor(self: *TestWorld, info: *const ScriptABI.ScriptInfo) !AssetHandle {
         const engine_context = self.mEngineContext;
         const asset_manager = &engine_context.mAssetManager;
-        const engine_allocator = engine_context.EngineAllocator();
-        const asset_id = try asset_manager.mECSManager.CreateEntity(engine_allocator);
+        const keep_allocator = engine_context.Keep();
+        const asset_id = try asset_manager.mECSManager.CreateEntity(keep_allocator);
         _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, Assets.AssetMetaData{ .mRefs = 1 });
         var file_meta_data = Assets.FileMetaData{ .mPathType = .Prj };
-        _ = try file_meta_data.mRelPath.print(engine_allocator, "scripts/Menu.zig", .{});
+        _ = try file_meta_data.mRelPath.print(keep_allocator, "scripts/Menu.zig", .{});
         _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, file_meta_data);
         _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, Assets.ScriptAsset{ ._Info = info });
         return .{ .mID = asset_id, .mManager = asset_manager };
@@ -293,7 +293,7 @@ test "file refs are saved by path and UUID, each part left out when unset, and r
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
     var script_asset = try world.ScriptAssetFor(&MenuExports.info);
     defer script_asset.ReleaseAsset();
@@ -310,13 +310,13 @@ test "file refs are saved by path and UUID, each part left out when unset, and r
     try ScriptValues.Set(script, "mPlayer", PlayerRef{ .mFile = player_file });
     try ScriptValues.Set(script, "mGameContext", GameContextRef{ .mObject = game_context });
 
-    var out: std.Io.Writer.Allocating = .init(engine_allocator);
+    var out: std.Io.Writer.Allocating = .init(keep_allocator);
     defer out.deinit();
     var write_stream: std.json.Stringify = .{ .writer = &out.writer };
     const component = script.GetComponent(ScriptComponent).?;
     try ScriptValues.Write(component, ScriptValues.InstanceOf(component).?, &write_stream);
 
-    const parsed = try std.json.parseFromSlice(std.json.Value, engine_allocator, out.written(), .{});
+    const parsed = try std.json.parseFromSlice(std.json.Value, keep_allocator, out.written(), .{});
     defer parsed.deinit();
     const values = parsed.value.object;
     try std.testing.expect(values.get("mEntity") == null);
@@ -354,7 +354,7 @@ test "a file that is missing, or isn't the variable's kind, leaves it unset" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
     var script_asset = try world.ScriptAssetFor(&MenuExports.info);
     defer script_asset.ReleaseAsset();
@@ -363,13 +363,13 @@ test "a file that is missing, or isn't the variable's kind, leaves it unset" {
     defer scene_file.ReleaseAsset();
     const refs = world.Refs(scene_file);
 
-    const json = try std.fmt.allocPrint(engine_allocator,
+    const json = try std.fmt.allocPrint(keep_allocator,
         \\{{"mScene": {{"File": {{"Path": "no/such/file.imsc", "PathType": "Eng"}}}},
         \\ "mPlayer": {{"File": {{"Path": "{s}", "PathType": "Eng"}}}},
         \\ "mEntity": 7}}
     , .{scene_file.GetFileMetaData().mRelPath.items});
-    defer engine_allocator.free(json);
-    const parsed = try std.json.parseFromSlice(std.json.Value, engine_allocator, json, .{});
+    defer keep_allocator.free(json);
+    const parsed = try std.json.parseFromSlice(std.json.Value, keep_allocator, json, .{});
     defer parsed.deinit();
     try ScriptValues.Read(engine_context, script, parsed.value);
 

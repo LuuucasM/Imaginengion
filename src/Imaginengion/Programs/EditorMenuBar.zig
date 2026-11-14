@@ -149,7 +149,7 @@ pub fn Build(engine_context: *EngineContext, bar: Entity, options: Widgets.Optio
     const zone = Tracy.ZoneInit("EditorMenuBar::Build", @src());
     defer zone.Deinit();
     var self: EditorMenuBar = .{ .mStockScripts = options.StockScripts };
-    errdefer self.Deinit(engine_context.EngineAllocator());
+    errdefer self.Deinit(engine_context.Keep());
     const item_options = Widgets.MenuItemOptions{ .StockScripts = options.StockScripts };
     const check_options = Widgets.MenuItemOptions{ .Checkable = true, .StockScripts = options.StockScripts };
 
@@ -197,9 +197,9 @@ pub fn Build(engine_context: *EngineContext, bar: Entity, options: Widgets.Optio
     return self;
 }
 
-pub fn Deinit(self: *EditorMenuBar, engine_allocator: std.mem.Allocator) void {
-    self.mActions.deinit(engine_allocator);
-    self.mPlayerItems.deinit(engine_allocator);
+pub fn Deinit(self: *EditorMenuBar, keep_allocator: std.mem.Allocator) void {
+    self.mActions.deinit(keep_allocator);
+    self.mPlayerItems.deinit(keep_allocator);
 }
 
 /// What clicking `item` does, null if it isn't one of the menu bar's items
@@ -251,7 +251,7 @@ fn UpdatePlayers(self: *EditorMenuBar, engine_context: *EngineContext, players: 
     self.mPlayerItems.clearRetainingCapacity();
     for (players) |player| {
         const item = try Widgets.MenuItem(engine_context, self.mPlayersMenu, player.GetName(), .{ .Checkable = true, .StockScripts = self.mStockScripts });
-        try self.mPlayerItems.append(engine_context.EngineAllocator(), .{ .Item = item, .Action = .{ .FollowPlayer = player } });
+        try self.mPlayerItems.append(engine_context.Keep(), .{ .Item = item, .Action = .{ .FollowPlayer = player } });
     }
 }
 
@@ -266,6 +266,6 @@ fn SamePlayers(self: *const EditorMenuBar, players: []const Player) bool {
 /// A menu item that does `action`
 fn Add(self: *EditorMenuBar, engine_context: *EngineContext, menu: Entity, text: []const u8, options: Widgets.MenuItemOptions, action: Action) !Entity {
     const item = try Widgets.MenuItem(engine_context, menu, text, options);
-    try self.mActions.append(engine_context.EngineAllocator(), .{ .Item = item, .Action = action });
+    try self.mActions.append(engine_context.Keep(), .{ .Item = item, .Action = action });
     return item;
 }

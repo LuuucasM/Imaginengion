@@ -117,11 +117,11 @@ pub fn GetSceneComponent(self: Scene) SceneComponent {
 //        const new_random = io_source.interface();
 //        const uuid_component = SceneUUIDComponent{ .ID = new_random.int(u64) };
 //        _ = try self.AddComponent(engine_context, uuid_component);
-//        try self.mManager.AddUUID(engine_context.EngineAllocator(), uuid_component.ID, self.mID);
+//        try self.mManager.AddUUID(engine_context.Keep(), uuid_component.ID, self.mID);
 //    }
 //    if (config.bAddSceneName) {
 //        var scene_name_component: SceneNameComponent = .empty;
-//        _ = try scene_name_component.mName.print(engine_context.EngineAllocator(), "New Scene", .{});
+//        _ = try scene_name_component.mName.print(engine_context.Keep(), "New Scene", .{});
 //
 //        _ = try self.AddComponent(engine_context, scene_name_component);
 //    }
@@ -192,9 +192,9 @@ pub fn GetEntity(self: Scene, entity_id: Entity.Type) Entity {
     return Entity{ .mID = entity_id, .mManager = self.mManager };
 }
 
-pub fn GetEntityGroup(self: Scene, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Entity.Type) {
-    var entity_list = try self.mManager.mEManager.GetGroup(frame_allocator, query);
-    self.FilterEntityByScene(frame_allocator, &entity_list);
+pub fn GetEntityGroup(self: Scene, scratch_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Entity.Type) {
+    var entity_list = try self.mManager.mEManager.GetGroup(scratch_allocator, query);
+    self.FilterEntityByScene(scratch_allocator, &entity_list);
     return entity_list;
 }
 

@@ -54,11 +54,11 @@ pub fn Init(self: *ShaderAsset, engine_context: *EngineContext, abs_path: []cons
     const file_path = std.fs.path.dirname(abs_path).?;
 
     var file_reader = asset_file.reader(engine_context.Io(), &.{});
-    const contents = try file_reader.interface.allocRemaining(engine_context.FrameAllocator(), .unlimited);
+    const contents = try file_reader.interface.allocRemaining(engine_context.Scratch(), .unlimited);
 
     const manifest = try std.json.parseFromSliceLeaky(
         ShaderManifest,
-        engine_context.FrameAllocator(),
+        engine_context.Scratch(),
         contents,
         .{ .allocate = .alloc_if_needed },
     );
@@ -97,19 +97,19 @@ pub fn Deinit(self: *ShaderAsset, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("ShaderAsset::Deinit", @src());
     defer zone.Deinit();
 
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
-    engine_allocator.free(self.mShaderSources.mVertexBinary);
-    engine_allocator.free(self.mShaderSources.mFragmentBinary);
+    keep_allocator.free(self.mShaderSources.mVertexBinary);
+    keep_allocator.free(self.mShaderSources.mFragmentBinary);
 }
 
 fn LoadSpirvFile(engine_context: *EngineContext, dir: []const u8, name: []const u8) ![]const u8 {
-    const path = try std.fs.path.join(engine_context.FrameAllocator(), &.{ dir, name });
+    const path = try std.fs.path.join(engine_context.Scratch(), &.{ dir, name });
     const file = try std.Io.Dir.openFileAbsolute(engine_context.Io(), path, .{});
     defer file.close(engine_context.Io());
 
     var file_reader = file.reader(engine_context.Io(), &.{});
-    const contents = try file_reader.interface.allocRemaining(engine_context.EngineAllocator(), .unlimited);
+    const contents = try file_reader.interface.allocRemaining(engine_context.Keep(), .unlimited);
 
     return contents;
 }

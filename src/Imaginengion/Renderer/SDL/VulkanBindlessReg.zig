@@ -28,8 +28,8 @@ pub const empty: BindlessVulkanReg = .{
     .mImageViews = .empty,
 };
 
-pub fn Init(self: *BindlessVulkanReg, engine_allocator: std.mem.Allocator, interop: *RenderInterop) !void {
-    try self.mImageViews.ensureTotalCapacity(engine_allocator, MAX_TEXTURES);
+pub fn Init(self: *BindlessVulkanReg, keep_allocator: std.mem.Allocator, interop: *RenderInterop) !void {
+    try self.mImageViews.ensureTotalCapacity(keep_allocator, MAX_TEXTURES);
     self.mImageViews.expandToCapacity();
     for (0..self.mImageViews.items.len) |i| {
         self.mImageViews.items[i] = null;
@@ -42,8 +42,8 @@ pub fn Init(self: *BindlessVulkanReg, engine_allocator: std.mem.Allocator, inter
     std.log.info("BindlessTextureRegistry: initialized ({d} slots)", .{MAX_TEXTURES});
 }
 
-pub fn Deinit(self: *BindlessVulkanReg, engine_allocator: std.mem.Allocator) void {
-    self.mImageViews.deinit(engine_allocator);
+pub fn Deinit(self: *BindlessVulkanReg, keep_allocator: std.mem.Allocator) void {
+    self.mImageViews.deinit(keep_allocator);
 }
 
 pub fn RegisterTexture2D(self: *BindlessVulkanReg, interop: *RenderInterop, texture: *SDLTexture2D, sdl_texture_format: c_int) u32 {

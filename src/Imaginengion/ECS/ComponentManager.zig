@@ -42,32 +42,32 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
         mComponentsArrays: std.ArrayList(ComponentArray(entity_t)),
 
-        pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
+        pub fn Init(self: *Self, keep_allocator: std.mem.Allocator) !void {
 
             //add the components for entity hiearchy
-            const parent_array = try ComponentArray(entity_t).Init(engine_allocator, ParentComponent);
-            try self.mComponentsArrays.append(engine_allocator, parent_array);
+            const parent_array = try ComponentArray(entity_t).Init(keep_allocator, ParentComponent);
+            try self.mComponentsArrays.append(keep_allocator, parent_array);
 
-            const child_array = try ComponentArray(entity_t).Init(engine_allocator, ChildComponent);
-            try self.mComponentsArrays.append(engine_allocator, child_array);
+            const child_array = try ComponentArray(entity_t).Init(keep_allocator, ChildComponent);
+            try self.mComponentsArrays.append(keep_allocator, child_array);
 
-            const skip_array = try ComponentArray(entity_t).Init(engine_allocator, SkipFieldComponent);
-            try self.mComponentsArrays.append(engine_allocator, skip_array);
+            const skip_array = try ComponentArray(entity_t).Init(keep_allocator, SkipFieldComponent);
+            try self.mComponentsArrays.append(keep_allocator, skip_array);
 
-            const main_object_array = try ComponentArray(entity_t).Init(engine_allocator, MainObjectComponent);
-            try self.mComponentsArrays.append(engine_allocator, main_object_array);
+            const main_object_array = try ComponentArray(entity_t).Init(keep_allocator, MainObjectComponent);
+            try self.mComponentsArrays.append(keep_allocator, main_object_array);
 
-            const entity_tag_array = try ComponentArray(entity_t).Init(engine_allocator, EntityTagComponent);
-            try self.mComponentsArrays.append(engine_allocator, entity_tag_array);
+            const entity_tag_array = try ComponentArray(entity_t).Init(keep_allocator, EntityTagComponent);
+            try self.mComponentsArrays.append(keep_allocator, entity_tag_array);
 
-            const script_tag_array = try ComponentArray(entity_t).Init(engine_allocator, ScriptTagComponent);
-            try self.mComponentsArrays.append(engine_allocator, script_tag_array);
+            const script_tag_array = try ComponentArray(entity_t).Init(keep_allocator, ScriptTagComponent);
+            try self.mComponentsArrays.append(keep_allocator, script_tag_array);
 
             std.debug.assert(self.mComponentsArrays.items.len == BuiltinComponentCount);
 
             inline for (components_types) |component_type| {
-                const new_component_array = try ComponentArray(entity_t).Init(engine_allocator, component_type);
-                try self.mComponentsArrays.append(engine_allocator, new_component_array);
+                const new_component_array = try ComponentArray(entity_t).Init(keep_allocator, component_type);
+                try self.mComponentsArrays.append(keep_allocator, new_component_array);
             }
         }
 
@@ -81,7 +81,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                 component_array.Deinit(engine_context);
             }
 
-            self.mComponentsArrays.deinit(engine_context.EngineAllocator());
+            self.mComponentsArrays.deinit(engine_context.Keep());
         }
 
         pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
@@ -101,8 +101,8 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         /// Gives a never before used id its SkipFieldComponent. Only valid when ReuseFreeEntity returned null.
-        pub fn CreateNewEntity(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t) !void {
-            _ = try self._SkipFieldArray().AddComponent(engine_allocator, entity_id, _NewSkipField());
+        pub fn CreateNewEntity(self: *Self, keep_allocator: std.mem.Allocator, entity_id: entity_t) !void {
+            _ = try self._SkipFieldArray().AddComponent(keep_allocator, entity_id, _NewSkipField());
         }
 
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) void {
@@ -176,7 +176,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return try self.mComponentsArrays.items[component_ind].CloneStaged(engine_context, arena, source);
         }
 
-        pub fn AddComponent(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component: anytype) !*@TypeOf(component) {
+        pub fn AddComponent(self: *Self, keep_allocator: std.mem.Allocator, entity_id: entity_t, component: anytype) !*@TypeOf(component) {
             const component_t = @TypeOf(component);
             std.debug.assert(!self.HasComponent(component_t, entity_id));
 
@@ -185,7 +185,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
             const internal_array: *InternalComponentArray(entity_t, component_t) = @ptrCast(@alignCast(self.mComponentsArrays.items[ComponentInd(component_t)].mPtr));
 
-            return try internal_array.AddComponent(engine_allocator, entity_id, component);
+            return try internal_array.AddComponent(keep_allocator, entity_id, component);
         }
 
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) void {
@@ -200,21 +200,21 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         /// Copies a staged component (see ECSManager.AddComponent) onto the entity
-        pub fn AddStaged(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize, staged: *anyopaque) !void {
+        pub fn AddStaged(self: *Self, keep_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize, staged: *anyopaque) !void {
             std.debug.assert(component_ind < components_types.len + BuiltinComponentCount);
             std.debug.assert(component_ind != SkipFieldComponent.Ind); // only added through entity creation
             std.debug.assert(!self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
 
             // added before the skipfield bit is set, so a failed add leaves the entity as it was
-            try self.mComponentsArrays.items[component_ind].AddStaged(engine_allocator, entity_id, staged);
+            try self.mComponentsArrays.items[component_ind].AddStaged(keep_allocator, entity_id, staged);
             self.GetComponent(SkipFieldComponent, entity_id).?.mSkipField.ChangeToUnskipped(component_ind);
         }
 
         /// Puts the tag in this slot on the entity: a tag has no value, so none is needed
-        pub fn AddTagInd(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize) !void {
+        pub fn AddTagInd(self: *Self, keep_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize) !void {
             std.debug.assert(self.IsTag(component_ind));
             var no_value: u8 = 0;
-            try self.AddStaged(engine_allocator, entity_id, component_ind, &no_value);
+            try self.AddStaged(keep_allocator, entity_id, component_ind, &no_value);
         }
 
         /// Whether the component in this slot is zero sized

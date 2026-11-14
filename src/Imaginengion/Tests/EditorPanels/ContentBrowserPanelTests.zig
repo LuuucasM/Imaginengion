@@ -1,6 +1,6 @@
 //! The Content Browser in the editor's own UI (EditorPanels/ContentBrowserPanel.zig), on a temporary folder: a tile per
 //! folder and shown file, folders first and each by name, other files left out, long names shortened, going into a
-//! folder and back up by double clicking, a new file showing up, files' tiles carrying their path when dragged, going
+//! folder and back up by double clicking, a new file showing up once the folder is listed again, files' tiles carrying their path when dragged, going
 //! into the engine's assets from the top of the project and back out, New Scene Layer, New Script and New Enum from the pane's menu, and the enum file New Enum writes. Also the Scripts panel taking a drop: which object a script type goes on, and a
 //! file that isn't a script ignored (adding a real script compiles it, so that part isn't run here). No window or
 //! renderer needed. Run with `zig build test-engine`.
@@ -32,7 +32,7 @@ const TestBrowser = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //folders are listed through the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -48,11 +48,11 @@ const TestBrowser = struct {
 
     fn Deinit(self: *TestBrowser) void {
         const engine_context = self.mEngineContext;
-        self.mPanel.Deinit(engine_context.EngineAllocator());
-        engine_context.mAssetManager.mCWDPath.deinit(engine_context.EngineAllocator());
+        self.mPanel.Deinit(engine_context.Keep());
+        engine_context.mAssetManager.mCWDPath.deinit(engine_context.Keep());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         self.mTmpDir.cleanup();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -68,11 +68,19 @@ const TestBrowser = struct {
 
     /// Shows the temporary folder as the project
     fn Open(self: *TestBrowser) !void {
-        const root = try self.mTmpDir.dir.realPathFileAlloc(self.Io(), ".", self.mEngineContext.FrameAllocator());
+        const root = try self.mTmpDir.dir.realPathFileAlloc(self.Io(), ".", self.mEngineContext.Scratch());
         try self.mPanel.SetRoot(self.mEngineContext, root);
     }
 
     fn Update(self: *TestBrowser) !void {
+        try self.mPanel.Update(self.mEngineContext);
+    }
+
+    /// A frame long enough for the folder to be due a listing again
+    fn UpdateAfterRefresh(self: *TestBrowser) !void {
+        const dt = self.mEngineContext.mDT;
+        defer self.mEngineContext.mDT = dt;
+        self.mEngineContext.mDT = ContentBrowserPanel.REFRESH_SECONDS;
         try self.mPanel.Update(self.mEngineContext);
     }
 
@@ -130,17 +138,21 @@ test "a tile per folder and shown file, folders first, each by name, others left
     try std.testing.expectEqualStrings("Mover.zig", browser.Tile(4).GetComponent(FileRefComponent).?.mRelPath.items);
     try std.testing.expectEqual(.Prj, browser.Tile(4).GetComponent(FileRefComponent).?.mPathType);
 
-    //nothing changed: not built again. A new file: built again with it
+    //nothing changed: not built again, even once the folder is listed again
     const grid = browser.mPanel.mGrid.?;
     try browser.Update();
+    try browser.UpdateAfterRefresh();
     try std.testing.expectEqual(grid.mID, browser.mPanel.mGrid.?.mID);
+    //a new file: not seen until the folder is listed again, then built again with it
     try browser.WriteFile("Jump.wav");
     try browser.Update();
+    try std.testing.expectEqual(grid.mID, browser.mPanel.mGrid.?.mID);
+    try browser.UpdateAfterRefresh();
     try std.testing.expect(browser.mPanel.mGrid.?.mID != grid.mID);
     try std.testing.expectEqual(@as(usize, 9), browser.Names(&names));
     //a theme file too, for a style to name
     try browser.WriteFile("Look.imtheme");
-    try browser.Update();
+    try browser.UpdateAfterRefresh();
     try std.testing.expectEqual(@as(usize, 10), browser.Names(&names));
 }
 
@@ -200,8 +212,8 @@ test "EngineAssets goes into the engine's assets, whose files are engine files, 
     defer browser.Deinit();
     const engine_context = browser.mEngineContext;
     //the temporary folder is the engine's folder as well as the project's
-    const cwd = try browser.mTmpDir.dir.realPathFileAlloc(browser.Io(), ".", engine_context.FrameAllocator());
-    try engine_context.mAssetManager.mCWDPath.appendSlice(engine_context.EngineAllocator(), cwd);
+    const cwd = try browser.mTmpDir.dir.realPathFileAlloc(browser.Io(), ".", engine_context.Scratch());
+    try engine_context.mAssetManager.mCWDPath.appendSlice(engine_context.Keep(), cwd);
     try browser.mTmpDir.dir.createDirPath(browser.Io(), "src/Imaginengion/EngineAssets/textures");
     try browser.WriteFile("src/Imaginengion/EngineAssets/textures/White.png");
     try browser.WriteFile("hero.png");
@@ -255,7 +267,7 @@ test "the Scripts panel takes each kind of script onto its kind of object, and n
     const page = try browser.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try page.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
     var scripts = try ScriptsPanel.Build(engine_context, page, .{ .StockScripts = false });
-    defer scripts.Deinit(engine_context.EngineAllocator());
+    defer scripts.Deinit(engine_context.Keep());
     const texture = try browser.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try texture.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "hero.png", .Prj));
     const script = try browser.mScene.CreateEntity(engine_context, Entity.DefaultConfig);

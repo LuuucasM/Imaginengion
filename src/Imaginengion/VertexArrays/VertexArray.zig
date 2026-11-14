@@ -19,8 +19,8 @@ pub fn Init() VertexArray {
     };
 }
 
-pub fn Deinit(self: *VertexArray, engine_allocator: std.mem.Allocator) void {
-    self.mImpl.Deinit(engine_allocator);
+pub fn Deinit(self: *VertexArray, keep_allocator: std.mem.Allocator) void {
+    self.mImpl.Deinit(keep_allocator);
 }
 
 pub fn Bind(self: VertexArray) void {
@@ -31,8 +31,8 @@ pub fn Unbind(self: VertexArray) void {
     self.mImpl.Unbind();
 }
 
-pub fn AddVertexBuffer(self: *VertexArray, engine_allocator: std.mem.Allocator, new_vertex_buffer: VertexBuffer) !void {
-    try self.mImpl.AddVertexBuffer(engine_allocator, new_vertex_buffer);
+pub fn AddVertexBuffer(self: *VertexArray, keep_allocator: std.mem.Allocator, new_vertex_buffer: VertexBuffer) !void {
+    try self.mImpl.AddVertexBuffer(keep_allocator, new_vertex_buffer);
 }
 
 pub fn SetIndexBuffer(self: *VertexArray, new_index_buffer: IndexBuffer) void {

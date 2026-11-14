@@ -60,9 +60,9 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
         /// Which headers are open, kept from one build to the next for the same object
         mOpen: Present = .empty,
 
-        pub fn Deinit(self: *Self, engine_allocator: std.mem.Allocator) void {
-            self.mMenus.deinit(engine_allocator);
-            self.mItems.deinit(engine_allocator);
+        pub fn Deinit(self: *Self, keep_allocator: std.mem.Allocator) void {
+            self.mMenus.deinit(keep_allocator);
+            self.mItems.deinit(keep_allocator);
         }
 
         pub fn PresentOf(object: ObjectType) Present {
@@ -82,7 +82,7 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
             const same_object = self.mRoot != null and self.mObject.mID == object.mID and self.mObject.mManager == object.mManager;
             self.mOpen = if (same_object) self.OpenSections() else .empty;
             try self.Clear(engine_context);
-            const engine_allocator = engine_context.EngineAllocator();
+            const keep_allocator = engine_context.Keep();
             self.mObject = object;
 
             const root = try Widgets.Column(engine_context, .{ .Entity = parent });
@@ -96,7 +96,7 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
                     }
                     if (comptime IsRemovable(component_type)) {
                         const menu = try Widgets.ContextMenu(engine_context, section.Header, options);
-                        try self.mMenus.append(engine_allocator, menu);
+                        try self.mMenus.append(keep_allocator, menu);
                         try self.AddItem(engine_context, menu, "Delete Component", .{ .Delete = i }, options);
                     }
                 }
@@ -165,7 +165,7 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
 
         fn AddItem(self: *Self, engine_context: *EngineContext, menu: Entity, text: []const u8, action: Action, options: Widgets.Options) !void {
             const item = try Widgets.MenuItem(engine_context, menu, text, .{ .StockScripts = options.StockScripts });
-            try self.mItems.append(engine_context.EngineAllocator(), .{ .Item = item, .Action = action });
+            try self.mItems.append(engine_context.Keep(), .{ .Item = item, .Action = action });
         }
     };
 }

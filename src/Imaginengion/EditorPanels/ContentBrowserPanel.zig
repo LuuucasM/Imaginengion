@@ -6,8 +6,8 @@
 //! panel. At the top of the project an EngineAssets tile goes into the engine's own assets (the white texture, the
 //! fonts...), browsed the same way, its files carried as engine files; Back from its top comes out to the project. Right clicking the pane offers New Scene Layer, New Script: a copy of one of the engine's script
 //! templates, and New Enum: an enum file with the enum named after the file, each named and put where the save dialog
-//! says (the folder being shown to start with). Every frame the folder is listed and checked against what
-//! the tiles were built from, so files added or removed on disk show up
+//! says (the folder being shown to start with). Every REFRESH_SECONDS, and straight away after going to another folder or
+//! making a file, the folder is listed and checked against the tiles, so files added or removed on disk show up
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -37,6 +37,9 @@ const MAX_NAME_LEN = 12;
 const MAX_EXTENSION_LEN = 5;
 /// The engine's assets folder, from the engine's folder (an engine file's path starts with it)
 const ENGINE_ASSETS_PATH = "src/Imaginengion/EngineAssets";
+/// How often the folder is listed again to catch files changed on disk. Listing it is OS calls (open, read, close), too
+/// much to do every frame for something that changes this rarely
+pub const REFRESH_SECONDS: f32 = 0.5;
 
 /// What New Script makes: one of the engine's templates (Scripts/Templates/), a script for one kind of object, with
 /// every hook that kind of object has written out, or a game event
@@ -158,8 +161,10 @@ mPath: std.ArrayList(u8) = .empty,
 /// The engine's assets folder, and whether the folder being shown is in it rather than in the project
 mEngineRoot: std.ArrayList(u8) = .empty,
 mInEngine: bool = false,
-/// The folder and its listing as they were when the tiles were built, to tell when they change
-mBuiltFrom: std.ArrayList(u8) = .empty,
+/// The folder the tiles were built for, to tell when it changes (the tiles themselves say what was listed)
+mBuiltPath: std.ArrayList(u8) = .empty,
+/// Since the folder was last listed. Starts due, and is put back to due whenever it has to be listed straight away
+mSinceListed: f32 = REFRESH_SECONDS,
 mIcons: Icons = .{},
 mOptions: Widgets.Options = .{},
 
@@ -188,14 +193,14 @@ pub fn Build(engine_context: *EngineContext, page: Entity, icons: Icons, options
     return self;
 }
 
-pub fn Deinit(self: *ContentBrowserPanel, engine_allocator: std.mem.Allocator) void {
+pub fn Deinit(self: *ContentBrowserPanel, keep_allocator: std.mem.Allocator) void {
     self.mIcons.Release();
-    self.mTiles.deinit(engine_allocator);
-    self.mNames.deinit(engine_allocator);
-    self.mRoot.deinit(engine_allocator);
-    self.mPath.deinit(engine_allocator);
-    self.mEngineRoot.deinit(engine_allocator);
-    self.mBuiltFrom.deinit(engine_allocator);
+    self.mTiles.deinit(keep_allocator);
+    self.mNames.deinit(keep_allocator);
+    self.mRoot.deinit(keep_allocator);
+    self.mPath.deinit(keep_allocator);
+    self.mEngineRoot.deinit(keep_allocator);
+    self.mBuiltPath.deinit(keep_allocator);
 }
 
 /// Whether it is shown in its pane (the Window menu's Content Browser)
@@ -211,14 +216,15 @@ pub fn Toggle(self: ContentBrowserPanel, engine_context: *EngineContext) !void {
 
 /// Shows `root`'s files, from its top: the project just opened or made
 pub fn SetRoot(self: *ContentBrowserPanel, engine_context: *EngineContext, root: []const u8) !void {
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
     self.mRoot.clearRetainingCapacity();
-    try self.mRoot.appendSlice(engine_allocator, root);
+    try self.mRoot.appendSlice(keep_allocator, root);
     self.mPath.clearRetainingCapacity();
-    try self.mPath.appendSlice(engine_allocator, root);
+    try self.mPath.appendSlice(keep_allocator, root);
     self.mEngineRoot.clearRetainingCapacity();
-    try self.mEngineRoot.print(engine_allocator, "{s}/{s}", .{ engine_context.mAssetManager.mCWDPath.items, ENGINE_ASSETS_PATH });
+    try self.mEngineRoot.print(keep_allocator, "{s}/{s}", .{ engine_context.mAssetManager.mCWDPath.items, ENGINE_ASSETS_PATH });
     self.mInEngine = false;
+    self.mSinceListed = REFRESH_SECONDS;
 }
 
 /// The folder being shown, as an absolute path. Empty with no project open
@@ -237,36 +243,53 @@ fn Top(self: ContentBrowserPanel) []const u8 {
 }
 
 /// Back to the top of the project
-fn GoToRoot(self: *ContentBrowserPanel, engine_allocator: std.mem.Allocator) !void {
+fn GoToRoot(self: *ContentBrowserPanel, keep_allocator: std.mem.Allocator) !void {
     self.mInEngine = false;
     self.mPath.clearRetainingCapacity();
-    try self.mPath.appendSlice(engine_allocator, self.mRoot.items);
+    try self.mPath.appendSlice(keep_allocator, self.mRoot.items);
+    self.mSinceListed = REFRESH_SECONDS;
 }
 
-/// Once a frame, before layout, while it is shown: the folder listed, and the tiles built again if it changed
+/// Once a frame, before layout, while it is shown: every REFRESH_SECONDS (or straight away when it is due) the folder
+/// listed, and the tiles built again if it changed
 pub fn Update(self: *ContentBrowserPanel, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("ContentBrowserPanel::Update", @src());
     defer zone.Deinit();
-    if (!self.IsOpen()) return;
-    const frame_allocator = engine_context.FrameAllocator();
+    if (!self.IsOpen()) {
+        //listed as soon as it is opened again
+        self.mSinceListed = REFRESH_SECONDS;
+        return;
+    }
 
     if (self.mPath.items.len == 0) {
-        if (self.mGrid != null) try self.Rebuild(engine_context, &.{}, "");
+        if (self.mGrid != null) try self.Rebuild(engine_context, &.{});
         return try ShowLine(engine_context, self.mMessage, "Open a project to see its files");
     }
+    self.mSinceListed += engine_context.mDT;
+    if (self.mSinceListed < REFRESH_SECONDS and self.mGrid != null) return;
+    self.mSinceListed = 0;
+
     const listing = ListFolder(engine_context, self.mPath.items) catch |err| {
         //gone from disk, or can't be read: back to the top of the project
         std.log.warn("The content browser can't show {s} ({s})", .{ self.mPath.items, @errorName(err) });
-        return try self.GoToRoot(engine_context.EngineAllocator());
+        return try self.GoToRoot(engine_context.Keep());
     };
     try ShowLine(engine_context, self.mMessage, "");
 
-    //what the tiles show, as one string to compare: the folder, then each kind and name
-    var built_from: std.ArrayList(u8) = .empty;
-    try built_from.appendSlice(frame_allocator, self.mPath.items);
-    for (listing) |listed| try built_from.print(frame_allocator, "\n{s}:{s}", .{ @tagName(listed.Kind), listed.Name });
-    if (std.mem.eql(u8, built_from.items, self.mBuiltFrom.items) and self.mGrid != null) return;
-    try self.Rebuild(engine_context, listing, built_from.items);
+    if (self.IsBuiltFrom(listing)) return;
+    try self.Rebuild(engine_context, listing);
+}
+
+/// Whether the tiles are of this folder and show `listing`: its folder, then each tile after the first (Back or
+/// EngineAssets, which only the folder decides) against each listed file, kind and name
+fn IsBuiltFrom(self: ContentBrowserPanel, listing: []const Listed) bool {
+    if (self.mGrid == null) return false;
+    if (!std.mem.eql(u8, self.mBuiltPath.items, self.mPath.items)) return false;
+    if (self.mTiles.items.len != listing.len + 1) return false;
+    for (self.mTiles.items[1..], listing, 1..) |tile, listed, i| {
+        if (tile.Kind != listed.Kind or !std.mem.eql(u8, self.NameOf(i), listed.Name)) return false;
+    }
+    return true;
 }
 
 /// What a click on `entity` does: a double click on a folder, Back, or an object file, or New Scene Layer, a New
@@ -301,12 +324,14 @@ fn IsAny(extension: []const u8, options: []const []const u8) bool {
 /// Does what a click asked for, other than NewScene, which is the editor's (its menu bar's New Game Scene). A new
 /// folder's tiles are built the next frame, and so is a new script's tile
 pub fn Run(self: *ContentBrowserPanel, engine_context: *EngineContext, action: Action) !void {
+    //another folder, or a file made in this one: listed next frame rather than at the next refresh
+    self.mSinceListed = REFRESH_SECONDS;
     switch (action) {
         .Up => {
             const top = self.Top();
             if (self.mPath.items.len <= top.len) {
                 //out of the engine's assets, back to the project they were entered from
-                if (self.mInEngine) try self.GoToRoot(engine_context.EngineAllocator());
+                if (self.mInEngine) try self.GoToRoot(engine_context.Keep());
                 return;
             }
             const last_slash = std.mem.lastIndexOfAny(u8, self.mPath.items, "/\\") orelse return;
@@ -314,31 +339,31 @@ pub fn Run(self: *ContentBrowserPanel, engine_context: *EngineContext, action: A
         },
         .Enter => |index| {
             const name = self.NameOf(index);
-            try self.mPath.print(engine_context.EngineAllocator(), "/{s}", .{name});
+            try self.mPath.print(engine_context.Keep(), "/{s}", .{name});
         },
         .EnterEngineAssets => {
             self.mInEngine = true;
             self.mPath.clearRetainingCapacity();
-            try self.mPath.appendSlice(engine_context.EngineAllocator(), self.mEngineRoot.items);
+            try self.mPath.appendSlice(engine_context.Keep(), self.mEngineRoot.items);
         },
         .Open => |index| {
-            const rel_path = try self.RelPath(engine_context.FrameAllocator(), self.NameOf(index));
+            const rel_path = try self.RelPath(engine_context.Scratch(), self.NameOf(index));
             const tmpl = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = self.CurrentPathType() } });
-            try engine_context.mEditorEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .OpenTmplEvent = .{ .mTmpl = tmpl } });
+            try engine_context.mEditorEventManager.Insert(engine_context.Keep(), .EndOfFrame, .{ .OpenTmplEvent = .{ .mTmpl = tmpl } });
         },
         .NewScene => {},
         .NewScript => |index| {
             if (self.mPath.items.len == 0) return;
-            const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), ".zig", self.mPath.items);
+            const abs_path = try PlatformUtils.SaveFile(engine_context.Scratch(), ".zig", self.mPath.items);
             if (abs_path.len == 0) return;
             try std.Io.Dir.cwd().writeFile(engine_context.Io(), .{ .sub_path = abs_path, .data = SCRIPT_TEMPLATES[index].Text });
         },
         .NewEnum => {
             if (self.mPath.items.len == 0) return;
-            const frame_allocator = engine_context.FrameAllocator();
-            const abs_path = try PlatformUtils.SaveFile(frame_allocator, ".zig", self.mPath.items);
+            const scratch_allocator = engine_context.Scratch();
+            const abs_path = try PlatformUtils.SaveFile(scratch_allocator, ".zig", self.mPath.items);
             if (abs_path.len == 0) return;
-            const text = try EnumFileText(frame_allocator, std.fs.path.stem(abs_path));
+            const text = try EnumFileText(scratch_allocator, std.fs.path.stem(abs_path));
             try std.Io.Dir.cwd().writeFile(engine_context.Io(), .{ .sub_path = abs_path, .data = text });
         },
     }
@@ -355,19 +380,19 @@ fn NameOf(self: ContentBrowserPanel, index: usize) []const u8 {
 }
 
 /// A file in the folder being shown, as a path from the project's folder, or from the engine's for an engine asset
-fn RelPath(self: ContentBrowserPanel, frame_allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
+fn RelPath(self: ContentBrowserPanel, scratch_allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
     const inside = std.mem.trimStart(u8, self.mPath.items[self.Top().len..], "/\\");
     if (self.mInEngine) {
-        if (inside.len == 0) return try std.fmt.allocPrint(frame_allocator, "{s}/{s}", .{ ENGINE_ASSETS_PATH, name });
-        return try std.fmt.allocPrint(frame_allocator, "{s}/{s}/{s}", .{ ENGINE_ASSETS_PATH, inside, name });
+        if (inside.len == 0) return try std.fmt.allocPrint(scratch_allocator, "{s}/{s}", .{ ENGINE_ASSETS_PATH, name });
+        return try std.fmt.allocPrint(scratch_allocator, "{s}/{s}/{s}", .{ ENGINE_ASSETS_PATH, inside, name });
     }
     if (inside.len == 0) return name;
-    return try std.fmt.allocPrint(frame_allocator, "{s}/{s}", .{ inside, name });
+    return try std.fmt.allocPrint(scratch_allocator, "{s}/{s}", .{ inside, name });
 }
 
 /// The folder's folders and the files the editor uses, folders first and then files, each by name
 fn ListFolder(engine_context: *EngineContext, path: []const u8) ![]Listed {
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
     const io = engine_context.Io();
     var dir = try std.Io.Dir.openDirAbsolute(io, path, .{ .iterate = true });
     defer dir.close(io);
@@ -380,7 +405,7 @@ fn ListFolder(engine_context: *EngineContext, path: []const u8) ![]Listed {
         if (entry.kind == .directory and (entry.name[0] == '.' or std.mem.eql(u8, entry.name, "zig-out"))) continue;
         if (at_project_top and std.mem.eql(u8, entry.name, Project.BUILD_FILE)) continue;
         const kind: Kind = if (entry.kind == .directory) .Folder else KindOf(entry.name) orelse continue;
-        try listing.append(frame_allocator, .{ .Kind = kind, .Name = try frame_allocator.dupe(u8, entry.name) });
+        try listing.append(scratch_allocator, .{ .Kind = kind, .Name = try scratch_allocator.dupe(u8, entry.name) });
     }
     std.mem.sort(Listed, listing.items, {}, struct {
         fn Before(_: void, a: Listed, b: Listed) bool {
@@ -403,19 +428,19 @@ fn KindOf(name: []const u8) ?Kind {
     return null;
 }
 
-/// The old tiles hidden and deleted, and new ones built for `listing`
-fn Rebuild(self: *ContentBrowserPanel, engine_context: *EngineContext, listing: []const Listed, built_from: []const u8) !void {
+/// The old tiles hidden and deleted, and new ones built for `listing` in the folder being shown. No folder: no tiles
+fn Rebuild(self: *ContentBrowserPanel, engine_context: *EngineContext, listing: []const Listed) !void {
     const zone = Tracy.ZoneInit("ContentBrowserPanel::Rebuild", @src());
     defer zone.Deinit();
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
     if (self.mGrid) |grid| try Widgets.Remove(engine_context, grid, &.{});
     self.mGrid = null;
     self.mTiles.clearRetainingCapacity();
     self.mNames.clearRetainingCapacity();
-    self.mBuiltFrom.clearRetainingCapacity();
-    try self.mBuiltFrom.appendSlice(engine_allocator, built_from);
+    self.mBuiltPath.clearRetainingCapacity();
+    try self.mBuiltPath.appendSlice(keep_allocator, self.mPath.items);
     try self.mArea.MarkLayoutDirty(engine_context);
-    if (built_from.len == 0) return;
+    if (self.mPath.items.len == 0) return;
 
     const grid = try Widgets.Grid(engine_context, .{ .Entity = self.mArea }, TILE_GAP);
     self.mGrid = grid;
@@ -428,25 +453,25 @@ fn Rebuild(self: *ContentBrowserPanel, engine_context: *EngineContext, listing: 
 }
 
 fn AddTile(self: *ContentBrowserPanel, engine_context: *EngineContext, grid: Entity, kind: Kind, name: []const u8) !void {
-    const engine_allocator = engine_context.EngineAllocator();
-    const shown = try ShortName(engine_context.FrameAllocator(), name);
+    const keep_allocator = engine_context.Keep();
+    const shown = try ShortName(engine_context.Scratch(), name);
     const tile = try Widgets.Tile(engine_context, .{ .Entity = grid }, self.mIcons.Of(kind), shown, TILE_WIDTH);
     switch (kind) {
         .Back, .Folder, .EngineAssets => {},
         //a file can be dragged, carrying which file it is
         .Texture, .Object, .Script, .Audio, .Font, .Theme => {
             _ = try tile.AddComponent(engine_context, DragSourceComponent{});
-            _ = try tile.AddComponent(engine_context, try FileRefComponent.Init(engine_context, try self.RelPath(engine_context.FrameAllocator(), name), self.CurrentPathType()));
+            _ = try tile.AddComponent(engine_context, try FileRefComponent.Init(engine_context, try self.RelPath(engine_context.Scratch(), name), self.CurrentPathType()));
         },
     }
-    try self.mTiles.append(engine_allocator, .{ .Entity = tile, .Kind = kind, .NameStart = self.mNames.items.len, .NameLen = name.len });
-    try self.mNames.appendSlice(engine_allocator, name);
+    try self.mTiles.append(keep_allocator, .{ .Entity = tile, .Kind = kind, .NameStart = self.mNames.items.len, .NameLen = name.len });
+    try self.mNames.appendSlice(keep_allocator, name);
 }
 
 /// `name`, shortened to MAX_NAME_LEN letters with "..." in it if it is longer. The file's type is kept at the end, so
 /// files of one name are told apart: "TacoRegular.ttf" is "TacoRe...ttf", its atlas "TacoRe...png". Counted in letters,
 /// not bytes
-fn ShortName(frame_allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
+fn ShortName(scratch_allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
     const letters = std.unicode.utf8CountCodepoints(name) catch return name;
     if (letters <= MAX_NAME_LEN) return name;
     //the type without its dot, if it is short enough to leave room for some of the name
@@ -455,7 +480,7 @@ fn ShortName(frame_allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
     var view = std.unicode.Utf8View.initUnchecked(name).iterator();
     var kept: usize = 0;
     for (0..MAX_NAME_LEN - 3 - ending.len) |_| kept += (view.nextCodepointSlice() orelse break).len;
-    return try std.fmt.allocPrint(frame_allocator, "{s}...{s}", .{ name[0..kept], ending });
+    return try std.fmt.allocPrint(scratch_allocator, "{s}...{s}", .{ name[0..kept], ending });
 }
 
 fn Same(a: Entity, b: Entity) bool {

@@ -123,11 +123,11 @@ mVersion: u32 = 0,
 /// Frees what the project holds without saving. The editor saves when it closes, before this runs
 pub fn Deinit(self: *Project, engine_context: *EngineContext) void {
     self.CloseFolder(engine_context);
-    self.mPath.deinit(engine_context.EngineAllocator());
-    self.mFileName.deinit(engine_context.EngineAllocator());
-    for (&self.mEntries.values) |*entry| entry.deinit(engine_context.EngineAllocator());
-    self.mName.deinit(engine_context.EngineAllocator());
-    self.mWindowIcon.deinit(engine_context.EngineAllocator());
+    self.mPath.deinit(engine_context.Keep());
+    self.mFileName.deinit(engine_context.Keep());
+    for (&self.mEntries.values) |*entry| entry.deinit(engine_context.Keep());
+    self.mName.deinit(engine_context.Keep());
+    self.mWindowIcon.deinit(engine_context.Keep());
 }
 
 pub fn IsOpen(self: Project) bool {
@@ -174,7 +174,7 @@ pub fn GetName(self: *const Project) []const u8 {
 pub fn SetName(self: *Project, engine_context: *EngineContext, name: []const u8) !void {
     if (!self.IsOpen()) return error.NoProjectOpen;
     self.mName.clearRetainingCapacity();
-    try self.mName.appendSlice(engine_context.EngineAllocator(), name);
+    try self.mName.appendSlice(engine_context.Keep(), name);
     self.mVersion +%= 1;
     try self.SaveProjectFile(engine_context);
 }
@@ -205,7 +205,7 @@ fn SetFileSetting(self: *Project, engine_context: *EngineContext, setting: *std.
     if (!inside) return error.NotInProject;
 
     setting.clearRetainingCapacity();
-    try setting.appendSlice(engine_context.EngineAllocator(), self.GetRelPath(abs_path));
+    try setting.appendSlice(engine_context.Keep(), self.GetRelPath(abs_path));
     //the same path on every platform
     std.mem.replaceScalar(u8, setting.items, '\\', '/');
     self.mVersion +%= 1;
@@ -221,9 +221,9 @@ pub fn New(self: *Project, engine_context: *EngineContext, folder_abs_path: []co
 
     try self.Close(engine_context);
 
-    const file_name = try std.fmt.allocPrint(engine_context.FrameAllocator(), "{s}{s}", .{ std.fs.path.basename(folder_abs_path), FILE_EXTENSION });
+    const file_name = try std.fmt.allocPrint(engine_context.Scratch(), "{s}{s}", .{ std.fs.path.basename(folder_abs_path), FILE_EXTENSION });
     try self.OpenFolder(engine_context, folder_abs_path, file_name);
-    try self.mName.appendSlice(engine_context.EngineAllocator(), std.fs.path.basename(folder_abs_path));
+    try self.mName.appendSlice(engine_context.Keep(), std.fs.path.basename(folder_abs_path));
 
     inline for (SETTINGS_OWNERS) |owner_field| {
         try @field(engine_context, owner_field).ResetProjectSettings(engine_context);
@@ -274,19 +274,19 @@ pub fn WriteBuildFiles(self: *Project, engine_context: *EngineContext) !void {
     defer zone.Deinit();
 
     const io = engine_context.Io();
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
     const current = try self.ReadIfThere(engine_context, BUILD_FILE);
     if (current) |text| {
         if (!std.mem.startsWith(u8, text, BUILD_FILE_MARK)) return;
     }
 
-    const engine_path = try std.Io.Dir.cwd().realPathFileAlloc(io, ".", frame_allocator);
-    const relative = try std.fs.path.relativeAlloc(frame_allocator, engine_path, null, self.mPath.items, engine_path);
+    const engine_path = try std.Io.Dir.cwd().realPathFileAlloc(io, ".", scratch_allocator);
+    const relative = try std.fs.path.relativeAlloc(scratch_allocator, engine_path, null, self.mPath.items, engine_path);
     //a dependency's path can't be absolute, and there is no relative one to another drive
     if (std.fs.path.isAbsolute(relative)) return error.EngineOnAnotherDrive;
     std.mem.replaceScalar(u8, relative, '\\', '/');
-    const zon = try std.fmt.allocPrint(frame_allocator, "{s}{f}{s}", .{ BUILD_ZON_BEFORE_PATH, std.zig.fmtString(relative), BUILD_ZON_AFTER_PATH });
+    const zon = try std.fmt.allocPrint(scratch_allocator, "{s}{f}{s}", .{ BUILD_ZON_BEFORE_PATH, std.zig.fmtString(relative), BUILD_ZON_AFTER_PATH });
 
     //only when different: ZLS loads the build again when one changes
     if (current == null or !std.mem.eql(u8, current.?, BUILD_FILE_TEXT)) {
@@ -300,7 +300,7 @@ pub fn WriteBuildFiles(self: *Project, engine_context: *EngineContext) !void {
 
 /// A file in the project folder's text for this frame, null if it isn't there
 fn ReadIfThere(self: *Project, engine_context: *EngineContext, rel_path: []const u8) !?[]const u8 {
-    return self.GetDirectory().readFileAlloc(engine_context.Io(), rel_path, engine_context.FrameAllocator(), .unlimited) catch |err| switch (err) {
+    return self.GetDirectory().readFileAlloc(engine_context.Io(), rel_path, engine_context.Scratch(), .unlimited) catch |err| switch (err) {
         error.FileNotFound => null,
         else => |e| return e,
     };
@@ -314,13 +314,13 @@ pub fn Close(self: *Project, engine_context: *EngineContext) !void {
 }
 
 fn OpenFolder(self: *Project, engine_context: *EngineContext, folder_abs_path: []const u8, file_name: []const u8) !void {
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
     self.mDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), folder_abs_path, .{});
     errdefer self.CloseFolder(engine_context);
 
-    try self.mPath.appendSlice(engine_allocator, folder_abs_path);
-    try self.mFileName.appendSlice(engine_allocator, file_name);
+    try self.mPath.appendSlice(keep_allocator, folder_abs_path);
+    try self.mFileName.appendSlice(keep_allocator, file_name);
 }
 
 fn CloseFolder(self: *Project, engine_context: *EngineContext) void {
@@ -341,14 +341,14 @@ fn SaveProjectFile(self: *Project, engine_context: *EngineContext) !void {
 }
 
 fn LoadProjectFile(self: *Project, engine_context: *EngineContext) !void {
-    const frame_allocator = engine_context.FrameAllocator();
-    const contents = try self.GetDirectory().readFileAlloc(engine_context.Io(), self.mFileName.items, frame_allocator, .unlimited);
-    const project_file = try std.json.parseFromSliceLeaky(ProjectFile, frame_allocator, contents, .{});
+    const scratch_allocator = engine_context.Scratch();
+    const contents = try self.GetDirectory().readFileAlloc(engine_context.Io(), self.mFileName.items, scratch_allocator, .unlimited);
+    const project_file = try std.json.parseFromSliceLeaky(ProjectFile, scratch_allocator, contents, .{});
     inline for (comptime std.enums.values(Entry)) |entry| {
-        try self.mEntries.getPtr(entry).appendSlice(engine_context.EngineAllocator(), @field(project_file, entry.FieldName()));
+        try self.mEntries.getPtr(entry).appendSlice(engine_context.Keep(), @field(project_file, entry.FieldName()));
     }
-    try self.mName.appendSlice(engine_context.EngineAllocator(), project_file.Name);
-    try self.mWindowIcon.appendSlice(engine_context.EngineAllocator(), project_file.WindowIcon);
+    try self.mName.appendSlice(engine_context.Keep(), project_file.Name);
+    try self.mWindowIcon.appendSlice(engine_context.Keep(), project_file.WindowIcon);
     self.mVersion +%= 1;
 }
 
@@ -357,7 +357,7 @@ fn SettingsPath(comptime owner_field: []const u8) []const u8 {
 }
 
 fn SaveOwnerSettings(self: *Project, engine_context: *EngineContext, comptime owner_field: []const u8) !void {
-    var out: std.Io.Writer.Allocating = .init(engine_context.FrameAllocator());
+    var out: std.Io.Writer.Allocating = .init(engine_context.Scratch());
     defer out.deinit();
 
     var write_stream: std.json.Stringify = .{ .writer = &out.writer, .options = STRINGIFY_OPTIONS };
@@ -370,15 +370,15 @@ fn SaveOwnerSettings(self: *Project, engine_context: *EngineContext, comptime ow
 fn LoadOwnerSettings(self: *Project, engine_context: *EngineContext, comptime owner_field: []const u8) !void {
     const owner = &@field(engine_context, owner_field);
 
-    const contents = try self.GetDirectory().readFileAlloc(engine_context.Io(), comptime SettingsPath(owner_field), engine_context.FrameAllocator(), .unlimited);
+    const contents = try self.GetDirectory().readFileAlloc(engine_context.Io(), comptime SettingsPath(owner_field), engine_context.Scratch(), .unlimited);
 
-    var scanner = std.json.Scanner.initCompleteInput(engine_context.FrameAllocator(), contents);
+    var scanner = std.json.Scanner.initCompleteInput(engine_context.Scratch(), contents);
     defer scanner.deinit();
     try owner.LoadProjectSettings(engine_context, &scanner);
 }
 
 fn WriteJson(self: *Project, engine_context: *EngineContext, rel_path: []const u8, value: anytype) !void {
-    var out: std.Io.Writer.Allocating = .init(engine_context.FrameAllocator());
+    var out: std.Io.Writer.Allocating = .init(engine_context.Scratch());
     defer out.deinit();
 
     var write_stream: std.json.Stringify = .{ .writer = &out.writer, .options = STRINGIFY_OPTIONS };

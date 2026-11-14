@@ -94,11 +94,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         /// thread (Transactions.Current), components are read and changed through it, see Transaction
         mTransactions: ?*const Transactions,
 
-        pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
+        pub fn Init(self: *Self, keep_allocator: std.mem.Allocator) !void {
             _ValidateCompList(components_types);
             const zone = Tracy.ZoneInit(debug_name ++ "::Init", @src());
             defer zone.Deinit();
-            try self.mComponentManager.Init(engine_allocator);
+            try self.mComponentManager.Init(keep_allocator);
         }
 
         pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
@@ -107,9 +107,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             // staged components go first: like any component, their Deinit can reach into the arrays
             self._DeinitStagedAdds(engine_context);
             self.mComponentManager.Deinit(engine_context);
-            self.mECSEventManager.Deinit(engine_context.EngineAllocator());
-            self.mStagingArena.promote(engine_context.EngineAllocator()).deinit();
-            self.mStaged.deinit(engine_context.EngineAllocator());
+            self.mECSEventManager.Deinit(engine_context.Keep());
+            self.mStagingArena.promote(engine_context.Keep()).deinit();
+            self.mStaged.deinit(engine_context.Keep());
         }
 
         pub fn SetRemovalHook(self: *Self, hook: RemovalHook) void {
@@ -128,8 +128,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             self._DeinitStagedAdds(engine_context);
             self.mComponentManager.clearAndFree(engine_context);
             // pending events refer to entities that no longer exist
-            self.mECSEventManager.EventsReset(engine_context.EngineAllocator(), .ClearAndFree);
-            self._ResetStagingArena(engine_context.EngineAllocator());
+            self.mECSEventManager.EventsReset(engine_context.Keep(), .ClearAndFree);
+            self._ResetStagingArena(engine_context.Keep());
             self.mNextID = 0;
         }
 
@@ -150,7 +150,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
 
             // queued events name entities by id, which the copy shares, so they carry over as they are. Except that
             // a queued add also points into this ECS's staging arena, so each one is given a clone of its own there
-            try self.mECSEventManager.CopyInto(engine_context.EngineAllocator(), &other.mECSEventManager);
+            try self.mECSEventManager.CopyInto(engine_context.Keep(), &other.mECSEventManager);
             try other._CloneCopiedAdds(engine_context, self);
 
             other.mNextID = self.mNextID;
@@ -165,19 +165,19 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         pub const SlotOf = ComponentManagerT.SlotOf;
 
         //---------------entity lifetime--------------
-        pub fn CreateEntity(self: *Self, engine_allocator: std.mem.Allocator) !entity_t {
+        pub fn CreateEntity(self: *Self, keep_allocator: std.mem.Allocator) !entity_t {
             const zone = Tracy.ZoneInit(debug_name ++ "::CreateEntity", @src());
             defer zone.Deinit();
 
-            const new_entity_id = try self._CreateID(engine_allocator);
-            _ = try self.mComponentManager.AddComponent(engine_allocator, new_entity_id, EntityTagComponent{});
+            const new_entity_id = try self._CreateID(keep_allocator);
+            _ = try self.mComponentManager.AddComponent(keep_allocator, new_entity_id, EntityTagComponent{});
 
             return new_entity_id;
         }
 
-        fn CreateScript(self: *Self, engine_allocator: std.mem.Allocator) !entity_t {
-            const new_entity_id = try self._CreateID(engine_allocator);
-            _ = try self.mComponentManager.AddComponent(engine_allocator, new_entity_id, ScriptTagComponent{});
+        fn CreateScript(self: *Self, keep_allocator: std.mem.Allocator) !entity_t {
+            const new_entity_id = try self._CreateID(keep_allocator);
+            _ = try self.mComponentManager.AddComponent(keep_allocator, new_entity_id, ScriptTagComponent{});
 
             return new_entity_id;
         }
@@ -185,7 +185,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         // returns an active id that has only its SkipFieldComponent, reusing a destroyed id when there is one. An open
         // transaction writes it down, to destroy it if it is dropped. A speculating one refuses (error.RunSerially): ids
         // come from the shared free list, and the hook is run again on its own
-        fn _CreateID(self: *Self, engine_allocator: std.mem.Allocator) !entity_t {
+        fn _CreateID(self: *Self, keep_allocator: std.mem.Allocator) !entity_t {
             const transaction = self._OpenTransaction();
             if (transaction) |open| {
                 if (open.RefuseSpeculative()) |err| return err;
@@ -196,7 +196,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                 const next_id = self.mNextID;
                 std.debug.assert(!self.IsActiveEntity(next_id));
 
-                try self.mComponentManager.CreateNewEntity(engine_allocator, next_id);
+                try self.mComponentManager.CreateNewEntity(keep_allocator, next_id);
                 self.mNextID += 1; // only consume the id once it has actually been created
                 break :blk next_id;
             };
@@ -211,7 +211,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             std.debug.assert(self.IsActiveEntity(entity_id));
             if (self._OpenTransaction()) |transaction| return try self._Hold(transaction, self._HeldOp(.Destroy, entity_id, 0));
             if (self._Queues()) {
-                try self._Enqueue(engine_context.EngineAllocator(), .{ .DestroyEntity = .{ .mEntityID = entity_id } });
+                try self._Enqueue(engine_context.Keep(), .{ .DestroyEntity = .{ .mEntityID = entity_id } });
                 return;
             }
             try self._DestroyNow(engine_context, entity_id);
@@ -230,14 +230,14 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             const zone = Tracy.ZoneInit(debug_name ++ "::DuplicateEntity", @src());
             defer zone.Deinit();
 
-            const engine_allocator = engine_context.EngineAllocator();
+            const keep_allocator = engine_context.Keep();
             const child_type: ChildType = if (self.HasComponent(ScriptTagComponent, original_entity_id)) .Script else .Entity;
 
             const new_entity_id = if (self.GetComponent(ChildComponent, original_entity_id)) |child_component|
                 try self.AddChild(engine_context, child_component.mParent, child_type)
             else switch (child_type) {
-                .Entity => try self.CreateEntity(engine_allocator),
-                .Script => try self.CreateScript(engine_allocator),
+                .Entity => try self.CreateEntity(keep_allocator),
+                .Script => try self.CreateScript(keep_allocator),
             };
 
             // the adds still staged for anything, found in one pass over the queue rather than one per node of the
@@ -245,12 +245,12 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             // its own. Taken now, since staging the copies appends to this same queue, so the copies' own adds
             // aren't copied again. With nothing staged there is nothing to find
             var queued_adds: std.ArrayList(QueuedAdd) = .empty;
-            defer queued_adds.deinit(engine_allocator);
+            defer queued_adds.deinit(keep_allocator);
             if (self.mStaged.count() > 0) {
                 for (self.mECSEventManager.mEventsArray.getPtr(.EndOfFrame).items) |event| switch (event) {
                     .AddComponent => |add| {
                         if (self._GetStaged(add.mEntityID, add.mComponentInd) != add.mData) continue; // taken back off
-                        try queued_adds.append(engine_allocator, .{ .mEntityID = add.mEntityID, .mComponentInd = add.mComponentInd, .mData = add.mData });
+                        try queued_adds.append(keep_allocator, .{ .mEntityID = add.mEntityID, .mComponentInd = add.mComponentInd, .mData = add.mData });
                     },
                     else => {},
                 };
@@ -279,7 +279,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
 
         // stages a copy of one entity's components and subtree onto another, already created, entity
         fn _InternalDuplicateInto(self: *Self, engine_context: *EngineContext, original_entity_id: entity_t, new_entity_id: entity_t, queued_adds: []const QueuedAdd) anyerror!void {
-            const engine_allocator = engine_context.EngineAllocator();
+            const keep_allocator = engine_context.Keep();
 
             // iterated from a copy, since nothing here needs the original's own one
             var original_skipfield = self.GetComponent(SkipFieldComponent, original_entity_id).?.mSkipField;
@@ -293,7 +293,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                 if (component_ind == EntityTagComponent.Ind) continue;
                 if (component_ind == ScriptTagComponent.Ind) continue;
 
-                var staging_arena = self.mStagingArena.promote(engine_allocator);
+                var staging_arena = self.mStagingArena.promote(keep_allocator);
                 defer self.mStagingArena = staging_arena.state;
                 const staged_component = try self.mComponentManager.StageDuplicate(engine_context, staging_arena.allocator(), component_ind, original_entity_id);
                 try self._StageOrAddCopy(engine_context, new_entity_id, component_ind, staged_component);
@@ -302,7 +302,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             // and the ones still staged for it
             const own_start, const own_end = std.sort.equalRange(QueuedAdd, queued_adds, original_entity_id, QueuedAdd.CompareTo);
             for (queued_adds[own_start..own_end]) |add| {
-                var staging_arena = self.mStagingArena.promote(engine_allocator);
+                var staging_arena = self.mStagingArena.promote(keep_allocator);
                 defer self.mStagingArena = staging_arena.state;
                 const staged_component = try self.mComponentManager.CloneStaged(engine_context, staging_arena.allocator(), add.mComponentInd, add.mData);
                 try self._StageOrAddCopy(engine_context, new_entity_id, add.mComponentInd, staged_component);
@@ -325,9 +325,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             }
             if (self.mComponentManager.IsTag(component_ind) or !self._Queues()) {
                 self._CheckStorageChange(component_ind, "Adding");
-                try self.mComponentManager.AddStaged(engine_context.EngineAllocator(), new_entity_id, component_ind, staged_component);
+                try self.mComponentManager.AddStaged(engine_context.Keep(), new_entity_id, component_ind, staged_component);
             } else {
-                try self._QueueStagedAdd(engine_context.EngineAllocator(), new_entity_id, component_ind, staged_component);
+                try self._QueueStagedAdd(engine_context.Keep(), new_entity_id, component_ind, staged_component);
             }
         }
 
@@ -486,10 +486,10 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             const zone = Tracy.ZoneInit(debug_name ++ "::AddChild", @src());
             defer zone.Deinit();
 
-            const engine_allocator = engine_context.EngineAllocator();
+            const keep_allocator = engine_context.Keep();
             const new_entity_id = switch (child_type) {
-                .Entity => try self.CreateEntity(engine_allocator),
-                .Script => try self.CreateScript(engine_allocator),
+                .Entity => try self.CreateEntity(keep_allocator),
+                .Script => try self.CreateScript(keep_allocator),
             };
 
             try self._InternalLinkChild(engine_context, entity_id, new_entity_id);
@@ -676,9 +676,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         }
 
         // queues a removal or a destroy
-        fn _Enqueue(self: *Self, engine_allocator: std.mem.Allocator, event: ECSEventDataT.EventT) !void {
+        fn _Enqueue(self: *Self, keep_allocator: std.mem.Allocator, event: ECSEventDataT.EventT) !void {
             self._CheckMainThread("Queueing a removal or a destroy");
-            try self.mECSEventManager.Insert(engine_allocator, .EndOfFrame, event);
+            try self.mECSEventManager.Insert(keep_allocator, .EndOfFrame, event);
         }
 
         //---------------what an open transaction holds until it ends (see Transaction)---------------
@@ -760,7 +760,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         }
 
         fn _ApplyHeldOrFail(self: *Self, engine_context: *EngineContext, op: *Transaction.Op) !void {
-            const engine_allocator = engine_context.EngineAllocator();
+            const keep_allocator = engine_context.Keep();
             const id: entity_t = @intCast(op.mEntityID);
             switch (op.mKind) {
                 .Add => {
@@ -768,22 +768,22 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                     var staged = op.mData.?;
                     if (op.mDataInArena) {
                         // the transaction's arena goes with it, so the value moves into the staging arena
-                        var staging_arena = self.mStagingArena.promote(engine_allocator);
+                        var staging_arena = self.mStagingArena.promote(keep_allocator);
                         defer self.mStagingArena = staging_arena.state;
                         staged = try self.mComponentManager.MoveStaged(staging_arena.allocator(), op.mComponentInd, staged);
                     }
                     errdefer self.mComponentManager.DeinitStaged(engine_context, op.mComponentInd, staged);
                     if (self._Queues()) {
-                        try self._QueueStagedAdd(engine_allocator, id, op.mComponentInd, staged);
+                        try self._QueueStagedAdd(keep_allocator, id, op.mComponentInd, staged);
                     } else {
-                        try self.mComponentManager.AddStaged(engine_allocator, id, op.mComponentInd, staged);
+                        try self.mComponentManager.AddStaged(keep_allocator, id, op.mComponentInd, staged);
                     }
                 },
                 .Tag => {
                     if (!self.IsActiveEntity(id)) return;
                     const has = self.mComponentManager.HasComponentInd(op.mComponentInd, id);
                     if (op.mOn and !has) {
-                        try self.mComponentManager.AddTagInd(engine_allocator, id, op.mComponentInd);
+                        try self.mComponentManager.AddTagInd(keep_allocator, id, op.mComponentInd);
                         var no_value: u8 = 0;
                         _ = try self.mECSEventManager.Dispatch(engine_context, .{ .AddComponent = .{ .mEntityID = id, .mComponentInd = op.mComponentInd, .mData = &no_value } });
                     } else if (!op.mOn and has) {
@@ -793,7 +793,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                 .Remove => {
                     if (!self.IsActiveEntity(id)) return;
                     if (self._Queues()) {
-                        try self._Enqueue(engine_allocator, .{ .RemoveComponent = .{ .mEntityID = id, .mComponentInd = op.mComponentInd } });
+                        try self._Enqueue(keep_allocator, .{ .RemoveComponent = .{ .mEntityID = id, .mComponentInd = op.mComponentInd } });
                     } else {
                         try self._RemoveNow(engine_context, id, op.mComponentInd);
                     }
@@ -801,7 +801,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                 .Destroy => {
                     if (!self.IsActiveEntity(id)) return;
                     if (self._Queues()) {
-                        try self._Enqueue(engine_allocator, .{ .DestroyEntity = .{ .mEntityID = id } });
+                        try self._Enqueue(keep_allocator, .{ .DestroyEntity = .{ .mEntityID = id } });
                     } else {
                         try self._DestroyNow(engine_context, id);
                     }
@@ -859,14 +859,14 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             // when the add lands instead, since a queued removal of it may land first
             std.debug.assert(self._GetStaged(entity_id, ComponentInd(component_t)) == null);
 
-            const engine_allocator = engine_context.EngineAllocator();
+            const keep_allocator = engine_context.Keep();
 
-            var staging_arena = self.mStagingArena.promote(engine_allocator);
+            var staging_arena = self.mStagingArena.promote(keep_allocator);
             defer self.mStagingArena = staging_arena.state;
             const staged_component = try staging_arena.allocator().create(component_t);
             staged_component.* = new_component;
 
-            try self._QueueStagedAdd(engine_allocator, entity_id, ComponentInd(component_t), staged_component);
+            try self._QueueStagedAdd(keep_allocator, entity_id, ComponentInd(component_t), staged_component);
 
             return staged_component;
         }
@@ -896,13 +896,13 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         }
 
         // lists a component already in the staging arena under its entity and queues its add
-        fn _QueueStagedAdd(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize, staged_component: *anyopaque) !void {
+        fn _QueueStagedAdd(self: *Self, keep_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize, staged_component: *anyopaque) !void {
             self._CheckMainThread("Staging an add");
             const key = StagedKey{ .mEntityID = entity_id, .mComponentInd = component_ind };
-            try self.mStaged.put(engine_allocator, key, staged_component);
+            try self.mStaged.put(keep_allocator, key, staged_component);
             errdefer _ = self.mStaged.remove(key);
 
-            try self.mECSEventManager.Insert(engine_allocator, .EndOfFrame, .{ .AddComponent = .{
+            try self.mECSEventManager.Insert(keep_allocator, .EndOfFrame, .{ .AddComponent = .{
                 .mEntityID = entity_id,
                 .mComponentInd = component_ind,
                 .mData = staged_component,
@@ -939,7 +939,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             }
 
             self._CheckStorageChange(ComponentInd(component_t), "Adding");
-            const component_ptr = try self.mComponentManager.AddComponent(engine_context.EngineAllocator(), entity_id, new_component);
+            const component_ptr = try self.mComponentManager.AddComponent(engine_context.Keep(), entity_id, new_component);
 
             _ = try self.mECSEventManager.Dispatch(engine_context, .{ .AddComponent = .{
                 .mEntityID = entity_id,
@@ -962,7 +962,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                 return try self._Hold(transaction, self._HeldOp(.Remove, entity_id, component_ind));
             }
             if (self.mComponentManager.IsTag(component_ind) or !self._Queues()) return try self._RemoveNow(engine_context, entity_id, component_ind);
-            try self._Enqueue(engine_context.EngineAllocator(), .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
+            try self._Enqueue(engine_context.Keep(), .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
         }
 
         /// RemoveComponent made right away even during a run. Only where nothing holds a pointer into that
@@ -1138,10 +1138,10 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             }
             zone.Value(event_ind);
 
-            self.mECSEventManager.ClearCategory(engine_context.EngineAllocator(), .EndOfFrame, .ClearRetainingCapacity);
+            self.mECSEventManager.ClearCategory(engine_context.Keep(), .EndOfFrame, .ClearRetainingCapacity);
             // every staged component has now been copied onto its entity or deinitialized with it
             std.debug.assert(self.mStaged.count() == 0);
-            self._ResetStagingArena(engine_context.EngineAllocator());
+            self._ResetStagingArena(engine_context.Keep());
         }
 
         /// Applies a queued AddComponent. One taken back off the stage (RemoveComponentSync) is skipped, its
@@ -1161,7 +1161,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             const zone = Tracy.ZoneInit(debug_name ++ "::_InternalAddComponent", @src());
             defer zone.Deinit();
 
-            try self.mComponentManager.AddStaged(engine_context.EngineAllocator(), entity_id, component_ind, staged);
+            try self.mComponentManager.AddStaged(engine_context.Keep(), entity_id, component_ind, staged);
         }
 
         // deinitializes every component still staged, for when the queue is dropped unprocessed
@@ -1178,8 +1178,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         // isn't listed here, so it is skipped and never read. On failure the clones made so far are listed, which is
         // all Copy's clearAndFree needs to free them
         fn _CloneCopiedAdds(self: *Self, engine_context: *EngineContext, source: *const Self) !void {
-            const engine_allocator = engine_context.EngineAllocator();
-            var staging_arena = self.mStagingArena.promote(engine_allocator);
+            const keep_allocator = engine_context.Keep();
+            var staging_arena = self.mStagingArena.promote(keep_allocator);
             defer self.mStagingArena = staging_arena.state;
 
             for (self.mECSEventManager.mEventsArray.getPtr(.EndOfFrame).items) |*event| switch (event.*) {
@@ -1187,14 +1187,14 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                     if (source._GetStaged(add.mEntityID, add.mComponentInd) != add.mData) continue;
                     add.mData = try self.mComponentManager.CloneStaged(engine_context, staging_arena.allocator(), add.mComponentInd, add.mData);
                     errdefer self.mComponentManager.DeinitStaged(engine_context, add.mComponentInd, add.mData);
-                    try self.mStaged.put(engine_allocator, .{ .mEntityID = add.mEntityID, .mComponentInd = add.mComponentInd }, add.mData);
+                    try self.mStaged.put(keep_allocator, .{ .mEntityID = add.mEntityID, .mComponentInd = add.mComponentInd }, add.mData);
                 },
                 else => {},
             };
         }
 
-        fn _ResetStagingArena(self: *Self, engine_allocator: std.mem.Allocator) void {
-            var staging_arena = self.mStagingArena.promote(engine_allocator);
+        fn _ResetStagingArena(self: *Self, keep_allocator: std.mem.Allocator) void {
+            var staging_arena = self.mStagingArena.promote(keep_allocator);
             _ = staging_arena.reset(.retain_capacity);
             self.mStagingArena = staging_arena.state;
         }

@@ -178,26 +178,26 @@ pub const ShadingBuffers = struct {
 
     pub fn Init(self: *ShadingBuffers, engine_context: *EngineContext) !void {
         self.mSurfShadingBuff.Init(engine_context, @sizeOf(SurfShadingData) * 100, 0, .Compute);
-        self.mSurfShadingBuffBase = try std.ArrayList(SurfShadingData).initCapacity(engine_context.EngineAllocator(), 100);
+        self.mSurfShadingBuffBase = try std.ArrayList(SurfShadingData).initCapacity(engine_context.Keep(), 100);
 
         self.mMedShadingBuff.Init(engine_context, @sizeOf(MedShadingData) * 100, 1, .Compute);
-        self.mMedShadingBuffBase = try std.ArrayList(MedShadingData).initCapacity(engine_context.EngineAllocator(), 100);
+        self.mMedShadingBuffBase = try std.ArrayList(MedShadingData).initCapacity(engine_context.Keep(), 100);
     }
     pub fn Deinit(self: *ShadingBuffers, engine_context: *EngineContext) void {
         self.mSurfShadingBuff.Deinit(engine_context);
-        self.mSurfShadingBuffBase.deinit(engine_context.EngineAllocator());
+        self.mSurfShadingBuffBase.deinit(engine_context.Keep());
 
         self.mMedShadingBuff.Deinit(engine_context);
-        self.mMedShadingBuffBase.deinit(engine_context.EngineAllocator());
-        self.mGlyphSurfaces.deinit(engine_context.EngineAllocator());
+        self.mMedShadingBuffBase.deinit(engine_context.Keep());
+        self.mGlyphSurfaces.deinit(engine_context.Keep());
     }
     pub fn AddSurface(
         self: *ShadingBuffers,
-        engine_allocator: std.mem.Allocator,
+        keep_allocator: std.mem.Allocator,
         tex_options: *const Texture2D.TexOptions,
         texture_asset: *Texture2D,
     ) !usize {
-        try self.mSurfShadingBuffBase.append(engine_allocator, .{
+        try self.mSurfShadingBuffBase.append(keep_allocator, .{
             .Color = tex_options.mColor.ToArray(),
             .TextureUV0 = tex_options.mTextureUV0.ToArray(),
             .TextureUV1 = tex_options.mTextureUV1.ToArray(),
@@ -214,13 +214,13 @@ pub const ShadingBuffers = struct {
     /// is turned over for it to show the right way up
     pub fn AddSurfaceSlot(
         self: *ShadingBuffers,
-        engine_allocator: std.mem.Allocator,
+        keep_allocator: std.mem.Allocator,
         tex_options: *const Texture2D.TexOptions,
         texture_handle: u32,
         width: usize,
         height: usize,
     ) !usize {
-        try self.mSurfShadingBuffBase.append(engine_allocator, .{
+        try self.mSurfShadingBuffBase.append(keep_allocator, .{
             .Color = tex_options.mColor.ToArray(),
             .TextureUV0 = .{ tex_options.mTextureUV0.x, 1 - tex_options.mTextureUV0.y },
             .TextureUV1 = .{ tex_options.mTextureUV1.x, 1 - tex_options.mTextureUV1.y },
@@ -237,17 +237,17 @@ pub const ShadingBuffers = struct {
     /// read from `font` (TextLayout.GlyphUVs) only when its entry is made. Good until the next Reset
     pub fn GlyphSurface(
         self: *ShadingBuffers,
-        engine_allocator: std.mem.Allocator,
+        keep_allocator: std.mem.Allocator,
         key: GlyphKey,
         atlas_width: usize,
         atlas_height: usize,
         font: anytype,
     ) !usize {
-        const entry = try self.mGlyphSurfaces.getOrPut(engine_allocator, key);
+        const entry = try self.mGlyphSurfaces.getOrPut(keep_allocator, key);
         if (!entry.found_existing) {
             errdefer _ = self.mGlyphSurfaces.remove(key);
             const uvs = TextLayout.GlyphUVs(@TypeOf(font.*), font, key.Glyph);
-            try self.mSurfShadingBuffBase.append(engine_allocator, .{
+            try self.mSurfShadingBuffBase.append(keep_allocator, .{
                 .Color = .{ 1.0, 1.0, 1.0, 1.0 },
                 .TextureUV0 = uvs.UV0.ToArray(),
                 .TextureUV1 = uvs.UV1.ToArray(),
@@ -260,8 +260,8 @@ pub const ShadingBuffers = struct {
         }
         return entry.value_ptr.*;
     }
-    pub fn AddMedium(self: *ShadingBuffers, engine_allocator: std.mem.Allocator, color: Vec4(f32), absorption: Vec3(f32), scattering: Vec3(f32)) !usize {
-        try self.mMedShadingBuffBase.append(engine_allocator, .{
+    pub fn AddMedium(self: *ShadingBuffers, keep_allocator: std.mem.Allocator, color: Vec4(f32), absorption: Vec3(f32), scattering: Vec3(f32)) !usize {
+        try self.mMedShadingBuffBase.append(keep_allocator, .{
             .Color = color.ToArray(),
             .Absorption = absorption.ToArray(),
             .Scattering = scattering.ToArray(),
@@ -269,12 +269,12 @@ pub const ShadingBuffers = struct {
 
         return self.mMedShadingBuffBase.items.len - 1;
     }
-    pub fn Reset(self: *ShadingBuffers, engine_allocator: std.mem.Allocator, reset_options: ResetOptions) void {
+    pub fn Reset(self: *ShadingBuffers, keep_allocator: std.mem.Allocator, reset_options: ResetOptions) void {
         switch (reset_options) {
             .ClearAndFree => {
-                self.mSurfShadingBuffBase.clearAndFree(engine_allocator);
-                self.mMedShadingBuffBase.clearAndFree(engine_allocator);
-                self.mGlyphSurfaces.clearAndFree(engine_allocator);
+                self.mSurfShadingBuffBase.clearAndFree(keep_allocator);
+                self.mMedShadingBuffBase.clearAndFree(keep_allocator);
+                self.mGlyphSurfaces.clearAndFree(keep_allocator);
             },
             .ClearRetainingCapacity => {
                 self.mSurfShadingBuffBase.clearRetainingCapacity();
@@ -379,13 +379,13 @@ pub fn EndFrame(self: *Renderer) void {
 }
 
 pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
-    self.mShownCopies.deinit(engine_context.EngineAllocator());
+    self.mShownCopies.deinit(engine_context.Keep());
     self.mSDFShading.Deinit(engine_context);
     self.mTextureManager.Deinit(engine_context);
     self.mGamePipeline.Deinit(engine_context);
     self.mOverlayPipeline.Deinit(engine_context);
     self.mR2D.Deinit(engine_context);
-    self.mR3D.Deinit(engine_context.EngineAllocator());
+    self.mR3D.Deinit(engine_context.Keep());
     self.mPlatform.Deinit(&engine_context.mAppWindow);
 }
 
@@ -458,7 +458,7 @@ pub const Fill = struct {
     pub const Name = "RenderFill";
 
     pub fn Run(engine_context: *EngineContext, self: *Renderer, world: *WorldManager, view_scenes: ViewScenes, camera_view: CameraView, stats: *RenderStats) !void {
-        try self.BeginRendering(engine_context.EngineAllocator());
+        try self.BeginRendering(engine_context.Keep());
 
         const bvh = &world.mBVH;
         const canvas = ShapeGeometry.WorldCanvas(world, camera_view);
@@ -481,20 +481,20 @@ pub const Fill = struct {
 /// is the camera in the tree's units, which only a collider's edge band reads
 fn FillLayer(self: *Renderer, engine_context: *EngineContext, world: *WorldManager, tree: *const WorldBVH.LayerTree, buffers: *Renderer2D.RenderBuffers, scenes: u64, view: CameraView, colliders: ?Renderer2D.ColliderShadings, stats: *RenderStats) !void {
     if (scenes == 0) return;
-    const frame_allocator = engine_context.FrameAllocator();
-    const engine_allocator = engine_context.EngineAllocator();
+    const scratch_allocator = engine_context.Scratch();
+    const keep_allocator = engine_context.Keep();
     const items = tree.mItems.items;
 
     //which items are drawn and the masks they're cut by, all found first: the masks' programs go in ahead of every merge's
     var masks: ShapeGeometry.ViewMasks = .{};
-    var mask_finder = ShapeGeometry.MaskFinder{ .mAllocator = frame_allocator, .mMasks = &masks };
-    const drawn = try frame_allocator.alloc(bool, items.len);
-    const item_masks = try frame_allocator.alloc(u32, items.len);
+    var mask_finder = ShapeGeometry.MaskFinder{ .mAllocator = scratch_allocator, .mMasks = &masks };
+    const drawn = try scratch_allocator.alloc(bool, items.len);
+    const item_masks = try scratch_allocator.alloc(u32, items.len);
     for (items, drawn, item_masks) |item, *draws, *mask| {
         draws.* = Draws(world, item, scenes, colliders != null);
         mask.* = if (draws.*) try ItemMask(world, &mask_finder, item) else SDFProgram.NO_MASK;
     }
-    try buffers.SetMasks(engine_allocator, &masks);
+    try buffers.SetMasks(keep_allocator, &masks);
 
     //each text's fill, added the first time one of its letters is drawn
     var text_fills: std.AutoHashMapUnmanaged(Entity.Type, Renderer2D.TextFill) = .empty;
@@ -502,13 +502,13 @@ fn FillLayer(self: *Renderer, engine_context: *EngineContext, world: *WorldManag
         const before = buffers.mShapeBufferBase.items.len;
         if (draws) try self.DrawItem(engine_context, world, buffers, item, mask, &masks, &text_fills, view, colliders);
         if (buffers.mShapeBufferBase.items.len == before) {
-            try buffers.AddNone(engine_allocator);
+            try buffers.AddNone(keep_allocator);
         } else {
             stats.TotalObjects += 1;
         }
         std.debug.assert(buffers.mShapeBufferBase.items.len == before + 1);
     }
-    try buffers.FinishTree(engine_allocator, frame_allocator, tree);
+    try buffers.FinishTree(keep_allocator, scratch_allocator, tree);
 }
 
 /// The mask a tree item is cut by: its mask region's, found at the build (WorldItem.MaskRegion), so its letters don't
@@ -553,7 +553,7 @@ fn DrawItem(self: *Renderer, engine_context: *EngineContext, world: *WorldManage
             const surface = entity.GetComponent(SurfaceComponent) orelse return;
             if (!surface.mShouldRender) return;
             const text = entity.GetComponent(TextComponent) orelse return;
-            const fill = try text_fills.getOrPut(engine_context.FrameAllocator(), entity.mID);
+            const fill = try text_fills.getOrPut(engine_context.Scratch(), entity.mID);
             if (!fill.found_existing) fill.value_ptr.* = try Renderer2D.TextFill.Of(engine_context, text, surface, &self.mSDFShading);
             //laid out when the tree was built, placed where the text is now
             const params = ShapeGeometry.GetTextParams(transform, text);
@@ -604,19 +604,19 @@ pub const FillView = struct {
     pub const Name = "RenderFillView";
 
     pub fn Run(engine_context: *EngineContext, self: *Renderer, world: *WorldManager, view_scenes: ViewScenes, camera_view: CameraView, stats: *RenderStats) !void {
-        const engine_allocator = engine_context.EngineAllocator();
-        const frame_allocator = engine_context.FrameAllocator();
-        try self.BeginRendering(engine_allocator);
+        const keep_allocator = engine_context.Keep();
+        const scratch_allocator = engine_context.Scratch();
+        try self.BeginRendering(keep_allocator);
         self.mOverlayCanvas = null;
 
-        const view = try ShapeGeometry.GatherViewShapes(frame_allocator, world, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
-        try self.mR2D.mOverlayData.SetMasks(engine_allocator, &view.Masks);
-        try self.mR2D.mGameData.SetMasks(engine_allocator, &view.Masks);
+        const view = try ShapeGeometry.GatherViewShapes(scratch_allocator, world, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
+        try self.mR2D.mOverlayData.SetMasks(keep_allocator, &view.Masks);
+        try self.mR2D.mGameData.SetMasks(keep_allocator, &view.Masks);
         stats.TotalObjects += view.Shapes.items.len;
         for (view.Shapes.items) |shape| try self.DrawShape(engine_context, shape, &view.Masks);
 
         if (self.mShowColliders) {
-            const colliders = try ShapeGeometry.GatherViewShapes(frame_allocator, world, camera_view, view_scenes, .{ .Component = ColliderComponent });
+            const colliders = try ShapeGeometry.GatherViewShapes(scratch_allocator, world, camera_view, view_scenes, .{ .Component = ColliderComponent });
             const shadings = try Renderer2D.AddColliderShadings(engine_context, &self.mSDFShading);
             for (colliders.Shapes.items) |shape| {
                 const transform_component = shape.Entity.GetComponent(TransformComponent) orelse continue;
@@ -634,17 +634,17 @@ fn ViewBuffers(self: *Renderer, canvas: ?OverlayCanvas.CanvasTransform) *Rendere
     return if (canvas != null) &self.mR2D.mOverlayData else &self.mR2D.mGameData;
 }
 
-fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) !void {
+fn BeginRendering(self: *Renderer, keep_allocator: std.mem.Allocator) !void {
     const zone = Tracy.ZoneInit("Renderer::BeginRendering", @src());
     defer zone.Deinit();
 
-    self.mR2D.StartBatch(engine_allocator);
-    self.mSDFShading.Reset(engine_allocator, .ClearRetainingCapacity);
+    self.mR2D.StartBatch(keep_allocator);
+    self.mSDFShading.Reset(keep_allocator, .ClearRetainingCapacity);
     self.mShownCopies.clearRetainingCapacity();
 
     //NOTE: temporary just add air as the medium
     const air_mat = MediumMaterial.MediumDatabase.get(.Air);
-    _ = try self.mSDFShading.AddMedium(engine_allocator, Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 }, air_mat.RenderData.Absorption, air_mat.RenderData.Scattering);
+    _ = try self.mSDFShading.AddMedium(keep_allocator, Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 }, air_mat.RenderData.Absorption, air_mat.RenderData.Scattering);
 }
 
 /// One gathered shape (FillView), placed by its canvas
@@ -670,7 +670,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, shape: ShapeGeomet
 fn DrawEntityQuad(self: *Renderer, buffers: *Renderer2D.RenderBuffers, engine_context: *EngineContext, entity: Entity, transform: *const TransformComponent, quad: ShapeComponent.Quad, surface: *const SurfaceComponent, canvas: ?OverlayCanvas.CanvasTransform, mask: u32, masks: *const ShapeGeometry.ViewMasks) !void {
     //a quad showing a player's view samples its render target instead of its texture
     const shown = if (entity.GetComponent(ViewportComponent)) |viewport| try Viewports.ShownTarget(engine_context, viewport.*) else null;
-    if (shown) |target| try self.mShownCopies.append(engine_context.EngineAllocator(), target);
+    if (shown) |target| try self.mShownCopies.append(engine_context.Keep(), target);
     try self.mR2D.DrawQuad(buffers, engine_context, transform, quad, surface, shown, canvas, mask, masks, &self.mSDFShading);
 }
 

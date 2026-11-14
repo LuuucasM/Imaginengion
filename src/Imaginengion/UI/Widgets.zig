@@ -291,7 +291,7 @@ pub fn Lines(engine_context: *EngineContext, parent: Parent) !Entity {
 pub fn SyncLines(engine_context: *EngineContext, column: Entity, lines: []const []const u8) !void {
     var labels: std.ArrayList(Entity) = .empty;
     var children = column.GetIterator(.Child);
-    while (children.next()) |child| try labels.append(engine_context.FrameAllocator(), child);
+    while (children.next()) |child| try labels.append(engine_context.Scratch(), child);
 
     for (lines, 0..) |line, i| {
         if (i < labels.items.len) {
@@ -645,13 +645,13 @@ pub fn ScrollingMenu(engine_context: *EngineContext, menu: Entity, rows: usize) 
 pub fn Remove(engine_context: *EngineContext, entity: Entity, keep: []const Entity) !void {
     if (!entity.IsActive()) return;
     var popups: std.ArrayList(Entity) = .empty;
-    try PopupsIn(engine_context.FrameAllocator(), entity, keep, &popups);
+    try PopupsIn(engine_context.Scratch(), entity, keep, &popups);
     try entity.Delete(engine_context);
     for (popups.items) |popup| try popup.Delete(engine_context);
 }
 
 /// The popups `entity` and everything in it open, and the ones those open, each once
-fn PopupsIn(frame_allocator: std.mem.Allocator, entity: Entity, keep: []const Entity, popups: *std.ArrayList(Entity)) !void {
+fn PopupsIn(scratch_allocator: std.mem.Allocator, entity: Entity, keep: []const Entity, popups: *std.ArrayList(Entity)) !void {
     if (UIManager.GetUIComponent(entity, PopupRefComponent)) |popup_ref| {
         const popup = popup_ref.mPopup;
         const listed = for (keep) |kept| {
@@ -660,12 +660,12 @@ fn PopupsIn(frame_allocator: std.mem.Allocator, entity: Entity, keep: []const En
             if (found.mID == popup.mID and found.mManager == popup.mManager) break true;
         } else false;
         if (!listed and popup.IsActive()) {
-            try popups.append(frame_allocator, popup);
-            try PopupsIn(frame_allocator, popup, keep, popups);
+            try popups.append(scratch_allocator, popup);
+            try PopupsIn(scratch_allocator, popup, keep, popups);
         }
     }
     var children = entity.GetIterator(.Child);
-    while (children.next()) |child| try PopupsIn(frame_allocator, child, keep, popups);
+    while (children.next()) |child| try PopupsIn(scratch_allocator, child, keep, popups);
 }
 
 /// A right-click menu that nothing opens yet, at the top of `near`'s scene: ShareContextMenu makes things open it

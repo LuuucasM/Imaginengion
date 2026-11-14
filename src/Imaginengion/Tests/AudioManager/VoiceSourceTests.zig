@@ -20,7 +20,7 @@ const Voice = @import("../../ECSObjects/Voice.zig");
 fn InitEngine() !*EngineContext {
     const engine_context = try std.heap.page_allocator.create(EngineContext);
     engine_context.* = .{};
-    engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+    engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
         .concurrent_limit = .nothing,
         .async_limit = .nothing,
     });
@@ -32,8 +32,8 @@ fn InitEngine() !*EngineContext {
 fn DeinitEngine(engine_context: *EngineContext) void {
     engine_context.mEditorWorld.Deinit(engine_context);
     engine_context.mAudioManager.DeinitMixer(engine_context);
-    engine_context.mSerializer.Deinit(engine_context.EngineAllocator());
-    _ = engine_context._Internal.EngineGPA.deinit();
+    engine_context.mSerializer.Deinit(engine_context.Keep());
+    _ = engine_context._Internal.KeepHeap.deinit();
     std.heap.page_allocator.destroy(engine_context);
 }
 

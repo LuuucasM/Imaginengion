@@ -98,7 +98,7 @@ pub const Update = struct {
     pub fn Run(engine_context: *EngineContext, _: *NumberFieldSystem) !void {
         const ui_manager = &engine_context.mUIManager;
         const focused = ui_manager.mFocusSystem.Focused();
-        const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = NumberFieldComponent });
+        const element_ids = try ui_manager.GetGroup(engine_context.Scratch(), .{ .Component = NumberFieldComponent });
         for (element_ids.items) |element_id| {
             const element = UIElement{ .mID = element_id, .mManager = ui_manager };
             const field = element.GetOwner();

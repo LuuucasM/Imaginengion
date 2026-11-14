@@ -35,7 +35,7 @@ test "sections start folded and are only filled in while open, and the pointer s
     defer {
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
     }
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const editor_program = try std.heap.page_allocator.create(EditorProgram);

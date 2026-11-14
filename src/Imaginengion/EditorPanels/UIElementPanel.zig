@@ -53,8 +53,8 @@ pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Opti
     return self;
 }
 
-pub fn Deinit(self: *UIElementPanel, engine_allocator: std.mem.Allocator) void {
-    self.mList.Deinit(engine_allocator);
+pub fn Deinit(self: *UIElementPanel, keep_allocator: std.mem.Allocator) void {
+    self.mList.Deinit(keep_allocator);
 }
 
 pub fn IsOpen(self: UIElementPanel) bool {

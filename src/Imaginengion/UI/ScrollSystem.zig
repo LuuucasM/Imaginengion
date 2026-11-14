@@ -104,7 +104,7 @@ pub const Update = struct {
 
     pub fn Run(engine_context: *EngineContext, _: *ScrollSystem, worlds: []const *WorldManager) !void {
         const ui_manager = &engine_context.mUIManager;
-        const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = ScrollComponent });
+        const element_ids = try ui_manager.GetGroup(engine_context.Scratch(), .{ .Component = ScrollComponent });
         for (element_ids.items) |element_id| {
             const element = UIElement{ .mID = element_id, .mManager = ui_manager };
             const region = element.GetOwner();
@@ -185,7 +185,7 @@ fn ThumbEntity(engine_context: *EngineContext, region: Entity, thumb_slot: *?Ent
     const thumb = try region.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     if (thumb.GetComponentMut(NameComponent)) |name| {
         name.mName.clearRetainingCapacity();
-        try name.mName.appendSlice(engine_context.EngineAllocator(), "Scrollbar");
+        try name.mName.appendSlice(engine_context.Keep(), "Scrollbar");
     }
     try Widgets.AddQuad(engine_context, thumb, .{}, .{});
     //its colors, including when it is hovered and dragged, are the theme's

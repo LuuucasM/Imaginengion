@@ -29,7 +29,7 @@ const TestWorld = struct {
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
         engine_context.mEditorWorld.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -73,10 +73,10 @@ const Kept = struct {
 fn KeptPairs(engine_context: *EngineContext, comptime linear: bool) !Kept {
     const world_manager = &engine_context.mEditorWorld;
     try world_manager.BuildBVH(engine_context);
-    const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.FrameAllocator());
+    const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.Scratch());
 
     var collision_manager: CollisionManager = .empty;
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    defer collision_manager.Deinit(engine_context.Keep());
     if (linear) {
         try collision_manager.BroadPassLinear(engine_context, world_manager, groups);
     } else {
@@ -96,9 +96,9 @@ fn KeptPairs(engine_context: *EngineContext, comptime linear: bool) !Kept {
 fn BroadPairCount(engine_context: *EngineContext) !usize {
     const world_manager = &engine_context.mEditorWorld;
     try world_manager.BuildBVH(engine_context);
-    const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.FrameAllocator());
+    const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.Scratch());
     var collision_manager: CollisionManager = .empty;
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    defer collision_manager.Deinit(engine_context.Keep());
     try collision_manager.BroadPass(engine_context, world_manager, groups);
     return collision_manager._BlockingContacts.items.len + collision_manager._OverlapContacts.items.len;
 }

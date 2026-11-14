@@ -44,17 +44,17 @@ pub fn Run(engine_context: *EngineContext, world_manager: *WorldManager) !void {
 
     //fetched after the step's listeners, which may have added bodies or changed their types, and once for every substep
     //below: this system's lock keeps the substeps from adding or removing a body or a collider, so the lists can't go stale
-    const frame_allocator = engine_context.FrameAllocator();
-    const dynamic_bodies = try world_manager.GetEntityGroup(frame_allocator, DynamicBodiesQuery);
-    const kinematic_bodies = try world_manager.GetEntityGroup(frame_allocator, KinematicBodiesQuery);
+    const scratch_allocator = engine_context.Scratch();
+    const dynamic_bodies = try world_manager.GetEntityGroup(scratch_allocator, DynamicBodiesQuery);
+    const kinematic_bodies = try world_manager.GetEntityGroup(scratch_allocator, KinematicBodiesQuery);
     const moving_body_count = dynamic_bodies.items.len + kinematic_bodies.items.len;
     Tracy.Plot("Physics/Moving Bodies", .{ .color = 0xE91E63 }, moving_body_count);
 
-    const collider_groups = try CollisionManager.QueryColliderGroups(world_manager, frame_allocator);
+    const collider_groups = try CollisionManager.QueryColliderGroups(world_manager, scratch_allocator);
 
     //added in with whatever the listeners applied, after them so a script that changes a constant force has it
     //count from this step. Part of the step's forces from here on, felt on every substep and let go of at the end
-    const constant_force_bodies = try world_manager.GetEntityGroup(frame_allocator, ConstantForceBodiesQuery);
+    const constant_force_bodies = try world_manager.GetEntityGroup(scratch_allocator, ConstantForceBodiesQuery);
     for (constant_force_bodies.items) |entity_id| {
         const entity = world_manager.GetEntity(entity_id);
         const constant_force = entity.GetComponent(ConstantForceComponent).?;

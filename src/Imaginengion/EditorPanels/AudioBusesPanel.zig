@@ -64,10 +64,10 @@ pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Opti
     return self;
 }
 
-pub fn Deinit(self: *AudioBusesPanel, engine_allocator: std.mem.Allocator) void {
-    self.mBuilt.deinit(engine_allocator);
-    self.mTitles.deinit(engine_allocator);
-    self.mButtons.deinit(engine_allocator);
+pub fn Deinit(self: *AudioBusesPanel, keep_allocator: std.mem.Allocator) void {
+    self.mBuilt.deinit(keep_allocator);
+    self.mTitles.deinit(keep_allocator);
+    self.mButtons.deinit(keep_allocator);
 }
 
 pub fn IsOpen(self: AudioBusesPanel) bool {
@@ -91,7 +91,7 @@ pub fn Update(self: *AudioBusesPanel, engine_context: *EngineContext) !void {
     if (!self.IsOpen()) return;
 
     var buses: std.ArrayList(Bus) = .empty;
-    try Walk(engine_context.FrameAllocator(), engine_context.mAudioManager.GetMasterBus(), &buses);
+    try Walk(engine_context.Scratch(), engine_context.mAudioManager.GetMasterBus(), &buses);
     if (!self.IsBuiltFrom(buses.items)) try self.Rebuild(engine_context);
 
     for (buses.items, self.mTitles.items) |bus, title| try WidgetActions.SetText(engine_context, title, NameOf(bus));
@@ -114,10 +114,10 @@ pub fn Run(engine_context: *EngineContext, action: Action) !void {
 }
 
 /// `bus` and every bus under it, each before the buses under it
-fn Walk(frame_allocator: std.mem.Allocator, bus: Bus, buses: *std.ArrayList(Bus)) !void {
-    try buses.append(frame_allocator, bus);
+fn Walk(scratch_allocator: std.mem.Allocator, bus: Bus, buses: *std.ArrayList(Bus)) !void {
+    try buses.append(scratch_allocator, bus);
     var children = bus.GetIterator(.Child);
-    while (children.next()) |child| try Walk(frame_allocator, child, buses);
+    while (children.next()) |child| try Walk(scratch_allocator, child, buses);
 }
 
 fn IsBuiltFrom(self: AudioBusesPanel, buses: []const Bus) bool {
@@ -149,10 +149,10 @@ fn Rebuild(self: *AudioBusesPanel, engine_context: *EngineContext) !void {
 }
 
 fn BuildBus(self: *AudioBusesPanel, engine_context: *EngineContext, bus: Bus, parent: Entity, master: Bus) !void {
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
     const node = try Widgets.TreeNode(engine_context, .{ .Entity = parent }, NameOf(bus), .{ .Open = true, .StockScripts = self.mOptions.StockScripts });
-    try self.mBuilt.append(engine_allocator, bus.mID);
-    try self.mTitles.append(engine_allocator, UIManager.LabelOf(node.Header).?);
+    try self.mBuilt.append(keep_allocator, bus.mID);
+    try self.mTitles.append(keep_allocator, UIManager.LabelOf(node.Header).?);
 
     const content = node.Content.?;
     const is_master = bus.mID == master.mID;
@@ -161,9 +161,9 @@ fn BuildBus(self: *AudioBusesPanel, engine_context: *EngineContext, bus: Bus, pa
     try self.Rows(engine_context, bus, content, BusComponent);
 
     const buttons = try Widgets.Row(engine_context, .{ .Entity = content });
-    try self.mButtons.append(engine_allocator, .{ .Button = try Widgets.Button(engine_context, .{ .Entity = buttons }, "Add Child"), .Action = .{ .AddChild = bus } });
+    try self.mButtons.append(keep_allocator, .{ .Button = try Widgets.Button(engine_context, .{ .Entity = buttons }, "Add Child"), .Action = .{ .AddChild = bus } });
     if (!is_master) {
-        try self.mButtons.append(engine_allocator, .{ .Button = try Widgets.Button(engine_context, .{ .Entity = buttons }, "Delete"), .Action = .{ .Delete = bus } });
+        try self.mButtons.append(keep_allocator, .{ .Button = try Widgets.Button(engine_context, .{ .Entity = buttons }, "Delete"), .Action = .{ .Delete = bus } });
     }
 
     var children = bus.GetIterator(.Child);

@@ -87,19 +87,19 @@ mPendingResolves: std.ArrayList(ResolveReq),
 mCurrDeserialize: DeserializeContext,
 
 /// Releases the file handles it holds, so it has to go before the asset manager does
-pub fn Deinit(self: *Serializer, engine_allocator: std.mem.Allocator) void {
+pub fn Deinit(self: *Serializer, keep_allocator: std.mem.Allocator) void {
     var file_iter = self.mFileObjects.valueIterator();
     while (file_iter.next()) |asset_handle| {
         asset_handle.ReleaseAsset();
     }
-    self.mFileObjects.deinit(engine_allocator);
-    self.mPendingResolves.deinit(engine_allocator);
+    self.mFileObjects.deinit(keep_allocator);
+    self.mPendingResolves.deinit(keep_allocator);
 }
 
 pub fn SaveECSObject(self: *Serializer, engine_context: *EngineContext, object: anytype) !void {
     if (self.mFileObjects.get(object.GetUUID())) |asset_handle| {
         const file_data = asset_handle.GetFileMetaData();
-        const abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath.items, file_data.mPathType);
+        const abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.Scratch(), file_data.mRelPath.items, file_data.mPathType);
         try SerializeECSObject(engine_context, object, abs_path, .Text);
     } else {
         try self.SaveECSObjAs(engine_context, object);
@@ -109,7 +109,7 @@ pub fn SaveECSObject(self: *Serializer, engine_context: *EngineContext, object: 
 /// Asks for a file and writes `object` to it. error.SaveCancelled when the dialog was closed without picking one, so
 /// nothing was written
 pub fn SaveECSObjAs(self: *Serializer, engine_context: *EngineContext, object: anytype) !void {
-    const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), FileExtension(@TypeOf(object)), null);
+    const abs_path = try PlatformUtils.SaveFile(engine_context.Scratch(), FileExtension(@TypeOf(object)), null);
     if (abs_path.len == 0) return error.SaveCancelled;
 
     try SerializeECSObject(engine_context, object, abs_path, .Text);
@@ -120,7 +120,7 @@ pub fn SaveECSObjAs(self: *Serializer, engine_context: *EngineContext, object: a
 /// Fills an already created object from the file at rel_path under path_type's root. The object should be blank
 /// (created without the default UUID/Name/Transform components) since those come from the file.
 pub fn DeserializeECSObj(self: *Serializer, engine_context: *EngineContext, object: anytype, rel_path: []const u8, path_type: PathType, comptime deserialize_type: SerializeType) !void {
-    const abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.FrameAllocator(), rel_path, path_type);
+    const abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.Scratch(), rel_path, path_type);
     switch (deserialize_type) {
         .Text => try TextSerializer.DeserializeECSObj(engine_context, object, abs_path),
         .Binary => @compileError("Binary deserialization is not implemented yet"),
@@ -131,8 +131,8 @@ pub fn DeserializeECSObj(self: *Serializer, engine_context: *EngineContext, obje
     try self.TrackFile(engine_context, object.GetUUID(), rel_path, path_type);
 }
 
-pub fn AddResolveReq(self: *Serializer, engine_allocator: std.mem.Allocator, resolve_req: ResolveReq) !void {
-    try self.mPendingResolves.append(engine_allocator, resolve_req);
+pub fn AddResolveReq(self: *Serializer, keep_allocator: std.mem.Allocator, resolve_req: ResolveReq) !void {
+    try self.mPendingResolves.append(keep_allocator, resolve_req);
 }
 
 /// Resolves every pending UUID reference whose target is now loaded. Requests whose target is not loaded
@@ -160,7 +160,7 @@ fn SerializeECSObject(engine_context: *EngineContext, object: anytype, abs_path:
 fn TrackFile(self: *Serializer, engine_context: *EngineContext, uuid: u64, rel_path: []const u8, path_type: PathType) !void {
     const asset_handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = path_type } });
 
-    const entry = try self.mFileObjects.getOrPut(engine_context.EngineAllocator(), uuid);
+    const entry = try self.mFileObjects.getOrPut(engine_context.Keep(), uuid);
     if (entry.found_existing) entry.value_ptr.ReleaseAsset();
     entry.value_ptr.* = asset_handle;
 }

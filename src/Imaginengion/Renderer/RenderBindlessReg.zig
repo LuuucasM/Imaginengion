@@ -13,12 +13,12 @@ const Impl = switch (builtin.os.tag) {
 
 _Impl: Impl = .empty,
 
-pub fn Init(self: *BindlessReg, engine_allocator: std.mem.Allocator, interop: *RenderInterop) !void {
-    try self._Impl.Init(engine_allocator, interop);
+pub fn Init(self: *BindlessReg, keep_allocator: std.mem.Allocator, interop: *RenderInterop) !void {
+    try self._Impl.Init(keep_allocator, interop);
 }
 
-pub fn Deinit(self: *BindlessReg, engine_allocator: std.mem.Allocator) void {
-    self._Impl.Deinit(engine_allocator);
+pub fn Deinit(self: *BindlessReg, keep_allocator: std.mem.Allocator) void {
+    self._Impl.Deinit(keep_allocator);
 }
 
 pub fn RegisterTexture2D(self: *BindlessReg, interop: *RenderInterop, texture: *SDLTexture2D, sdl_texture_format: c_int) u32 {

@@ -31,7 +31,7 @@ const TestWorld = struct {
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
         engine_context.mEditorWorld.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -68,7 +68,7 @@ fn ExpectOnlyType(entity: Entity, comptime body_type_tag: type) !void {
 fn RunBroadPass(collision_manager: *CollisionManager, engine_context: *EngineContext) !void {
     const world_manager = &engine_context.mEditorWorld;
     try world_manager.BuildBVH(engine_context);
-    const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.FrameAllocator());
+    const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.Scratch());
     try collision_manager.BroadPass(engine_context, world_manager, groups);
 }
 
@@ -173,8 +173,8 @@ test "BroadPass skips pairs that neither side can move" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     //four statics: six pairs, none of which the solver could ever act on
     for (0..4) |_| _ = try MakeBody(engine_context, scene, StaticBodyTag);
@@ -183,14 +183,14 @@ test "BroadPass skips pairs that neither side can move" {
     try std.testing.expectEqual(@as(usize, 0), collision_manager._BlockingContacts.items.len);
 
     //one dynamic against those four statics is four pairs, and still nothing static against static
-    collision_manager.Reset(engine_context.EngineAllocator());
+    collision_manager.Reset(engine_context.Keep());
     _ = try MakeBody(engine_context, scene, DynamicBodyTag);
 
     try RunBroadPass(&collision_manager, engine_context);
     try std.testing.expectEqual(@as(usize, 4), collision_manager._BlockingContacts.items.len);
 
     //a second dynamic adds its own four static pairs plus the one dynamic against dynamic pair
-    collision_manager.Reset(engine_context.EngineAllocator());
+    collision_manager.Reset(engine_context.Keep());
     _ = try MakeBody(engine_context, scene, DynamicBodyTag);
 
     try RunBroadPass(&collision_manager, engine_context);
@@ -204,8 +204,8 @@ test "a collider with no rigid body still takes part in the broad pass" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     //no body type tag, so it can only reach the broad pass as a static collider
     const bare = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
@@ -224,8 +224,8 @@ test "a kinematic body pairs with every body type by its filter" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var collision_manager: CollisionManager = .empty;
-    try collision_manager.Init(engine_context.EngineAllocator());
-    defer collision_manager.Deinit(engine_context.EngineAllocator());
+    try collision_manager.Init(engine_context.Keep());
+    defer collision_manager.Deinit(engine_context.Keep());
 
     //two solid kinematics and a solid static: each kinematic can be stopped by the other two, so three solid pairs
     _ = try MakeBody(engine_context, scene, KinematicBodyTag);
@@ -237,7 +237,7 @@ test "a kinematic body pairs with every body type by its filter" {
     try std.testing.expectEqual(@as(usize, 0), collision_manager._OverlapContacts.items.len);
 
     //the static one becomes a zone: both kinematic bodies pair with it as overlaps, and stay solid to each other
-    collision_manager.Reset(engine_context.EngineAllocator());
+    collision_manager.Reset(engine_context.Keep());
     static_body.GetComponentMut(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
 
     try RunBroadPass(&collision_manager, engine_context);
@@ -245,7 +245,7 @@ test "a kinematic body pairs with every body type by its filter" {
     try std.testing.expectEqual(@as(usize, 2), collision_manager._OverlapContacts.items.len);
 
     //one kinematic body a trigger too: the pair between the two kinematic ones is an overlap now
-    collision_manager.Reset(engine_context.EngineAllocator());
+    collision_manager.Reset(engine_context.Keep());
     other_kinematic.GetComponentMut(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
 
     try RunBroadPass(&collision_manager, engine_context);
@@ -253,7 +253,7 @@ test "a kinematic body pairs with every body type by its filter" {
     try std.testing.expectEqual(@as(usize, 3), collision_manager._OverlapContacts.items.len);
 
     //a dynamic body pairs with all three whatever they are: two of them are triggers, the first kinematic is solid
-    collision_manager.Reset(engine_context.EngineAllocator());
+    collision_manager.Reset(engine_context.Keep());
     _ = try MakeBody(engine_context, scene, DynamicBodyTag);
 
     try RunBroadPass(&collision_manager, engine_context);

@@ -14,10 +14,10 @@ mPcmFrames: ?*anyopaque = null,
 mFrameCount: u64 = 0,
 
 pub fn Init(self: *MiniAudioBuffer, engine_context: *EngineContext, rel_path: []const u8, asset_file: std.Io.File) !void {
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
     var file_reader = asset_file.reader(engine_context.Io(), &.{});
-    const contents = try file_reader.interface.allocRemaining(frame_allocator, .unlimited);
+    const contents = try file_reader.interface.allocRemaining(scratch_allocator, .unlimited);
 
     var decoder_config = ma.ma_decoder_config_init(AudioFormatToMAFormat(AUDIO_FORMAT), AUDIO_CHANNELS, SAMPLE_RATE);
 

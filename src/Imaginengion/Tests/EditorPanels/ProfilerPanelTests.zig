@@ -23,10 +23,10 @@ test "the profiler window shows a row per node under its parent's, with numbers 
     try engine_context.mEditorWorld.Init(engine_context);
     var panel: ProfilerPanel = .{};
     defer {
-        panel.Deinit(engine_context.EngineAllocator());
+        panel.Deinit(engine_context.Keep());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
     }
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
 
@@ -40,7 +40,7 @@ test "the profiler window shows a row per node under its parent's, with numbers 
     try std.testing.expectEqualStrings("Not measuring", TextOf(panel.mNote));
     try std.testing.expect(panel.mTree == null);
 
-    try profiler.Start(engine_context.EngineAllocator(), std.testing.io);
+    try profiler.Start(engine_context.Keep(), std.testing.io);
     defer profiler.Stop();
     var loop: Profiler.Site = .{ .mName = "Loop" };
     var inner: Profiler.Site = .{ .mName = "Inner" };

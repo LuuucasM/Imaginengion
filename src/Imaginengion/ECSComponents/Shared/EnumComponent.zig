@@ -151,8 +151,8 @@ pub fn jsonStringify(self: *const EnumComponent, jw: anytype) !void {
     try jw.write(Saved{ .EnumFile = self.mEnumFile, .Enum = self.GetEnumName(), .Value = self.GetName() });
 }
 
-pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!EnumComponent {
-    const saved = try std.json.innerParse(Saved, frame_allocator, reader, options);
+pub fn jsonParse(scratch_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!EnumComponent {
+    const saved = try std.json.innerParse(Saved, scratch_allocator, reader, options);
     var component = EnumComponent{ .mEnumFile = saved.EnumFile };
     //a name too long for the component was never saved by it: a hand edit, left empty
     component.mEnumName.Set(saved.Enum) catch {};

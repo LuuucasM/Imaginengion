@@ -41,7 +41,7 @@ const TestWorld = struct {
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -56,16 +56,16 @@ const TestWorld = struct {
 
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
-        const engine_allocator = engine_context.EngineAllocator();
+        const keep_allocator = engine_context.Keep();
         engine_context.mGameWorld.Deinit(engine_context);
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
         const asset_manager = &engine_context.mAssetManager;
         asset_manager.mECSManager.Deinit(engine_context);
-        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-        asset_manager.mEventManager.Deinit(engine_allocator);
-        asset_manager.mCWDPath.deinit(engine_allocator);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+        asset_manager.mEventManager.Deinit(keep_allocator);
+        asset_manager.mCWDPath.deinit(keep_allocator);
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -195,7 +195,7 @@ test "the Components panel's Possess box possesses a dropped entity, linking bot
     const page = try world.mUIScene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try page.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
     var panel = try ComponentsPanel.Build(engine_context, page, NO_SCRIPTS);
-    defer panel.Deinit(engine_context.EngineAllocator());
+    defer panel.Deinit(engine_context.Keep());
 
     var player_config = Player.DefaultConfig;
     player_config.bAddPossessComponent = true;

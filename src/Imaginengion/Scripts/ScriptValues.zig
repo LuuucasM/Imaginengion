@@ -222,7 +222,7 @@ pub fn Read(engine_context: *EngineContext, script: anytype, values: std.json.Va
                 if (value != .object) continue;
                 try At(kind.RefType(), data, field).ReadFile(engine_context, value);
                 const uuid = UUIDOf(value.object.get("Object") orelse continue) orelse continue;
-                try engine_context.mSerializer.AddResolveReq(engine_context.EngineAllocator(), .{
+                try engine_context.mSerializer.AddResolveReq(engine_context.Keep(), .{
                     .Requester = Serializer.Requester.Init(script),
                     .UUID = uuid,
                     .Resolve = ResolveRef,
@@ -240,7 +240,7 @@ pub fn Relink(engine_context: *EngineContext, world: *WorldManager) !void {
 
     inline for (.{ Entity, Scene, Player, GameContext }) |ObjectType| {
         const manager = world.GetManager(ObjectType);
-        const script_ids = try manager.GetGroup(engine_context.FrameAllocator(), GroupQuery{ .Component = ScriptComponent });
+        const script_ids = try manager.GetGroup(engine_context.Scratch(), GroupQuery{ .Component = ScriptComponent });
         for (script_ids.items) |script_id| {
             const component = manager.GetComponent(ScriptComponent, script_id) orelse continue;
             if (component.mLinks.items.len == 0) continue;
@@ -449,8 +449,8 @@ pub fn BuildFields(engine_context: *EngineContext, parent: Entity, root: Entity,
     if (info.mFieldCount == 0) return;
 
     //the rows are measured from a copy, as RenderComponent does: building them can't move it
-    const frame_allocator = engine_context.FrameAllocator();
-    const copy = try frame_allocator.alignedAlloc(u8, .@"16", info.mDataSize);
+    const scratch_allocator = engine_context.Scratch();
+    const copy = try scratch_allocator.alignedAlloc(u8, .@"16", info.mDataSize);
     @memcpy(copy, @as([*]const u8, @ptrCast(instance.mData))[0..info.mDataSize]);
     const data: *anyopaque = @ptrCast(copy.ptr);
 
@@ -472,20 +472,20 @@ pub fn BuildFields(engine_context: *EngineContext, parent: Entity, root: Entity,
             .U32 => try builder.UInt(At(u32, data, field), label, .{}),
             .Bool => try builder.Bool(At(bool, data, field), label, .{}),
             .Enum => {
-                const choices = try frame_allocator.alloc([]const u8, field.mCount);
+                const choices = try scratch_allocator.alloc([]const u8, field.mCount);
                 for (choices, 0..) |*choice, i| choice.* = field.ValueName(i);
                 const field_ptr: *u8 = @ptrCast(@as([*]u8, @ptrCast(data)) + field.mOffset);
                 try builder.Choice(field_ptr, label, choices, EnumAccess(field.mSize), .{});
             },
             .Bits => try builder.BitFlags(@as([*]u8, @ptrCast(data)) + field.mOffset, field.mCount, label, .{}),
             .EnumSet => {
-                const names = try frame_allocator.alloc([]const u8, field.mCount);
+                const names = try scratch_allocator.alloc([]const u8, field.mCount);
                 for (names, 0..) |*name, i| name.* = field.ValueName(i);
                 try builder.BitFlags(@as([*]u8, @ptrCast(data)) + field.mOffset, field.mCount, label, .{ .Names = names });
             },
             .CollisionMask => {
                 const layers = &engine_context.mCollisionLayers;
-                const names = try frame_allocator.alloc([]const u8, field.mCount);
+                const names = try scratch_allocator.alloc([]const u8, field.mCount);
                 for (names, 0..) |*name, layer| name.* = layers.GetName(layer);
                 try builder.BitFlags(@as([*]u8, @ptrCast(data)) + field.mOffset, field.mCount, label, .{ .Names = names });
             },

@@ -126,7 +126,7 @@ pub fn WorldCanvas(world: *const WorldManager, camera_view: CameraView) CanvasTr
 /// one canvas, then the game layer, along with the masks they are cut by. Overlay scenes that are gone, or aren't overlays,
 /// are left out. Only valid for the frame it was built in
 pub fn GatherViewShapes(
-    frame_allocator: std.mem.Allocator,
+    scratch_allocator: std.mem.Allocator,
     world: *WorldManager,
     camera_view: CameraView,
     view_scenes: ViewScenes,
@@ -141,48 +141,48 @@ pub fn GatherViewShapes(
 
     var view = ViewShapes{};
     const shapes = &view.Shapes;
-    var masks = MaskFinder{ .mAllocator = frame_allocator, .mMasks = &view.Masks };
+    var masks = MaskFinder{ .mAllocator = scratch_allocator, .mMasks = &view.Masks };
     //only what is drawn folds into merges: a collider on a part is still its own collider
     const fold_merges = comptime IsVisuals(query);
-    var merges = MergeFinder{ .mAllocator = frame_allocator };
+    var merges = MergeFinder{ .mAllocator = scratch_allocator };
 
     const canvas = WorldCanvas(world, camera_view);
     for (view_scenes.Overlays) |scene_id| {
         const scene = world.GetScene(scene_id);
         if (!scene.IsActive() or scene.GetLayer() != .OverlayLayer) continue;
 
-        const entity_ids = try scene.GetEntityGroup(frame_allocator, overlay_query);
-        try shapes.ensureUnusedCapacity(frame_allocator, entity_ids.items.len);
+        const entity_ids = try scene.GetEntityGroup(scratch_allocator, overlay_query);
+        try shapes.ensureUnusedCapacity(scratch_allocator, entity_ids.items.len);
         for (entity_ids.items) |entity_id| {
             const entity = world.GetEntity(entity_id);
-            try AddViewShape(shapes, frame_allocator, &masks, if (fold_merges) &merges else null, entity, canvas);
+            try AddViewShape(shapes, scratch_allocator, &masks, if (fold_merges) &merges else null, entity, canvas);
         }
     }
 
     const game_ids = switch (view_scenes.Game) {
-        .All => try world.GetEntityGroup(frame_allocator, game_query),
-        .One => |scene_id| try world.GetScene(scene_id).GetEntityGroup(frame_allocator, game_query),
+        .All => try world.GetEntityGroup(scratch_allocator, game_query),
+        .One => |scene_id| try world.GetScene(scene_id).GetEntityGroup(scratch_allocator, game_query),
         .None => return view,
     };
-    try shapes.ensureUnusedCapacity(frame_allocator, game_ids.items.len);
+    try shapes.ensureUnusedCapacity(scratch_allocator, game_ids.items.len);
     for (game_ids.items) |entity_id| {
         const entity = world.GetEntity(entity_id);
-        try AddViewShape(shapes, frame_allocator, &masks, if (fold_merges) &merges else null, entity, null);
+        try AddViewShape(shapes, scratch_allocator, &masks, if (fold_merges) &merges else null, entity, null);
     }
 
     return view;
 }
 
 /// Adds `entity` to what the view shows, cut by its mask. A part of a merge is shown as its merge's root instead, once
-fn AddViewShape(shapes: *std.ArrayList(ViewShape), frame_allocator: std.mem.Allocator, masks: *MaskFinder, merges: ?*MergeFinder, entity: Entity, canvas: ?CanvasTransform) !void {
+fn AddViewShape(shapes: *std.ArrayList(ViewShape), scratch_allocator: std.mem.Allocator, masks: *MaskFinder, merges: ?*MergeFinder, entity: Entity, canvas: ?CanvasTransform) !void {
     if (merges) |found| {
         if (MergeRootOf(entity)) |root| {
             if (!try found.FirstSight(root)) return;
-            try shapes.append(frame_allocator, .{ .Entity = root, .Canvas = canvas, .Mask = try masks.MaskOf(root, canvas), .Merge = true });
+            try shapes.append(scratch_allocator, .{ .Entity = root, .Canvas = canvas, .Mask = try masks.MaskOf(root, canvas), .Merge = true });
             return;
         }
     }
-    try shapes.append(frame_allocator, .{ .Entity = entity, .Canvas = canvas, .Mask = try masks.MaskOf(entity, canvas) });
+    try shapes.append(scratch_allocator, .{ .Entity = entity, .Canvas = canvas, .Mask = try masks.MaskOf(entity, canvas) });
 }
 
 /// Whether a gather's query is VISUALS_QUERY, what the renderer draws and picking clicks on

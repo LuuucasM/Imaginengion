@@ -30,7 +30,7 @@ const TestEngine = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //UUIDs and file reads/writes go through the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -49,24 +49,24 @@ const TestEngine = struct {
 
     fn Deinit(self: *TestEngine) void {
         const engine_context = self.mEngineContext;
-        const engine_allocator = engine_context.EngineAllocator();
+        const keep_allocator = engine_context.Keep();
         //everything that holds asset handles goes while the asset manager is still alive, as in EngineContext.DeInit
         engine_context.mGameWorld.Deinit(engine_context);
         engine_context.mSimulateWorld.Deinit(engine_context);
         engine_context.mAssetWorld.clearAndFree(engine_context, .All);
-        engine_context.mSerializer.Deinit(engine_allocator);
+        engine_context.mSerializer.Deinit(keep_allocator);
         engine_context.mAudioManager.DeinitMixer(engine_context);
         engine_context.mProject.Deinit(engine_context);
         //the asset manager, minus the default assets Init never set up and the working directory handle it does not own
         const asset_manager = &engine_context.mAssetManager;
         asset_manager.mECSManager.Deinit(engine_context);
-        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-        asset_manager.mEventManager.Deinit(engine_allocator);
-        asset_manager.mCWDPath.deinit(engine_allocator);
+        asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+        asset_manager.mEventManager.Deinit(keep_allocator);
+        asset_manager.mCWDPath.deinit(keep_allocator);
         engine_context.mAssetWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
 
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         self.mTmpDir.cleanup();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -75,7 +75,7 @@ const TestEngine = struct {
     /// Saves `object` into the project folder and makes it the project's `entry`
     fn SaveEntry(self: *TestEngine, object: anytype, entry: @import("../../Core/Project.zig").Entry, file_name: []const u8) !void {
         const engine_context = self.mEngineContext;
-        const abs_path = try engine_context.mProject.GetAbsPath(engine_context.FrameAllocator(), file_name);
+        const abs_path = try engine_context.mProject.GetAbsPath(engine_context.Scratch(), file_name);
         try TextSerializer.SerializeECSObject(engine_context, object, abs_path);
         try engine_context.mProject.SetEntry(engine_context, entry, abs_path);
     }
@@ -84,16 +84,16 @@ const TestEngine = struct {
 fn SetName(engine_context: *EngineContext, object: anytype, comptime name_t: type, name: []const u8) !void {
     const name_list = &object.GetComponentMut(name_t).?.mName;
     name_list.clearRetainingCapacity();
-    try name_list.appendSlice(engine_context.EngineAllocator(), name);
+    try name_list.appendSlice(engine_context.Keep(), name);
 }
 
 test "starting a game loads the entry scene, player and game context into the game world" {
     const engine = try TestEngine.Init();
     defer engine.Deinit();
     const engine_context = engine.mEngineContext;
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
-    const project_folder = try engine.mTmpDir.dir.realPathFileAlloc(engine_context.Io(), ".", frame_allocator);
+    const project_folder = try engine.mTmpDir.dir.realPathFileAlloc(engine_context.Io(), ".", scratch_allocator);
     try engine_context.mProject.New(engine_context, project_folder);
 
     const level = try engine_context.mSimulateWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
@@ -117,20 +117,20 @@ test "starting a game loads the entry scene, player and game context into the ga
     try GameProgram.StartGame(engine_context);
     const game_world = &engine_context.mGameWorld;
 
-    const scene_ids = try game_world.GetSceneGroup(frame_allocator, .{ .Component = SceneComponent });
+    const scene_ids = try game_world.GetSceneGroup(scratch_allocator, .{ .Component = SceneComponent });
     try std.testing.expectEqual(@as(usize, 1), scene_ids.items.len);
-    const entity_ids = try game_world.GetScene(scene_ids.items[0]).GetEntityGroup(frame_allocator, .{ .Component = EntitySceneComponent });
+    const entity_ids = try game_world.GetScene(scene_ids.items[0]).GetEntityGroup(scratch_allocator, .{ .Component = EntitySceneComponent });
     try std.testing.expectEqual(@as(usize, 1), entity_ids.items.len);
     try std.testing.expectEqualStrings("Camera", game_world.GetEntity(entity_ids.items[0]).GetName());
 
     //possessing something is left to the game's scripts
-    const player_ids = try game_world.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
+    const player_ids = try game_world.GetPlayerGroup(scratch_allocator, .{ .Component = PossessComponent });
     try std.testing.expectEqual(@as(usize, 1), player_ids.items.len);
     try std.testing.expect(!game_world.GetPlayer(player_ids.items[0]).GetComponent(PossessComponent).?.mPossessedEntity.IsActive());
     //loaded rather than copied, so scripts can find them by the UUIDs saved in their files
     try std.testing.expectEqual(player_ids.items[0], game_world.GetObjectByUUID(Player, player.GetUUID()).?.mID);
 
-    const game_context_ids = try game_world.GetGameContextGroup(frame_allocator, .{ .Component = GCNameComponent });
+    const game_context_ids = try game_world.GetGameContextGroup(scratch_allocator, .{ .Component = GCNameComponent });
     try std.testing.expectEqual(@as(usize, 1), game_context_ids.items.len);
     try std.testing.expectEqualStrings("Rules", game_world.GetGameContext(game_context_ids.items[0]).GetName());
     try std.testing.expectEqual(game_context_ids.items[0], game_world.GetObjectByUUID(GameContext, game_context.GetUUID()).?.mID);

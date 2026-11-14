@@ -79,17 +79,17 @@ pub fn UIRender(self: *AudioComponent, ui: *Inspector.Builder) !void {
 
     //the buses as they are now: one added while this is shown appears the next time it is built
     var buses: std.ArrayList(Bus) = .empty;
-    try BusesInOrder(ui.mEngineContext.FrameAllocator(), ui.mEngineContext.mAudioManager.GetMasterBus(), &buses);
-    const names = try ui.mEngineContext.FrameAllocator().alloc([]const u8, buses.items.len);
+    try BusesInOrder(ui.mEngineContext.Scratch(), ui.mEngineContext.mAudioManager.GetMasterBus(), &buses);
+    const names = try ui.mEngineContext.Scratch().alloc([]const u8, buses.items.len);
     for (buses.items, names) |bus, *name| name.* = if (bus.GetComponent(BusNameComponent)) |bus_name| bus_name.mName.items else "Bus";
     try ui.Choice(&self.mBus, "Bus", names, &BUS_ACCESS, .{});
 }
 
 /// `bus` and every bus under it, each before the ones under it: the order the Bus dropdown lists them in
-fn BusesInOrder(frame_allocator: std.mem.Allocator, bus: Bus, buses: *std.ArrayList(Bus)) !void {
-    try buses.append(frame_allocator, bus);
+fn BusesInOrder(scratch_allocator: std.mem.Allocator, bus: Bus, buses: *std.ArrayList(Bus)) !void {
+    try buses.append(scratch_allocator, bus);
     var children = bus.GetIterator(.Child);
-    while (children.next()) |child| try BusesInOrder(frame_allocator, child, buses);
+    while (children.next()) |child| try BusesInOrder(scratch_allocator, child, buses);
 }
 
 /// Where `target` comes in BusesInOrder from `bus`, counting on from `next`
@@ -166,7 +166,7 @@ pub fn jsonStringify(self: *const AudioComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!AudioComponent {
+pub fn jsonParse(scratch_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!AudioComponent {
     //a key a file does not have keeps the component's default
     const FileData = struct {
         AudioType: AudioType = .Audio2D,
@@ -177,13 +177,13 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
         StopWithSource: bool = true,
         Bus: ?u64 = null,
     };
-    const file_data = try std.json.innerParse(FileData, frame_allocator, reader, options);
+    const file_data = try std.json.innerParse(FileData, scratch_allocator, reader, options);
 
     if (file_data.Bus) |bus_uuid| {
-        const engine_context = JsonUtils.EngineContextFromAllocator(frame_allocator);
+        const engine_context = JsonUtils.EngineContextFromAllocator(scratch_allocator);
         const serializer = &engine_context.mSerializer;
         std.debug.assert(serializer.mCurrDeserialize.requester != .Bus);
-        try serializer.AddResolveReq(engine_context.EngineAllocator(), .{
+        try serializer.AddResolveReq(engine_context.Keep(), .{
             .Requester = serializer.mCurrDeserialize.requester,
             .UUID = bus_uuid,
             .Resolve = ResolveBusRef,

@@ -49,15 +49,15 @@ fn _SetCurrentOnThisThread(transaction: ?*Transaction) void {
     tCurrent = transaction;
 }
 
-pub fn Deinit(self: *Transactions, engine_allocator: std.mem.Allocator) void {
+pub fn Deinit(self: *Transactions, keep_allocator: std.mem.Allocator) void {
     std.debug.assert(self.mOpenTransaction == null);
-    self.mTransaction.Deinit(engine_allocator);
-    self.mConflicts.Deinit(engine_allocator);
+    self.mTransaction.Deinit(keep_allocator);
+    self.mConflicts.Deinit(keep_allocator);
     for (self.mBatchPool.items) |transaction| {
-        transaction.Deinit(engine_allocator);
-        engine_allocator.destroy(transaction);
+        transaction.Deinit(keep_allocator);
+        keep_allocator.destroy(transaction);
     }
-    self.mBatchPool.deinit(engine_allocator);
+    self.mBatchPool.deinit(keep_allocator);
     self.mBatchPool = .empty;
 }
 
@@ -68,10 +68,10 @@ pub fn Register(self: *Transactions, ecs: anytype) void {
 }
 
 /// Stops `ecs` going through transactions. Once the last one is gone the layer lets go of its memory too
-pub fn Unregister(self: *Transactions, engine_allocator: std.mem.Allocator, ecs: anytype) void {
+pub fn Unregister(self: *Transactions, keep_allocator: std.mem.Allocator, ecs: anytype) void {
     ecs.SetTransactions(null);
     self.mRegistered -= 1;
-    if (self.mRegistered == 0) self.Deinit(engine_allocator);
+    if (self.mRegistered == 0) self.Deinit(keep_allocator);
 }
 
 /// The transaction open now on the calling thread, null outside one: what the ECSs read and write through
@@ -144,7 +144,7 @@ fn _Transact(self: *Transactions, engine_context: *EngineContext, comptime func:
     // still inside the run: what keeping or dropping sets off waits like anything else in it. Code that said it failed
     // (MarkFailed) isn't kept whatever it handed back
     const kept = keep(result) and !self.mTransaction.mFailed;
-    if (self.mTransaction.mMeasuring) self.mConflicts.Check(engine_context.EngineAllocator(), &self.mTransaction, kept or self.mTransaction.mIrrevocable != null);
+    if (self.mTransaction.mMeasuring) self.mConflicts.Check(engine_context.Keep(), &self.mTransaction, kept or self.mTransaction.mIrrevocable != null);
     _End(engine_context, &self.mTransaction, kept);
 
     engine_context.mSystems.LeaveRun(engine_context);
@@ -194,7 +194,7 @@ pub fn AriaGroupAwait(userdata: ?*anyopaque, group: *std.Io.Group, token: *anyop
     engine_context.mTransactions.RunTasks(engine_context, job_group.mTasks.items) catch |err| {
         std.log.err("A batch of transactions couldn't run: {s}", .{@errorName(err)});
     };
-    job_group.Free(engine_context.EngineAllocator(), group);
+    job_group.Free(engine_context.Keep(), group);
 }
 
 /// Runs `tasks` as one batch the way Aria does (transactions plan, step 5): what an AriaIo group's await does. A task's
@@ -229,25 +229,25 @@ pub fn RunTasks(self: *Transactions, engine_context: *EngineContext, tasks: []co
     const zone = Tracy.ZoneInit("Transactions::RunTasks", @src());
     defer zone.Deinit();
 
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
     var pending: std.ArrayList(usize) = .empty;
-    defer pending.deinit(engine_allocator);
+    defer pending.deinit(keep_allocator);
     var next: std.ArrayList(usize) = .empty;
-    defer next.deinit(engine_allocator);
+    defer next.deinit(keep_allocator);
     var serial: std.ArrayList(usize) = .empty;
-    defer serial.deinit(engine_allocator);
+    defer serial.deinit(keep_allocator);
     var reservations: Transaction.Reservations = .{};
-    defer reservations.Deinit(engine_allocator);
+    defer reservations.Deinit(keep_allocator);
 
-    try pending.ensureTotalCapacity(engine_allocator, count);
-    try next.ensureTotalCapacity(engine_allocator, count);
-    try serial.ensureTotalCapacity(engine_allocator, count);
+    try pending.ensureTotalCapacity(keep_allocator, count);
+    try next.ensureTotalCapacity(keep_allocator, count);
+    try serial.ensureTotalCapacity(keep_allocator, count);
     for (0..count) |index| pending.appendAssumeCapacity(index);
     while (self.mBatchPool.items.len < count) {
-        const transaction = try engine_allocator.create(Transaction);
+        const transaction = try keep_allocator.create(Transaction);
         transaction.* = .empty;
-        self.mBatchPool.append(engine_allocator, transaction) catch |err| {
-            engine_allocator.destroy(transaction);
+        self.mBatchPool.append(keep_allocator, transaction) catch |err| {
+            keep_allocator.destroy(transaction);
             return err;
         };
     }
@@ -292,7 +292,7 @@ pub fn RunTasks(self: *Transactions, engine_context: *EngineContext, tasks: []co
         for (pending.items, 0..) |index, slot| {
             const transaction = self.mBatchPool.items[slot];
             if (transaction.mRunSerially or transaction.mFailed) continue;
-            reservations.Reserve(engine_allocator, transaction, index) catch {
+            reservations.Reserve(keep_allocator, transaction, index) catch {
                 reservations_lost = true;
             };
         }
@@ -302,7 +302,7 @@ pub fn RunTasks(self: *Transactions, engine_context: *EngineContext, tasks: []co
         for (pending.items, 0..) |index, slot| {
             const transaction = self.mBatchPool.items[slot];
             if (transaction.mRunSerially) {
-                self.mConflicts.CountBatchHook(engine_allocator, .Serial, "");
+                self.mConflicts.CountBatchHook(keep_allocator, .Serial, "");
                 transaction.Discard(engine_context);
                 serial.appendAssumeCapacity(index);
                 continue;
@@ -310,12 +310,12 @@ pub fn RunTasks(self: *Transactions, engine_context: *EngineContext, tasks: []co
             const first = slot == 0;
             const conflict = transaction.ConflictWith(&reservations, index);
             if (!first and (reservations_lost or transaction.mMeasureLost or conflict != null)) {
-                self.mConflicts.CountBatchHook(engine_allocator, .Conflict, if (conflict) |array| transaction.NameOf(array) else "");
+                self.mConflicts.CountBatchHook(keep_allocator, .Conflict, if (conflict) |array| transaction.NameOf(array) else "");
                 transaction.Discard(engine_context);
                 next.appendAssumeCapacity(index);
                 continue;
             }
-            self.mConflicts.CountBatchHook(engine_allocator, .Done, "");
+            self.mConflicts.CountBatchHook(keep_allocator, .Done, "");
             if (transaction.mFailed) transaction.Discard(engine_context) else transaction.Commit(engine_context);
         }
         std.mem.swap(std.ArrayList(usize), &pending, &next);
@@ -324,7 +324,7 @@ pub fn RunTasks(self: *Transactions, engine_context: *EngineContext, tasks: []co
 
     for (serial.items) |index| {
         _ = self._Transact(engine_context, JobGroup.Task.Run, .{tasks[index]}, _KeepUnlessFailed, false);
-        self.mConflicts.CountBatchHook(engine_allocator, .Done, "");
+        self.mConflicts.CountBatchHook(keep_allocator, .Done, "");
     }
 }
 

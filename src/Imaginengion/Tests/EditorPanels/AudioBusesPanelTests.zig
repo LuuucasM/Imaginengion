@@ -27,7 +27,7 @@ const TestEngine = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //bus UUIDs go through the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -41,11 +41,11 @@ const TestEngine = struct {
 
     fn Deinit(self: *TestEngine) void {
         const engine_context = self.mEngineContext;
-        self.mPanel.Deinit(engine_context.EngineAllocator());
+        self.mPanel.Deinit(engine_context.Keep());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mAudioManager.DeinitMixer(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -159,7 +159,7 @@ test "a volume edit is written into the bus, and a renamed bus's node follows it
 
     const name = child.GetComponentMut(NameComponent).?;
     name.mName.clearRetainingCapacity();
-    try name.mName.appendSlice(engine_context.EngineAllocator(), "Music");
+    try name.mName.appendSlice(engine_context.Keep(), "Music");
     try panel.Update(engine_context);
     try std.testing.expectEqualStrings("Music", TextOf(panel.mTitles.items[1]));
 }

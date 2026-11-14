@@ -18,7 +18,7 @@ const TestJobs = struct {
             threads.* = std.Io.Threaded.init(std.heap.page_allocator, .{ .async_limit = .limited(workers), .concurrent_limit = .nothing });
             self.mThreads = threads;
             engine_context.mJobPool = .{ .mIo = threads.io(), .mWorkers = workers };
-            engine_context._Internal.ThreadFrameArenas.mMainThread = std.Thread.getCurrentId();
+            engine_context._Internal.ThreadScratchArenas.mMainThread = std.Thread.getCurrentId();
         }
         return self;
     }
@@ -28,8 +28,8 @@ const TestJobs = struct {
             threads.deinit();
             std.heap.page_allocator.destroy(threads);
         }
-        self.mEngineContext._Internal.ThreadFrameArenas.Deinit();
-        const leak_check = self.mEngineContext._Internal.EngineGPA.deinit();
+        self.mEngineContext._Internal.ThreadScratchArenas.Deinit();
+        const leak_check = self.mEngineContext._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(self.mEngineContext);
         try std.testing.expect(leak_check == .ok);
     }
@@ -86,14 +86,14 @@ test "the thread waiting on a job group works through it too, side by side with 
     try std.testing.expect(threads[0] == this_thread or threads[1] == this_thread);
 }
 
-/// Meets, then takes some frame memory and writes down which arena it came from
+/// Meets, then takes some scratch memory and writes down which arena it came from
 fn MeetsAndAllocates(engine_context: *EngineContext, thread: *std.Thread.Id, met: *bool, arena: **std.heap.ArenaAllocator) void {
     Meets(thread, met);
-    _ = engine_context.FrameAllocator().alloc(u8, 4096) catch unreachable;
-    arena.* = Allocators.FrameArenaOf(engine_context);
+    _ = engine_context.Scratch().alloc(u8, 4096) catch unreachable;
+    arena.* = Allocators.ScratchArenaOf(engine_context);
 }
 
-test "a task on a worker thread takes frame memory from that thread's own arena, the waiting thread from the engine's" {
+test "a task on a worker thread takes scratch memory from that thread's own arena, the waiting thread from the engine's" {
     const jobs = try TestJobs.Init(1);
     defer jobs.Deinit() catch unreachable;
     const engine_context = jobs.mEngineContext;
@@ -111,12 +111,12 @@ test "a task on a worker thread takes frame memory from that thread's own arena,
     const this_thread = std.Thread.getCurrentId();
     for (threads, arenas) |thread, arena| {
         if (thread == this_thread) {
-            try std.testing.expect(arena == &engine_context._Internal.FrameArena);
+            try std.testing.expect(arena == &engine_context._Internal.ScratchArena);
         } else {
-            try std.testing.expect(arena != &engine_context._Internal.FrameArena);
+            try std.testing.expect(arena != &engine_context._Internal.ScratchArena);
             try std.testing.expect(arena.queryCapacity() >= 4096);
         }
     }
     //emptied with the engine's at the end of the frame, keeping the memory
-    engine_context._Internal.ThreadFrameArenas.Reset();
+    engine_context._Internal.ThreadScratchArenas.Reset();
 }

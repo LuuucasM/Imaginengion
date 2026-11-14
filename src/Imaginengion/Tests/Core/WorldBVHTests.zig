@@ -44,7 +44,7 @@ const TestWorld = struct {
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
         engine_context.mEditorWorld.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -676,10 +676,10 @@ test "a refit places its items on the job pool, a run of them per task, and come
         engine_context.mJobPool = .{};
         threads.deinit();
         std.heap.page_allocator.destroy(threads);
-        engine_context._Internal.ThreadFrameArenas.Deinit();
+        engine_context._Internal.ThreadScratchArenas.Deinit();
     }
     engine_context.mJobPool = .{ .mIo = threads.io(), .mWorkers = 3 };
-    engine_context._Internal.ThreadFrameArenas.mMainThread = std.Thread.getCurrentId();
+    engine_context._Internal.ThreadScratchArenas.mMainThread = std.Thread.getCurrentId();
     //back where they were, so the refit has something to put right
     for (tree.mBVHItems.items) |*item| item.Bounds = .{ .Min = .{ .x = 0, .y = 0, .z = 0 }, .Max = .{ .x = 0, .y = 0, .z = 0 } };
     try engine_context.mSystems.RunSystem(BVHRefitSystem, engine_context, .{ editor_world, WorldBVH.ALL_ITEMS });

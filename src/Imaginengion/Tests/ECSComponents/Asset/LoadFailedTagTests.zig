@@ -20,7 +20,7 @@ const TestContext = struct {
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -30,15 +30,15 @@ const TestContext = struct {
 
     fn Deinit(self: *TestContext) void {
         const engine_context = self.mEngineContext;
-        const engine_allocator = engine_context.EngineAllocator();
+        const keep_allocator = engine_context.Keep();
 
         const asset_manager = &engine_context.mAssetManager;
         asset_manager.mECSManager.Deinit(engine_context);
-        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-        asset_manager.mEventManager.Deinit(engine_allocator);
-        asset_manager.mCWDPath.deinit(engine_allocator);
+        asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+        asset_manager.mEventManager.Deinit(keep_allocator);
+        asset_manager.mCWDPath.deinit(keep_allocator);
 
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -47,11 +47,11 @@ const TestContext = struct {
 /// A file asset whose file does not exist, so any attempt to load it errors instead of passing
 fn CreateMissingFileAsset(engine_context: *EngineContext) !AssetHandle.Type {
     const asset_manager = &engine_context.mAssetManager;
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
-    const asset_id = try asset_manager.mECSManager.CreateEntity(engine_allocator);
+    const asset_id = try asset_manager.mECSManager.CreateEntity(keep_allocator);
     var file_meta_data = FileMetaData{ .mPathType = .Eng };
-    _ = try file_meta_data.mRelPath.print(engine_allocator, "{s}", .{"does/not/exist.ttf"});
+    _ = try file_meta_data.mRelPath.print(keep_allocator, "{s}", .{"does/not/exist.ttf"});
     _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, file_meta_data);
     return asset_id;
 }
@@ -76,13 +76,13 @@ test "a change to the file clears the mark so the next GetAsset tries again" {
     defer test_context.Deinit();
     const engine_context = test_context.mEngineContext;
     const asset_manager = &engine_context.mAssetManager;
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
     const asset_id = try CreateMissingFileAsset(engine_context);
     _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, LoadFailedTag{});
 
     //what OnUpdate queues when it sees the file's mtime or size change
-    try asset_manager.mEventManager.Insert(engine_allocator, .EndOfFrame, .{ .FileUpdate = .{ .mAssetID = asset_id } });
+    try asset_manager.mEventManager.Insert(keep_allocator, .EndOfFrame, .{ .FileUpdate = .{ .mAssetID = asset_id } });
     try asset_manager.ProcessDestroyedAssets(engine_context);
 
     try std.testing.expect(!asset_manager.mECSManager.HasComponent(LoadFailedTag, asset_id));
@@ -97,12 +97,12 @@ test "a change to the file marks it changed until the next update clears it" {
     defer test_context.Deinit();
     const engine_context = test_context.mEngineContext;
     const asset_manager = &engine_context.mAssetManager;
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
     const asset_id = try CreateMissingFileAsset(engine_context);
     try std.testing.expect(!asset_manager.AnyFileChanged());
 
-    try asset_manager.mEventManager.Insert(engine_allocator, .EndOfFrame, .{ .FileUpdate = .{ .mAssetID = asset_id } });
+    try asset_manager.mEventManager.Insert(keep_allocator, .EndOfFrame, .{ .FileUpdate = .{ .mAssetID = asset_id } });
     try asset_manager.ProcessDestroyedAssets(engine_context);
     try std.testing.expect(asset_manager.AnyFileChanged());
     try std.testing.expect(asset_manager.FileChanged(asset_id));

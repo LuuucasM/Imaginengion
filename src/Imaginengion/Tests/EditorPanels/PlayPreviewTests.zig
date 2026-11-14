@@ -25,7 +25,7 @@ test "a quad per view placed by its area rect, made and deleted as views come an
         engine_context.mGameWorld.Deinit(engine_context);
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
     }
     const ui_scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const area = try ui_scene.CreateEntity(engine_context, Entity.DefaultConfig);
@@ -33,7 +33,7 @@ test "a quad per view placed by its area rect, made and deleted as views come an
     //as the area was last laid out
     (try area.AddComponent(engine_context, LayoutItemComponent{})).mComputedSize = .{ .x = 800, .y = 400 };
     var quads: std.ArrayList(Entity) = .empty;
-    defer quads.deinit(engine_context.EngineAllocator());
+    defer quads.deinit(engine_context.Keep());
 
     const one = try engine_context.mGameWorld.CreatePlayer(engine_context, Player.DefaultConfig);
     const two = try engine_context.mGameWorld.CreatePlayer(engine_context, Player.DefaultConfig);

@@ -63,15 +63,15 @@ pub fn jsonStringify(self: *const AssetHandle, jw: anytype) !void {
     try jw.write(FileRef{ .Path = file_data.mRelPath.items, .PathType = file_data.mPathType });
 }
 
-pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!AssetHandle {
+pub fn jsonParse(scratch_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!AssetHandle {
     if (try reader.peekNextTokenType() == .null) {
         _ = try reader.next();
         return .uninit;
     }
 
-    const file_ref = try std.json.innerParse(FileRef, frame_allocator, reader, options);
+    const file_ref = try std.json.innerParse(FileRef, scratch_allocator, reader, options);
 
-    const engine_context = JsonUtils.EngineContextFromAllocator(frame_allocator);
+    const engine_context = JsonUtils.EngineContextFromAllocator(scratch_allocator);
     return engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = file_ref.Path, .path_type = file_ref.PathType } }) catch |err| {
         //a missing asset should not stop the rest of the file from loading, the asset manager falls back to default assets
         std.log.err("Failed to load asset '{s}' ({s}) while deserializing: {}", .{ file_ref.Path, @tagName(file_ref.PathType), err });

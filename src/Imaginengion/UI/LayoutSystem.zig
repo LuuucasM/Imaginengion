@@ -49,8 +49,8 @@ pub const Name = "Layout";
 
 /// Lays out every tree in `world` that has a dirty entity in it, each once however many of its entities are dirty
 pub fn Run(engine_context: *EngineContext, world: *WorldManager) !void {
-    const frame_allocator = engine_context.FrameAllocator();
-    const dirty_ids = try world.GetEntityGroup(frame_allocator, .{ .Component = LayoutDirtyTag });
+    const scratch_allocator = engine_context.Scratch();
+    const dirty_ids = try world.GetEntityGroup(scratch_allocator, .{ .Component = LayoutDirtyTag });
 
     var roots: std.ArrayList(Entity.Type) = .empty;
     for (dirty_ids.items) |entity_id| {
@@ -61,7 +61,7 @@ pub fn Run(engine_context: *EngineContext, world: *WorldManager) !void {
             continue;
         }
         const root = FindRoot(entity);
-        if (std.mem.indexOfScalar(Entity.Type, roots.items, root.mID) == null) try roots.append(frame_allocator, root.mID);
+        if (std.mem.indexOfScalar(Entity.Type, roots.items, root.mID) == null) try roots.append(scratch_allocator, root.mID);
     }
 
     for (roots.items) |root_id| {
@@ -72,7 +72,7 @@ pub fn Run(engine_context: *EngineContext, world: *WorldManager) !void {
 /// Asks for every layout tree in `scene` to be laid out again, e.g. because the screen it fits into changed. Tagging
 /// each tree's root is enough, one tag lays out its whole tree
 pub fn MarkSceneDirty(scene: Scene, engine_context: *EngineContext) !void {
-    const entity_ids = try scene.GetEntityGroup(engine_context.FrameAllocator(), .{ .Or = &.{
+    const entity_ids = try scene.GetEntityGroup(engine_context.Scratch(), .{ .Or = &.{
         .{ .Component = LayoutItemComponent },
         .{ .Component = LayoutComponent },
     } });
@@ -181,7 +181,7 @@ pub fn OnEntityDestroyed(engine_context: *EngineContext, entity: Entity) !void {
 /// Lays out the tree under `root` and clears the dirty tag from all of it. An overlay tree whose scene hasn't been
 /// drawn yet has no screen to fit into, so it keeps its tags and waits for the frame after its first draw
 fn LayoutTree(root: Entity, engine_context: *EngineContext) !void {
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
     const root_area: ?Vec2(f32) = switch (root.GetLayer()) {
         //nothing around a panel in the world: it is sized, and placed by its own transform
@@ -193,9 +193,9 @@ fn LayoutTree(root: Entity, engine_context: *EngineContext) !void {
     };
 
     var tree: Tree = .{};
-    try tree.Add(root, null, false, engine_context, frame_allocator);
+    try tree.Add(root, null, false, engine_context, scratch_allocator);
 
-    const results = try Layout.Solve(frame_allocator, tree.mNodes.items, 0, root_area);
+    const results = try Layout.Solve(scratch_allocator, tree.mNodes.items, 0, root_area);
     for (tree.mEntities.items, tree.mTextCenters.items, results) |entity, text_center, result| {
         try WriteBack(entity, text_center, result, engine_context);
         try entity.ClearLayoutDirty(engine_context);
@@ -240,7 +240,7 @@ const Tree = struct {
 
     /// Adds `entity` as the last child of `parent`, and then everything under it that is in the tree. `folded` is
     /// whether something above it is collapsed
-    fn Add(self: *Tree, entity: Entity, parent: ?Layout.Index, folded: bool, engine_context: *EngineContext, frame_allocator: std.mem.Allocator) anyerror!void {
+    fn Add(self: *Tree, entity: Entity, parent: ?Layout.Index, folded: bool, engine_context: *EngineContext, scratch_allocator: std.mem.Allocator) anyerror!void {
         var node = if (entity.GetComponent(LayoutItemComponent)) |item| item.ToNode() else (LayoutItemComponent{}).ToNode();
         //the solver leaves out a collapsed element and everything under it, so there is no text in there to measure
         const hidden = folded or node.Collapsed;
@@ -262,10 +262,10 @@ const Tree = struct {
         }
 
         const index: Layout.Index = @intCast(self.mNodes.items.len);
-        try self.mNodes.append(frame_allocator, node);
-        try self.mEntities.append(frame_allocator, entity);
-        try self.mTextCenters.append(frame_allocator, text_center);
-        try self.mLastChild.append(frame_allocator, null);
+        try self.mNodes.append(scratch_allocator, node);
+        try self.mEntities.append(scratch_allocator, entity);
+        try self.mTextCenters.append(scratch_allocator, text_center);
+        try self.mLastChild.append(scratch_allocator, null);
         if (parent) |parent_index| {
             if (self.mLastChild.items[parent_index]) |last| {
                 self.mNodes.items[last].NextSibling = index;
@@ -278,7 +278,7 @@ const Tree = struct {
         if (node.Container == null) return;
         var children = entity.GetIterator(.Child);
         while (children.next()) |child| {
-            if (IsInLayout(child)) try self.Add(child, index, hidden, engine_context, frame_allocator);
+            if (IsInLayout(child)) try self.Add(child, index, hidden, engine_context, scratch_allocator);
         }
     }
 };

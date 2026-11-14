@@ -22,7 +22,7 @@ fn InitWorld() !*EngineContext {
 
 fn DeinitWorld(engine_context: *EngineContext) void {
     engine_context.mEditorWorld.Deinit(engine_context);
-    _ = engine_context._Internal.EngineGPA.deinit();
+    _ = engine_context._Internal.KeepHeap.deinit();
     std.heap.page_allocator.destroy(engine_context);
 }
 

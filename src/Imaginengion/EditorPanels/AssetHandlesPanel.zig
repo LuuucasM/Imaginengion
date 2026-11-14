@@ -52,12 +52,12 @@ pub fn Update(self: AssetHandlesPanel, engine_context: *EngineContext) !void {
     defer zone.Deinit();
     if (!self.IsOpen()) return;
 
-    const frame_allocator = engine_context.FrameAllocator();
-    const asset_ids = try engine_context.mAssetManager.GetGroup(frame_allocator, .{ .Component = FileMetaData });
-    const lines = try frame_allocator.alloc([]const u8, asset_ids.items.len);
+    const scratch_allocator = engine_context.Scratch();
+    const asset_ids = try engine_context.mAssetManager.GetGroup(scratch_allocator, .{ .Component = FileMetaData });
+    const lines = try scratch_allocator.alloc([]const u8, asset_ids.items.len);
     for (asset_ids.items, lines) |asset_id, *line| {
         const file_data = engine_context.mAssetManager.GetFileMetaData(asset_id);
-        line.* = try std.fmt.allocPrint(frame_allocator, "{d}: {s}", .{ asset_id, file_data.mRelPath.items });
+        line.* = try std.fmt.allocPrint(scratch_allocator, "{d}: {s}", .{ asset_id, file_data.mRelPath.items });
     }
     try Widgets.SyncLines(engine_context, self.mLines, lines);
 }

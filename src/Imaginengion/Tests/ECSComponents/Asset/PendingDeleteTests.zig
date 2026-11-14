@@ -21,7 +21,7 @@ const TestContext = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //UUIDs and timestamps go through the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -31,17 +31,17 @@ const TestContext = struct {
 
     fn Deinit(self: *TestContext) void {
         const engine_context = self.mEngineContext;
-        const engine_allocator = engine_context.EngineAllocator();
+        const keep_allocator = engine_context.Keep();
 
         //the asset manager, minus the default assets Init never set up and the working directory
         //handle it does not own
         const asset_manager = &engine_context.mAssetManager;
         asset_manager.mECSManager.Deinit(engine_context);
-        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-        asset_manager.mEventManager.Deinit(engine_allocator);
-        asset_manager.mCWDPath.deinit(engine_allocator);
+        asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+        asset_manager.mEventManager.Deinit(keep_allocator);
+        asset_manager.mCWDPath.deinit(keep_allocator);
 
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -52,9 +52,9 @@ test "a destroyed asset takes its PendingDelete with it" {
     defer test_context.Deinit();
     const engine_context = test_context.mEngineContext;
     const asset_manager = &engine_context.mAssetManager;
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
-    const asset_id = try asset_manager.mECSManager.CreateEntity(engine_allocator);
+    const asset_id = try asset_manager.mECSManager.CreateEntity(keep_allocator);
     _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, PendingDelete{
         .mReason = 1,
         .mTime = std.Io.Timestamp.now(engine_context.Io(), .awake),
@@ -71,7 +71,7 @@ test "a destroyed asset takes its PendingDelete with it" {
     try std.testing.expect(!asset_manager.mECSManager.IsActiveEntity(asset_id));
     try std.testing.expectEqual(@as(usize, 0), asset_manager.mECSManager.NumWithComponent(PendingDelete));
 
-    const pending = try asset_manager.mECSManager.GetGroup(engine_context.FrameAllocator(), .{ .Component = PendingDelete });
+    const pending = try asset_manager.mECSManager.GetGroup(engine_context.Scratch(), .{ .Component = PendingDelete });
     try std.testing.expectEqual(@as(usize, 0), pending.items.len);
 }
 
@@ -80,17 +80,17 @@ test "marking is per asset and leaves others alone" {
     defer test_context.Deinit();
     const engine_context = test_context.mEngineContext;
     const asset_manager = &engine_context.mAssetManager;
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
-    const marked = try asset_manager.mECSManager.CreateEntity(engine_allocator);
-    const untouched = try asset_manager.mECSManager.CreateEntity(engine_allocator);
+    const marked = try asset_manager.mECSManager.CreateEntity(keep_allocator);
+    const untouched = try asset_manager.mECSManager.CreateEntity(keep_allocator);
 
     _ = try asset_manager.mECSManager.AddComponentSync(engine_context, marked, PendingDelete{
         .mReason = 1,
         .mTime = std.Io.Timestamp.now(engine_context.Io(), .awake),
     });
 
-    const pending = try asset_manager.mECSManager.GetGroup(engine_context.FrameAllocator(), .{ .Component = PendingDelete });
+    const pending = try asset_manager.mECSManager.GetGroup(engine_context.Scratch(), .{ .Component = PendingDelete });
     try std.testing.expectEqual(@as(usize, 1), pending.items.len);
     try std.testing.expectEqual(marked, pending.items[0]);
     try std.testing.expect(!asset_manager.mECSManager.HasComponent(PendingDelete, untouched));
@@ -101,9 +101,9 @@ test "a mark can come off again, for a file that was only briefly missing" {
     defer test_context.Deinit();
     const engine_context = test_context.mEngineContext;
     const asset_manager = &engine_context.mAssetManager;
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
-    const asset_id = try asset_manager.mECSManager.CreateEntity(engine_allocator);
+    const asset_id = try asset_manager.mECSManager.CreateEntity(keep_allocator);
     _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, PendingDelete{
         .mReason = 1,
         .mTime = std.Io.Timestamp.now(engine_context.Io(), .awake),
@@ -129,7 +129,7 @@ test "OnUpdate stats every file on the job pool: a missing one is marked, a chan
     defer test_context.Deinit();
     const engine_context = test_context.mEngineContext;
     const asset_manager = &engine_context.mAssetManager;
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
     //the test's own file setup: the engine's Io doesn't forward deleting a file
     const io = std.testing.io;
 
@@ -137,12 +137,12 @@ test "OnUpdate stats every file on the job pool: a missing one is marked, a chan
     const threads = try std.heap.page_allocator.create(std.Io.Threaded);
     threads.* = std.Io.Threaded.init(std.heap.page_allocator, .{ .async_limit = .limited(3), .concurrent_limit = .nothing });
     engine_context.mJobPool = .{ .mIo = threads.io(), .mWorkers = 3 };
-    engine_context._Internal.ThreadFrameArenas.mMainThread = std.Thread.getCurrentId();
+    engine_context._Internal.ThreadScratchArenas.mMainThread = std.Thread.getCurrentId();
     defer {
         engine_context.mJobPool = .{};
         threads.deinit();
         std.heap.page_allocator.destroy(threads);
-        engine_context._Internal.ThreadFrameArenas.Deinit();
+        engine_context._Internal.ThreadScratchArenas.Deinit();
     }
 
     var tmp = std.testing.tmpDir(.{});
@@ -157,9 +157,9 @@ test "OnUpdate stats every file on the job pool: a missing one is marked, a chan
         try tmp.dir.writeFile(io, .{ .sub_path = name, .data = "contents" });
         const stat = try tmp.dir.statFile(io, name, .{});
 
-        asset.* = try asset_manager.mECSManager.CreateEntity(engine_allocator);
+        asset.* = try asset_manager.mECSManager.CreateEntity(keep_allocator);
         var file_data = FileMetaData{ .mPathType = .Eng, .mLastModified = stat.mtime, .mSize = stat.size };
-        try file_data.mRelPath.print(engine_allocator, ".zig-cache/tmp/{s}/{s}", .{ tmp.sub_path, name });
+        try file_data.mRelPath.print(keep_allocator, ".zig-cache/tmp/{s}/{s}", .{ tmp.sub_path, name });
         _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset.*, file_data);
     }
 

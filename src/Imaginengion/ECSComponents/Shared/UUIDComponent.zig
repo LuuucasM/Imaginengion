@@ -30,5 +30,5 @@ pub const jsonParse = Json.jsonParse;
 
 /// Registers the loaded UUID with the manager of whatever object owns this component (entity, scene, ...)
 pub fn PostParse(self: *UUIDComponent, engine_context: *EngineContext, owner: anytype) !void {
-    try owner.mManager.GetManager(@TypeOf(owner)).AddUUID(engine_context.EngineAllocator(), self.ID, owner.mID);
+    try owner.mManager.GetManager(@TypeOf(owner)).AddUUID(engine_context.Keep(), self.ID, owner.mID);
 }

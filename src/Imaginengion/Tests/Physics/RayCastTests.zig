@@ -43,7 +43,7 @@ const TestWorld = struct {
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
         engine_context.mEditorWorld.Deinit(engine_context);
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -73,7 +73,7 @@ fn CenterRay(pose: CameraRay.Pose) CameraRay.Ray {
 
 /// A cast through a view that shows the whole world, every overlay included
 fn Cast(engine_context: *EngineContext, pose: CameraRay.Pose, ray: CameraRay.Ray, options: RayCast.CastOptions) !?RayCast.RayHit {
-    const overlays = try engine_context.mEditorWorld.GetSceneGroup(engine_context.FrameAllocator(), .{ .Component = OverlayLayerTag });
+    const overlays = try engine_context.mEditorWorld.GetSceneGroup(engine_context.Scratch(), .{ .Component = OverlayLayerTag });
     return CastIn(engine_context, .{ .Overlays = overlays.items }, pose, ray, options);
 }
 

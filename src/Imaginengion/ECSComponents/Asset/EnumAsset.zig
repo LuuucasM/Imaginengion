@@ -22,13 +22,13 @@ pub fn Init(self: *EnumAsset, engine_context: *EngineContext, abs_path: []const 
     defer zone.Deinit();
     zone.Text(rel_path);
 
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
     var file_reader = asset_file.reader(engine_context.Io(), &.{});
-    const contents = try file_reader.interface.allocRemaining(frame_allocator, .unlimited);
-    const source = try frame_allocator.dupeSentinel(u8, contents, 0);
+    const contents = try file_reader.interface.allocRemaining(scratch_allocator, .unlimited);
+    const source = try scratch_allocator.dupeSentinel(u8, contents, 0);
 
     const enum_name = std.fs.path.stem(abs_path);
-    const names = ParseNames(frame_allocator, source, enum_name) catch |err| {
+    const names = ParseNames(scratch_allocator, source, enum_name) catch |err| {
         switch (err) {
             error.SyntaxError => std.log.err("{s} has a syntax error, so {s}'s values can't be read", .{ rel_path, enum_name }),
             error.NoSuchEnum => std.log.err("{s} has no pub const {s} = enum {{ ... }}: an enum file holds the enum named after it", .{ rel_path, enum_name }),
@@ -38,16 +38,16 @@ pub fn Init(self: *EnumAsset, engine_context: *EngineContext, abs_path: []const 
         return error.AssetInitFailed;
     };
 
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
     errdefer self.Deinit(engine_context);
-    try self.mNames.ensureTotalCapacityPrecise(engine_allocator, names.len);
-    for (names) |name| self.mNames.appendAssumeCapacity(try engine_allocator.dupe(u8, name));
+    try self.mNames.ensureTotalCapacityPrecise(keep_allocator, names.len);
+    for (names) |name| self.mNames.appendAssumeCapacity(try keep_allocator.dupe(u8, name));
 }
 
 pub fn Deinit(self: *EnumAsset, engine_context: *EngineContext) void {
-    const engine_allocator = engine_context.EngineAllocator();
-    for (self.mNames.items) |name| engine_allocator.free(name);
-    self.mNames.deinit(engine_allocator);
+    const keep_allocator = engine_context.Keep();
+    for (self.mNames.items) |name| keep_allocator.free(name);
+    self.mNames.deinit(keep_allocator);
 }
 
 /// Where the value called `name` is among the enum's values, null if it has none of that name

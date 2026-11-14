@@ -13,7 +13,7 @@ pub fn Build(_: *EngineContext, _: []const u8, _: []const u8) !void {}
 
 /// The ScriptInfo of the script at rel_path, which is how the table knows it: abs_path is different on every machine
 pub fn Open(_: *StaticScriptAsset, engine_context: *EngineContext, _: []const u8, rel_path: []const u8, _: u32) !*const ScriptABI.ScriptInfo {
-    const path = try ProjectWalk.Normalize(engine_context.FrameAllocator(), rel_path);
+    const path = try ProjectWalk.Normalize(engine_context.Scratch(), rel_path);
     for (game_scripts.scripts) |script| {
         if (std.mem.eql(u8, script.mPath, path)) return script.mInfo;
     }

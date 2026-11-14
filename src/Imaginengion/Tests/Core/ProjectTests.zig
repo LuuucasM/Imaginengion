@@ -18,7 +18,7 @@ const TestEngine = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //file reads/writes go through the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -31,8 +31,8 @@ const TestEngine = struct {
         const engine_context = self.mEngineContext;
         engine_context.mAudioManager.DeinitMixer(engine_context);
         engine_context.mProject.Deinit(engine_context);
-        engine_context.mSerializer.Deinit(engine_context.EngineAllocator());
-        _ = engine_context._Internal.EngineGPA.deinit();
+        engine_context.mSerializer.Deinit(engine_context.Keep());
+        _ = engine_context._Internal.KeepHeap.deinit();
         self.mTmpDir.cleanup();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -40,7 +40,7 @@ const TestEngine = struct {
 
     /// This test's temporary folder as an absolute path, which is what a project is made with
     fn TmpDirAbsPath(self: *TestEngine) ![]const u8 {
-        return try self.mTmpDir.dir.realPathFileAlloc(self.mEngineContext.Io(), ".", self.mEngineContext.FrameAllocator());
+        return try self.mTmpDir.dir.realPathFileAlloc(self.mEngineContext.Io(), ".", self.mEngineContext.Scratch());
     }
 };
 
@@ -50,30 +50,30 @@ test "the build files point at the engine, are put back when wrong, and a build.
     const context = engine.mEngineContext;
     const project = &context.mProject;
     const io = context.Io();
-    const frame_allocator = context.FrameAllocator();
+    const scratch_allocator = context.Scratch();
 
     try project.New(context, try engine.TmpDirAbsPath());
     const dir = project.GetDirectory();
     try project.WriteBuildFiles(context);
 
-    const build_file = try dir.readFileAlloc(io, "build.zig", frame_allocator, .unlimited);
+    const build_file = try dir.readFileAlloc(io, "build.zig", scratch_allocator, .unlimited);
     try std.testing.expect(std.mem.indexOf(u8, build_file, "@import(\"GameEngine\").ProjectBuild(b)") != null);
 
     //from the test's temporary folder, which is inside the engine's: back up to it, with / and no drive
-    const zon = try dir.readFileAlloc(io, "build.zig.zon", frame_allocator, .unlimited);
+    const zon = try dir.readFileAlloc(io, "build.zig.zon", scratch_allocator, .unlimited);
     try std.testing.expect(std.mem.indexOf(u8, zon, ".path = \"../") != null);
     try std.testing.expect(std.mem.indexOfScalar(u8, zon, '\\') == null);
 
     try dir.writeFile(io, .{ .sub_path = "build.zig.zon", .data = "out of date" });
     try project.WriteBuildFiles(context);
-    try std.testing.expectEqualStrings(zon, try dir.readFileAlloc(io, "build.zig.zon", frame_allocator, .unlimited));
+    try std.testing.expectEqualStrings(zon, try dir.readFileAlloc(io, "build.zig.zon", scratch_allocator, .unlimited));
 
     const own_build_file = "const std = @import(\"std\");\n";
     try dir.writeFile(io, .{ .sub_path = "build.zig", .data = own_build_file });
     try dir.writeFile(io, .{ .sub_path = "build.zig.zon", .data = "out of date" });
     try project.WriteBuildFiles(context);
-    try std.testing.expectEqualStrings(own_build_file, try dir.readFileAlloc(io, "build.zig", frame_allocator, .unlimited));
-    try std.testing.expectEqualStrings("out of date", try dir.readFileAlloc(io, "build.zig.zon", frame_allocator, .unlimited));
+    try std.testing.expectEqualStrings(own_build_file, try dir.readFileAlloc(io, "build.zig", scratch_allocator, .unlimited));
+    try std.testing.expectEqualStrings("out of date", try dir.readFileAlloc(io, "build.zig.zon", scratch_allocator, .unlimited));
 }
 
 test "the entries are kept from the project folder, and opening the project brings them back" {
@@ -81,22 +81,22 @@ test "the entries are kept from the project folder, and opening the project brin
     defer saved_engine.Deinit();
     const saved_context = saved_engine.mEngineContext;
     const project = &saved_context.mProject;
-    const frame_allocator = saved_context.FrameAllocator();
+    const scratch_allocator = saved_context.Scratch();
 
     const project_folder = try saved_engine.TmpDirAbsPath();
     try project.New(saved_context, project_folder);
     try std.testing.expectEqualStrings("", project.GetEntry(.Scene));
 
-    try project.SetEntry(saved_context, .Scene, try std.fs.path.join(frame_allocator, &.{ project_folder, "Scenes", "Main.imsc" }));
-    try project.SetEntry(saved_context, .Player, try std.fs.path.join(frame_allocator, &.{ project_folder, "Hero.impl" }));
+    try project.SetEntry(saved_context, .Scene, try std.fs.path.join(scratch_allocator, &.{ project_folder, "Scenes", "Main.imsc" }));
+    try project.SetEntry(saved_context, .Player, try std.fs.path.join(scratch_allocator, &.{ project_folder, "Hero.impl" }));
     try std.testing.expectEqualStrings("Scenes/Main.imsc", project.GetEntry(.Scene));
     try std.testing.expectEqualStrings("Hero.impl", project.GetEntry(.Player));
     try std.testing.expectEqualStrings("", project.GetEntry(.GameContext));
 
     //only the entry's kind of file, and only one in the project
-    const outside_path = try std.fs.path.join(frame_allocator, &.{ std.fs.path.dirname(project_folder).?, "Other.imsc" });
+    const outside_path = try std.fs.path.join(scratch_allocator, &.{ std.fs.path.dirname(project_folder).?, "Other.imsc" });
     try std.testing.expectError(error.NotInProject, project.SetEntry(saved_context, .Scene, outside_path));
-    const wrong_kind_path = try std.fs.path.join(frame_allocator, &.{ project_folder, "Hero.impl" });
+    const wrong_kind_path = try std.fs.path.join(scratch_allocator, &.{ project_folder, "Hero.impl" });
     try std.testing.expectError(error.WrongFileKind, project.SetEntry(saved_context, .GameContext, wrong_kind_path));
     try std.testing.expectEqualStrings("Scenes/Main.imsc", project.GetEntry(.Scene));
     try std.testing.expectEqualStrings("", project.GetEntry(.GameContext));
@@ -105,8 +105,8 @@ test "the entries are kept from the project folder, and opening the project brin
     const loaded_engine = try TestEngine.Init();
     defer loaded_engine.Deinit();
     const loaded_context = loaded_engine.mEngineContext;
-    const project_file_name = try std.fmt.allocPrint(loaded_context.FrameAllocator(), "{s}{s}", .{ std.fs.path.basename(project_folder), Project.FILE_EXTENSION });
-    const project_file_path = try std.fs.path.join(loaded_context.FrameAllocator(), &.{ project_folder, project_file_name });
+    const project_file_name = try std.fmt.allocPrint(loaded_context.Scratch(), "{s}{s}", .{ std.fs.path.basename(project_folder), Project.FILE_EXTENSION });
+    const project_file_path = try std.fs.path.join(loaded_context.Scratch(), &.{ project_folder, project_file_name });
     try loaded_context.mProject.Open(loaded_context, project_file_path);
     try std.testing.expectEqualStrings("Scenes/Main.imsc", loaded_context.mProject.GetEntry(.Scene));
     try std.testing.expectEqualStrings("Hero.impl", loaded_context.mProject.GetEntry(.Player));
@@ -118,7 +118,7 @@ test "the game's name starts as the folder's, and it and the window icon are kep
     defer saved_engine.Deinit();
     const saved_context = saved_engine.mEngineContext;
     const project = &saved_context.mProject;
-    const frame_allocator = saved_context.FrameAllocator();
+    const scratch_allocator = saved_context.Scratch();
 
     const project_folder = try saved_engine.TmpDirAbsPath();
     try project.New(saved_context, project_folder);
@@ -126,12 +126,12 @@ test "the game's name starts as the folder's, and it and the window icon are kep
     try std.testing.expectEqualStrings("", project.GetWindowIcon());
 
     try project.SetName(saved_context, "Space Pong");
-    try project.SetWindowIcon(saved_context, try std.fs.path.join(frame_allocator, &.{ project_folder, "Art", "Icon.png" }));
+    try project.SetWindowIcon(saved_context, try std.fs.path.join(scratch_allocator, &.{ project_folder, "Art", "Icon.png" }));
     try std.testing.expectEqualStrings("Art/Icon.png", project.GetWindowIcon());
 
     //only a PNG, and only one in the project
-    try std.testing.expectError(error.WrongFileKind, project.SetWindowIcon(saved_context, try std.fs.path.join(frame_allocator, &.{ project_folder, "Icon.jpg" })));
-    const outside_path = try std.fs.path.join(frame_allocator, &.{ std.fs.path.dirname(project_folder).?, "Icon.png" });
+    try std.testing.expectError(error.WrongFileKind, project.SetWindowIcon(saved_context, try std.fs.path.join(scratch_allocator, &.{ project_folder, "Icon.jpg" })));
+    const outside_path = try std.fs.path.join(scratch_allocator, &.{ std.fs.path.dirname(project_folder).?, "Icon.png" });
     try std.testing.expectError(error.NotInProject, project.SetWindowIcon(saved_context, outside_path));
     try std.testing.expectEqualStrings("Art/Icon.png", project.GetWindowIcon());
 
@@ -139,8 +139,8 @@ test "the game's name starts as the folder's, and it and the window icon are kep
     const loaded_engine = try TestEngine.Init();
     defer loaded_engine.Deinit();
     const loaded_context = loaded_engine.mEngineContext;
-    const project_file_name = try std.fmt.allocPrint(loaded_context.FrameAllocator(), "{s}{s}", .{ std.fs.path.basename(project_folder), Project.FILE_EXTENSION });
-    const project_file_path = try std.fs.path.join(loaded_context.FrameAllocator(), &.{ project_folder, project_file_name });
+    const project_file_name = try std.fmt.allocPrint(loaded_context.Scratch(), "{s}{s}", .{ std.fs.path.basename(project_folder), Project.FILE_EXTENSION });
+    const project_file_path = try std.fs.path.join(loaded_context.Scratch(), &.{ project_folder, project_file_name });
     try loaded_context.mProject.Open(loaded_context, project_file_path);
     try std.testing.expectEqualStrings("Space Pong", loaded_context.mProject.GetName());
     try std.testing.expectEqualStrings("Art/Icon.png", loaded_context.mProject.GetWindowIcon());

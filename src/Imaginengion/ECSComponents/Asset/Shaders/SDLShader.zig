@@ -15,9 +15,9 @@ const SDLShader = @This();
 mPipeline: ?*sdl.SDL_GPUGraphicsPipeline,
 
 pub fn Init(self: *SDLShader, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File, config: PipelineConfig) !void {
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
-    const sources: ShaderSources = try ReadFile(asset_file, frame_allocator, abs_path);
+    const sources: ShaderSources = try ReadFile(asset_file, scratch_allocator, abs_path);
 
     const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mRenderContext.GetDevice()));
 
@@ -169,13 +169,13 @@ fn ReadFile(asset_file: std.fs.File, frame_allcoator: std.mem.Allocator, abs_pat
     };
 }
 
-fn LoadSpirvFile(frame_allocator: std.mem.Allocator, dir: []const u8, name: []const u8) ![]const u8 {
-    const path = try std.fs.path.join(frame_allocator, &.{ dir, name });
+fn LoadSpirvFile(scratch_allocator: std.mem.Allocator, dir: []const u8, name: []const u8) ![]const u8 {
+    const path = try std.fs.path.join(scratch_allocator, &.{ dir, name });
     const file = try std.fs.openFileAbsolute(path, .{});
     defer file.close();
 
     const size = try file.getEndPos();
-    const buf = try frame_allocator.alloc(u8, size);
+    const buf = try scratch_allocator.alloc(u8, size);
     _ = try file.readAll(buf);
     return buf;
 }

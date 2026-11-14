@@ -127,10 +127,10 @@ fn ScriptLoop(comptime ObjectType: type, comptime script_type: type, comptime wo
         pub const Name = std.fmt.comptimePrint("ScriptsProcessor::RunScript({s}, {s}, {s})", .{ Tracy.ShortTypeName(ObjectType), Tracy.ShortTypeName(script_type), world_name });
 
         pub fn Run(engine_context: *EngineContext, world_manager: *WorldManager, above: ?usize, args: Args) !ScriptResult {
-            const frame_allocator = engine_context.FrameAllocator();
+            const scratch_allocator = engine_context.Scratch();
             const manager = world_manager.GetManager(ObjectType);
 
-            const script_ids = try manager.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
+            const script_ids = try manager.GetGroup(scratch_allocator, GroupQuery{ .Component = script_type });
             SortByOwnerStackPos(ObjectType, world_manager, script_ids.items);
 
             if (comptime IsBatched(script_type)) {
@@ -142,7 +142,7 @@ fn ScriptLoop(comptime ObjectType: type, comptime script_type: type, comptime wo
                     }
                     const script_component = manager.GetComponent(ScriptComponent, script_id) orelse continue;
                     const prepared = Prepare(ObjectType, script_type, script_component) orelse continue;
-                    try hooks.append(frame_allocator, .{
+                    try hooks.append(scratch_allocator, .{
                         .mPrepared = prepared,
                         .mOwner = .{ .mID = OwnerOf(ObjectType, world_manager, script_id), .mManager = world_manager },
                     });
@@ -503,7 +503,7 @@ pub fn ProcessGameEvents(engine_context: *EngineContext, world: *WorldManager, c
 
     const queue = world.mGameEventManager.GetQueue(phase);
     defer world.mGameEventManager.Clear(phase);
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
     //built when the first event comes, so a phase with none costs nothing, and again only when the scripts that hear
     //events or their order may have changed (WorldManager.mEventHandlersVersion). Not for every event: most handlers
@@ -513,10 +513,10 @@ pub fn ProcessGameEvents(engine_context: *EngineContext, world: *WorldManager, c
     //by index: a handler can send more, which go on the end and can move the queue
     while (index < queue.mEntries.items.len) : (index += 1) {
         const entry = queue.mEntries.items[index];
-        if (handlers == null or handlers.?.mVersion != world.mEventHandlersVersion) handlers = try HandlerList.Build(frame_allocator, world);
-        const scripts = try handlers.?.For(frame_allocator, entry.mId);
+        if (handlers == null or handlers.?.mVersion != world.mEventHandlersVersion) handlers = try HandlerList.Build(scratch_allocator, world);
+        const scripts = try handlers.?.For(scratch_allocator, entry.mId);
         //the handlers are handed a copy, aligned for any event, which a handler sending an event can't move
-        const copy = try frame_allocator.alignedAlloc(u8, .@"16", @max(entry.mSize, 1));
+        const copy = try scratch_allocator.alignedAlloc(u8, .@"16", @max(entry.mSize, 1));
         @memcpy(copy[0..entry.mSize], queue.BytesOf(index));
         _ = try engine_context.mSystems.RunSystem(EventHandlersLoop, engine_context, .{ world, scripts, entry.mId, @as(*const anyopaque, copy.ptr) });
     }
@@ -615,7 +615,7 @@ const EventHandlersLoop = struct {
     pub const Name = "ScriptsProcessor::RunEventHandlers";
 
     pub fn Run(engine_context: *EngineContext, world: *WorldManager, known: ?HandlerList.Lists, id: u64, event: *const anyopaque) !ScriptResult {
-        const scripts = known orelse (try HandlerList.Build(engine_context.FrameAllocator(), world)).mAll;
+        const scripts = known orelse (try HandlerList.Build(engine_context.Scratch(), world)).mAll;
         inline for (HandlerList.OBJECT_TYPES, 0..) |ObjectType, i| {
             const manager = world.GetManager(ObjectType);
             for (scripts[i]) |script| {
@@ -663,13 +663,13 @@ pub fn SyncScripts(engine_context: *EngineContext, worlds: []const *WorldManager
     const asset_manager = &engine_context.mAssetManager;
     if (!asset_manager.AnyFileChanged()) return;
 
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
     //each changed script is built once, however many script children run it
     var reloaded: std.AutoHashMapUnmanaged(AssetHandle.Type, void) = .empty;
     for (worlds) |world_manager| {
         inline for (.{ Entity, Scene, Player, GameContext }) |ObjectType| {
             const manager = world_manager.GetManager(ObjectType);
-            const script_ids = try manager.GetGroup(frame_allocator, GroupQuery{ .Component = ScriptComponent });
+            const script_ids = try manager.GetGroup(scratch_allocator, GroupQuery{ .Component = ScriptComponent });
             for (script_ids.items) |script_id| {
                 const script_handle = manager.GetComponent(ScriptComponent, script_id).?.mScriptAssetHandle;
                 if (script_handle.mID == AssetHandle.NullObject) continue;
@@ -678,10 +678,10 @@ pub fn SyncScripts(engine_context: *EngineContext, worlds: []const *WorldManager
                 const import_changed = if (loaded) |script_asset| script_asset.DependencyChanged(engine_context) else false;
                 if (!own_changed and !import_changed) continue;
                 if (!reloaded.contains(script_handle.mID)) {
-                    try reloaded.put(frame_allocator, script_handle.mID, {});
+                    try reloaded.put(scratch_allocator, script_handle.mID, {});
                     if (loaded) |script_asset| {
                         const file_data = script_handle.GetFileMetaData();
-                        const abs_path = try asset_manager.GetAbsPath(frame_allocator, file_data.mRelPath.items, file_data.mPathType);
+                        const abs_path = try asset_manager.GetAbsPath(scratch_allocator, file_data.mRelPath.items, file_data.mPathType);
                         _ = try script_asset.Reload(engine_context, abs_path, file_data.mRelPath.items, import_changed);
                     }
                 }

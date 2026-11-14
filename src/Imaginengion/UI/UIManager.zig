@@ -94,22 +94,22 @@ pub const PLAIN_TEXTURE_PATH = EngineFiles.PLAIN_TEXTURE;
 
 /// Sets up UI land, and makes its ECS known to the systems layer
 pub fn Init(self: *UIManager, engine_context: *EngineContext) !void {
-    try self.mECSManager.Init(engine_context.EngineAllocator());
-    try engine_context.mSystems.Register(engine_context.EngineAllocator(), &self.mECSManager);
+    try self.mECSManager.Init(engine_context.Keep());
+    try engine_context.mSystems.Register(engine_context.Keep(), &self.mECSManager);
     engine_context.mTransactions.Register(&self.mECSManager);
 }
 
 pub fn Deinit(self: *UIManager, engine_context: *EngineContext) void {
-    engine_context.mSystems.Unregister(engine_context.EngineAllocator(), &self.mECSManager);
-    engine_context.mTransactions.Unregister(engine_context.EngineAllocator(), &self.mECSManager);
-    self.mFocusSystem.Deinit(engine_context.EngineAllocator());
-    self.mPopupSystem.Deinit(engine_context.EngineAllocator());
-    self.mStyleSystem.Deinit(engine_context.EngineAllocator());
-    self.mBindingSystem.Deinit(engine_context.EngineAllocator());
+    engine_context.mSystems.Unregister(engine_context.Keep(), &self.mECSManager);
+    engine_context.mTransactions.Unregister(engine_context.Keep(), &self.mECSManager);
+    self.mFocusSystem.Deinit(engine_context.Keep());
+    self.mPopupSystem.Deinit(engine_context.Keep());
+    self.mStyleSystem.Deinit(engine_context.Keep());
+    self.mBindingSystem.Deinit(engine_context.Keep());
     self.mTheme.ReleaseAsset();
     self.mPlainTexture.ReleaseAsset();
     self.mECSManager.Deinit(engine_context);
-    self.mEventManager.Deinit(engine_context.EngineAllocator());
+    self.mEventManager.Deinit(engine_context.Keep());
 }
 
 pub const SetSyncCallback = Core.SetSyncCallback;
@@ -223,7 +223,7 @@ pub fn ProcessUIEvents(self: *UIManager, engine_context: *EngineContext, callbac
     var callbacks = callback_list;
     callbacks.prepend(&own_callback.mNode);
     try self.mEventManager.ProcessCategory(.UI, engine_context, callbacks);
-    self.mEventManager.ClearCategory(engine_context.EngineAllocator(), .UI, .ClearRetainingCapacity);
+    self.mEventManager.ClearCategory(engine_context.Keep(), .UI, .ClearRetainingCapacity);
 }
 
 fn OnOwnUIEvent(self: *UIManager, engine_context: *EngineContext, event: *const UIEventData.EventT) !EventResult {
@@ -279,7 +279,7 @@ pub fn Reset(self: *UIManager, engine_context: *EngineContext) void {
 pub fn SetTheme(self: *UIManager, engine_context: *EngineContext, theme: AssetHandle) void {
     self.mTheme.ReleaseAsset();
     self.mTheme = theme;
-    self.mStyleSystem.ClearWarnings(engine_context.EngineAllocator());
+    self.mStyleSystem.ClearWarnings(engine_context.Keep());
 }
 
 /// Reads the current theme (and so its fonts, see ThemeAsset) and the plain texture now, for a program to call while it
@@ -328,8 +328,8 @@ pub fn GetManager(self: *UIManager, comptime obj_t: type) *UIManager {
 
 /// A new element with no components of its own and no entity yet. Usually made through Adopt instead
 pub fn NewElement(self: *UIManager, engine_context: *EngineContext) !UIElement {
-    const engine_allocator = engine_context.EngineAllocator();
-    const element_id = try self.mECSManager.CreateEntity(engine_allocator);
+    const keep_allocator = engine_context.Keep();
+    const element_id = try self.mECSManager.CreateEntity(keep_allocator);
     //not AddComponentSync: an element made inside a system that reads owners (a scrollbar's, during the scroll pass)
     //would move what that system holds. Waiting is still readable, so Adopt can set the owner straight away
     _ = try self.mECSManager.AddComponent(engine_context, element_id, ElementOwnerComponent{});
@@ -377,7 +377,7 @@ pub fn Adopt(self: *UIManager, engine_context: *EngineContext, owner: Entity) !v
 pub fn AdoptWorld(self: *UIManager, engine_context: *EngineContext, world: *WorldManager) !void {
     const zone = Tracy.ZoneInit("UIManager::AdoptWorld", @src());
     defer zone.Deinit();
-    const entity_ids = try world.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = UIElementComponent });
+    const entity_ids = try world.GetEntityGroup(engine_context.Scratch(), .{ .Component = UIElementComponent });
     for (entity_ids.items) |entity_id| try self.Adopt(engine_context, world.GetEntity(entity_id));
 }
 
@@ -412,7 +412,7 @@ pub fn Send(self: *UIManager, engine_context: *EngineContext, entity: Entity, ev
         try transaction.OnCommit(HeldUIEvent{ .mManager = self, .mEntity = entity, .mEvent = event }, HeldUIEvent.Send);
         return;
     }
-    try self.mEventManager.Insert(engine_context.EngineAllocator(), .UI, .{ .Entity = .{ .mEntity = entity, .mEvent = event } });
+    try self.mEventManager.Insert(engine_context.Keep(), .UI, .{ .Entity = .{ .mEntity = entity, .mEvent = event } });
 }
 
 /// A UI event sent inside a transaction, waiting for it to be kept (Send)
@@ -422,7 +422,7 @@ const HeldUIEvent = struct {
     mEvent: UIEventData.UIEvent,
 
     fn Send(engine_context: *EngineContext, self: *HeldUIEvent) void {
-        self.mManager.mEventManager.Insert(engine_context.EngineAllocator(), .UI, .{ .Entity = .{ .mEntity = self.mEntity, .mEvent = self.mEvent } }) catch |err| {
+        self.mManager.mEventManager.Insert(engine_context.Keep(), .UI, .{ .Entity = .{ .mEntity = self.mEntity, .mEvent = self.mEvent } }) catch |err| {
             std.log.err("A UI event a kept transaction sent was lost: {s}", .{@errorName(err)});
         };
     }
@@ -522,7 +522,7 @@ pub fn EndFrame(self: *UIManager, engine_context: *EngineContext) !void {
     };
     callback_list.append(&callback.mNode);
     try self.mEventManager.ProcessCategory(.EndOfFrame, engine_context, callback_list);
-    self.mEventManager.ClearCategory(engine_context.EngineAllocator(), .EndOfFrame, .ClearRetainingCapacity);
+    self.mEventManager.ClearCategory(engine_context.Keep(), .EndOfFrame, .ClearRetainingCapacity);
 
     try self.mECSManager.ProcessEvents(engine_context);
 }

@@ -57,8 +57,8 @@ pub fn Core(comptime Self: type) type {
             _ValidateObject(Self);
         }
 
-        pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
-            try self.mECSManager.Init(engine_allocator);
+        pub fn Init(self: *Self, keep_allocator: std.mem.Allocator) !void {
+            try self.mECSManager.Init(keep_allocator);
             HookRemovals(self);
         }
 
@@ -70,8 +70,8 @@ pub fn Core(comptime Self: type) type {
 
         pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
             self.mECSManager.Deinit(engine_context);
-            self.mUUIDToWorldID.deinit(engine_context.EngineAllocator());
-            self.mEventManager.Deinit(engine_context.EngineAllocator());
+            self.mUUIDToWorldID.deinit(engine_context.Keep());
+            self.mEventManager.Deinit(engine_context.Keep());
         }
 
         /// Points both of this manager's event managers (its own and its ECS manager's) at the
@@ -103,7 +103,7 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn CreateObj(self: *Self, engine_context: *EngineContext, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {
-            const new_obj: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.CreateEntity(engine_context.EngineAllocator()), .mManager = ObjManager(self) };
+            const new_obj: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.CreateEntity(engine_context.Keep()), .mManager = ObjManager(self) };
             try self.ApplyConfig(engine_context, new_obj.mID, config);
             return new_obj;
         }
@@ -132,7 +132,7 @@ pub fn Core(comptime Self: type) type {
             for (self.mEventManager.mEventsArray.getPtr(.EndOfFrame).items) |queued_event| {
                 if (std.meta.eql(queued_event, event)) return;
             }
-            try self.mEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, event);
+            try self.mEventManager.Insert(engine_context.Keep(), .EndOfFrame, event);
         }
 
         /// The ECS's removal hook (see ECSManager.RemovalHook): hands each removal and destroy to OnComponentRemoved or
@@ -350,18 +350,18 @@ pub fn Core(comptime Self: type) type {
             return new_obj;
         }
 
-        pub fn GetGroup(self: *Self, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(UnderlyingObjType(Self)) {
-            return try self.mECSManager.GetGroup(frame_allocator, query);
+        pub fn GetGroup(self: *Self, scratch_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(UnderlyingObjType(Self)) {
+            return try self.mECSManager.GetGroup(scratch_allocator, query);
         }
 
         pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
             self.mECSManager.clearAndFree(engine_context);
-            self.mUUIDToWorldID.clearAndFree(engine_context.EngineAllocator());
-            self.mEventManager.EventsReset(engine_context.EngineAllocator(), .ClearAndFree);
+            self.mUUIDToWorldID.clearAndFree(engine_context.Keep());
+            self.mEventManager.EventsReset(engine_context.Keep(), .ClearAndFree);
         }
 
-        pub fn AddUUID(self: *Self, engine_allocator: std.mem.Allocator, uuid: u64, world_id: UnderlyingObjType(Self)) !void {
-            try self.mUUIDToWorldID.put(engine_allocator, uuid, world_id);
+        pub fn AddUUID(self: *Self, keep_allocator: std.mem.Allocator, uuid: u64, world_id: UnderlyingObjType(Self)) !void {
+            try self.mUUIDToWorldID.put(keep_allocator, uuid, world_id);
         }
 
         pub fn RemoveUUID(self: *Self, uuid: u64) void {
@@ -379,14 +379,14 @@ pub fn Core(comptime Self: type) type {
         /// The manager's own event queue is left alone: its events carry objects that hold a
         /// *WorldManager, which would still be this world's.
         pub fn Copy(self: *Self, engine_context: *EngineContext, other: *Self) !void {
-            const engine_allocator = engine_context.EngineAllocator();
+            const keep_allocator = engine_context.Keep();
 
-            try other.mUUIDToWorldID.ensureTotalCapacity(engine_allocator, self.mUUIDToWorldID.count());
+            try other.mUUIDToWorldID.ensureTotalCapacity(keep_allocator, self.mUUIDToWorldID.count());
             var iter = self.mUUIDToWorldID.iterator();
             while (iter.next()) |entry| {
                 other.mUUIDToWorldID.putAssumeCapacity(entry.key_ptr.*, entry.value_ptr.*);
             }
-            errdefer other.mUUIDToWorldID.clearAndFree(engine_allocator);
+            errdefer other.mUUIDToWorldID.clearAndFree(keep_allocator);
 
             try self.mECSManager.Copy(engine_context, &other.mECSManager);
         }

@@ -114,7 +114,7 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
     defer zone.Deinit();
 
     var masks: ShapeGeometry.ViewMasks = .{};
-    var mask_finder = ShapeGeometry.MaskFinder{ .mAllocator = engine_context.FrameAllocator(), .mMasks = &masks };
+    var mask_finder = ShapeGeometry.MaskFinder{ .mAllocator = engine_context.Scratch(), .mMasks = &masks };
     const bvh = &world.mBVH;
     const items: u32 = switch (options.Targets) {
         .Visuals => BVH.Mask.PICK,
@@ -211,9 +211,9 @@ const TreeWalk = struct {
         const canvas = self.mCanvas;
         switch (item.Kind) {
             .Merge => {
-                const frame_allocator = self.mEngineContext.FrameAllocator();
+                const scratch_allocator = self.mEngineContext.Scratch();
                 var programs: SDFCompiler.Programs = .{};
-                const compiled = SDFCompiler.Compile(frame_allocator, entity, canvas, &programs) catch |err| switch (err) {
+                const compiled = SDFCompiler.Compile(scratch_allocator, entity, canvas, &programs) catch |err| switch (err) {
                     error.MergeTooDeep => return,
                     else => return err,
                 };
@@ -277,14 +277,14 @@ const TreeWalk = struct {
 /// CastRay by testing every shape the view shows, with no tree: what CastRay's hits are checked against in the tests.
 /// Never called by the engine, so it isn't compiled into it
 pub fn CastRayLinear(engine_context: *EngineContext, world: *WorldManager, ray: Ray, camera_view: CameraView, view_scenes: ViewScenes, options: CastOptions) !?RayHit {
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
     var best_overlay: NearestPick = .{};
     var best_game: NearestPick = .{};
 
     switch (options.Targets) {
         .Visuals => {
-            const view = try ShapeGeometry.GatherViewShapes(frame_allocator, world, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
+            const view = try ShapeGeometry.GatherViewShapes(scratch_allocator, world, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
 
             for (view.Shapes.items) |shape| {
                 //overlays come first and any overlay hit wins, so once there is one the game layer can't change the answer
@@ -299,7 +299,7 @@ pub fn CastRayLinear(engine_context: *EngineContext, world: *WorldManager, ray: 
                 //hit says whether it is there
                 if (shape.Merge) {
                     var programs: SDFCompiler.Programs = .{};
-                    const compiled = SDFCompiler.Compile(frame_allocator, entity, canvas, &programs) catch |err| switch (err) {
+                    const compiled = SDFCompiler.Compile(scratch_allocator, entity, canvas, &programs) catch |err| switch (err) {
                         error.MergeTooDeep => continue,
                         else => return err,
                     };
@@ -338,7 +338,7 @@ pub fn CastRayLinear(engine_context: *EngineContext, world: *WorldManager, ray: 
             }
         },
         .Colliders => {
-            const colliders = try ShapeGeometry.GatherViewShapes(frame_allocator, world, camera_view, view_scenes, .{ .Component = ColliderComponent });
+            const colliders = try ShapeGeometry.GatherViewShapes(scratch_allocator, world, camera_view, view_scenes, .{ .Component = ColliderComponent });
 
             for (colliders.Shapes.items) |shape| {
                 //the same as for visuals: an overlay hit already decides it

@@ -65,10 +65,10 @@ mWarned: std.StringHashMapUnmanaged(void) = .empty,
 /// read again after its file changed, everything is styled again (ThemesReread)
 mThemesUsed: std.ArrayList(AssetHandle.Type) = .empty,
 
-pub fn Deinit(self: *StyleSystem, engine_allocator: std.mem.Allocator) void {
-    self.ClearWarnings(engine_allocator);
-    self.mWarned.deinit(engine_allocator);
-    self.mThemesUsed.deinit(engine_allocator);
+pub fn Deinit(self: *StyleSystem, keep_allocator: std.mem.Allocator) void {
+    self.ClearWarnings(keep_allocator);
+    self.mWarned.deinit(keep_allocator);
+    self.mThemesUsed.deinit(keep_allocator);
 }
 
 /// Whether a theme file a style was taken from is no longer read in, because its file changed (or it is gone): its
@@ -81,9 +81,9 @@ pub fn ThemesReread(self: *const StyleSystem, engine_context: *EngineContext) bo
 }
 
 /// Forgets which missing styles were warned about, e.g. once another theme is current
-pub fn ClearWarnings(self: *StyleSystem, engine_allocator: std.mem.Allocator) void {
+pub fn ClearWarnings(self: *StyleSystem, keep_allocator: std.mem.Allocator) void {
     var iter = self.mWarned.keyIterator();
-    while (iter.next()) |key| engine_allocator.free(key.*);
+    while (iter.next()) |key| keep_allocator.free(key.*);
     self.mWarned.clearRetainingCapacity();
 }
 
@@ -95,11 +95,11 @@ pub const Update = struct {
 
     pub fn Run(engine_context: *EngineContext, self: *StyleSystem, theme: *const ThemeAsset, plain_texture: AssetHandle, restyle_all: bool) !void {
         const ui_manager = &engine_context.mUIManager;
-        const frame_allocator = engine_context.FrameAllocator();
+        const scratch_allocator = engine_context.Scratch();
         const element_ids = if (restyle_all)
-            try ui_manager.GetGroup(frame_allocator, .{ .Component = StyleComponent })
+            try ui_manager.GetGroup(scratch_allocator, .{ .Component = StyleComponent })
         else
-            try ui_manager.GetGroup(frame_allocator, .{ .Component = StyleDirtyTag });
+            try ui_manager.GetGroup(scratch_allocator, .{ .Component = StyleDirtyTag });
         //every styled element is about to say which theme it takes its style from
         if (restyle_all) self.mThemesUsed.clearRetainingCapacity();
         for (element_ids.items) |element_id| {
@@ -113,7 +113,7 @@ pub const Update = struct {
             const name = style_component.mStyle.items;
             const style_theme = try self.ThemeOf(engine_context, style_component.*) orelse theme;
             const style = style_theme.GetStyle(name) orelse {
-                try self.WarnMissing(engine_context.EngineAllocator(), name);
+                try self.WarnMissing(engine_context.Keep(), name);
                 continue;
             };
             try Apply(engine_context, entity, style.*, plain_texture);
@@ -130,7 +130,7 @@ fn ThemeOf(self: *StyleSystem, engine_context: *EngineContext, style: StyleCompo
     if (!style.mTheme.IsIDValid()) return null;
     const theme = style.mTheme.GetAsset(engine_context, ThemeAsset) catch return null;
     if (std.mem.indexOfScalar(AssetHandle.Type, self.mThemesUsed.items, style.mTheme.mID) == null) {
-        try self.mThemesUsed.append(engine_context.EngineAllocator(), style.mTheme.mID);
+        try self.mThemesUsed.append(engine_context.Keep(), style.mTheme.mID);
     }
     return theme;
 }
@@ -239,8 +239,8 @@ pub fn ColorFor(colors: ThemeAsset.StateColors, state: State) ?Vec4(f32) {
     return for_state orelse colors.Normal;
 }
 
-fn WarnMissing(self: *StyleSystem, engine_allocator: std.mem.Allocator, name: []const u8) !void {
+fn WarnMissing(self: *StyleSystem, keep_allocator: std.mem.Allocator, name: []const u8) !void {
     if (self.mWarned.contains(name)) return;
     std.log.warn("No style called '{s}' in its theme", .{name});
-    try self.mWarned.put(engine_allocator, try engine_allocator.dupe(u8, name), {});
+    try self.mWarned.put(keep_allocator, try keep_allocator.dupe(u8, name), {});
 }

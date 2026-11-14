@@ -32,14 +32,14 @@ pub const Pool = struct {
 
 /// Adds a task to `group`, making the group's JobGroup the first time: a vtable groupAsync. The arguments are copied.
 /// With no memory to queue it in, the task runs right away instead
-pub fn Add(engine_allocator: std.mem.Allocator, group: *std.Io.Group, context: []const u8, context_alignment: std.mem.Alignment, start: *const fn (context: *const anyopaque) void) void {
-    _AddOrFail(engine_allocator, group, context, context_alignment, start) catch start(context.ptr);
+pub fn Add(keep_allocator: std.mem.Allocator, group: *std.Io.Group, context: []const u8, context_alignment: std.mem.Alignment, start: *const fn (context: *const anyopaque) void) void {
+    _AddOrFail(keep_allocator, group, context, context_alignment, start) catch start(context.ptr);
 }
 
-fn _AddOrFail(engine_allocator: std.mem.Allocator, group: *std.Io.Group, context: []const u8, context_alignment: std.mem.Alignment, start: *const fn (context: *const anyopaque) void) !void {
+fn _AddOrFail(keep_allocator: std.mem.Allocator, group: *std.Io.Group, context: []const u8, context_alignment: std.mem.Alignment, start: *const fn (context: *const anyopaque) void) !void {
     const self = Of(group) orelse blk: {
-        const made = try engine_allocator.create(JobGroup);
-        made.* = .{ .mArena = std.heap.ArenaAllocator.init(engine_allocator) };
+        const made = try keep_allocator.create(JobGroup);
+        made.* = .{ .mArena = std.heap.ArenaAllocator.init(keep_allocator) };
         group.token.store(made, .release);
         break :blk made;
     };
@@ -55,9 +55,9 @@ pub fn Of(group: *std.Io.Group) ?*JobGroup {
 }
 
 /// Lets go of the tasks, and leaves `group` empty, as Group.await and Group.cancel have to
-pub fn Free(self: *JobGroup, engine_allocator: std.mem.Allocator, group: *std.Io.Group) void {
+pub fn Free(self: *JobGroup, keep_allocator: std.mem.Allocator, group: *std.Io.Group) void {
     self.mArena.deinit();
-    engine_allocator.destroy(self);
+    keep_allocator.destroy(self);
     group.token.store(null, .release);
 }
 
@@ -104,7 +104,7 @@ pub fn ParallelFor(pool: Pool, count: usize, context: anytype, comptime run: fn 
 
 pub fn GroupAsync(userdata: ?*anyopaque, group: *std.Io.Group, context: []const u8, context_alignment: std.mem.Alignment, start: *const fn (context: *const anyopaque) void) void {
     const engine_context: *EngineContext = @ptrCast(@alignCast(userdata.?));
-    Add(engine_context.EngineAllocator(), group, context, context_alignment, start);
+    Add(engine_context.Keep(), group, context, context_alignment, start);
 }
 
 pub fn GroupAwait(userdata: ?*anyopaque, group: *std.Io.Group, token: *anyopaque) std.Io.Cancelable!void {
@@ -114,12 +114,12 @@ pub fn GroupAwait(userdata: ?*anyopaque, group: *std.Io.Group, token: *anyopaque
     //they read, which isn't safe from several threads, so they all run here
     const pool: Pool = if (engine_context.mTransactions.Current() != null) .{} else engine_context.mJobPool;
     self.RunAll(pool);
-    self.Free(engine_context.EngineAllocator(), group);
+    self.Free(engine_context.Keep(), group);
 }
 
 /// Nothing has started before await, so canceling only lets go of the tasks
 pub fn GroupCancel(userdata: ?*anyopaque, group: *std.Io.Group, token: *anyopaque) void {
     const engine_context: *EngineContext = @ptrCast(@alignCast(userdata.?));
     const self: *JobGroup = @ptrCast(@alignCast(token));
-    self.Free(engine_context.EngineAllocator(), group);
+    self.Free(engine_context.Keep(), group);
 }

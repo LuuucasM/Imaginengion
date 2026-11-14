@@ -92,7 +92,7 @@ fn ItemBounds(engine_context: *EngineContext, world: *WorldManager, item: WorldB
             const text = entity.GetComponent(TextComponent) orelse return null;
             return WorldBVH.BoxBounds(ShapeGeometry.TextBoxFromMetrics(transform, text, bvh.mTexts.items[item.Index], null));
         },
-        .Merge => return WorldBVH.MergeBounds(engine_context.FrameAllocator(), entity) catch null,
+        .Merge => return WorldBVH.MergeBounds(engine_context.Scratch(), entity) catch null,
         .Collider => return WorldBVH.ColliderBounds(entity),
     }
 }

@@ -20,10 +20,10 @@ const Label = struct {
     pub const Ind: usize = ECS.BuiltinComponentCount + 1;
     mText: std.ArrayList(u8) = .empty,
     pub fn Deinit(self: *Label, engine_context: *EngineContext) void {
-        self.mText.deinit(engine_context.EngineAllocator());
+        self.mText.deinit(engine_context.Keep());
     }
     pub fn Clone(self: *const Label, engine_context: *EngineContext) !Label {
-        return .{ .mText = try self.mText.clone(engine_context.EngineAllocator()) };
+        return .{ .mText = try self.mText.clone(engine_context.Keep()) };
     }
 };
 
@@ -53,7 +53,7 @@ const TestLayer = struct {
         threads.* = std.Io.Threaded.init(std.heap.page_allocator, .{ .async_limit = .limited(workers), .concurrent_limit = .nothing });
         self.mThreads = threads;
         self.mEngineContext.mJobPool = .{ .mIo = threads.io(), .mWorkers = workers };
-        self.mEngineContext._Internal.ThreadFrameArenas.mMainThread = std.Thread.getCurrentId();
+        self.mEngineContext._Internal.ThreadScratchArenas.mMainThread = std.Thread.getCurrentId();
         return self;
     }
 
@@ -62,9 +62,9 @@ const TestLayer = struct {
         const engine_context = try std.heap.page_allocator.create(EngineContext);
         engine_context.* = .{};
         self.* = .{ .mEngineContext = engine_context, .mSystems = &engine_context.mSystems, .mTransactions = &engine_context.mTransactions };
-        const engine_allocator = engine_context.EngineAllocator();
-        try self.mBodies.Init(engine_allocator);
-        try self.mSystems.Register(engine_allocator, &self.mBodies);
+        const keep_allocator = engine_context.Keep();
+        try self.mBodies.Init(keep_allocator);
+        try self.mSystems.Register(keep_allocator, &self.mBodies);
         self.mTransactions.Register(&self.mBodies);
         return self;
     }
@@ -75,12 +75,12 @@ const TestLayer = struct {
             self.mEngineContext.mJobPool = .{};
             threads.deinit();
             std.heap.page_allocator.destroy(threads);
-            self.mEngineContext._Internal.ThreadFrameArenas.Deinit();
+            self.mEngineContext._Internal.ThreadScratchArenas.Deinit();
         }
-        self.mSystems.Unregister(engine_context.EngineAllocator(), &self.mBodies);
-        self.mTransactions.Unregister(engine_context.EngineAllocator(), &self.mBodies);
+        self.mSystems.Unregister(engine_context.Keep(), &self.mBodies);
+        self.mTransactions.Unregister(engine_context.Keep(), &self.mBodies);
         self.mBodies.Deinit(engine_context);
-        const leak_check = engine_context._Internal.EngineGPA.deinit();
+        const leak_check = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
         try std.testing.expect(leak_check == .ok);
@@ -88,16 +88,16 @@ const TestLayer = struct {
 
     fn NewBody(self: *TestLayer, x: f32) !u32 {
         const engine_context = self.mEngineContext;
-        const id = try self.mBodies.CreateEntity(engine_context.EngineAllocator());
+        const id = try self.mBodies.CreateEntity(engine_context.Keep());
         _ = try self.mBodies.AddComponent(engine_context, id, Position{ .x = x });
         return id;
     }
 
     fn NewLabel(self: *TestLayer, text: []const u8) !u32 {
         const engine_context = self.mEngineContext;
-        const id = try self.mBodies.CreateEntity(engine_context.EngineAllocator());
+        const id = try self.mBodies.CreateEntity(engine_context.Keep());
         var label = Label{};
-        try label.mText.appendSlice(engine_context.EngineAllocator(), text);
+        try label.mText.appendSlice(engine_context.Keep(), text);
         _ = try self.mBodies.AddComponent(engine_context, id, label);
         return id;
     }
@@ -170,7 +170,7 @@ test "outside a transaction a change goes straight to storage" {
 /// Adds to a label, and hands back `keep`
 fn Appends(bodies: *BodyECS, engine_context: *EngineContext, id: u32, keep: bool) bool {
     const label = bodies.GetComponentMut(Label, id).?;
-    label.mText.appendSlice(engine_context.EngineAllocator(), " and more, enough to grow the list") catch unreachable;
+    label.mText.appendSlice(engine_context.Keep(), " and more, enough to grow the list") catch unreachable;
     return keep;
 }
 
@@ -251,10 +251,10 @@ test "a transaction that is used again starts empty" {
 
 /// Makes a body with a position, a label and a child, and hands back `keep`
 fn MakesBody(bodies: *BodyECS, engine_context: *EngineContext, made: *u32, child: *u32, keep: bool) bool {
-    made.* = bodies.CreateEntity(engine_context.EngineAllocator()) catch unreachable;
+    made.* = bodies.CreateEntity(engine_context.Keep()) catch unreachable;
     _ = bodies.AddComponent(engine_context, made.*, Position{ .x = 2 }) catch unreachable;
     var label = Label{};
-    label.mText.appendSlice(engine_context.EngineAllocator(), "new") catch unreachable;
+    label.mText.appendSlice(engine_context.Keep(), "new") catch unreachable;
     _ = bodies.AddComponent(engine_context, made.*, label) catch unreachable;
     child.* = bodies.AddChild(engine_context, made.*, .Entity) catch unreachable;
     _ = bodies.AddComponent(engine_context, child.*, Position{ .x = 3 }) catch unreachable;
@@ -304,7 +304,7 @@ const Existing = struct {
 /// Adds a label to one body, takes the position off another, destroys a third, and hands back `keep`
 fn ChangesExisting(bodies: *BodyECS, engine_context: *EngineContext, existing: Existing, keep: bool) bool {
     var label = Label{};
-    label.mText.appendSlice(engine_context.EngineAllocator(), "added") catch unreachable;
+    label.mText.appendSlice(engine_context.Keep(), "added") catch unreachable;
     _ = bodies.AddComponent(engine_context, existing.mAddTo, label) catch unreachable;
     bodies.RemoveComponent(engine_context, existing.mRemoveFrom, Position.Ind) catch unreachable;
     bodies.DestroyEntity(engine_context, existing.mDestroy) catch unreachable;
@@ -476,10 +476,10 @@ fn RunsHook(bodies: *BodyECS, engine_context: *EngineContext, hook: Hook) bool {
         .ReadsPosition => _ = bodies.GetComponent(Position, hook.mID).?.x,
         .AddsLabel => _ = bodies.AddComponent(engine_context, hook.mID, Label{}) catch unreachable,
         .GroupsLabels => {
-            var group = bodies.GetGroup(engine_context.EngineAllocator(), .{ .Component = Label }) catch unreachable;
-            group.deinit(engine_context.EngineAllocator());
+            var group = bodies.GetGroup(engine_context.Keep(), .{ .Component = Label }) catch unreachable;
+            group.deinit(engine_context.Keep());
         },
-        .MakesBody => _ = bodies.CreateEntity(engine_context.EngineAllocator()) catch unreachable,
+        .MakesBody => _ = bodies.CreateEntity(engine_context.Keep()) catch unreachable,
     }
     return hook.mKeep;
 }
@@ -496,7 +496,7 @@ const TestBatch = struct {
 /// Runs `hooks` as one batch with measuring on, and hands back what the report says about it
 fn Measured(layer: *TestLayer, hooks: []const Hook) !ConflictReport.Counts {
     const conflicts = &layer.mTransactions.mConflicts;
-    conflicts.Clear(layer.mEngineContext.EngineAllocator());
+    conflicts.Clear(layer.mEngineContext.Keep());
     conflicts.mOn = true;
     defer conflicts.mOn = false;
     try layer.mSystems.RunSystem(TestBatch, layer.mEngineContext, .{ layer.mTransactions, &layer.mBodies, hooks });
@@ -591,7 +591,7 @@ const BatchKind = enum {
     CopiesX,
     /// writes down how it finds its transaction, and runs a system to see the run depth inside it
     Probes,
-    /// takes memory from the frame allocator
+    /// takes memory from the scratch allocator
     FrameAllocates,
     /// waits for another Meets hook to be running at the same time (gArrived), giving up after a long while
     Meets,
@@ -644,7 +644,7 @@ fn RunsBatchHook(bodies: *BodyECS, engine_context: *EngineContext, hooks: []Batc
         .CountsLabels => hook.mSaw = @floatFromInt(bodies.NumWithComponent(Label)),
         .Freezes => _ = bodies.AddComponent(engine_context, hook.mID, Frozen{}) catch unreachable,
         .SeesFrozen => hook.mSaw = if (bodies.HasComponent(Frozen, hook.mID)) 1 else 0,
-        .Makes => hook.mMade = bodies.CreateEntity(engine_context.EngineAllocator()) catch |err| {
+        .Makes => hook.mMade = bodies.CreateEntity(engine_context.Keep()) catch |err| {
             std.debug.assert(err == error.RunSerially);
             return true;
         },
@@ -657,7 +657,7 @@ fn RunsBatchHook(bodies: *BodyECS, engine_context: *EngineContext, hooks: []Batc
             hook.mProbe.mThread = std.Thread.getCurrentId();
             engine_context.mSystems.RunSystem(DepthProbe, engine_context, .{&hook.mProbe.mDepthInSystem}) catch unreachable;
         },
-        .FrameAllocates => _ = engine_context.FrameAllocator().alloc(u8, 4096) catch unreachable,
+        .FrameAllocates => _ = engine_context.Scratch().alloc(u8, 4096) catch unreachable,
         .Meets => {
             hook.mProbe.mThread = std.Thread.getCurrentId();
             _ = gArrived.fetchAdd(1, .acq_rel);
@@ -832,16 +832,16 @@ test "a batch's hooks find their own transactions through the per-thread lookup,
     try std.testing.expectEqual(@as(u32, 0), layer.mSystems.mRunDepth);
 }
 
-test "with no job pool, a batch's hooks take frame memory from the engine's frame arena, on the one thread there is" {
+test "with no job pool, a batch's hooks take scratch memory from the engine's scratch arena, on the one thread there is" {
     const layer = try TestLayer.Init();
     defer layer.Deinit() catch unreachable;
     const engine_context = layer.mEngineContext;
-    const shared_before = engine_context._Internal.FrameArena.queryCapacity();
+    const shared_before = engine_context._Internal.ScratchArena.queryCapacity();
     var hooks = [_]BatchHook{ .{ .mKind = .FrameAllocates }, .{ .mKind = .FrameAllocates } };
 
     try RunBatchOf(layer, &hooks);
 
-    try std.testing.expect(engine_context._Internal.FrameArena.queryCapacity() >= shared_before + 4096);
+    try std.testing.expect(engine_context._Internal.ScratchArena.queryCapacity() >= shared_before + 4096);
 }
 
 //----------------the same batches on several threads----------------

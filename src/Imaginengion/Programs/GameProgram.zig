@@ -81,8 +81,8 @@ pub fn Init(self: *GameProgram, engine_context: *EngineContext, args: std.proces
     defer zone.Deinit();
     _ = self;
 
-    const frame_allocator = engine_context.FrameAllocator();
-    const arg_list = try args.toSlice(frame_allocator);
+    const scratch_allocator = engine_context.Scratch();
+    const arg_list = try args.toSlice(scratch_allocator);
     if (arg_list.len < 2) {
         std.log.err("No project to run: pass its project file, e.g. ImaginGame.exe MyGame/MyGame.imprj", .{});
         return error.NoProject;
@@ -90,7 +90,7 @@ pub fn Init(self: *GameProgram, engine_context: *EngineContext, args: std.proces
     const project_path = if (std.fs.path.isAbsolute(arg_list[1]))
         arg_list[1]
     else
-        try std.fs.path.join(frame_allocator, &.{ engine_context.mAssetManager.mCWDPath.items, arg_list[1] });
+        try std.fs.path.join(scratch_allocator, &.{ engine_context.mAssetManager.mCWDPath.items, arg_list[1] });
 
     try engine_context.mProject.Open(engine_context, project_path);
     SetUpWindow(engine_context);
@@ -108,13 +108,13 @@ fn SetUpWindow(engine_context: *EngineContext) void {
     const window = &engine_context.mAppWindow;
 
     const name = project.GetName();
-    if (name.len > 0) window.SetTitle(engine_context.FrameAllocator(), name) catch |err| {
+    if (name.len > 0) window.SetTitle(engine_context.Scratch(), name) catch |err| {
         std.log.err("Could not set the window's title to {s}: {s}", .{ name, @errorName(err) });
     };
 
     const icon_path = project.GetWindowIcon();
     if (icon_path.len == 0) return;
-    const icon = project.GetDirectory().readFileAlloc(engine_context.Io(), icon_path, engine_context.FrameAllocator(), .unlimited) catch |err| {
+    const icon = project.GetDirectory().readFileAlloc(engine_context.Io(), icon_path, engine_context.Scratch(), .unlimited) catch |err| {
         return std.log.err("Could not read the window icon {s}: {s}", .{ icon_path, @errorName(err) });
     };
     window.SetIcon(icon) catch |err| std.log.err("Could not set the window icon to {s}: {s}", .{ icon_path, @errorName(err) });
@@ -150,7 +150,7 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
     defer zone.Deinit();
 
     var callback_list: std.DoublyLinkedList = .{};
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
     const game_world = &engine_context.mGameWorld;
 
     //----------------Start Build BVH------------------
@@ -184,7 +184,7 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
         callback_list.append(&pointer_event_callback.mNode);
         self.mEventScripts.Reset();
         try engine_context.mPointerEventManager.ProcessCategory(.Pointer, engine_context, callback_list);
-        engine_context.mPointerEventManager.ClearCategory(engine_allocator, .Pointer, .ClearRetainingCapacity);
+        engine_context.mPointerEventManager.ClearCategory(keep_allocator, .Pointer, .ClearRetainingCapacity);
         callback_list.first = null;
         callback_list.last = null;
 
@@ -314,7 +314,7 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
         //after the deletes, so an element whose entity went this frame goes with it
         try engine_context.mUIManager.EndFrame(engine_context);
 
-        engine_context.mSystemEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);
+        engine_context.mSystemEventManager.EventsReset(keep_allocator, .ClearRetainingCapacity);
     }
     //-----------------End End of Frame-------------------
 }
@@ -408,7 +408,7 @@ fn OnWorldEvent(_: *anyopaque, engine_context: *EngineContext, event: *const Wor
 /// a player possess an entity with a viewpoint
 fn ShownView(engine_context: *EngineContext) !?Player.RenderView {
     const game_world = &engine_context.mGameWorld;
-    const player_ids = try game_world.GetPlayerGroup(engine_context.FrameAllocator(), .{ .Component = PossessComponent });
+    const player_ids = try game_world.GetPlayerGroup(engine_context.Scratch(), .{ .Component = PossessComponent });
     for (player_ids.items) |player_id| {
         if (game_world.GetPlayer(player_id).GetRenderView()) |view| return view;
     }
@@ -427,7 +427,7 @@ fn PointerInput(engine_context: *EngineContext) !PointerSystem.Input {
         .CameraView = Renderer.CameraView.FromViewpoint(view.mTransform, view.mViewpoint, engine_context.mAppWindow.GetDisplayScale()),
     };
     input.View = pointer_view;
-    const overlays = try view.mPlayer.GetOverlayScenes(engine_context.FrameAllocator());
+    const overlays = try view.mPlayer.GetOverlayScenes(engine_context.Scratch());
     if (try RayCast.CastRay(engine_context, &engine_context.mGameWorld, pointer_view.Ray, pointer_view.CameraView, .{ .Overlays = overlays.items }, .{})) |hit| {
         input.Target = hit.Entity;
         input.Position = hit.Position;
@@ -449,7 +449,7 @@ fn RenderGame(engine_context: *EngineContext) !void {
     try view.mRenderTarget.mComputeTexture.Resize(engine_context, width, height);
     if (!view.mRenderTarget.mComputeTexture.IsCreated()) return;
 
-    const overlays = try view.mPlayer.GetOverlayScenes(engine_context.FrameAllocator());
+    const overlays = try view.mPlayer.GetOverlayScenes(engine_context.Scratch());
     try engine_context.mRenderer.RenderWorld(
         &engine_context.mGameWorld,
         .{ .Overlays = overlays.items },

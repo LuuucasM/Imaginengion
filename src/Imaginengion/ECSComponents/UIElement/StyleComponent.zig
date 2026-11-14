@@ -22,20 +22,20 @@ mTheme: AssetHandle = .uninit,
 mOnce: bool = false,
 
 pub fn Deinit(self: *StyleComponent, engine_context: *EngineContext) void {
-    self.mStyle.deinit(engine_context.EngineAllocator());
+    self.mStyle.deinit(engine_context.Keep());
     self.mTheme.ReleaseAsset();
 }
 
 pub fn Clone(self: *const StyleComponent, engine_context: *EngineContext) !StyleComponent {
     //the copy releases its theme itself, so it needs its own reference
     self.mTheme.RetainAsset();
-    return .{ .mStyle = try self.mStyle.clone(engine_context.EngineAllocator()), .mTheme = self.mTheme, .mOnce = self.mOnce };
+    return .{ .mStyle = try self.mStyle.clone(engine_context.Keep()), .mTheme = self.mTheme, .mOnce = self.mOnce };
 }
 
 /// A style component for the style called `name`
 pub fn Init(engine_context: *EngineContext, name: []const u8) !StyleComponent {
     var style = StyleComponent{};
-    try style.mStyle.appendSlice(engine_context.EngineAllocator(), name);
+    try style.mStyle.appendSlice(engine_context.Keep(), name);
     return style;
 }
 

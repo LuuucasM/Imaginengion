@@ -74,7 +74,7 @@ const TestWorlds = struct {
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
         //UUIDs are drawn from the context's Io, which forwards to this
-        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        engine_context._Internal.ThreadPool = std.Io.Threaded.init(engine_context._Internal.KeepHeap.allocator(), .{
             .concurrent_limit = .nothing,
             .async_limit = .nothing,
         });
@@ -87,19 +87,19 @@ const TestWorlds = struct {
 
     fn Deinit(self: *TestWorlds) void {
         const engine_context = self.mEngineContext;
-        const engine_allocator = engine_context.EngineAllocator();
+        const keep_allocator = engine_context.Keep();
         //the scripts give their variables back to the assets first
         engine_context.mSimulateWorld.Deinit(engine_context);
         engine_context.mGameWorld.Deinit(engine_context);
-        engine_context.mSerializer.Deinit(engine_allocator);
+        engine_context.mSerializer.Deinit(keep_allocator);
 
         const asset_manager = &engine_context.mAssetManager;
         asset_manager.mECSManager.Deinit(engine_context);
-        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
-        asset_manager.mEventManager.Deinit(engine_allocator);
-        asset_manager.mCWDPath.deinit(engine_allocator);
+        asset_manager.mUUIDToWorldID.deinit(keep_allocator);
+        asset_manager.mEventManager.Deinit(keep_allocator);
+        asset_manager.mCWDPath.deinit(keep_allocator);
 
-        _ = engine_context._Internal.EngineGPA.deinit();
+        _ = engine_context._Internal.KeepHeap.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
     }
@@ -108,11 +108,11 @@ const TestWorlds = struct {
     fn ScriptAssetFor(self: *TestWorlds, info: *const ScriptABI.ScriptInfo) !AssetHandle {
         const engine_context = self.mEngineContext;
         const asset_manager = &engine_context.mAssetManager;
-        const engine_allocator = engine_context.EngineAllocator();
-        const asset_id = try asset_manager.mECSManager.CreateEntity(engine_allocator);
+        const keep_allocator = engine_context.Keep();
+        const asset_id = try asset_manager.mECSManager.CreateEntity(keep_allocator);
         _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, Assets.AssetMetaData{ .mRefs = 1 });
         var file_meta_data = Assets.FileMetaData{ .mPathType = .Prj };
-        _ = try file_meta_data.mRelPath.print(engine_allocator, "scripts/Chaser.zig", .{});
+        _ = try file_meta_data.mRelPath.print(keep_allocator, "scripts/Chaser.zig", .{});
         _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, file_meta_data);
         _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, ScriptAsset{ ._Info = info });
         return .{ .mID = asset_id, .mManager = asset_manager };
@@ -181,7 +181,7 @@ test "a script's variables are saved by name and read back, an entity once it is
     const worlds = try TestWorlds.Init();
     defer worlds.Deinit();
     const engine_context = worlds.mEngineContext;
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
     var handle = try worlds.ScriptAssetFor(&ChaserExports.info);
     defer handle.ReleaseAsset();
@@ -193,13 +193,13 @@ test "a script's variables are saved by name and read back, an entity once it is
     chaser.mMode = .Wait;
     chaser.mOffset.z = 2;
 
-    var out: std.Io.Writer.Allocating = .init(engine_allocator);
+    var out: std.Io.Writer.Allocating = .init(keep_allocator);
     defer out.deinit();
     var write_stream: std.json.Stringify = .{ .writer = &out.writer };
     const component = script.GetComponent(ScriptComponent).?;
     try ScriptValues.Write(component, ScriptValues.InstanceOf(component).?, &write_stream);
 
-    const parsed = try std.json.parseFromSlice(std.json.Value, engine_allocator, out.written(), .{});
+    const parsed = try std.json.parseFromSlice(std.json.Value, keep_allocator, out.written(), .{});
     defer parsed.deinit();
     try std.testing.expectEqualStrings("Wait", parsed.value.object.get("mMode").?.string);
 
@@ -268,10 +268,10 @@ test "saving an object keeps what its script is waiting for, and reading that fi
     const worlds = try TestWorlds.Init();
     defer worlds.Deinit();
     const engine_context = worlds.mEngineContext;
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const path = try std.fmt.allocPrint(frame_allocator, ".zig-cache/tmp/{s}/ball.imen", .{tmp.sub_path});
+    const path = try std.fmt.allocPrint(scratch_allocator, ".zig-cache/tmp/{s}/ball.imen", .{tmp.sub_path});
 
     //the ball's file exists, but it isn't loaded
     const ball = try worlds.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
@@ -287,8 +287,8 @@ test "saving an object keeps what its script is waiting for, and reading that fi
     var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
     var write_stream: std.json.Stringify = .{ .writer = &out.writer };
-    try TextSerializer.WriteObject(&write_stream, frame_allocator, entity);
-    const saved = try std.fmt.allocPrint(frame_allocator, "\"mTarget\":{d}", .{uuid});
+    try TextSerializer.WriteObject(&write_stream, scratch_allocator, entity);
+    const saved = try std.fmt.allocPrint(scratch_allocator, "\"mTarget\":{d}", .{uuid});
     try std.testing.expect(std.mem.indexOf(u8, out.written(), saved) != null);
 
     const loaded = try worlds.mScene.CreateEntity(engine_context, Entity.BlankConfig);
@@ -317,7 +317,7 @@ test "a variable keeps what it wants when its object goes away, and links to the
 
     //the same object loaded again is a new entity with the same UUID
     const new_ball = try worlds.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
-    try game_world.mEManager.AddUUID(engine_context.EngineAllocator(), uuid, new_ball.mID);
+    try game_world.mEManager.AddUUID(engine_context.Keep(), uuid, new_ball.mID);
     try ScriptValues.Relink(engine_context, game_world);
     try std.testing.expectEqual(new_ball.mID, ChaserOf(script).mTarget.mID);
 }
@@ -373,7 +373,7 @@ test "an edit makes a variable want what it points at, and Clear makes it want n
     try std.testing.expectEqual(@as(?u64, null), script.GetComponent(ScriptComponent).?.GetLink("mTarget"));
 
     const new_ball = try worlds.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
-    try game_world.mEManager.AddUUID(engine_context.EngineAllocator(), uuid, new_ball.mID);
+    try game_world.mEManager.AddUUID(engine_context.Keep(), uuid, new_ball.mID);
     try ScriptValues.Relink(engine_context, game_world);
     try std.testing.expectEqual(Entity.NullObject, ChaserOf(script).mTarget.mID);
 }
@@ -395,7 +395,7 @@ test "a variable waiting in the world Play copies links in the copy, and the ori
 
     const sim_scene: Scene = .{ .mID = worlds.mScene.mID, .mManager = sim_world };
     const loaded_in_play = try sim_scene.CreateEntity(engine_context, Entity.DefaultConfig);
-    try sim_world.mEManager.AddUUID(engine_context.EngineAllocator(), 123456, loaded_in_play.mID);
+    try sim_world.mEManager.AddUUID(engine_context.Keep(), 123456, loaded_in_play.mID);
     try ScriptValues.Relink(engine_context, sim_world);
 
     try std.testing.expectEqual(loaded_in_play.mID, ChaserOf(sim_script).mTarget.mID);
@@ -534,7 +534,7 @@ test "a bit set is saved as its set bits' numbers and an enum set as their names
     const worlds = try TestWorlds.Init();
     defer worlds.Deinit();
     const engine_context = worlds.mEngineContext;
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
     var handle = try worlds.ScriptAssetFor(&PickerExports.info);
     defer handle.ReleaseAsset();
@@ -545,7 +545,7 @@ test "a bit set is saved as its set bits' numbers and an enum set as their names
     picker.mTeams = .initMany(&.{ .Red, .Neutral });
     picker.mHits.set(4);
 
-    var out: std.Io.Writer.Allocating = .init(engine_allocator);
+    var out: std.Io.Writer.Allocating = .init(keep_allocator);
     defer out.deinit();
     var write_stream: std.json.Stringify = .{ .writer = &out.writer };
     const component = script.GetComponent(ScriptComponent).?;
@@ -553,7 +553,7 @@ test "a bit set is saved as its set bits' numbers and an enum set as their names
     //a collision layer by its number, which renaming it in the editor doesn't change
     try std.testing.expectEqualStrings("{\"mLayers\":[1,5],\"mTeams\":[\"Red\",\"Neutral\"],\"mHits\":[4]}", out.written());
 
-    const parsed = try std.json.parseFromSlice(std.json.Value, engine_allocator, out.written(), .{});
+    const parsed = try std.json.parseFromSlice(std.json.Value, keep_allocator, out.written(), .{});
     defer parsed.deinit();
     _, const loaded = try worlds.EntityWithScript(handle);
     try ScriptValues.Read(engine_context, loaded, parsed.value);
@@ -564,7 +564,7 @@ test "a bit set is saved as its set bits' numbers and an enum set as their names
     try std.testing.expect(read.mTeams.contains(.Red) and read.mTeams.contains(.Neutral) and !read.mTeams.contains(.Blue));
 
     //a bit past the variable's and a name its enum hasn't are left out
-    const odd = try std.json.parseFromSlice(std.json.Value, engine_allocator, "{\"mLayers\":[2,9],\"mTeams\":[\"Green\",\"Blue\"]}", .{});
+    const odd = try std.json.parseFromSlice(std.json.Value, keep_allocator, "{\"mLayers\":[2,9],\"mTeams\":[\"Green\",\"Blue\"]}", .{});
     defer odd.deinit();
     try ScriptValues.Read(engine_context, loaded, odd.value);
     try std.testing.expectEqual(@as(u8, 0b100), read.mLayers.mask);

@@ -24,8 +24,8 @@ pub fn Init() OpenGLVertexArray {
     return new_va;
 }
 
-pub fn Deinit(self: *OpenGLVertexArray, engine_allocator: std.mem.Allocator) void {
-    self.mVertexBuffers.deinit(engine_allocator);
+pub fn Deinit(self: *OpenGLVertexArray, keep_allocator: std.mem.Allocator) void {
+    self.mVertexBuffers.deinit(keep_allocator);
     glad.glDeleteVertexArrays(1, &self.mArrayID);
 }
 
@@ -37,7 +37,7 @@ pub fn Unbind() void {
     glad.glBindVertexArray(0);
 }
 
-pub fn AddVertexBuffer(self: *OpenGLVertexArray, engine_allocator: std.mem.Allocator, new_vertex_buffer: VertexBuffer) !void {
+pub fn AddVertexBuffer(self: *OpenGLVertexArray, keep_allocator: std.mem.Allocator, new_vertex_buffer: VertexBuffer) !void {
     self.Bind();
     new_vertex_buffer.Bind();
     for (new_vertex_buffer.GetLayout().items, 0..) |element, i| {
@@ -67,7 +67,7 @@ pub fn AddVertexBuffer(self: *OpenGLVertexArray, engine_allocator: std.mem.Alloc
             );
         }
     }
-    try self.mVertexBuffers.append(engine_allocator, new_vertex_buffer);
+    try self.mVertexBuffers.append(keep_allocator, new_vertex_buffer);
 }
 
 pub fn SetIndexBuffer(self: *OpenGLVertexArray, new_index_buffer: IndexBuffer) void {

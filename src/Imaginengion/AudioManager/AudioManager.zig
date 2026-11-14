@@ -107,8 +107,8 @@ pub fn Deinit(self: *AudioManager, engine_context: *EngineContext) void {
 /// Voices and buses without the output device. Init is this and then the device; tests use it on its own, to work
 /// with voices and buses without a sound card. Pair it with DeinitMixer
 pub fn InitMixer(self: *AudioManager, engine_context: *EngineContext) !void {
-    try self.mECSManager.Init(engine_context.EngineAllocator());
-    try engine_context.mSystems.Register(engine_context.EngineAllocator(), &self.mECSManager);
+    try self.mECSManager.Init(engine_context.Keep());
+    try engine_context.mSystems.Register(engine_context.Keep(), &self.mECSManager);
     engine_context.mTransactions.Register(&self.mECSManager);
     //a destroyed bus's UUID comes out of the map (Core.OnObjectDestroyed)
     Core.HookRemovals(self);
@@ -116,11 +116,11 @@ pub fn InitMixer(self: *AudioManager, engine_context: *EngineContext) !void {
 }
 
 pub fn DeinitMixer(self: *AudioManager, engine_context: *EngineContext) void {
-    engine_context.mSystems.Unregister(engine_context.EngineAllocator(), &self.mECSManager);
-    engine_context.mTransactions.Unregister(engine_context.EngineAllocator(), &self.mECSManager);
+    engine_context.mSystems.Unregister(engine_context.Keep(), &self.mECSManager);
+    engine_context.mTransactions.Unregister(engine_context.Keep(), &self.mECSManager);
     self.mECSManager.Deinit(engine_context);
-    self.mEventManager.Deinit(engine_context.EngineAllocator());
-    self.mUUIDToWorldID.deinit(engine_context.EngineAllocator());
+    self.mEventManager.Deinit(engine_context.Keep());
+    self.mUUIDToWorldID.deinit(engine_context.Keep());
 }
 
 pub const SetSyncCallback = Core.SetSyncCallback;
@@ -167,8 +167,8 @@ pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: an
     }
 
     //the voice lives in this manager's storage, so adding to it leaves audio_component (in the world's) where it is
-    const engine_allocator = engine_context.EngineAllocator();
-    const voice: Voice = .{ .mID = try self.mECSManager.CreateEntity(engine_allocator), .mManager = self };
+    const keep_allocator = engine_context.Keep();
+    const voice: Voice = .{ .mID = try self.mECSManager.CreateEntity(keep_allocator), .mManager = self };
     errdefer self.DeleteVoice(engine_context, voice.mID) catch {};
 
     _ = try self.mECSManager.AddComponent(engine_context, voice.mID, VoiceComponent{
@@ -287,7 +287,7 @@ fn QueueBusDestroy(self: *AudioManager, engine_context: *EngineContext, bus: Bus
     for (self.mEventManager.mEventsArray.getPtr(.EndOfFrame).items) |queued_event| {
         if (std.meta.eql(queued_event, event)) return;
     }
-    try self.mEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, event);
+    try self.mEventManager.Insert(engine_context.Keep(), .EndOfFrame, event);
 }
 
 /// bus_id if it is a live bus, otherwise Master: what an unset (uninit) or since deleted bus plays into
@@ -300,12 +300,12 @@ fn IsBus(self: *AudioManager, id: Bus.Type) bool {
 }
 
 fn NewBus(self: *AudioManager, engine_context: *EngineContext, parent_id: ?Bus.Type, config: Bus.CreateConfig, name: []const u8) !Bus {
-    const engine_allocator = engine_context.EngineAllocator();
+    const keep_allocator = engine_context.Keep();
 
     const bus_id = if (parent_id) |parent|
         try self.mECSManager.AddChild(engine_context, parent, .Entity)
     else
-        try self.mECSManager.CreateEntity(engine_allocator);
+        try self.mECSManager.CreateEntity(keep_allocator);
 
     //what makes it a bus, so not up to the config: a blank bus being read from a file still needs one
     _ = try self.mECSManager.AddComponent(engine_context, bus_id, BusComponent{});
@@ -315,9 +315,9 @@ fn NewBus(self: *AudioManager, engine_context: *EngineContext, parent_id: ?Bus.T
     }
     if (config.bAddName) {
         var name_component: NameComponent = .empty;
-        try name_component.mName.appendSlice(engine_allocator, name);
+        try name_component.mName.appendSlice(keep_allocator, name);
         _ = self.mECSManager.AddComponent(engine_context, bus_id, name_component) catch |err| {
-            name_component.mName.deinit(engine_allocator);
+            name_component.mName.deinit(keep_allocator);
             return err;
         };
     }
@@ -325,7 +325,7 @@ fn NewBus(self: *AudioManager, engine_context: *EngineContext, parent_id: ?Bus.T
         const io_source = std.Random.IoSource{ .io = engine_context.Io() };
         const uuid = io_source.interface().int(u64);
         _ = try self.mECSManager.AddComponent(engine_context, bus_id, UUIDComponent{ .ID = uuid });
-        try self.AddUUID(engine_allocator, uuid, bus_id);
+        try self.AddUUID(keep_allocator, uuid, bus_id);
     }
 
     return .{ .mID = bus_id, .mManager = self };
@@ -340,7 +340,7 @@ pub const ProjectSettingsName = "Audio";
 pub fn SaveProjectSettings(self: *AudioManager, engine_context: *EngineContext, write_stream: *std.json.Stringify) !void {
     try write_stream.beginObject();
     try write_stream.objectField("Buses");
-    try TextSerializer.WriteObject(write_stream, engine_context.FrameAllocator(), self.mMasterBus);
+    try TextSerializer.WriteObject(write_stream, engine_context.Scratch(), self.mMasterBus);
     try write_stream.endObject();
 }
 
@@ -350,7 +350,7 @@ pub fn LoadProjectSettings(self: *AudioManager, engine_context: *EngineContext, 
 
     if (.object_begin != try scanner.next()) return error.UnexpectedToken;
     while (true) {
-        const key = switch (try scanner.nextAlloc(engine_context.FrameAllocator(), .alloc_if_needed)) {
+        const key = switch (try scanner.nextAlloc(engine_context.Scratch(), .alloc_if_needed)) {
             .object_end => break,
             inline .string, .allocated_string => |slice| slice,
             else => return error.UnexpectedToken,
@@ -421,15 +421,15 @@ pub const Mix = struct {
         const buffered_frames = self.mOutputBuffer.AvailableRead() / AUDIO_CHANNELS;
         if (buffered_frames >= TARGET_FRAMES) return;
 
-        const frame_allocator = engine_context.FrameAllocator();
+        const scratch_allocator = engine_context.Scratch();
         const frames_to_produce = TARGET_FRAMES - buffered_frames;
         const samples_to_produce = frames_to_produce * AUDIO_CHANNELS;
 
-        const voices = try self.GetGroup(frame_allocator, .{ .Component = VoiceComponent });
+        const voices = try self.GetGroup(scratch_allocator, .{ .Component = VoiceComponent });
 
         //one buffer per voice, back to back, since every stage needs every voice's output from the one before it
-        const voice_buffers = try frame_allocator.alloc(f32, voices.items.len * samples_to_produce);
-        const voice_frames = try frame_allocator.alloc(u64, voices.items.len);
+        const voice_buffers = try scratch_allocator.alloc(f32, voices.items.len * samples_to_produce);
+        const voice_frames = try scratch_allocator.alloc(u64, voices.items.len);
 
         //read stage
         for (voices.items, 0..) |voice_id, i| {
@@ -464,12 +464,12 @@ pub const Mix = struct {
 
         //bus stage: each voice is added into its bus, then the tree is mixed children first, each bus applying its own
         //gain before it is added into its parent. What comes out of Master is the mix
-        const buses = try self.GetGroup(frame_allocator, .{ .Component = BusComponent });
-        const bus_buffers = try frame_allocator.alloc(f32, buses.items.len * samples_to_produce);
+        const buses = try self.GetGroup(scratch_allocator, .{ .Component = BusComponent });
+        const bus_buffers = try scratch_allocator.alloc(f32, buses.items.len * samples_to_produce);
         @memset(bus_buffers, 0);
 
         var bus_indices: BusIndices = .empty;
-        try bus_indices.ensureTotalCapacity(frame_allocator, @intCast(buses.items.len));
+        try bus_indices.ensureTotalCapacity(scratch_allocator, @intCast(buses.items.len));
         for (buses.items, 0..) |bus_id, i| {
             bus_indices.putAssumeCapacity(bus_id, i);
         }
@@ -605,7 +605,7 @@ pub fn ProcessEvents(self: *AudioManager, comptime event_data: type, comptime ev
         defer callback_list.remove(&callback.mNode);
 
         try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
-        self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
+        self.mEventManager.ClearCategory(engine_context.Keep(), event_category, .ClearRetainingCapacity);
     } else {
         std.log.err("AudioManager.ProcessEvents does not currently handle processing events of type {s}", .{@typeName(event_data)});
     }

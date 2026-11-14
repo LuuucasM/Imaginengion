@@ -105,11 +105,11 @@ pub const AddComponentScript = Core.AddComponentScript;
 //        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
 //        const new_random = io_source.interface();
 //        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = new_random.int(u64) });
-//        try self.mWorldManager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
+//        try self.mWorldManager.AddUUID(engine_context.Keep(), new_uuid_component.ID, self.mEntityID);
 //    }
 //    if (config.bAddNameComponent) {
 //        var new_name_component: NameComponent = .empty;
-//        _ = try new_name_component.mName.print(engine_context.EngineAllocator(), "New Entity", .{});
+//        _ = try new_name_component.mName.print(engine_context.Keep(), "New Entity", .{});
 //        _ = try self.AddComponent(engine_context, new_name_component);
 //    }
 //}

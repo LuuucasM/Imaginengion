@@ -167,7 +167,7 @@ pub fn AddOverlay(self: Player, engine_context: *EngineContext, scene: Scene) !P
 
     var name_component: PlayerNameComponent = .empty;
     const name = if (scene.HasComponent(PlayerNameComponent)) scene.GetName() else "Overlay";
-    name_component.mName.appendSlice(engine_context.EngineAllocator(), name) catch |err| {
+    name_component.mName.appendSlice(engine_context.Keep(), name) catch |err| {
         name_component.Deinit(engine_context);
         return err;
     };
@@ -185,26 +185,26 @@ pub fn AddOverlay(self: Player, engine_context: *EngineContext, scene: Scene) !P
 /// each once, in no particular order (overlays are ordered by depth, not by this list). Scenes that are gone
 /// are left out. The editor camera sees every overlay scene instead, the same kind of list from
 /// `world.GetSceneGroup(.{ .Component = OverlayLayerTag })`.
-pub fn GetOverlayScenes(self: Player, frame_allocator: std.mem.Allocator) !std.ArrayList(Scene.Type) {
+pub fn GetOverlayScenes(self: Player, scratch_allocator: std.mem.Allocator) !std.ArrayList(Scene.Type) {
     var scenes: std.ArrayList(Scene.Type) = .empty;
-    try _CollectOverlayScenes(self, frame_allocator, &scenes);
+    try _CollectOverlayScenes(self, scratch_allocator, &scenes);
     return scenes;
 }
 
-fn _CollectOverlayScenes(player: Player, frame_allocator: std.mem.Allocator, scenes: *std.ArrayList(Scene.Type)) anyerror!void {
+fn _CollectOverlayScenes(player: Player, scratch_allocator: std.mem.Allocator, scenes: *std.ArrayList(Scene.Type)) anyerror!void {
     if (player.GetComponent(OverlayComponent)) |overlay| {
         if (overlay.GetScene()) |scene| {
             //two children showing the same scene would draw it twice. a player sees a handful of overlays,
             //so a scan beats a set
             if (std.mem.indexOfScalar(Scene.Type, scenes.items, scene.mID) == null) {
-                try scenes.append(frame_allocator, scene.mID);
+                try scenes.append(scratch_allocator, scene.mID);
             }
         }
     }
 
     var child_iter = player.GetIterator(.Child);
     while (child_iter.next()) |child| {
-        try _CollectOverlayScenes(child, frame_allocator, scenes);
+        try _CollectOverlayScenes(child, scratch_allocator, scenes);
     }
 }
 
@@ -222,11 +222,11 @@ pub const AddComponentScript = Core.AddComponentScript;
 //        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
 //        const new_random = io_source.interface();
 //        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = new_random.int(u64) });
-//        try self.mWorldManager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
+//        try self.mWorldManager.AddUUID(engine_context.Keep(), new_uuid_component.ID, self.mEntityID);
 //    }
 //    if (config.bAddNameComponent) {
 //        var new_name_component: PlayerNameComponent = .empty;
-//        _ = try new_name_component.mName.print(engine_context.EngineAllocator(), "New Entity", .{});
+//        _ = try new_name_component.mName.print(engine_context.Keep(), "New Entity", .{});
 //        _ = try self.AddComponent(engine_context, new_name_component);
 //    }
 //    if (config.bAddPossessComponent) {

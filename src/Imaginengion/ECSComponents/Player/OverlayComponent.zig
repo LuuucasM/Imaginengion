@@ -55,12 +55,12 @@ pub fn jsonStringify(self: *const OverlayComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!OverlayComponent {
+pub fn jsonParse(scratch_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!OverlayComponent {
     const FileData = struct { Scene: ?u64 = null };
-    const file_data = try std.json.innerParse(FileData, frame_allocator, reader, options);
+    const file_data = try std.json.innerParse(FileData, scratch_allocator, reader, options);
 
     const scene_uuid = file_data.Scene orelse return .{};
-    const requester = JsonUtils.EngineContextFromAllocator(frame_allocator).mSerializer.mCurrDeserialize.requester;
+    const requester = JsonUtils.EngineContextFromAllocator(scratch_allocator).mSerializer.mCurrDeserialize.requester;
     std.debug.assert(requester == .Player);
     return .{ .mScene = ObjectLink.Waiting(Scene, requester.Player.mManager), .mWantedUUID = scene_uuid };
 }

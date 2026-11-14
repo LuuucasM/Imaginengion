@@ -91,7 +91,7 @@ pub fn ProcessEvents(self: *PManager, comptime event_data: type, comptime event_
         callback_list.append(&callback.mNode);
         defer callback_list.remove(&callback.mNode);
         try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
-        self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
+        self.mEventManager.ClearCategory(engine_context.Keep(), event_category, .ClearRetainingCapacity);
     } else if (event_data == ECSEventData) {
         try self.mECSManager.ProcessEvents(engine_context);
     } else {
@@ -105,7 +105,7 @@ pub fn ProcessConfig(self: PManager, engine_context: *EngineContext, player_id: 
     }
     if (config.bAddNameComponent) {
         const name_component = try self.mECSManager.AddComponentSync(engine_context, player_id, PComponents.NameComponent.empty);
-        name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Game Context");
+        name_component.mName.appendSlice(engine_context.Keep(), "New Game Context");
     }
 }
 
@@ -119,14 +119,14 @@ pub fn OnManagerEvents(_: *PManager, _: *EngineContext, event: EventData.EventT)
 pub fn ApplyConfig(self: *PManager, engine_context: *EngineContext, player_id: Player.Type, config: Player.CreateConfig) !void {
     if (config.bAddNameComponent) {
         var name_component: NameComponent = .empty;
-        try name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Player");
+        try name_component.mName.appendSlice(engine_context.Keep(), "New Player");
         _ = try self.AddComponent(engine_context, player_id, name_component);
     }
     if (config.bAddUUIDComponent) {
         const io_source = std.Random.IoSource{ .io = engine_context.Io() };
         const new_random = io_source.interface();
         const new_uuid_component = try self.AddComponent(engine_context, player_id, UUIDComponent{ .ID = new_random.int(u64) });
-        try self.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, player_id);
+        try self.AddUUID(engine_context.Keep(), new_uuid_component.ID, player_id);
     }
     if (config.bAddRenderComponent) {
         //with no texture yet: the first fit to the size it is drawn at makes one

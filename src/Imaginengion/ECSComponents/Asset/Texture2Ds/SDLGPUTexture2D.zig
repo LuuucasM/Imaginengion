@@ -19,14 +19,14 @@ pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, 
     defer zone.Deinit();
     zone.Text(rel_path);
 
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
     var width: c_int = 0;
     var height: c_int = 0;
     var channels: c_int = 0;
 
     var file_reader = asset_file.reader(engine_context.Io(), &.{});
-    const contents = try file_reader.interface.allocRemaining(frame_allocator, .unlimited);
+    const contents = try file_reader.interface.allocRemaining(scratch_allocator, .unlimited);
 
     stb.stbi_set_flip_vertically_on_load(1);
     const data = stb.stbi_load_from_memory(
@@ -98,12 +98,12 @@ pub fn UpdateDataPath(self: *SDLTexture2D, engine_context: *EngineContext, abs_p
     var width: c_int = 0;
     var height: c_int = 0;
     var channels: c_int = 0;
-    const frame_allocator = engine_context.FrameAllocator();
+    const scratch_allocator = engine_context.Scratch();
 
     const file = try std.fs.openFileAbsolute(abs_path, .{});
     defer file.close();
     const fstats = try file.stat();
-    const contents = try file.readToEndAlloc(frame_allocator, @intCast(fstats.size));
+    const contents = try file.readToEndAlloc(scratch_allocator, @intCast(fstats.size));
 
     stb.stbi_set_flip_vertically_on_load(1);
     const data = stb.stbi_load_from_memory(

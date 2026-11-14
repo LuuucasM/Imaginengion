@@ -92,7 +92,7 @@ pub fn Open(engine_context: *EngineContext, tmpl: AssetHandle, camera_scene: Sce
 
 /// The window: the Save row, then tree | preview | components, or tree | components with no preview
 fn BuildWindow(self: *TmplEditPanel, engine_context: *EngineContext, camera_scene: Scene, ui_scene: Scene, options: Widgets.Options) !void {
-    const title = try std.fmt.allocPrint(engine_context.FrameAllocator(), "Template - {s}", .{std.fs.path.basename(self.mTmpl.GetFileMetaData().mRelPath.items)});
+    const title = try std.fmt.allocPrint(engine_context.Scratch(), "Template - {s}", .{std.fs.path.basename(self.mTmpl.GetFileMetaData().mRelPath.items)});
     const window = try Widgets.FloatingWindow(engine_context, ui_scene, title, SIZE, AT, options);
     self.mWindow = window.Window;
     const toolbar = try Widgets.Row(engine_context, .{ .Entity = window.Content });
@@ -122,15 +122,15 @@ fn BuildWindow(self: *TmplEditPanel, engine_context: *EngineContext, camera_scen
     };
 }
 
-pub fn Deinit(self: *TmplEditPanel, engine_allocator: std.mem.Allocator) void {
+pub fn Deinit(self: *TmplEditPanel, keep_allocator: std.mem.Allocator) void {
     switch (self.mTrees) {
         .scene_layer => |*trees| {
-            trees.Scene.Deinit(engine_allocator);
-            trees.Entities.Deinit(engine_allocator);
+            trees.Scene.Deinit(keep_allocator);
+            trees.Entities.Deinit(keep_allocator);
         },
-        inline else => |*tree| tree.Deinit(engine_allocator),
+        inline else => |*tree| tree.Deinit(keep_allocator),
     }
-    self.mComponents.Deinit(engine_allocator);
+    self.mComponents.Deinit(keep_allocator);
 }
 
 /// Whether its window is open. Closed, the editor saves it and takes it away (Close)
@@ -168,8 +168,8 @@ pub fn Update(self: *TmplEditPanel, engine_context: *EngineContext) !void {
             //only the top level ones, each with its own children under it
             const EntitySceneQuery = GroupQuery{ .Component = EntitySceneComponent };
             const EntityChildQuery = GroupQuery{ .Component = EntityChildComponent };
-            const ids = try scene.GetEntityGroup(engine_context.FrameAllocator(), .{ .Not = .{ .mFirst = &EntitySceneQuery, .mSecond = &EntityChildQuery } });
-            const entities = try engine_context.FrameAllocator().alloc(Entity, ids.items.len);
+            const ids = try scene.GetEntityGroup(engine_context.Scratch(), .{ .Not = .{ .mFirst = &EntitySceneQuery, .mSecond = &EntityChildQuery } });
+            const entities = try engine_context.Scratch().alloc(Entity, ids.items.len);
             for (ids.items, entities) |id, *entity| entity.* = scene.GetEntity(id);
             try trees.Entities.UpdateRoots(engine_context, entities, self.mSelected);
         },
@@ -251,7 +251,7 @@ pub fn Close(self: *TmplEditPanel, engine_context: *EngineContext) !void {
     if (self.mPreview) |preview| try preview.Delete(engine_context);
     //everything in the window, and the menus and lists it opens, which live at the top of the scene
     try Widgets.Remove(engine_context, self.mWindow, &.{});
-    self.Deinit(engine_context.EngineAllocator());
+    self.Deinit(engine_context.Keep());
     self.mTmpl.ReleaseAsset();
 }
 
@@ -292,5 +292,5 @@ fn Load(comptime obj_t: type, engine_context: *EngineContext, tmpl: AssetHandle,
 
 fn AbsPath(engine_context: *EngineContext, tmpl: AssetHandle) ![]const u8 {
     const file_data = tmpl.GetFileMetaData();
-    return try engine_context.mAssetManager.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath.items, file_data.mPathType);
+    return try engine_context.mAssetManager.GetAbsPath(engine_context.Scratch(), file_data.mRelPath.items, file_data.mPathType);
 }

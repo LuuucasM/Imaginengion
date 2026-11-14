@@ -559,7 +559,7 @@ pub fn RenderComponentWith(engine_context: *EngineContext, parent: Entity, root:
     const zone = Tracy.ZoneInit("Inspector::RenderComponent", @src());
     defer zone.Deinit();
     const component = object.GetComponent(component_type) orelse return;
-    const copy = try engine_context.FrameAllocator().create(component_type);
+    const copy = try engine_context.Scratch().create(component_type);
     copy.* = component.*;
     var builder = ForComponent(engine_context, parent, root, object, component_type, options);
     builder.mBase = @intFromPtr(copy);
@@ -700,7 +700,7 @@ pub fn AccessFor(comptime T: type) *const Access {
                 },
                 std.ArrayList(u8) => {
                     value.clearRetainingCapacity();
-                    try value.appendSlice(engine_context.EngineAllocator(), written.Text);
+                    try value.appendSlice(engine_context.Keep(), written.Text);
                 },
                 else => {
                     const values = comptime std.enums.values(T);

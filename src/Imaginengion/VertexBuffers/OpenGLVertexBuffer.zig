@@ -24,8 +24,8 @@ pub fn Init(size: usize) OpenGLVertexBuffer {
     return new_vb;
 }
 
-pub fn Deinit(self: *OpenGLVertexBuffer, engine_allocator: std.mem.Allocator) void {
-    self.mLayout.deinit(engine_allocator);
+pub fn Deinit(self: *OpenGLVertexBuffer, keep_allocator: std.mem.Allocator) void {
+    self.mLayout.deinit(keep_allocator);
     glad.glDeleteBuffers(1, &self.mBufferID);
 }
 
@@ -46,9 +46,9 @@ pub fn SetData(self: *OpenGLVertexBuffer, data: *anyopaque, size: usize, offset:
     }
 }
 
-pub fn SetLayout(self: *OpenGLVertexBuffer, engine_allocator: std.mem.Allocator, layout: std.ArrayList(VertexBufferElement)) !void {
+pub fn SetLayout(self: *OpenGLVertexBuffer, keep_allocator: std.mem.Allocator, layout: std.ArrayList(VertexBufferElement)) !void {
     self.mLayout.clearRetainingCapacity();
-    try self.mLayout.appendSlice(engine_allocator, layout.items);
+    try self.mLayout.appendSlice(keep_allocator, layout.items);
 }
 
 pub fn SetStride(self: *OpenGLVertexBuffer, stride: usize) void {

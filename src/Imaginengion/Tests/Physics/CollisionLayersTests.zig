@@ -13,7 +13,7 @@ fn NewEngineContext() !*EngineContext {
 }
 
 fn FreeEngineContext(engine_context: *EngineContext) void {
-    _ = engine_context._Internal.EngineGPA.deinit();
+    _ = engine_context._Internal.KeepHeap.deinit();
     std.heap.page_allocator.destroy(engine_context);
 }
 
@@ -56,14 +56,14 @@ test "the names are saved with the project's settings and read back, a missing o
     layers.SetName(0, "Player");
     layers.SetName(4, "Pickup");
 
-    var out: std.Io.Writer.Allocating = .init(engine_context.FrameAllocator());
+    var out: std.Io.Writer.Allocating = .init(engine_context.Scratch());
     var write_stream: std.json.Stringify = .{ .writer = &out.writer };
     try layers.SaveProjectSettings(engine_context, &write_stream);
 
     try layers.ResetProjectSettings(engine_context);
     try std.testing.expectEqualStrings("1", layers.GetName(0));
 
-    var scanner = std.json.Scanner.initCompleteInput(engine_context.FrameAllocator(), out.written());
+    var scanner = std.json.Scanner.initCompleteInput(engine_context.Scratch(), out.written());
     defer scanner.deinit();
     try layers.LoadProjectSettings(engine_context, &scanner);
     try std.testing.expectEqualStrings("Player", layers.GetName(0));
@@ -71,7 +71,7 @@ test "the names are saved with the project's settings and read back, a missing o
     try std.testing.expectEqualStrings("2", layers.GetName(1));
 
     //settings with fewer names than layers (hand edited) leave the rest at their numbers
-    var short_scanner = std.json.Scanner.initCompleteInput(engine_context.FrameAllocator(), "{\"Names\":[\"Wall\"]}");
+    var short_scanner = std.json.Scanner.initCompleteInput(engine_context.Scratch(), "{\"Names\":[\"Wall\"]}");
     defer short_scanner.deinit();
     try layers.LoadProjectSettings(engine_context, &short_scanner);
     try std.testing.expectEqualStrings("Wall", layers.GetName(0));
