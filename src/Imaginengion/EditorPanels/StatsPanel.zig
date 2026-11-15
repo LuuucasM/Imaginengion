@@ -352,11 +352,13 @@ fn SetWorld(engine_context: *EngineContext, lines: WorldLines, stats: EngineStat
     try SetTreeLine(engine_context, lines.GameBVH, "Game", render.GameBVH);
     try SetLine(engine_context, lines.BVHCosts, "BVH cost: overlay {d:.1}, game {d:.1}", .{ render.OverlayBVH.Cost, render.GameBVH.Cost });
     const world_bvh = stats.mBVHStats;
-    try SetLine(engine_context, lines.WorldBVH, "World BVH: overlay {d} items (depth {d}), game {d} items (depth {d})", .{
+    try SetLine(engine_context, lines.WorldBVH, "World BVH: overlay {d} items (depth {d}), game {d} items (depth {d}), {d} letter trees ({d} nodes)", .{
         world_bvh.Overlay.Items,
         world_bvh.Overlay.Depth,
         world_bvh.Game.Items,
         world_bvh.Game.Depth,
+        world_bvh.LetterTrees,
+        world_bvh.LetterNodes,
     });
     try SetLine(engine_context, lines.Entities, "Entities: {d}", .{stats.mECSStats.TotalEntities});
 }

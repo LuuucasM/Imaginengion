@@ -63,12 +63,12 @@ pub const CHUNK_ITEMS = 256;
 fn PlaceItems(engine_context: *EngineContext, world: *WorldManager, tree: *WorldBVH.LayerTree, mask: u4, start: usize, end: usize) void {
     for (tree.mBVHItems.items[start..end], tree.mItems.items[start..end]) |*bvh_item, item| {
         if (bvh_item.Mask & mask == 0) continue;
-        if (ItemBounds(engine_context, world, item)) |bounds| bvh_item.Bounds = bounds;
+        if (ItemBounds(engine_context, world, item, bvh_item.Mask)) |bounds| bvh_item.Bounds = bounds;
     }
 }
 
-/// Where `item` is now, or null if its entity has lost what places it
-fn ItemBounds(engine_context: *EngineContext, world: *WorldManager, item: WorldBVH.WorldItem) ?Aabb {
+/// Where `item`, for the systems in `mask`, is now, or null if its entity has lost what places it
+fn ItemBounds(engine_context: *EngineContext, world: *WorldManager, item: WorldBVH.WorldItem, mask: u4) ?Aabb {
     const bvh = &world.mBVH;
     const entity = world.GetEntity(item.Entity);
     //destroyed since the build: deletes happen straight away, so the tree can name an entity that is gone until the
@@ -81,16 +81,11 @@ fn ItemBounds(engine_context: *EngineContext, world: *WorldManager, item: WorldB
             const surface = entity.GetComponent(SurfaceComponent) orelse return null;
             return WorldBVH.BoxBounds(ShapeGeometry.QuadBox(transform, quad.*, surface.mBorderWidth, null));
         },
-        .Glyph => {
-            const transform = entity.GetComponent(TransformComponent) orelse return null;
-            const text = entity.GetComponent(TextComponent) orelse return null;
-            const params = ShapeGeometry.GetTextParams(transform, text);
-            return WorldBVH.BoxBounds(ShapeGeometry.GlyphBox(transform, params, bvh.mGlyphs.items[item.Index], null));
-        },
+        //its letters' tree is in its own layout space, which moving the text doesn't change: only its one box moves
         .Text => {
             const transform = entity.GetComponent(TransformComponent) orelse return null;
             const text = entity.GetComponent(TextComponent) orelse return null;
-            return WorldBVH.BoxBounds(ShapeGeometry.TextBoxFromMetrics(transform, text, bvh.mTexts.items[item.Index], null));
+            return bvh.TextBounds(transform, text, bvh.mTexts.items[item.Index], mask);
         },
         .Merge => return WorldBVH.MergeBounds(engine_context.Scratch(), entity) catch null,
         .Collider => return WorldBVH.ColliderBounds(entity),

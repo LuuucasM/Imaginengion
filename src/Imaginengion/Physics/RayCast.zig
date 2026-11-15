@@ -259,7 +259,6 @@ const TreeWalk = struct {
                 try self.Consider(entity, .Collider, hit, false);
             },
             //drawn, never clicked: the whole text's item is
-            .Glyph => {},
         }
     }
 

@@ -1092,6 +1092,203 @@ test "walking the BVH finds the same color as testing every shape, on random sce
     try std.testing.expect(hits > 500);
 }
 
+//==================================walking into a text's letters==================================
+
+/// A text the way the renderer draws one from the world's tree (Renderer.FillLayer): a stand in shape in the world
+/// tree's leaf, its letters' shapes after every other, and its letter tree (BVH.BuildInOrder over their layout boxes)
+/// after the world tree's nodes. Its letters are placed from their layout boxes the way ShapeGeometry.GlyphBox places
+/// them: their centers off its left bound, stretched, turned and moved, their sizes stretched
+const TestText = struct {
+    Position: Vec3(f32),
+    Rotation: Quat(f32),
+    Stretch: Vec2(f32),
+    LeftBound: f32,
+    /// each letter's box in the text's layout space (WorldBVH.LetterBounds), in reading order
+    Letters: []const Aabb,
+    /// where each new line starts
+    LineStarts: []const u32,
+    Flags: u32,
+
+    fn LetterShape(self: TestText, layout: Aabb) ShapeData {
+        const center = layout.Center();
+        const local = Vec3(f32){ .x = (center.x - self.LeftBound) * self.Stretch.x, .y = center.y * self.Stretch.y, .z = 0 };
+        const axes = Renderer2D.ShapeAxes(self.Position.AddVec(local.QuatRotate(self.Rotation)), self.Rotation);
+        return .{
+            .AxisX = axes[0],
+            .AxisY = axes[1],
+            .AxisZ = axes[2],
+            .Size = .{ (layout.Max.x - layout.Min.x) * 0.5 * @abs(self.Stretch.x), (layout.Max.y - layout.Min.y) * 0.5 * @abs(self.Stretch.y), SDFFunc.THICKNESS_2D },
+            .Params = .{ 0, 0, 0, 0 },
+            .Type = .Glyph,
+            .MaskIndex = NO_MASK,
+            .SurfaceIndex = undefined,
+            .Flags = self.Flags,
+        };
+    }
+};
+
+/// The shading slots TraceTexts paints with: quads with the first three, letters with the atlas and green fill
+const TEXT_LETTER_SURFACE = ShapeSurface{ .ShadingHandle = 4, .BorderShadingHandle = 4, .BorderWidth = 0, .AtlasHandle = 3 };
+
+/// The color one ray comes out with through `quads` and `texts`, laid out the way Renderer.FillLayer lays out a pass
+/// from the world's tree, the direct shapes found by `search`
+fn TraceTexts(quads: []const TestShape, texts: []const TestText, shadings: []const SurfShadingData, ray: Ray, comptime search: SDFRayMarcher.DirectSearch, comptime features: SDFRayMarcher.Features) !Vec4(f32) {
+    const allocator = std.testing.allocator;
+    var shapes: std.ArrayList(ShapeData) = .empty;
+    defer shapes.deinit(allocator);
+    var surfaces: std.ArrayList(ShapeSurface) = .empty;
+    defer surfaces.deinit(allocator);
+    var nodes: std.ArrayList(BVH.Node) = .empty;
+    defer nodes.deinit(allocator);
+
+    //the world tree over the quads and one stand in for each text, boxed around its letters
+    var items: std.ArrayList(BVH.Item) = .empty;
+    defer items.deinit(allocator);
+    for (quads, 0..) |quad, i| try items.append(allocator, .{ .Id = @intCast(i), .Bounds = SDFFunc.aabbIMShape(quad.Shape), .Mask = BVH.Mask.RENDER });
+    for (texts, 0..) |text, i| {
+        var bounds = Aabb.empty;
+        for (text.Letters) |letter| bounds = bounds.Union(SDFFunc.aabbIMShape(text.LetterShape(letter)));
+        try items.append(allocator, .{ .Id = @intCast(quads.len + i), .Bounds = bounds, .Mask = BVH.Mask.RENDER });
+    }
+    try BVH.Build(allocator, items.items, &nodes);
+    for (items.items) |item| {
+        if (item.Id < quads.len) {
+            try shapes.append(allocator, quads[item.Id].Shape);
+            try surfaces.append(allocator, quads[item.Id].Surface);
+            continue;
+        }
+        const text = texts[item.Id - quads.len];
+        //where its letters are is filled in below, once they're added
+        const axes = Renderer2D.TextLayoutAxes(text.Position, text.Rotation, text.Stretch, text.LeftBound).?;
+        try shapes.append(allocator, .{ .AxisX = axes[0], .AxisY = axes[1], .AxisZ = axes[2], .Size = .{ 0, 0, 0 }, .Params = .{ 0, 0, 0, 0 }, .Type = .Text, .MaskIndex = NO_MASK, .SurfaceIndex = undefined, .Flags = 0 });
+        try surfaces.append(allocator, .{ .ShadingHandle = 0, .BorderShadingHandle = 0, .BorderWidth = 0 });
+    }
+
+    //then each text's letters and letter tree, in the text's order
+    var letter_tree: std.ArrayList(BVH.Node) = .empty;
+    defer letter_tree.deinit(allocator);
+    var letter_items: std.ArrayList(BVH.Item) = .empty;
+    defer letter_items.deinit(allocator);
+    for (texts, 0..) |text, text_ind| {
+        const stand_in_ind = for (items.items, 0..) |item, i| {
+            if (item.Id == quads.len + text_ind) break i;
+        } else unreachable;
+        letter_items.clearRetainingCapacity();
+        for (text.Letters, 0..) |letter, i| try letter_items.append(allocator, .{ .Id = @intCast(i), .Bounds = letter, .Mask = BVH.Mask.RENDER });
+        try BVH.BuildInOrder(allocator, letter_items.items, text.LineStarts, &letter_tree);
+        shapes.items[stand_in_ind].Params = Renderer2D.TextParamsOf(.{
+            .FirstNode = @intCast(nodes.items.len),
+            .NodeCount = @intCast(letter_tree.items.len),
+            .FirstLetter = @intCast(shapes.items.len),
+        });
+        try nodes.appendSlice(allocator, letter_tree.items);
+        for (text.Letters) |letter| {
+            try shapes.append(allocator, text.LetterShape(letter));
+            try surfaces.append(allocator, TEXT_LETTER_SURFACE);
+        }
+    }
+    //draw order is buffer order
+    for (shapes.items, 0..) |*shape, i| shape.SurfaceIndex = @intCast(i);
+
+    const no_programs = TestPrograms{};
+    const Marcher = TestMarcher(search, features);
+    var marcher = Marcher{
+        .mDefaultColor = DEFAULT_COLOR,
+        .mShapes = shapes.items.ptr,
+        .mShapeSurfaces = surfaces.items.ptr,
+        .mShapesCount = shapes.items.len,
+        .mDirectCount = shapes.items.len,
+        .mBVHNodes = nodes.items.ptr,
+        .mMasks = &no_programs.Masks,
+        .mInstrs = &no_programs.Instrs,
+        .mParts = &no_programs.Parts,
+        .mSurfShading = shadings.ptr,
+        .mMedShading = &[_]MedShadingData{CLEAR_MEDIUM},
+        .mPerspectiveFar = FAR,
+    };
+    marcher.Start(ray);
+    marcher.March(FakeSample, &TEXTURES);
+    return marcher.GenerateColor(FakeSample, &TEXTURES);
+}
+
+test "walking into texts' letter trees finds the same color as testing every letter, however the texts are turned and stretched" {
+    const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
+    const shadings = [_]SurfShadingData{
+        ColorShading(RED),
+        ColorShading(BLUE),
+        ColorShading(half_red),
+        Shading(WHITE, ATLAS_HANDLE),
+        Shading(WHITE, GREEN_HANDLE),
+    };
+    var prng = std.Random.DefaultPrng.init(0x7E77);
+    const random = prng.random();
+
+    var letter_hits: usize = 0;
+    var drawn_rays: usize = 0;
+    for (0..10) |_| {
+        //a few quads among the texts, some see-through
+        var quads: [6]TestShape = undefined;
+        for (&quads) |*quad| {
+            const center = Vec3(f32){ .x = random.float(f32) * 6 - 3, .y = random.float(f32) * 6 - 3, .z = random.float(f32) * 4 - 2 };
+            const shading = random.uintLessThan(u32, 3);
+            quad.* = MakeQuad(center, IDENTITY, .{ .x = 0.3 + random.float(f32), .y = 0.3 + random.float(f32) }, shading, if (shading == 2) TRANSPARENT else 0, NO_MASK);
+        }
+
+        //three texts of two or three lines, each turned, stretched (one way mirrored, sometimes) and moved
+        var letters: [3][24]Aabb = undefined;
+        var line_starts: [3][2]u32 = undefined;
+        var texts: [3]TestText = undefined;
+        for (&texts, &letters, &line_starts) |*text, *text_letters, *starts| {
+            const per_line: u32 = 6 + random.uintLessThan(u32, 3);
+            starts.* = .{ per_line, 2 * per_line };
+            for (text_letters, 0..) |*letter, i| {
+                const line: f32 = @floatFromInt(@as(u32, @intCast(i)) / per_line);
+                const column: f32 = @floatFromInt(@as(u32, @intCast(i)) % per_line);
+                const center = Vec3(f32){ .x = column * 0.6 + 0.25, .y = -line * 1.2 + 0.35, .z = 0 };
+                const half = Vec3(f32){ .x = 0.25, .y = 0.35, .z = SDFFunc.THICKNESS_2D };
+                letter.* = .{ .Min = center.SubVec(half), .Max = center.AddVec(half) };
+            }
+            const count = @min(text_letters.len, 2 * per_line + random.uintLessThan(u32, per_line));
+            const axis = (Vec3(f32){ .x = random.float(f32) - 0.5, .y = random.float(f32) - 0.5, .z = 1 + random.float(f32) }).Dir();
+            text.* = .{
+                .Position = .{ .x = random.float(f32) * 4 - 2, .y = random.float(f32) * 4 - 2, .z = random.float(f32) * 4 - 2 },
+                .Rotation = Quat(f32).FromAxisAngle(axis, random.float(f32) * 1.2 - 0.6),
+                .Stretch = .{ .x = (0.4 + random.float(f32)) * @as(f32, if (random.uintLessThan(u32, 4) == 0) -1 else 1), .y = 0.4 + random.float(f32) },
+                .LeftBound = random.float(f32) * 2,
+                .Letters = text_letters[0..count],
+                .LineStarts = if (count > 2 * per_line) starts[0..2] else starts[0..1],
+                .Flags = if (random.boolean()) TRANSPARENT else 0,
+            };
+        }
+
+        for (0..150) |_| {
+            const origin = Vec3(f32){ .x = random.float(f32) * 8 - 4, .y = random.float(f32) * 8 - 4, .z = 10 };
+            //most aimed near a letter, so they go through letters, their gaps and their neighbours
+            const text = texts[random.uintLessThan(usize, texts.len)];
+            const letter = text.LetterShape(text.Letters[random.uintLessThan(usize, text.Letters.len)]);
+            const target = if (random.uintLessThan(u32, 4) != 0)
+                SDFFunc.ShapeCenter(letter).AddVec(.{ .x = (random.float(f32) - 0.5) * 0.6, .y = (random.float(f32) - 0.5) * 0.6, .z = 0 })
+            else
+                Vec3(f32){ .x = random.float(f32) * 8 - 4, .y = random.float(f32) * 8 - 4, .z = 0 };
+            const ray = Ray{ .Origin = origin, .Dir = target.SubVec(origin).Dir() };
+
+            const walked = try TraceTexts(&quads, &texts, &shadings, ray, .BVH, .full);
+            const every = try TraceTexts(&quads, &texts, &shadings, ray, .Linear, .full);
+            ExpectColor(every, walked) catch |err| {
+                std.debug.print("walking into the letters and testing every letter disagree: walked {any}, every {any}\n", .{ walked, every });
+                return err;
+            };
+            try ExpectColor(walked, try TraceTexts(&quads, &texts, &shadings, ray, .BVH, .lean));
+            try ExpectColor(walked, try TraceTexts(&quads, &texts, &shadings, ray, .BVH, .heatmap));
+            if (std.meta.eql(walked, GREEN)) letter_hits += 1;
+            if (!std.meta.eql(walked, DEFAULT_COLOR)) drawn_rays += 1;
+        }
+    }
+    //plenty of the rays landed on an opaque letter's ink, so the walk into the letters was really tested
+    try std.testing.expect(letter_hits > 150);
+    try std.testing.expect(drawn_rays > 600);
+}
+
 //==================================the shader heatmap's counts==================================
 
 test "a ray that misses everything tests the tree's root and nothing in it" {

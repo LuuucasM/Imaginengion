@@ -38,7 +38,6 @@ const MainObjectComponent = EntityComponents.MainObjectComponent;
 const ShapeComponent = EntityComponents.ShapeComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const EntityECS = @import("../ECSManagers/EManager.zig").ECSManagerT;
-const Vec2 = @import("../Math/MathTypes.zig").Vec2;
 const GameLayerTag = EntityComponents.GameLayerTag;
 const OverlayLayerTag = EntityComponents.OverlayLayerTag;
 const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
@@ -90,6 +89,10 @@ const Builder = struct {
     mRooms: std.AutoHashMapUnmanaged(Entity.Type, []const ShapeGeometry.Box) = .empty,
     /// the merge and mask each entity is under, each ancestor worked out once
     mAncestry: Ancestry = undefined,
+    /// the text being added's letters' boxes, line starts and letter tree, each text's in turn (AddText)
+    mLetterItems: std.ArrayList(BVH.Item) = .empty,
+    mLineStarts: std.ArrayList(u32) = .empty,
+    mLetterNodes: std.ArrayList(BVH.Node) = .empty,
 
     /// What is drawn and clicked: the same as a view's gather (ShapeGeometry.GatherViewShapes), only over every scene.
     /// Folded away by a collapsed layout item is neither, and that only changes at the commit
@@ -243,50 +246,58 @@ const Builder = struct {
         try self.AddTo(placement, root, .Merge, 0, bounds, BVH.Mask.RENDER | BVH.Mask.PICK);
     }
 
-    /// One item per letter `text` draws, laid out once here and kept for refits and the renderer, and one for the whole
-    /// text that clicks land on, from the size the same layout measured. All of them go where `placement` says. Those
-    /// outside the `room` its masks leave (RoomOf) are left out: all its letters at once when all its ink is, and one by
-    /// one only for a text across a mask's edge
+    /// `text`'s one item, where `placement` says: its letters laid out once here and kept, with a tree of their own in
+    /// its layout space (WorldBVH.TextEntry), for refits and the renderer, and the size the same layout measured, which
+    /// is what clicks land on. What lies outside the `room` its masks leave (RoomOf) is left out: its letters when all
+    /// their ink is, its click area when all of that is, and the item when both are. A text across a mask's edge keeps
+    /// every letter, and the renderer leaves out the ones its mask cuts off
     fn AddText(self: *Builder, placement: Placement, entity: Entity, transform: *const TransformComponent, text: *const TextComponent, font: anytype, room: []const ShapeGeometry.Box) !void {
         const zone = Tracy.ZoneInit("WorldBVH::AddText", @src());
         defer zone.Deinit();
 
         const params = ShapeGeometry.GetTextParams(transform, text);
-        const glyphs = &self.mBVH.mGlyphs;
+        const bvh = self.mBVH;
+        const glyphs = &bvh.mGlyphs;
         const first_glyph = glyphs.items.len;
+        //each letter's box in the layout's own space, and where each new line starts, for its letter tree. Around them
+        //all, the letters' ink, so the whole text is checked against its masks at once
+        self.mLetterItems.clearRetainingCapacity();
+        self.mLineStarts.clearRetainingCapacity();
+        var ink = Aabb.empty;
         var layout = TextLayout.Iterator(@TypeOf(font.*)).Init(text.mText.items, font, params.FontSize, params.WrapWidth);
-        //the letters' ink in the layout's own space, so the whole text is checked against its masks at once
-        var ink_min = Vec2(f32){ .x = std.math.inf(f32), .y = std.math.inf(f32) };
-        var ink_max = Vec2(f32){ .x = -std.math.inf(f32), .y = -std.math.inf(f32) };
         while (layout.Next()) |glyph| {
-            try glyphs.append(self.mKeepAllocator, glyph);
-            const center = glyph.Pen.AddVec(glyph.PlaneCenter);
-            ink_min = .{ .x = @min(ink_min.x, center.x - glyph.HalfExtents.x), .y = @min(ink_min.y, center.y - glyph.HalfExtents.y) };
-            ink_max = .{ .x = @max(ink_max.x, center.x + glyph.HalfExtents.x), .y = @max(ink_max.y, center.y + glyph.HalfExtents.y) };
-        }
-        zone.Value(glyphs.items.len - first_glyph);
-
-        if (glyphs.items.len > first_glyph) {
-            const ink = ShapeGeometry.TextInkBox(transform, params, ink_min, ink_max, null);
-            if (CutOff(room, ink)) {
-                glyphs.shrinkRetainingCapacity(first_glyph);
-            } else {
-                const check_each = !WithinRoom(room, ink);
-                for (glyphs.items[first_glyph..], first_glyph..) |glyph, glyph_ind| {
-                    const box = ShapeGeometry.GlyphBox(transform, params, glyph, null);
-                    if (check_each and CutOff(room, box)) continue;
-                    try self.AddTo(placement, entity, .Glyph, @intCast(glyph_ind), BoxBounds(box), BVH.Mask.RENDER);
-                }
+            const letter_ind: u32 = @intCast(glyphs.items.len - first_glyph);
+            if (letter_ind > 0 and glyph.Pen.y != glyphs.items[glyphs.items.len - 1].Pen.y) {
+                try self.mLineStarts.append(self.mScratchAllocator, letter_ind);
             }
+            try glyphs.append(self.mKeepAllocator, glyph);
+            const bounds = WorldBVH.LetterBounds(glyph);
+            try self.mLetterItems.append(self.mScratchAllocator, .{ .Id = letter_ind, .Bounds = bounds, .Mask = BVH.Mask.RENDER });
+            ink = ink.Union(bounds);
         }
+        const glyph_count: u32 = @intCast(glyphs.items.len - first_glyph);
+        zone.Value(glyph_count);
 
-        const metrics = layout.GetMetrics();
-        const click_box = ShapeGeometry.TextBoxFromMetrics(transform, text, metrics, null);
-        if (CutOff(room, click_box)) return;
-        const texts = &self.mBVH.mTexts;
-        const text_ind: u32 = @intCast(texts.items.len);
-        try texts.append(self.mKeepAllocator, metrics);
-        try self.AddTo(placement, entity, .Text, text_ind, BoxBounds(click_box), BVH.Mask.PICK);
+        var entry = WorldBVH.TextEntry{ .Metrics = layout.GetMetrics() };
+        const ink_box = ShapeGeometry.TextInkBox(transform, params, .{ .x = ink.Min.x, .y = ink.Min.y }, .{ .x = ink.Max.x, .y = ink.Max.y }, null);
+        const keeps_letters = glyph_count > 0 and !CutOff(room, ink_box);
+        const keeps_click = !CutOff(room, ShapeGeometry.TextBoxFromMetrics(transform, text, entry.Metrics, null));
+        if (!keeps_letters) glyphs.shrinkRetainingCapacity(first_glyph);
+        if (!keeps_letters and !keeps_click) return;
+
+        if (keeps_letters) {
+            try BVH.BuildInOrder(self.mScratchAllocator, self.mLetterItems.items, self.mLineStarts.items, &self.mLetterNodes);
+            entry.FirstGlyph = @intCast(first_glyph);
+            entry.GlyphCount = glyph_count;
+            entry.FirstNode = @intCast(bvh.mLetterNodes.items.len);
+            entry.NodeCount = @intCast(self.mLetterNodes.items.len);
+            try bvh.mLetterNodes.appendSlice(self.mKeepAllocator, self.mLetterNodes.items);
+        }
+        const text_ind: u32 = @intCast(bvh.mTexts.items.len);
+        try bvh.mTexts.append(self.mKeepAllocator, entry);
+
+        const mask = (if (keeps_letters) BVH.Mask.RENDER else 0) | (if (keeps_click) BVH.Mask.PICK else 0);
+        try self.AddTo(placement, entity, .Text, text_ind, bvh.TextBounds(transform, text, entry, mask), mask);
     }
 };
 
@@ -302,14 +313,6 @@ fn CutOff(room: []const ShapeGeometry.Box, box: ShapeGeometry.Box) bool {
         if (ShapeGeometry.OutsideMaskBox(box, mask_box)) return true;
     }
     return false;
-}
-
-/// Whether `box` is wholly inside every one of the masks' grown quads in `room`, so nothing in it can be cut off
-fn WithinRoom(room: []const ShapeGeometry.Box, box: ShapeGeometry.Box) bool {
-    for (room) |mask_box| {
-        if (!ShapeGeometry.InsideMaskBox(box, mask_box)) return false;
-    }
-    return true;
 }
 
 /// The merge (ShapeGeometry.MergeRootOf) and the mask (ShapeGeometry.MaskRegionAbove) each of a world's entities is

@@ -239,6 +239,68 @@ test "items each much further out than the last, which would peel off one at a t
     try std.testing.expect(Depth(nodes.items) <= BVH.MAX_DEPTH);
 }
 
+/// The first item of the leftmost leaf under `node_ind`: where that subtree's items start
+fn FirstItemUnder(nodes: []const BVH.Node, node_ind: u32) u32 {
+    var at = node_ind;
+    while (!nodes[at].IsLeaf()) at += 1;
+    return nodes[at].FirstItem();
+}
+
+fn BuildInOrder(items: []const BVH.Item, breaks: []const u32) !std.ArrayList(BVH.Node) {
+    var nodes: std.ArrayList(BVH.Node) = .empty;
+    try BVH.BuildInOrder(std.testing.allocator, items, breaks, &nodes);
+    return nodes;
+}
+
+test "a tree in order keeps every item where it is, once, in small leaves, with every box exactly around what is under it" {
+    var prng = std.Random.DefaultPrng.init(0x1E77E5);
+    const random = prng.random();
+    for ([_]usize{ 0, 1, 4, 5, 17, 64, 300 }) |count| {
+        const items = try RandomItems(random, count);
+        defer std.testing.allocator.free(items);
+        const before = try std.testing.allocator.dupe(BVH.Item, items);
+        defer std.testing.allocator.free(before);
+
+        //random breaks, in order, some at the ends where they split nothing
+        var breaks: std.ArrayList(u32) = .empty;
+        defer breaks.deinit(std.testing.allocator);
+        for (0..count + 1) |i| {
+            if (random.uintLessThan(u32, 5) == 0) try breaks.append(std.testing.allocator, @intCast(i));
+        }
+        var nodes = try BuildInOrder(items, breaks.items);
+        defer nodes.deinit(std.testing.allocator);
+        try ExpectValidTree(items, nodes.items);
+        try std.testing.expectEqualSlices(BVH.Item, before, items);
+        if (count > 0) try std.testing.expect(Depth(nodes.items) <= BVH.MAX_DEPTH);
+
+        //and the same again builds the same tree
+        var again = try BuildInOrder(items, breaks.items);
+        defer again.deinit(std.testing.allocator);
+        try std.testing.expectEqualSlices(BVH.Node, nodes.items, again.items);
+    }
+}
+
+test "a tree in order splits a run at the break nearest its middle, the earlier of two as near, and at the middle with none inside it" {
+    var prng = std.Random.DefaultPrng.init(0x5B1);
+    const items = try RandomItems(prng.random(), 10);
+    defer std.testing.allocator.free(items);
+    const Case = struct { Breaks: []const u32, Split: u32 };
+    const cases = [_]Case{
+        .{ .Breaks = &.{}, .Split = 5 },
+        .{ .Breaks = &.{8}, .Split = 8 },
+        .{ .Breaks = &.{ 1, 8 }, .Split = 8 },
+        //as near either side: the earlier
+        .{ .Breaks = &.{ 3, 7 }, .Split = 3 },
+        //at the ends, splitting nothing
+        .{ .Breaks = &.{ 0, 10 }, .Split = 5 },
+    };
+    for (cases) |case| {
+        var nodes = try BuildInOrder(items, case.Breaks);
+        defer nodes.deinit(std.testing.allocator);
+        try std.testing.expectEqual(case.Split, FirstItemUnder(nodes.items, nodes.items[0].RightChild()));
+    }
+}
+
 test "a tree's stats count its nodes, leaves and items, and how deep its leaves are" {
     var empty_nodes = try BuildTree(&.{});
     defer empty_nodes.deinit(std.testing.allocator);

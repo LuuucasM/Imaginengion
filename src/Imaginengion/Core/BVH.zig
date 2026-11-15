@@ -197,6 +197,73 @@ fn BuildStructure(allocator: std.mem.Allocator, items: []Item, nodes: *std.Array
     zone.Value(nodes.items.len);
 }
 
+/// The tree over `items` into `nodes` (cleared first, its memory kept), keeping the items in the order they come: no
+/// binning and no reordering, so a leaf's FirstItem is the item's own place in `items`. For items already in order
+/// along something, like a text's letters along its lines (WorldBVH's letter trees), where halving the run halves
+/// them in space too. `breaks` are where a new run starts (a text's line starts), in order: each range is split at the
+/// break nearest its middle, so a node doesn't span two lines' ends, or at the middle when there is none inside it, or
+/// the nearest would leave a half too big to fit under MAX_DEPTH. The same items and breaks always build the same tree
+pub fn BuildInOrder(allocator: std.mem.Allocator, items: []const Item, breaks: []const u32, nodes: *std.ArrayList(Node)) !void {
+    const zone = Tracy.ZoneInit("BVH::BuildInOrder", @src());
+    defer zone.Deinit();
+    zone.Value(items.len);
+
+    nodes.clearRetainingCapacity();
+    if (items.len == 0) return;
+    std.debug.assert(items.len <= MAX_ITEMS);
+
+    //the same depth first order as BuildStructure: a range waiting its turn is a right half, or the root
+    const Pending = struct { First: u32, End: u32, RightOf: ?u32, Depth: u32 };
+    var pending: [MAX_BUILD_DEPTH]Pending = undefined;
+    var pending_count: usize = 1;
+    pending[0] = .{ .First = 0, .End = @intCast(items.len), .RightOf = null, .Depth = 0 };
+
+    while (pending_count > 0) {
+        pending_count -= 1;
+        const range = pending[pending_count];
+        const node_ind: u32 = @intCast(nodes.items.len);
+        if (range.RightOf) |parent| nodes.items[parent].SetIndex(node_ind);
+
+        const count = range.End - range.First;
+        if (count <= MAX_LEAF_ITEMS) {
+            try nodes.append(allocator, Node.Init(range.First, count));
+            continue;
+        }
+
+        try nodes.append(allocator, Node.Init(0, 0));
+        const split = InOrderSplit(range.First, range.End, range.Depth, breaks);
+        std.debug.assert(pending_count + 2 <= MAX_BUILD_DEPTH);
+        pending[pending_count] = .{ .First = split, .End = range.End, .RightOf = node_ind, .Depth = range.Depth + 1 };
+        pending[pending_count + 1] = .{ .First = range.First, .End = split, .RightOf = null, .Depth = range.Depth + 1 };
+        pending_count += 2;
+    }
+    FillSkips(nodes.items);
+    Refit(items, nodes.items);
+    zone.Value(nodes.items.len);
+}
+
+/// Where BuildInOrder splits the items from `first` up to `end`, more than a leaf holds, at depth `depth`: the break
+/// strictly inside the range nearest its middle (the earlier of two as near), if both halves still fit under MAX_DEPTH,
+/// or else the middle, which always fits
+fn InOrderSplit(first: u32, end: u32, depth: u32, breaks: []const u32) u32 {
+    const middle = first + (end - first) / 2;
+    //the first break at or past the middle, and the one before it: the two nearest it either side
+    const after = std.sort.lowerBound(u32, breaks, middle, struct {
+        fn Order(target: u32, item: u32) std.math.Order {
+            return std.math.order(target, item);
+        }
+    }.Order);
+    var best: ?u32 = null;
+    if (after > 0 and breaks[after - 1] > first) best = breaks[after - 1];
+    if (after < breaks.len and breaks[after] < end) {
+        const later = breaks[after];
+        if (best == null or later - middle < middle - best.?) best = later;
+    }
+    const at = best orelse return middle;
+    const bigger_half = @max(at - first, end - at);
+    return if (depth + 1 + LevelsBelow(bigger_half) <= MAX_DEPTH) at else middle;
+}
+
 /// Where each node's walk goes next. A parent comes before its children, so its own Skip is always set by the time
 /// its children's are worked out from it
 fn FillSkips(nodes: []Node) void {

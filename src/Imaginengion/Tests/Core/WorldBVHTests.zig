@@ -14,6 +14,10 @@ const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
 const TransformSystem = @import("../../Physics/TransformSystem.zig");
 const BVHBuildSystem = @import("../../Core/BVHBuildSystem.zig");
 const BVHRefitSystem = @import("../../Core/BVHRefitSystem.zig");
+const EngineStats = @import("../../Core/EngineStats.zig");
+const Renderer2D = @import("../../Renderer/Renderer2D.zig");
+const SDFFunctions = @import("../../Math/SDFFunctions.zig");
+const RayIntersect = @import("../../Math/RayIntersect.zig");
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec2 = MathTypes.Vec2;
 const Vec3 = MathTypes.Vec3;
@@ -201,9 +205,9 @@ test "quads, letters, merges and colliders each get items in their own layer, wi
     try std.testing.expectEqual(@as(usize, 1), ItemsOf(game, rock));
     try std.testing.expectEqual(@as(usize, 1), ItemsOf(game, wall));
     try std.testing.expectEqual(@as(usize, 1), ItemsOf(game, merge));
-    //two letters and the whole text
-    try std.testing.expectEqual(@as(usize, 4), overlay.mItems.items.len);
-    try std.testing.expectEqual(@as(usize, 3), ItemsOf(overlay, label));
+    //the text is one item, however many letters it has
+    try std.testing.expectEqual(@as(usize, 2), overlay.mItems.items.len);
+    try std.testing.expectEqual(@as(usize, 1), ItemsOf(overlay, label));
     try std.testing.expectEqual(@as(usize, 1), ItemsOf(overlay, row_button));
 
     const Expected = struct { Tree: *const WorldBVH.LayerTree, Entity: Entity, Kind: WorldBVH.ItemKind, Mask: u4 };
@@ -212,26 +216,16 @@ test "quads, letters, merges and colliders each get items in their own layer, wi
         .{ .Tree = game, .Entity = wall, .Kind = .Collider, .Mask = BVH.Mask.PHYSICS },
         .{ .Tree = game, .Entity = merge, .Kind = .Merge, .Mask = BVH.Mask.RENDER | BVH.Mask.PICK },
         .{ .Tree = overlay, .Entity = row_button, .Kind = .Quad, .Mask = BVH.Mask.PICK },
+        //drawn by its letters, clicked anywhere on it
+        .{ .Tree = overlay, .Entity = label, .Kind = .Text, .Mask = BVH.Mask.RENDER | BVH.Mask.PICK },
     };
     for (expected) |want| {
         const ind = IndexOf(want.Tree, want.Entity);
         try std.testing.expectEqual(want.Kind, want.Tree.mItems.items[ind].Kind);
         try std.testing.expectEqual(want.Mask, want.Tree.mBVHItems.items[ind].Mask);
     }
-    //the letters are drawn, the whole text is what is clicked
-    var letters: usize = 0;
-    for (overlay.mItems.items, overlay.mBVHItems.items) |item, bvh_item| {
-        if (item.Entity != label.mID) continue;
-        switch (item.Kind) {
-            .Glyph => {
-                letters += 1;
-                try std.testing.expectEqual(BVH.Mask.RENDER, bvh_item.Mask);
-            },
-            .Text => try std.testing.expectEqual(BVH.Mask.PICK, bvh_item.Mask),
-            else => return error.TestUnexpectedResult,
-        }
-    }
-    try std.testing.expectEqual(@as(usize, 2), letters);
+    //its two letters, the space drawing nothing
+    try std.testing.expectEqual(@as(u32, 2), TextEntryOf(bvh, overlay, label).GlyphCount);
 
     //each item knows its scene, and a view showing only the HUD names only its slot
     for (game.mItems.items) |item| try std.testing.expectEqual(level.mID, bvh.mScenes.items[item.SceneSlot]);
@@ -244,32 +238,66 @@ test "quads, letters, merges and colliders each get items in their own layer, wi
     try ExpectTreeHoldsItems(overlay);
 }
 
-test "each letter's item is placed from its own layout, after the build has reordered them" {
+test "a text's stand in moves where each letter is placed back to where it is in its layout, at the same distance along a ray" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
-    //enough letters over two lines that the build has to sort them
-    const text = try AddText(engine_context, level, "AAAAAA\nAAAAAA", .{ .x = 3, .y = 2, .z = 0 });
-    try text.SetScale(engine_context, .{ .x = 2, .y = 1, .z = 1 });
+    //turned, stretched unevenly and mirrored, with a left bound, over two lines
+    const text = try level.CreateEntity(engine_context, Entity.DefaultConfig);
+    try text.SetTranslation(engine_context, .{ .x = 3, .y = 2, .z = -1 });
+    try text.SetScale(engine_context, .{ .x = 2, .y = -0.5, .z = 1 });
+    try text.SetRotation(engine_context, MathTypes.Quat(f32).FromAxisAngle(Unit(.{ .x = 0.3, .y = 0.2, .z = 1 }), 0.7));
+    const text_component = try text.AddComponent(engine_context, TextComponent{ .mBounds = .{ .x = 1.5, .y = 6 }, .mFontSize = 1 });
+    try text_component.SetText(text.KeepFor(TextComponent), "AAAAAA\nAAAAAA");
+    _ = try text.AddComponent(engine_context, SurfaceComponent{});
 
     const bvh = try world.Build();
     const tree = &bvh.mGame;
-    //twelve letters and the whole text
-    try std.testing.expectEqual(@as(usize, 13), tree.mItems.items.len);
+    try std.testing.expectEqual(@as(usize, 1), tree.mItems.items.len);
+    const entry = TextEntryOf(bvh, tree, text);
+    try std.testing.expectEqual(@as(u32, 12), entry.GlyphCount);
 
     const transform = text.GetComponent(TransformComponent).?;
     const params = ShapeGeometry.GetTextParams(transform, text.GetComponent(TextComponent).?);
-    var placements_seen: [12]bool = @splat(false);
-    for (tree.mItems.items, tree.mBVHItems.items) |item, bvh_item| {
-        if (item.Kind != .Glyph) continue;
-        try std.testing.expect(!placements_seen[item.Index]);
-        placements_seen[item.Index] = true;
-        const box = ShapeGeometry.GlyphBox(transform, params, bvh.mGlyphs.items[item.Index], null);
-        try ExpectNear(box.Center, bvh_item.Bounds.Center());
+    const axes = Renderer2D.TextLayoutAxes(transform.GetWorldPosition(), transform.GetWorldRotation(), params.Stretch, params.LeftBound).?;
+    var stand_in: Renderer2D.ShapeData = undefined;
+    stand_in.AxisX = axes[0];
+    stand_in.AxisY = axes[1];
+    stand_in.AxisZ = axes[2];
+    const item_box = tree.mBVHItems.items[0].Bounds;
+    for (bvh.Letters(entry)) |letter| {
+        //where the renderer draws it, inside the text's one box
+        const placed = ShapeGeometry.GlyphBox(transform, params, letter, null);
+        try std.testing.expect(BoxHolds(item_box.Grow(0.0001), WorldBVH.BoxBounds(placed)));
+        //and back in its layout
+        try ExpectNear(WorldBVH.LetterBounds(letter).Center(), SDFFunctions.ShapeLocalPoint(stand_in, placed.Center));
+
+        //a ray to it reaches its layout box at the same distance along it as its placed one
+        const origin = Vec3(f32){ .x = -2, .y = 1, .z = 9 };
+        const dir = Unit(placed.Center.SubVec(origin));
+        const placed_bounds = WorldBVH.BoxBounds(placed);
+        const world_span = RayIntersect.RayAabb(origin, Inverse(dir), placed_bounds.Min, placed_bounds.Max).?;
+        const local_dir = SDFFunctions.ShapeLocalDir(stand_in, dir);
+        const layout_box = WorldBVH.LetterBounds(letter);
+        const local_span = RayIntersect.RayAabb(SDFFunctions.ShapeLocalPoint(stand_in, origin), Inverse(local_dir), layout_box.Min, layout_box.Max).?;
+        //the boxes differ (an axis lined up box around a turned one is bigger), but both hold the center
+        const center_t = @sqrt(placed.Center.SubVec(origin).Dot(placed.Center.SubVec(origin)));
+        try std.testing.expect(world_span.Enter <= center_t + 0.0001 and local_span.Enter <= center_t + 0.0001);
+        try std.testing.expect(local_span.Exit >= center_t - 0.0001);
+        try ExpectNear(placed.Center, origin.AddVec(dir.MulScalar(center_t)));
+        try ExpectNear(WorldBVH.LetterBounds(letter).Center(), SDFFunctions.ShapeLocalPoint(stand_in, origin).AddVec(local_dir.MulScalar(center_t)));
     }
     try ExpectTreeHoldsItems(tree);
+}
+
+fn Unit(v: Vec3(f32)) Vec3(f32) {
+    return v.MulScalar(1 / @sqrt(v.Dot(v)));
+}
+
+fn Inverse(dir: Vec3(f32)) Vec3(f32) {
+    return .{ .x = 1 / dir.x, .y = 1 / dir.y, .z = 1 / dir.z };
 }
 
 test "a letter's box in canvas units, placed by a view's canvas, is the box that view draws it with" {
@@ -337,7 +365,12 @@ test "a refit follows what has moved, and every box above it still holds it" {
     for (&quads, 0..) |*quad, i| quad.* = try AddQuad(engine_context, level, .{ .x = @floatFromInt(i * 2), .y = 0, .z = 0 });
     const ball = try level.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try ball.AddComponent(engine_context, ColliderComponent{});
-    const sign = try AddText(engine_context, level, "AA", .{ .x = 0, .y = 4, .z = 0 });
+    //its letters run past its narrow bounds (one to a line), so its box has to hold them as well as its click area
+    const sign = try level.CreateEntity(engine_context, Entity.DefaultConfig);
+    try sign.SetTranslation(engine_context, .{ .x = 0, .y = 4, .z = 0 });
+    const sign_component = try sign.AddComponent(engine_context, TextComponent{ .mBounds = .{ .x = 0, .y = 0.2 }, .mFontSize = 1 });
+    try sign_component.SetText(sign.KeepFor(TextComponent), "AAAAAA");
+    _ = try sign.AddComponent(engine_context, SurfaceComponent{});
 
     const bvh = try world.Build();
     const tree = &bvh.mGame;
@@ -356,7 +389,15 @@ test "a refit follows what has moved, and every box above it still holds it" {
     try ExpectNear(.{ .x = 100, .y = -30, .z = 5 }, tree.mBVHItems.items[IndexOf(tree, moved)].Bounds.Center());
     try ExpectNear(.{ .x = -40, .y = 0, .z = 0 }, tree.mBVHItems.items[IndexOf(tree, ball)].Bounds.Center());
     for (tree.mItems.items, tree.mBVHItems.items) |item, bvh_item| {
-        if (item.Entity == sign.mID) try std.testing.expect(bvh_item.Bounds.Min.y > 55);
+        //six one letter lines (it wraps after each), 1.2 apart, down from y 60
+        if (item.Entity == sign.mID) try std.testing.expect(bvh_item.Bounds.Min.y > 50);
+    }
+    //the text's one box still holds every letter where the renderer now places it
+    const sign_transform = sign.GetComponent(TransformComponent).?;
+    const sign_params = ShapeGeometry.GetTextParams(sign_transform, sign.GetComponent(TextComponent).?);
+    const sign_box = tree.mBVHItems.items[IndexOf(tree, sign)].Bounds;
+    for (bvh.Letters(TextEntryOf(bvh, tree, sign))) |letter| {
+        try std.testing.expect(BoxHolds(sign_box.Grow(0.0001), WorldBVH.BoxBounds(ShapeGeometry.GlyphBox(sign_transform, sign_params, letter, null))));
     }
     try ExpectTreeHoldsItems(tree);
 }
@@ -502,6 +543,77 @@ test "a text's click box is the whole text area, the same box picking tests, and
     try std.testing.expectEqual(moved, tree.mBVHItems.items[text_ind.?].Bounds);
 }
 
+/// The text entry (WorldBVH.TextEntry) of `entity`'s click item
+fn TextEntryOf(bvh: *const WorldBVH, tree: *const WorldBVH.LayerTree, entity: Entity) WorldBVH.TextEntry {
+    for (tree.mItems.items) |item| {
+        if (item.Entity == entity.mID and item.Kind == .Text) return bvh.mTexts.items[item.Index];
+    }
+    unreachable;
+}
+
+test "each text keeps a tree of its own over its letters, in its layout space, split at its line breaks" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //ten letters, the only line break past the middle (wide enough not to wrap); then a short one, turned and stretched
+    const sign = try level.CreateEntity(engine_context, Entity.DefaultConfig);
+    try sign.SetTranslation(engine_context, .{ .x = 3, .y = 2, .z = 0 });
+    const sign_text = try sign.AddComponent(engine_context, TextComponent{ .mBounds = .{ .x = 0, .y = 100 }, .mFontSize = 1 });
+    try sign_text.SetText(sign.KeepFor(TextComponent), "AAAAAAAA\nAA");
+    _ = try sign.AddComponent(engine_context, SurfaceComponent{});
+    const label = try AddText(engine_context, level, "AAAAAA", .{ .x = -4, .y = 1, .z = 0.5 });
+    try label.SetScale(engine_context, .{ .x = 2, .y = 0.5, .z = 1 });
+    try label.SetRotation(engine_context, MathTypes.Quat(f32).FromAxisAngle(.{ .x = 0, .y = 0, .z = 1 }, 0.4));
+
+    const bvh = try world.Build();
+    const tree = &bvh.mGame;
+    var total_nodes: u32 = 0;
+    for ([_]Entity{ sign, label }, [_]u32{ 10, 6 }) |entity, letter_count| {
+        const entry = TextEntryOf(bvh, tree, entity);
+        try std.testing.expectEqual(letter_count, entry.GlyphCount);
+        const letters = bvh.Letters(entry);
+        const nodes = bvh.LetterTree(entry);
+        total_nodes += entry.NodeCount;
+
+        //a tree of its own: its root's Skip is its end, and its leaves cover its letters in order, each box around
+        //its letters' layout boxes
+        try std.testing.expectEqual(entry.NodeCount, nodes[0].Skip);
+        var next_letter: u32 = 0;
+        for (nodes) |node| {
+            if (!node.IsLeaf()) continue;
+            try std.testing.expectEqual(next_letter, node.FirstItem());
+            for (letters[node.FirstItem()..][0..node.ItemCount()]) |letter| {
+                try std.testing.expect(BoxHolds(node.Bounds(), WorldBVH.LetterBounds(letter)));
+            }
+            next_letter += node.ItemCount();
+        }
+        try std.testing.expectEqual(letter_count, next_letter);
+
+        //its root, placed by the text's transform, holds every letter where the renderer places it, and the text's one
+        //item holds that
+        const transform = entity.GetComponent(TransformComponent).?;
+        const params = ShapeGeometry.GetTextParams(transform, entity.GetComponent(TextComponent).?);
+        const root = nodes[0].Bounds();
+        const ink = WorldBVH.BoxBounds(ShapeGeometry.TextInkBox(transform, params, .{ .x = root.Min.x, .y = root.Min.y }, .{ .x = root.Max.x, .y = root.Max.y }, null));
+        for (letters) |letter| {
+            try std.testing.expect(BoxHolds(ink.Grow(0.0001), WorldBVH.BoxBounds(ShapeGeometry.GlyphBox(transform, params, letter, null))));
+        }
+        try std.testing.expect(BoxHolds(tree.mBVHItems.items[IndexOf(tree, entity)].Bounds, ink));
+    }
+    //the sign's first split is at its second line
+    const sign_nodes = bvh.LetterTree(TextEntryOf(bvh, tree, sign));
+    var first_right = sign_nodes[0].RightChild();
+    while (!sign_nodes[first_right].IsLeaf()) first_right += 1;
+    try std.testing.expectEqual(@as(u32, 8), sign_nodes[first_right].FirstItem());
+
+    var stats = EngineStats.WorldBVHStats{};
+    stats.Collect(bvh.*);
+    try std.testing.expectEqual(@as(u32, 2), stats.LetterTrees);
+    try std.testing.expectEqual(total_nodes, stats.LetterNodes);
+}
+
 /// A mask (MaskComponent) `size` across at `position`, cutting with its quad. Its own quad isn't drawn
 fn AddMask(engine_context: *EngineContext, parent: anytype, position: Vec3(f32), size: Vec2(f32), op: @import("../../Renderer/SDFProgram.zig").MaskOp) !Entity {
     const mask = try NewEntityIn(engine_context, parent);
@@ -568,12 +680,15 @@ test "what a mask cuts off well past its edge gets no items, quads and texts bot
     try std.testing.expectEqual(@as(usize, 0), ItemsOf(tree, far_below));
     //no letters, and no click box either
     try std.testing.expectEqual(@as(usize, 0), ItemsOf(tree, far_text));
-    //its four letters and its click box
-    try std.testing.expectEqual(@as(usize, 5), ItemsOf(tree, near_text));
+    //one item for its letters and its click box
+    try std.testing.expectEqual(@as(usize, 1), ItemsOf(tree, near_text));
+    //only the text near it has letters, and a tree over them
+    try std.testing.expectEqual(@as(usize, 1), bvh.mTexts.items.len);
+    try std.testing.expectEqual(@as(u32, 4), TextEntryOf(bvh, tree, near_text).GlyphCount);
     try ExpectTreeHoldsItems(tree);
 }
 
-test "a text across a mask's edge keeps only the letters near enough to it, and its click box" {
+test "a text across a mask's edge keeps every letter in its tree, and one item for drawing and clicking" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
@@ -586,27 +701,12 @@ test "a text across a mask's edge keeps only the letters near enough to it, and 
 
     const bvh = try world.Build();
     const tree = &bvh.mGame;
-    //the stand in font's letters are 0.5 wide, a 0.6 advance apart: one is kept while its left edge is in the room
-    var near_letters: usize = 0;
-    for (0..20) |i| {
-        if (start + 0.6 * @as(f32, @floatFromInt(i)) <= MASK_REACH) near_letters += 1;
-    }
-    try std.testing.expect(near_letters > 0 and near_letters < 20);
-    var glyphs: usize = 0;
-    var clicks: usize = 0;
-    for (tree.mItems.items, tree.mBVHItems.items) |item, bvh_item| {
-        if (item.Entity != line.mID) continue;
-        switch (item.Kind) {
-            .Glyph => {
-                glyphs += 1;
-                try std.testing.expect(bvh_item.Bounds.Min.x <= MASK_REACH);
-            },
-            .Text => clicks += 1,
-            else => return error.TestUnexpectedResult,
-        }
-    }
-    try std.testing.expectEqual(near_letters, glyphs);
-    try std.testing.expectEqual(@as(usize, 1), clicks);
+    //the renderer leaves out the letters its mask cuts off
+    try std.testing.expectEqual(@as(usize, 1), ItemsOf(tree, line));
+    try std.testing.expectEqual(BVH.Mask.RENDER | BVH.Mask.PICK, tree.mBVHItems.items[IndexOf(tree, line)].Mask);
+    try std.testing.expectEqual(@as(u32, 20), TextEntryOf(bvh, tree, line).GlyphCount);
+    //reaching past the room, the way its letters do
+    try std.testing.expect(tree.mBVHItems.items[IndexOf(tree, line)].Bounds.Max.x > MASK_REACH + start);
     try ExpectTreeHoldsItems(tree);
 }
 

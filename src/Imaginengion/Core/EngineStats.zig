@@ -78,10 +78,16 @@ pub const RateCounter = struct {
 pub const WorldBVHStats = struct {
     Overlay: BVH.TreeStats = .{},
     Game: BVH.TreeStats = .{},
+    /// every text's letter tree together (WorldBVH.TextEntry): how many texts have one, and their nodes
+    LetterTrees: u32 = 0,
+    LetterNodes: u32 = 0,
 
     pub fn Collect(self: *WorldBVHStats, world_bvh: WorldBVH) void {
         self.Overlay = world_bvh.mOverlay.Stats();
         self.Game = world_bvh.mGame.Stats();
+        self.LetterTrees = 0;
+        for (world_bvh.mTexts.items) |text| self.LetterTrees += @intFromBool(text.NodeCount > 0);
+        self.LetterNodes = @intCast(world_bvh.mLetterNodes.items.len);
     }
 };
 

@@ -3,8 +3,11 @@
 //! once a frame right after the end-of-frame commit, so the set of items can't change until the next one, and refit as
 //! things move. Shared by whatever asks what is where: the renderer, physics' broad phase, picking.
 //!
-//! One flat item per thing a ray or a box can meet: a quad, each letter of a text, a merge (its root standing for all
-//! its parts) and a collider. Each item carries its entity, its scene and which systems it is for (BVH.Mask), so a walk
+//! One flat item per thing a ray or a box can meet: a quad, a text, a merge (its root standing for all its parts) and a
+//! collider. A text is one item however many letters it has: its letters are in a small tree of its own, in its own
+//! layout space (TextEntry), which only its layout changes. Where the text is, how it is turned or stretched never does,
+//! so moving it refits one box, and the renderer walks into its letter tree from the text's item (like a mesh's own
+//! tree under an object in a bigger engine's world tree). Each item carries its entity, its scene and which systems it is for (BVH.Mask), so a walk
 //! passes over what isn't its own: a view over scenes it doesn't show, physics over what is only drawn.
 const std = @import("std");
 const Tracy = @import("Tracy.zig");
@@ -26,6 +29,7 @@ const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
+const TextComponent = EntityComponents.TextComponent;
 
 const WorldBVH = @This();
 
@@ -34,10 +38,9 @@ pub const MAX_SCENES: usize = 64;
 
 pub const ItemKind = enum(u8) {
     Quad,
-    /// one letter of a text, what is drawn (BVH.Mask.RENDER)
-    Glyph,
-    /// a whole text, from its first line's ascender down to its last one's descender: what is clicked
-    /// (BVH.Mask.PICK), so a click between two letters still lands on it
+    /// a whole text: drawn (BVH.Mask.RENDER) by its letters, which are in its own letter tree (TextEntry), and clicked
+    /// (BVH.Mask.PICK) anywhere from its first line's ascender down to its last one's descender, so a click between two
+    /// letters still lands on it. Its box is around both (TextBounds)
     Text,
     /// a merge's root, standing for every part of it
     Merge,
@@ -50,8 +53,7 @@ pub const WorldItem = struct {
     Kind: ItemKind,
     /// the item's scene, as its place in mScenes
     SceneSlot: u8,
-    /// a glyph's placement in mGlyphs, or a text's measurement in mTexts, which a refit places again without laying the
-    /// text out again. 0 for the rest
+    /// a text's TextEntry in mTexts, which a refit places again without laying the text out again. 0 for the rest
     Index: u32 = 0,
     /// where it was added in its layer, before the build reordered them: the order entities come in, which doesn't
     /// change as they move. What the renderer breaks a tie between two shapes at exactly the same depth by, so the tie
@@ -61,6 +63,20 @@ pub const WorldItem = struct {
     /// the build rather than for each of its letters every render. Entity.NullObject for none, and for colliders,
     /// which masks never cut
     MaskRegion: Entity.Type = Entity.NullObject,
+};
+
+/// One laid out text: its measured size, its letters and the tree over them (BVH.BuildInOrder), all in the text's own
+/// layout space (LetterBounds), before where it is placed, how it is turned or how it is stretched. The tree is its own:
+/// its root is its first node, its nodes' children and Skips count from there, and its leaves' items are its letters,
+/// counting from its first one. A text whose letters are all cut off has none, and no tree
+pub const TextEntry = struct {
+    Metrics: TextLayout.Metrics,
+    /// its letters, a run of mGlyphs
+    FirstGlyph: u32 = 0,
+    GlyphCount: u32 = 0,
+    /// its letter tree, a run of mLetterNodes
+    FirstNode: u32 = 0,
+    NodeCount: u32 = 0,
 };
 
 /// One layer's tree. mItems[i] is what mBVHItems[i] stands for, both in the order the build left them, so a leaf's
@@ -112,10 +128,12 @@ pub const LayerTree = struct {
 
 mGame: LayerTree = .{},
 mOverlay: LayerTree = .{},
-/// every laid out letter, which glyph items point into
+/// every laid out letter, each text's a run of them (TextEntry)
 mGlyphs: std.ArrayList(TextLayout.GlyphPlacement) = .empty,
-/// every text's measured size, which text items point into
-mTexts: std.ArrayList(TextLayout.Metrics) = .empty,
+/// every text's measured size and letter tree, which text items point into (WorldItem.Index)
+mTexts: std.ArrayList(TextEntry) = .empty,
+/// every text's letter tree, one run of nodes each (TextEntry.FirstNode)
+mLetterNodes: std.ArrayList(BVH.Node) = .empty,
 /// the scenes items are in, each one's place here its SceneSlot
 mScenes: std.ArrayList(Scene.Type) = .empty,
 
@@ -124,6 +142,7 @@ pub fn Deinit(self: *WorldBVH, keep_allocator: std.mem.Allocator) void {
     self.mOverlay.Deinit(keep_allocator);
     self.mGlyphs.deinit(keep_allocator);
     self.mTexts.deinit(keep_allocator);
+    self.mLetterNodes.deinit(keep_allocator);
     self.mScenes.deinit(keep_allocator);
 }
 
@@ -133,7 +152,28 @@ pub fn Clear(self: *WorldBVH) void {
     self.mOverlay.Clear();
     self.mGlyphs.clearRetainingCapacity();
     self.mTexts.clearRetainingCapacity();
+    self.mLetterNodes.clearRetainingCapacity();
     self.mScenes.clearRetainingCapacity();
+}
+
+/// `text`'s letters, each one's leaf item index its place here
+pub fn Letters(self: *const WorldBVH, text: TextEntry) []const TextLayout.GlyphPlacement {
+    return self.mGlyphs.items[text.FirstGlyph..][0..text.GlyphCount];
+}
+
+/// The tree over `text`'s letters, a tree of its own (TextEntry)
+pub fn LetterTree(self: *const WorldBVH, text: TextEntry) []const BVH.Node {
+    return self.mLetterNodes.items[text.FirstNode..][0..text.NodeCount];
+}
+
+/// A laid out letter's box in its text's layout space: around its glyph box (its pen plus PlaneCenter, out by
+/// HalfExtents), as thin as a drawn letter. Placed by the text's transform (ShapeGeometry.GlyphBox) it is the letter
+pub fn LetterBounds(glyph: TextLayout.GlyphPlacement) Aabb {
+    const center = glyph.Pen.AddVec(glyph.PlaneCenter);
+    return .{
+        .Min = .{ .x = center.x - glyph.HalfExtents.x, .y = center.y - glyph.HalfExtents.y, .z = -SDFFunctions.THICKNESS_2D },
+        .Max = .{ .x = center.x + glyph.HalfExtents.x, .y = center.y + glyph.HalfExtents.y, .z = SDFFunctions.THICKNESS_2D },
+    };
 }
 
 pub fn Tree(self: *WorldBVH, layer: LayerType) *LayerTree {
@@ -159,6 +199,20 @@ pub const ALL_ITEMS: u4 = BVH.Mask.RENDER | BVH.Mask.PICK | BVH.Mask.PHYSICS;
 pub fn BoxBounds(box: ShapeGeometry.Box) Aabb {
     const axis_x, const axis_y, const axis_z = box.Rotation.Axes();
     return SDFFunctions.aabbBox(box.Center, axis_x, axis_y, axis_z, box.HalfExtents);
+}
+
+/// A text item's box (in its tree's units) from where its text is now: around its whole text area when it is clicked
+/// (`mask` has BVH.Mask.PICK, ShapeGeometry.TextBoxFromMetrics), and around its letters when they are drawn (RENDER,
+/// its letter tree's root placed by the text's transform). What the build and a refit both box a text with
+pub fn TextBounds(self: *const WorldBVH, transform: *const TransformComponent, text: *const TextComponent, entry: TextEntry, mask: u4) Aabb {
+    var bounds = Aabb.empty;
+    if (mask & BVH.Mask.PICK != 0) bounds = bounds.Union(BoxBounds(ShapeGeometry.TextBoxFromMetrics(transform, text, entry.Metrics, null)));
+    if (mask & BVH.Mask.RENDER != 0 and entry.NodeCount > 0) {
+        const ink = self.LetterTree(entry)[0].Bounds();
+        const params = ShapeGeometry.GetTextParams(transform, text);
+        bounds = bounds.Union(BoxBounds(ShapeGeometry.TextInkBox(transform, params, .{ .x = ink.Min.x, .y = ink.Min.y }, .{ .x = ink.Max.x, .y = ink.Max.y }, null)));
+    }
+    return bounds;
 }
 
 /// A collider's box grown by how far it can reach this substep (CollisionManager.SubstepReach), so any two the narrow
