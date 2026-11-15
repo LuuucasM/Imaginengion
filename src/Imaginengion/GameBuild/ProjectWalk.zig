@@ -214,9 +214,10 @@ pub fn IsBuildOnlyFile(name: []const u8) bool {
 }
 
 /// Everything the game whose project file is `project_file_name` in `project_path` needs, with `engine_path` the engine's
-/// folder. An error only for a project file that can't be read: anything else wrong is in what it returns. Memory from
+/// folder. With `stats`, the stats window's too (a game built with -Dstats, Programs/GameStats.zig): every stock widget
+/// script. An error only for a project file that can't be read: anything else wrong is in what it returns. Memory from
 /// `arena`
-pub fn WalkProject(arena: std.mem.Allocator, io: std.Io, project_path: []const u8, engine_path: []const u8, project_file_name: []const u8) !Result {
+pub fn WalkProject(arena: std.mem.Allocator, io: std.Io, project_path: []const u8, engine_path: []const u8, project_file_name: []const u8, stats: bool) !Result {
     const resolved_project = try std.fs.path.resolveAlloc(arena, &.{project_path});
     var walker: Walker = .{
         .mArena = arena,
@@ -229,6 +230,7 @@ pub fn WalkProject(arena: std.mem.Allocator, io: std.Io, project_path: []const u
     try walker.AddProjectFile(project_file_name);
     try walker.AddSettings(project_file_name);
     for (EngineFiles.ALWAYS_NEEDED) |path| try walker.Add(.Eng, path, null, "every game needs it");
+    if (stats) try walker.AddStockScripts(null, "the stats window");
 
     while (walker.mToRead.pop()) |file| try walker.Read(file);
 
@@ -356,14 +358,14 @@ const Walker = struct {
         };
         const script = try ParseScript(self.mArena, source);
         try self.mResult.mScriptFiles.getPtr(file.mRoot).put(self.mArena, file.mPath, script);
-        if (script.mUsesWidgets) try self.AddStockScripts(file);
+        if (script.mUsesWidgets) try self.AddStockScripts(file, "uses Widgets");
         //an engine script is built with no project files to import
         if (file.mRoot == .Prj) try self.FollowImports(file, source);
     }
 
     /// Every stock script: which widget builders a file calls could be narrowed down to which scripts it needs, but that
     /// would be a table to keep up with Widgets by hand
-    fn AddStockScripts(self: *Walker, file: FileId) !void {
+    fn AddStockScripts(self: *Walker, from: ?FileId, via: []const u8) !void {
         const folder = EngineFiles.ASSETS_PATH ++ "/" ++ EngineFiles.STOCK_SCRIPTS_FOLDER;
         var dir = try std.Io.Dir.cwd().openDir(self.mIo, try self.FullPath(.Eng, folder), .{ .iterate = true });
         defer dir.close(self.mIo);
@@ -371,7 +373,7 @@ const Walker = struct {
         while (try iter.next(self.mIo)) |entry| {
             if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".zig")) continue;
             const path = try std.fmt.allocPrint(self.mArena, "{s}/{s}", .{ folder, entry.name });
-            try self.Add(.Eng, path, file, "uses Widgets");
+            try self.Add(.Eng, path, from, via);
             try self.mResult.mLoadedScripts.getPtr(.Eng).put(self.mArena, path, {});
         }
     }

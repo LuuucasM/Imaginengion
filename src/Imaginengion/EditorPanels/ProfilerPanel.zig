@@ -1,4 +1,5 @@
-//! The Profiler panel, in the editor's own UI: a floating window showing the engine profiler's tree (Core/Profiler.zig),
+//! The Profiler panel: a floating window, in the editor's own UI and in a game built with -Dstats (Programs/GameStats.zig),
+//! showing the engine profiler's tree (Core/Profiler.zig),
 //! a node per zone per place it was called from, each titled with how long it takes a pass of the loop over the passes
 //! the profiler remembers: on average, the 99th percentile, the worst, its own time without the zones inside it, and how
 //! many times it runs. Nodes are added as the profiler meets them and are never removed. Only the rows that can be seen
@@ -14,6 +15,7 @@ const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const Profiler = @import("../Core/Profiler.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const Widgets = @import("../UI/Widgets.zig");
@@ -131,7 +133,7 @@ pub fn Update(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *c
         try WidgetActions.SetText(engine_context, self.mNote, "Not measuring");
         return;
     }
-    try SetLine(engine_context, self.mNote, "A pass of the loop, over the last {d}: average, 99th percentile, worst, own time (without the zones inside), times run", .{profiler.LoopsKept()});
+    try SetLine(engine_context, self.mNote, "{d:.0} FPS. A pass of the loop, over the last {d}: average, 99th percentile, worst, own time (without the zones inside), times run", .{ engine_context.mEngineStats.FrameRate.mRate, profiler.LoopsKept() });
 
     try self.SetWorlds(engine_context, profiler);
     try self.AddRows(engine_context, profiler);
@@ -153,7 +155,7 @@ fn UpdateMemory(self: *ProfilerPanel, engine_context: *EngineContext) !void {
 
     //parents come before their children, so whether a parent's row can be seen is known by the time its children's are
     const rows = self.mMemoryRows.items;
-    const shown = try engine_context.mEditorWorld.Scratch().alloc(bool, rows.len);
+    const shown = try self.World().Scratch().alloc(bool, rows.len);
     for (rows, 0..) |row, row_ind| {
         shown[row_ind] = if (row.Parent) |parent| shown[parent] and !IsFolded(.{ .Node = rows[parent].Fold, .Title = rows[parent].Title }) else true;
         if (!shown[row_ind]) continue;
@@ -179,7 +181,7 @@ fn AddMemoryRows(self: *ProfilerPanel, engine_context: *EngineContext, node: *Me
         .StockScripts = self.mOptions.StockScripts,
     });
     const row = self.mMemoryRows.items.len;
-    try self.mMemoryRows.append(engine_context.mEditorWorld.Keep(), .{ .Node = node, .Fold = fold, .Title = UIManager.LabelOf(fold.Header).?, .Parent = parent_row });
+    try self.mMemoryRows.append(self.World().Keep(), .{ .Node = node, .Fold = fold, .Title = UIManager.LabelOf(fold.Header).?, .Parent = parent_row });
     var children = node.Children();
     while (children.next()) |child| try self.AddMemoryRows(engine_context, child, fold.Content.?, row, depth + 1);
 }
@@ -198,13 +200,13 @@ fn GPUOf(engine_context: *EngineContext, node: *MemoryNode) u64 {
 
 /// Each world that ran anything, and its time a pass on average
 fn SetWorlds(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *const Profiler) !void {
-    var line: std.Io.Writer.Allocating = .init(engine_context.mEditorWorld.Scratch());
+    var line: std.Io.Writer.Allocating = .init(self.World().Scratch());
     try line.writer.writeAll("Each world, a pass on average:");
     var any = false;
     for (1..EngineContext.WORLD_NAMES.len + 1) |tag| {
         const world: Profiler.World = @intCast(tag);
         if (!RanOn(profiler, world)) continue;
-        try line.writer.print("{s} {s} {d:.1} us", .{ if (any) "," else "", EngineContext.WorldName(world), Micros(profiler.WorldAverage(world)) });
+        try line.writer.print("{s} {s} {f}", .{ if (any) "," else "", EngineContext.WorldName(world), Profiler.Time{ .mDuration = profiler.WorldAverage(world) } });
         any = true;
     }
     if (!any) try line.writer.writeAll(" none measured yet");
@@ -219,15 +221,15 @@ fn RanOn(profiler: *const Profiler, world: Profiler.World) bool {
 }
 
 /// A node's name, with its world's in front when it starts that world's part of the tree
-fn Title(engine_context: *EngineContext, profiler: *const Profiler, node: Profiler.NodeIndex) ![]const u8 {
+fn Title(self: *const ProfilerPanel, profiler: *const Profiler, node: Profiler.NodeIndex) ![]const u8 {
     if (!profiler.StartsWorld(node)) return profiler.Name(node);
-    return try std.fmt.allocPrint(engine_context.mEditorWorld.Scratch(), "[{s}] {s}", .{ EngineContext.WorldName(profiler.GetNode(node).mWorld), profiler.Name(node) });
+    return try std.fmt.allocPrint(self.World().Scratch(), "[{s}] {s}", .{ EngineContext.WorldName(profiler.GetNode(node).mWorld), profiler.Name(node) });
 }
 
 /// The row of each node met since the last refresh, under its parent's row. Nodes come after their parents, so the
 /// parent's row is always there already. The top ones start open, the rest folded
 fn AddRows(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *const Profiler) !void {
-    const keep_allocator = engine_context.mEditorWorld.Keep();
+    const keep_allocator = self.World().Keep();
     if (self.mTree == null) {
         //the root's row is the tree itself, so the top nodes go in it like any other node goes in its parent's content
         const tree = try Widgets.Tree(engine_context, .{ .Entity = self.mContent });
@@ -237,7 +239,7 @@ fn AddRows(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *cons
     for (self.mRows.items.len..profiler.NodeCount()) |node_ind| {
         const node: Profiler.NodeIndex = @intCast(node_ind);
         const parent = profiler.GetNode(node).mParent;
-        const fold = try Widgets.TreeNode(engine_context, .{ .Entity = self.mRows.items[parent].Node.Content.? }, try Title(engine_context, profiler, node), .{
+        const fold = try Widgets.TreeNode(engine_context, .{ .Entity = self.mRows.items[parent].Node.Content.? }, try self.Title(profiler, node), .{
             .Open = parent == Profiler.ROOT,
             .StockScripts = self.mOptions.StockScripts,
         });
@@ -248,7 +250,7 @@ fn AddRows(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *cons
 /// The numbers on every row whose parents are all open
 fn Refresh(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *const Profiler) !void {
     const rows = self.mRows.items;
-    const shown = try engine_context.mEditorWorld.Scratch().alloc(bool, rows.len);
+    const shown = try self.World().Scratch().alloc(bool, rows.len);
     shown[Profiler.ROOT] = true;
     for (rows[1..], 1..) |row, node_ind| {
         const parent = profiler.GetNode(@intCast(node_ind)).mParent;
@@ -261,12 +263,12 @@ fn Refresh(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *cons
         var children = profiler.Children(node);
         while (children.next()) |child| inside += profiler.Average(child).toNanoseconds();
         const own: std.Io.Duration = .fromNanoseconds(@max(0, summary.Avg.toNanoseconds() - inside));
-        try SetLine(engine_context, row.Title, "{s}   {d:.1} / {d:.1} / {d:.1} us   own {d:.1} us   x{d:.1}", .{
-            try Title(engine_context, profiler, node),
-            Micros(summary.Avg),
-            Micros(summary.P99),
-            Micros(summary.Max),
-            Micros(own),
+        try SetLine(engine_context, row.Title, "{s}   {f} / {f} / {f}   own {f}   x{d:.1}", .{
+            try self.Title(profiler, node),
+            Profiler.Time{ .mDuration = summary.Avg },
+            Profiler.Time{ .mDuration = summary.P99 },
+            Profiler.Time{ .mDuration = summary.Max },
+            Profiler.Time{ .mDuration = own },
             summary.Calls,
         });
     }
@@ -278,11 +280,12 @@ fn IsFolded(row: Row) bool {
     return item.mCollapsed;
 }
 
-fn Micros(duration: std.Io.Duration) f64 {
-    return @as(f64, @floatFromInt(duration.toNanoseconds())) / std.time.ns_per_us;
+/// The world the window is in, whose memory it takes: the editor's, or the game's
+fn World(self: *const ProfilerPanel) *WorldManager {
+    return self.mWindow.mManager;
 }
 
 /// Puts a formatted line on a label, if it doesn't say that already
 fn SetLine(engine_context: *EngineContext, label: Entity, comptime format: []const u8, args: anytype) !void {
-    try WidgetActions.SetText(engine_context, label, try std.fmt.allocPrint(engine_context.mEditorWorld.Scratch(), format, args));
+    try WidgetActions.SetText(engine_context, label, try std.fmt.allocPrint(label.mManager.Scratch(), format, args));
 }

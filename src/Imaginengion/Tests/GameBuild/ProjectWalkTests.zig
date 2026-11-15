@@ -53,7 +53,12 @@ const TestGame = struct {
     }
 
     fn Walk(self: *TestGame) !ProjectWalk.Result {
-        return try ProjectWalk.WalkProject(self.mArena.allocator(), std.testing.io, try self.FullPath("game"), try self.FullPath("engine"), "game.imprj");
+        return try self.WalkFor(false);
+    }
+
+    /// The walk for a game built with -Dstats or without
+    fn WalkFor(self: *TestGame, stats: bool) !ProjectWalk.Result {
+        return try ProjectWalk.WalkProject(self.mArena.allocator(), std.testing.io, try self.FullPath("game"), try self.FullPath("engine"), "game.imprj", stats);
     }
 
     fn FindNotNeeded(self: *TestGame, result: *const ProjectWalk.Result) !ProjectWalk.NotNeeded {
@@ -730,6 +735,17 @@ test "only scripts on objects are compiled in, and using Widgets brings in every
     try std.testing.expect(result.mCode.getPtrConst(.Eng).contains(STOCK_FOLDER ++ "/Toggle.zig"));
     try std.testing.expect(result.mLoadedScripts.getPtrConst(.Eng).contains(STOCK_FOLDER ++ "/Toggle.zig"));
     try ExpectPaths(&.{}, (try game.FindNotNeeded(&result)).mEngine.items);
+}
+
+test "a game built with -Dstats compiles in every stock script, for its stats window, though none of its own uses Widgets" {
+    var game = try TestGame.Init();
+    defer game.Deinit();
+    try game.WriteEntries();
+
+    try ExpectPaths(&.{}, (try game.WalkFor(false)).mLoadedScripts.getPtrConst(.Eng).keys());
+    const result = try game.WalkFor(true);
+    try std.testing.expect(result.mLoadedScripts.getPtrConst(.Eng).contains(STOCK_FOLDER ++ "/Choose.zig"));
+    try std.testing.expect(result.mLoadedScripts.getPtrConst(.Eng).contains(STOCK_FOLDER ++ "/Toggle.zig"));
 }
 
 test "the walk says which files it read, so the build knows when to run it again" {

@@ -21,6 +21,8 @@ const TransformSystem = @import("../Physics/TransformSystem.zig");
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
 const UIManager = @import("../UI/UIManager.zig");
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
+const GameStats = @import("GameStats.zig");
+const Profiler = @import("../Core/Profiler.zig");
 const EventResult = @import("../Events/EventManager.zig").EventResult;
 
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -74,6 +76,8 @@ const GameProgram = @This();
 
 /// Hands the pointer's and the UI's events to entities' event scripts
 mEventScripts: ScriptsProcessor.EventScripts = .{},
+/// The stats overlay, in a game built with -Dstats (GameStats)
+mStats: if (GameStats.enabled) GameStats else void = if (GameStats.enabled) .{} else {},
 
 /// Opens the project named by the first argument and starts its game
 pub fn Init(self: *GameProgram, engine_context: *EngineContext, args: std.process.Args) !void {
@@ -95,11 +99,14 @@ pub fn Init(self: *GameProgram, engine_context: *EngineContext, args: std.proces
     try engine_context.mProject.Open(engine_context, project_path);
     SetUpWindow(engine_context);
     engine_context.mUIManager.LoadTheme(engine_context);
+    if (GameStats.enabled) try GameStats.Start(engine_context);
 
     try StartGame(engine_context);
 }
 
-pub fn Deinit(_: *GameProgram, _: *EngineContext) void {}
+pub fn Deinit(self: *GameProgram, engine_context: *EngineContext) void {
+    if (GameStats.enabled) self.mStats.Deinit(engine_context);
+}
 
 /// The window shows the project's name in its title bar and its icon, each only if the project has one: without, the
 /// window keeps what it was made with. Neither stops the game if it fails, it is only logged
@@ -234,6 +241,8 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
         const layout_zone = Tracy.ZoneInit("Layout Update Section", @src());
         defer layout_zone.Deinit();
         try engine_context.mUIManager.UpdateBeforeLayout(engine_context);
+        //the stats overlay's lines are set before they are laid out
+        if (GameStats.enabled) try self.mStats.Update(engine_context, &Profiler.gMain);
         try engine_context.mSystems.RunSystem(LayoutSystem, engine_context, .{game_world});
         const ui_worlds = [_]*WorldManager{game_world};
         try engine_context.mUIManager.UpdateAfterLayout(engine_context, &ui_worlds);
@@ -349,10 +358,18 @@ pub fn OnEvent(_: *GameProgram, engine_context: *EngineContext, event: anytype) 
     }
 }
 
-fn OnSystemEvent(_: *anyopaque, engine_context: *EngineContext, event: *const WindowEvent) anyerror!EventResult {
+fn OnSystemEvent(game_program: *anyopaque, engine_context: *EngineContext, event: *const WindowEvent) anyerror!EventResult {
+    const self: *GameProgram = @ptrCast(@alignCast(game_program));
     switch (event.*) {
         .WindowClose => engine_context.mIsRunning = false,
-        .KeyboardPressed => |e| try OnKeyboardPressed(engine_context, e),
+        .KeyboardPressed => |e| {
+            //the stats overlay's key is never the game's
+            if (GameStats.enabled and GameStats.IsToggle(engine_context, e._InputCode, e._Repeat)) {
+                if (try ShownView(engine_context)) |view| try self.mStats.Toggle(engine_context, view.mPlayer);
+                return .Continue;
+            }
+            try OnKeyboardPressed(engine_context, e);
+        },
         .MousePressed => |e| try engine_context.mPointerSystem.OnPressed(engine_context, e._ButtonCode),
         .MouseReleased => |e| try engine_context.mPointerSystem.OnReleased(engine_context, e._ButtonCode),
         .MouseClicked => |e| try engine_context.mPointerSystem.OnClicked(engine_context, e._ButtonCode, e._Clicks),

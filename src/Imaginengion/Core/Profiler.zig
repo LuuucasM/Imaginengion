@@ -241,6 +241,20 @@ pub fn StartsWorld(self: *const Profiler, node: NodeIndex) bool {
     return world != NO_WORLD and self.GetNode(self.GetNode(node).mParent).mWorld != world;
 }
 
+/// A duration in the unit that fits it: ns under a microsecond, us under a millisecond, ms under a second, then s
+pub const Time = struct {
+    mDuration: std.Io.Duration,
+
+    pub fn format(self: Time, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        const nanos = self.mDuration.toNanoseconds();
+        const value: f64 = @floatFromInt(nanos);
+        if (@abs(nanos) < std.time.ns_per_us) return writer.print("{d} ns", .{nanos});
+        if (@abs(nanos) < std.time.ns_per_ms) return writer.print("{d:.1} us", .{value / std.time.ns_per_us});
+        if (@abs(nanos) < std.time.ns_per_s) return writer.print("{d:.2} ms", .{value / std.time.ns_per_ms});
+        try writer.print("{d:.2} s", .{value / std.time.ns_per_s});
+    }
+};
+
 /// A node over the loops it remembers. Avg, P99 and Max are per pass of the loop, counting passes it didn't run in
 pub const Summary = struct {
     Avg: std.Io.Duration = .zero,

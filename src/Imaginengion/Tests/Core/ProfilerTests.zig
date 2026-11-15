@@ -283,3 +283,17 @@ test "a system handed a world is measured on that world, and the world is left w
     try std.testing.expect(found);
     try std.testing.expectEqual(Profiler.NO_WORLD, Profiler.gMain.mWorld);
 }
+
+test "a time is shown in the unit that fits it" {
+    const Expect = struct {
+        fn Shows(expected: []const u8, nanos: i96) !void {
+            var buffer: [32]u8 = undefined;
+            const shown = try std.fmt.bufPrint(&buffer, "{f}", .{Profiler.Time{ .mDuration = .fromNanoseconds(nanos) }});
+            try std.testing.expectEqualStrings(expected, shown);
+        }
+    };
+    try Expect.Shows("640 ns", 640);
+    try Expect.Shows("300.0 us", 300 * std.time.ns_per_us);
+    try Expect.Shows("2.50 ms", 2_500 * std.time.ns_per_us);
+    try Expect.Shows("1.20 s", 1_200 * std.time.ns_per_ms);
+}

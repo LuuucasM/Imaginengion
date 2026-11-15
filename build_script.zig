@@ -104,21 +104,23 @@ pub fn ProjectBuild(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     //a project's build is for playing unless asked for something else
     const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Build mode, fast if not given") orelse .fast;
-    const engine = b.dependency("GameEngine", .{ .target = target, .optimize = optimize, .@"packaged-game" = true });
+    //the stats window, Ctrl+Shift+F12 in the game (Programs/GameStats.zig)
+    const stats = b.option(bool, "stats", "Build the stats window in: Ctrl+Shift+F12 in the game shows the profiler's time and memory trees") orelse false;
+    const engine = b.dependency("GameEngine", .{ .target = target, .optimize = optimize, .@"packaged-game" = true, .stats = stats });
 
     const check_step = b.step("check", "Check that the project's files compile");
     const game_step = b.step("game", "Build the game into zig-out/<name>/");
     const run_step = b.step("rungame", "Build the game and run it");
     b.getInstallStep().dependOn(game_step);
 
-    AddProjectSteps(b, engine, check_step, game_step, run_step, target, optimize) catch |err| {
+    AddProjectSteps(b, engine, check_step, game_step, run_step, target, optimize, stats) catch |err| {
         const fail = b.addFail(b.fmt("couldn't read the project's files: {s}", .{@errorName(err)}));
         check_step.dependOn(&fail.step);
         game_step.dependOn(&fail.step);
     };
 }
 
-fn AddProjectSteps(b: *std.Build, engine: *std.Build.Dependency, check_step: *std.Build.Step, game_step: *std.Build.Step, run_step: *std.Build.Step, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) !void {
+fn AddProjectSteps(b: *std.Build, engine: *std.Build.Dependency, check_step: *std.Build.Step, game_step: *std.Build.Step, run_step: *std.Build.Step, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, stats: bool) !void {
     const engine_module = engine.module("ImaginEngionScript");
     const project = try b.root.root_dir.handle.realPathFileAlloc(b.graph.io, ".", b.allocator);
     const files = try ScriptImports.FindProjectFiles(b.allocator, b.graph.io, project);
@@ -172,7 +174,7 @@ fn AddProjectSteps(b: *std.Build, engine: *std.Build.Dependency, check_step: *st
         game_step.dependOn(&b.addFail("no .imprj file at the top of the project's folder, so there's no game to build").step);
         return;
     };
-    const walk = WalkGame(b, game_step, engine, project, game_name) orelse return;
+    const walk = WalkGame(b, game_step, engine, project, game_name, stats) orelse return;
     const game: GameBuild = .{
         .mBuild = b,
         .mStep = game_step,
@@ -181,6 +183,7 @@ fn AddProjectSteps(b: *std.Build, engine: *std.Build.Dependency, check_step: *st
         .mOptimize = optimize,
         .mName = game_name,
         .mWalk = walk,
+        .mStats = stats,
     };
     game.AddScripts(engine, project, &files);
 
@@ -230,10 +233,10 @@ fn FindProjectFileName(b: *std.Build) !?[]const u8 {
     return null;
 }
 
-/// Which files the game `game_name` needs. Null, with a failing step added to `game_step` saying why, for a project file
+/// Which files the game `game_name` needs, with the stats window's too for `stats`. Null, with a failing step added to `game_step` saying why, for a project file
 /// that can't be read. The build is set to run this again when a file it read changes, or any project folder gets a file
 /// added or removed (AddProjectSteps does the project's folders)
-fn WalkGame(b: *std.Build, game_step: *std.Build.Step, engine: *std.Build.Dependency, project: []const u8, game_name: []const u8) ?ProjectWalk.Result {
+fn WalkGame(b: *std.Build, game_step: *std.Build.Step, engine: *std.Build.Dependency, project: []const u8, game_name: []const u8, stats: bool) ?ProjectWalk.Result {
     const project_file = b.fmt("{s}.imprj", .{game_name});
     b.dependOnFileContents(b.path(project_file));
 
@@ -241,7 +244,7 @@ fn WalkGame(b: *std.Build, game_step: *std.Build.Step, engine: *std.Build.Depend
         game_step.dependOn(&b.addFail(b.fmt("couldn't find the engine's folder: {s}", .{@errorName(err)})).step);
         return null;
     };
-    const walk = ProjectWalk.WalkProject(b.allocator, b.graph.io, project, engine_path, project_file) catch |err| {
+    const walk = ProjectWalk.WalkProject(b.allocator, b.graph.io, project, engine_path, project_file, stats) catch |err| {
         game_step.dependOn(&b.addFail(b.fmt("couldn't read {s}: {s}", .{ project_file, @errorName(err) })).step);
         return null;
     };
@@ -264,6 +267,8 @@ const GameBuild = struct {
     mOptimize: std.builtin.OptimizeMode,
     mName: []const u8,
     mWalk: ProjectWalk.Result,
+    /// built with -Dstats: the stats window's files are needed too
+    mStats: bool,
 
     /// Compiles the scripts the game loads into its exe: the engine gets a table of them ("game_scripts", which
     /// StaticScriptAsset reads) and they use the same engine module as the exe, so the game has one copy of the engine.
@@ -374,6 +379,7 @@ const GameBuild = struct {
         report.addArg(self.mName);
         report.addDirectoryArg(b.graph.path(.install_prefix, self.mName));
         if (b.option(bool, "trees", "Also print every object file's objects after building the game") orelse false) report.addArg("trees");
+        if (self.mStats) report.addArg("stats");
 
         for (self.mStep.dependencies.items) |step| report.step.dependOn(step);
         self.mStep.dependOn(&report.step);

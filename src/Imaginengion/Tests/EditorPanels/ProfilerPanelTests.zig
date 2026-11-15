@@ -67,7 +67,7 @@ test "the profiler window shows a row per node under its parent's, with numbers 
 
     engine_context.mDT = ProfilerPanel.REFRESH_SECONDS;
     try panel.Update(engine_context, &profiler);
-    try std.testing.expect(std.mem.startsWith(u8, TextOf(panel.mNote), "A pass of the loop, over the last 1:"));
+    try std.testing.expect(std.mem.startsWith(u8, TextOf(panel.mNote), "0 FPS. A pass of the loop, over the last 1:"));
     //the root's row and one for each node
     try std.testing.expectEqual(@as(usize, 3), panel.mRows.items.len);
     //the top node starts open, so its row and the one under it both have numbers; called once a pass
