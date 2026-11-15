@@ -215,7 +215,7 @@ pub fn Read(engine_context: *EngineContext, script: anytype, values: std.json.Va
             },
             inline .Entity, .Scene, .Player, .GameContext => |kind| {
                 const uuid = UUIDOf(value) orelse continue;
-                try component.SetLink(script.Keep(), field.Name(), uuid);
+                try component.SetLink(script.KeepFor(ScriptComponent), field.Name(), uuid);
                 At(kind.ObjectType(), data, field).* = ObjectLink.Waiting(kind.ObjectType(), script.mManager);
             },
             inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| {
@@ -266,7 +266,7 @@ pub fn SyncLinks(script: anytype) !void {
             inline .Entity, .Scene, .Player, .GameContext => |kind| {
                 const object = At(kind.ObjectType(), instance.mData, field).*;
                 if (ObjectLink.WantedNow(object, component.GetLink(field.Name()))) |uuid| {
-                    try component.SetLink(script.Keep(), field.Name(), uuid);
+                    try component.SetLink(script.KeepFor(ScriptComponent), field.Name(), uuid);
                 } else {
                     component.RemoveLink(field.Name());
                 }
@@ -462,6 +462,7 @@ pub fn BuildFields(engine_context: *EngineContext, parent: Entity, root: Entity,
         .mObject = Inspector.ObjectRef.Of(script),
         .mBase = @intFromPtr(copy.ptr),
         .mResolve = ResolveFor(@TypeOf(script)),
+        .mKeepOf = Inspector.KeepOfFor(@TypeOf(script), ScriptComponent),
         .mAfterEdit = AfterEditFor(@TypeOf(script)),
         .mOptions = options,
     };

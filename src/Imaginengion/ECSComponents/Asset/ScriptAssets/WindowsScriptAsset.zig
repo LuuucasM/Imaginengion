@@ -5,6 +5,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const WindowsScriptAsset = @This();
 
+const ScriptAsset = @import("../ScriptAsset.zig");
 const EngineContext = @import("../../../Core/EngineContext.zig");
 const Tracy = @import("../../../Core/Tracy.zig");
 const ScriptABI = @import("../../../Scripts/ScriptABI.zig");
@@ -73,7 +74,7 @@ pub fn Open(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path:
         std.log.err("Failed to copy {s} to {s} to load it", .{ built_path, load_path });
         return error.AssetInitFailed;
     }
-    try self.mLoadedPath.appendSlice(engine_context.Keep(), load_path);
+    try self.mLoadedPath.appendSlice(engine_context.mAssetManager.KeepFor(ScriptAsset), load_path);
     errdefer self.Close(engine_context);
 
     const load_path_w = try std.unicode.utf8ToUtf16LeAllocZ(scratch_allocator, load_path);
@@ -99,7 +100,7 @@ pub fn Close(self: *WindowsScriptAsset, engine_context: *EngineContext) void {
             _ = DeleteFileW(path_w.ptr);
         } else |_| {}
     }
-    self.mLoadedPath.deinit(engine_context.Keep());
+    self.mLoadedPath.deinit(engine_context.mAssetManager.KeepFor(ScriptAsset));
     self.mLoadedPath = .empty;
 }
 

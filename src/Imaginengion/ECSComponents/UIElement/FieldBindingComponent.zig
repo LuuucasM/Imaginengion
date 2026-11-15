@@ -17,6 +17,8 @@ pub const Name: []const u8 = "FieldBindingComponent";
 mObject: Inspector.ObjectRef,
 /// Finds the object's component again, null once either has gone
 mResolve: *const fn (Inspector.ObjectRef) ?*anyopaque,
+/// The Keep of the component's array, for what a written field owns (Inspector.KeepOfFor)
+mKeepOf: *const fn (Inspector.ObjectRef) std.mem.Allocator,
 /// Where the field is inside the component, in bytes
 mOffset: usize,
 /// How the field's type is read and written

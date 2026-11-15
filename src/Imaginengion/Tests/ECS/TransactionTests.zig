@@ -88,14 +88,14 @@ const TestLayer = struct {
 
     fn NewBody(self: *TestLayer, x: f32) !u32 {
         const engine_context = self.mEngineContext;
-        const id = try self.mBodies.CreateEntity(engine_context.Keep());
+        const id = try self.mBodies.CreateEntity();
         _ = try self.mBodies.AddComponent(engine_context, id, Position{ .x = x });
         return id;
     }
 
     fn NewLabel(self: *TestLayer, text: []const u8) !u32 {
         const engine_context = self.mEngineContext;
-        const id = try self.mBodies.CreateEntity(engine_context.Keep());
+        const id = try self.mBodies.CreateEntity();
         var label = Label{};
         try label.mText.appendSlice(engine_context.Keep(), text);
         _ = try self.mBodies.AddComponent(engine_context, id, label);
@@ -251,7 +251,7 @@ test "a transaction that is used again starts empty" {
 
 /// Makes a body with a position, a label and a child, and hands back `keep`
 fn MakesBody(bodies: *BodyECS, engine_context: *EngineContext, made: *u32, child: *u32, keep: bool) bool {
-    made.* = bodies.CreateEntity(engine_context.Keep()) catch unreachable;
+    made.* = bodies.CreateEntity() catch unreachable;
     _ = bodies.AddComponent(engine_context, made.*, Position{ .x = 2 }) catch unreachable;
     var label = Label{};
     label.mText.appendSlice(engine_context.Keep(), "new") catch unreachable;
@@ -479,7 +479,7 @@ fn RunsHook(bodies: *BodyECS, engine_context: *EngineContext, hook: Hook) bool {
             var group = bodies.GetGroup(engine_context.Keep(), .{ .Component = Label }) catch unreachable;
             group.deinit(engine_context.Keep());
         },
-        .MakesBody => _ = bodies.CreateEntity(engine_context.Keep()) catch unreachable,
+        .MakesBody => _ = bodies.CreateEntity() catch unreachable,
     }
     return hook.mKeep;
 }
@@ -644,7 +644,7 @@ fn RunsBatchHook(bodies: *BodyECS, engine_context: *EngineContext, hooks: []Batc
         .CountsLabels => hook.mSaw = @floatFromInt(bodies.NumWithComponent(Label)),
         .Freezes => _ = bodies.AddComponent(engine_context, hook.mID, Frozen{}) catch unreachable,
         .SeesFrozen => hook.mSaw = if (bodies.HasComponent(Frozen, hook.mID)) 1 else 0,
-        .Makes => hook.mMade = bodies.CreateEntity(engine_context.Keep()) catch |err| {
+        .Makes => hook.mMade = bodies.CreateEntity() catch |err| {
             std.debug.assert(err == error.RunSerially);
             return true;
         },

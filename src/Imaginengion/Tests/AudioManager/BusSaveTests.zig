@@ -86,7 +86,7 @@ fn NewBus(engine: *TestEngine, parent: Bus, name: []const u8, volume: f32) !Bus 
     const bus = try parent.CreateChild(engine_context, .Entity, Bus.DefaultConfig);
     const name_component = bus.GetComponentMut(VComponents.NameComponent).?;
     name_component.mName.clearRetainingCapacity();
-    try name_component.mName.appendSlice(engine_context.Keep(), name);
+    try name_component.mName.appendSlice(bus.KeepFor(VComponents.NameComponent), name);
     bus.SetVolume(volume);
     return bus;
 }

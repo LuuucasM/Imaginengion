@@ -114,7 +114,7 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         const asset_manager = &engine_context.mAssetManager;
         const keep_allocator = engine_context.Keep();
-        const asset_id = try asset_manager.mECSManager.CreateEntity(keep_allocator);
+        const asset_id = try asset_manager.mECSManager.CreateEntity();
         _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, Assets.AssetMetaData{ .mRefs = 1 });
         var file_meta_data = Assets.FileMetaData{ .mPathType = .Prj };
         _ = try file_meta_data.mRelPath.print(keep_allocator, "scripts/Test.zig", .{});
@@ -520,7 +520,7 @@ test "a hook in a batch asking for an asset that isn't loaded is refused, and ru
     gFirstLoadError = null;
 
     const asset_manager = &engine_context.mAssetManager;
-    const asset_id = try asset_manager.mECSManager.CreateEntity(engine_context.Keep());
+    const asset_id = try asset_manager.mECSManager.CreateEntity();
     _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, Assets.AssetMetaData{ .mRefs = 1 });
     var file_meta_data = Assets.FileMetaData{ .mPathType = .Prj };
     _ = try file_meta_data.mRelPath.print(engine_context.Keep(), "never/loaded.txt", .{});

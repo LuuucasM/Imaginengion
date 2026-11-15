@@ -167,8 +167,7 @@ pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: an
     }
 
     //the voice lives in this manager's storage, so adding to it leaves audio_component (in the world's) where it is
-    const keep_allocator = engine_context.Keep();
-    const voice: Voice = .{ .mID = try self.mECSManager.CreateEntity(keep_allocator), .mManager = self };
+    const voice: Voice = .{ .mID = try self.mECSManager.CreateEntity(), .mManager = self };
     errdefer self.DeleteVoice(engine_context, voice.mID) catch {};
 
     _ = try self.mECSManager.AddComponent(engine_context, voice.mID, VoiceComponent{
@@ -300,12 +299,13 @@ fn IsBus(self: *AudioManager, id: Bus.Type) bool {
 }
 
 fn NewBus(self: *AudioManager, engine_context: *EngineContext, parent_id: ?Bus.Type, config: Bus.CreateConfig, name: []const u8) !Bus {
-    const keep_allocator = engine_context.Keep();
+    //the name is its NameComponent's, which frees it
+    const keep_allocator = self.mECSManager.KeepFor(NameComponent);
 
     const bus_id = if (parent_id) |parent|
         try self.mECSManager.AddChild(engine_context, parent, .Entity)
     else
-        try self.mECSManager.CreateEntity(keep_allocator);
+        try self.mECSManager.CreateEntity();
 
     //what makes it a bus, so not up to the config: a blank bus being read from a file still needs one
     _ = try self.mECSManager.AddComponent(engine_context, bus_id, BusComponent{});
@@ -325,7 +325,8 @@ fn NewBus(self: *AudioManager, engine_context: *EngineContext, parent_id: ?Bus.T
         const io_source = std.Random.IoSource{ .io = engine_context.Io() };
         const uuid = io_source.interface().int(u64);
         _ = try self.mECSManager.AddComponent(engine_context, bus_id, UUIDComponent{ .ID = uuid });
-        try self.AddUUID(keep_allocator, uuid, bus_id);
+        //the UUID map is the manager's own, so the engine's, as Deinit frees it
+        try self.AddUUID(engine_context.Keep(), uuid, bus_id);
     }
 
     return .{ .mID = bus_id, .mManager = self };

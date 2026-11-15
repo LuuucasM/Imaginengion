@@ -201,7 +201,7 @@ test "an enum is a dropdown, text a text field, and a struct with no UIRender sh
 
     //text
     const text = try world.mObject.AddComponent(engine_context, TextComponent{});
-    try text.SetText(world.mObject.Keep(), "Hello");
+    try text.SetText(world.mObject.KeepFor(TextComponent), "Hello");
     var text_ui = world.Builder(TextComponent);
     try text_ui.Text(&text.mText, "Text", .{});
     const typed = UIManager.LabelOf(world.Widget(1)).?;

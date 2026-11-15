@@ -81,9 +81,11 @@ const File = struct {
 pub fn Init(self: *ThemeAsset, engine_context: *EngineContext, _: []const u8, rel_path: []const u8, asset_file: std.Io.File) !void {
     var file_reader = asset_file.reader(engine_context.Io(), &.{});
     const contents = try file_reader.interface.allocRemaining(engine_context.Scratch(), .unlimited);
-    self.FromJson(engine_context, contents) catch |err| {
+    //what it holds is its array's, which frees it
+    const keep_allocator = engine_context.mAssetManager.KeepFor(ThemeAsset);
+    self.FromJson(engine_context, keep_allocator, contents) catch |err| {
         std.log.err("Theme {s} could not be read: {s}", .{ rel_path, @errorName(err) });
-        self.Deinit(engine_context, engine_context.Keep());
+        self.Deinit(engine_context, keep_allocator);
         return error.AssetInitFailed;
     };
     self.LoadFonts(engine_context);
@@ -101,9 +103,9 @@ fn LoadFonts(self: *ThemeAsset, engine_context: *EngineContext) void {
     }
 }
 
-/// Reads a theme's styles from the text of a theme file
-pub fn FromJson(self: *ThemeAsset, engine_context: *EngineContext, contents: []const u8) !void {
-    const keep_allocator = engine_context.Keep();
+/// Reads a theme's styles from the text of a theme file, what they hold taken from `keep_allocator`: the one Deinit
+/// is given
+pub fn FromJson(self: *ThemeAsset, engine_context: *EngineContext, keep_allocator: std.mem.Allocator, contents: []const u8) !void {
     const file = try std.json.parseFromSliceLeaky(File, engine_context.Scratch(), contents, .{});
 
     var iter = file.Styles.map.iterator();

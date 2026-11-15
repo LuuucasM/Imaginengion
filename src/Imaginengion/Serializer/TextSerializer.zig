@@ -221,7 +221,7 @@ fn DeserializeComponent(engine_context: *EngineContext, scanner: *std.json.Scann
             //components that need to know their owner while parsing (e.g. to request UUID resolves) read it from here, and
             //what they own is taken from the object's Keep, which frees it. Put back after, for the object this is inside of
             const outer = engine_context.mSerializer.mCurrDeserialize;
-            engine_context.mSerializer.mCurrDeserialize = .{ .requester = .Init(object), .keep = object.Keep() };
+            engine_context.mSerializer.mCurrDeserialize = .{ .requester = .Init(object), .keep = object.KeepFor(component_type) };
             defer engine_context.mSerializer.mCurrDeserialize = outer;
 
             //parse first then add, so AddComponent can hook up the manager pointers of the parsed value

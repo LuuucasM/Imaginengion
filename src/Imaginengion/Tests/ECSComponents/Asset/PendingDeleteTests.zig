@@ -52,9 +52,8 @@ test "a destroyed asset takes its PendingDelete with it" {
     defer test_context.Deinit();
     const engine_context = test_context.mEngineContext;
     const asset_manager = &engine_context.mAssetManager;
-    const keep_allocator = engine_context.Keep();
 
-    const asset_id = try asset_manager.mECSManager.CreateEntity(keep_allocator);
+    const asset_id = try asset_manager.mECSManager.CreateEntity();
     _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, PendingDelete{
         .mReason = 1,
         .mTime = std.Io.Timestamp.now(engine_context.Io(), .awake),
@@ -80,10 +79,9 @@ test "marking is per asset and leaves others alone" {
     defer test_context.Deinit();
     const engine_context = test_context.mEngineContext;
     const asset_manager = &engine_context.mAssetManager;
-    const keep_allocator = engine_context.Keep();
 
-    const marked = try asset_manager.mECSManager.CreateEntity(keep_allocator);
-    const untouched = try asset_manager.mECSManager.CreateEntity(keep_allocator);
+    const marked = try asset_manager.mECSManager.CreateEntity();
+    const untouched = try asset_manager.mECSManager.CreateEntity();
 
     _ = try asset_manager.mECSManager.AddComponentSync(engine_context, marked, PendingDelete{
         .mReason = 1,
@@ -101,9 +99,8 @@ test "a mark can come off again, for a file that was only briefly missing" {
     defer test_context.Deinit();
     const engine_context = test_context.mEngineContext;
     const asset_manager = &engine_context.mAssetManager;
-    const keep_allocator = engine_context.Keep();
 
-    const asset_id = try asset_manager.mECSManager.CreateEntity(keep_allocator);
+    const asset_id = try asset_manager.mECSManager.CreateEntity();
     _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, PendingDelete{
         .mReason = 1,
         .mTime = std.Io.Timestamp.now(engine_context.Io(), .awake),
@@ -157,7 +154,7 @@ test "OnUpdate stats every file on the job pool: a missing one is marked, a chan
         try tmp.dir.writeFile(io, .{ .sub_path = name, .data = "contents" });
         const stat = try tmp.dir.statFile(io, name, .{});
 
-        asset.* = try asset_manager.mECSManager.CreateEntity(keep_allocator);
+        asset.* = try asset_manager.mECSManager.CreateEntity();
         var file_data = FileMetaData{ .mPathType = .Eng, .mLastModified = stat.mtime, .mSize = stat.size };
         try file_data.mRelPath.print(keep_allocator, ".zig-cache/tmp/{s}/{s}", .{ tmp.sub_path, name });
         _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset.*, file_data);

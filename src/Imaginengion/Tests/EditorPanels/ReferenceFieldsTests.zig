@@ -181,7 +181,7 @@ test "an asset field's Clear lets go of its asset" {
     const box = parts.next().?;
 
     const picture = try world.mUIScene.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try picture.AddComponent(engine_context, try FileRefComponent.Init(picture.Keep(), "src/Imaginengion/EngineAssets/textures/White.png", .Eng));
+    _ = try picture.AddComponent(engine_context, try FileRefComponent.Init(picture.KeepFor(FileRefComponent), "src/Imaginengion/EngineAssets/textures/White.png", .Eng));
     try world.Drop(picture, box);
     try std.testing.expect(entity.GetComponent(SurfaceComponent).?.mTexture.mID != AssetHandle.NullObject);
     try world.Clear(box);

@@ -461,7 +461,7 @@ fn AddTile(self: *ContentBrowserPanel, engine_context: *EngineContext, grid: Ent
         //a file can be dragged, carrying which file it is
         .Texture, .Object, .Script, .Audio, .Font, .Theme => {
             _ = try tile.AddComponent(engine_context, DragSourceComponent{});
-            _ = try tile.AddComponent(engine_context, try FileRefComponent.Init(tile.Keep(), try self.RelPath(engine_context.mEditorWorld.Scratch(), name), self.CurrentPathType()));
+            _ = try tile.AddComponent(engine_context, try FileRefComponent.Init(tile.KeepFor(FileRefComponent), try self.RelPath(engine_context.mEditorWorld.Scratch(), name), self.CurrentPathType()));
         },
     }
     try self.mTiles.append(keep_allocator, .{ .Entity = tile, .Kind = kind, .NameStart = self.mNames.items.len, .NameLen = name.len });

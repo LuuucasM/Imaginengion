@@ -2,6 +2,7 @@ const std = @import("std");
 const InternalComponentArray = @import("InternalComponentArray.zig").InternalComponentArray;
 const EngineContext = @import("../Core/EngineContext.zig");
 const Transaction = @import("Transaction.zig");
+const MemoryNode = @import("../Core/Allocators.zig").MemoryNode;
 
 pub fn ComponentArray(entity_t: type) type {
     const VTab = struct {
@@ -13,7 +14,7 @@ pub fn ComponentArray(entity_t: type) type {
         RemoveComponent: *const fn (*anyopaque, *EngineContext, entity_t) void,
         clearAndFree: *const fn (*anyopaque) void,
         DestroyEntity: *const fn (*anyopaque, *EngineContext, entity_t) void,
-        AddStaged: *const fn (*anyopaque, std.mem.Allocator, entity_t, *anyopaque) anyerror!void,
+        AddStaged: *const fn (*anyopaque, entity_t, *anyopaque) anyerror!void,
         DeinitStaged: *const fn (*anyopaque, *EngineContext, *anyopaque) void,
         CloneStaged: *const fn (*anyopaque, *EngineContext, std.mem.Allocator, *const anyopaque) anyerror!*anyopaque,
         CommitCopy: *const fn (*anyopaque, *EngineContext, u64, *anyopaque) void,
@@ -41,8 +42,9 @@ pub fn ComponentArray(entity_t: type) type {
                 }
                 fn Deinit(ptr: *anyopaque) void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    const array_keep = self.mKeep;
+                    const array_keep = self.mArrayKeep;
                     self.Deinit();
+                    self.mMemory.Detach();
                     array_keep.destroy(self);
                 }
                 fn StageDuplicate(ptr: *anyopaque, engine_context: *EngineContext, arena: std.mem.Allocator, original_entity_id: entity_t) anyerror!*anyopaque {
@@ -65,9 +67,9 @@ pub fn ComponentArray(entity_t: type) type {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     self.DestroyEntity(engine_context, entity_id);
                 }
-                fn AddStaged(ptr: *anyopaque, allocator: std.mem.Allocator, entity_id: entity_t, staged: *anyopaque) anyerror!void {
+                fn AddStaged(ptr: *anyopaque, entity_id: entity_t, staged: *anyopaque) anyerror!void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    try self.AddStaged(allocator, entity_id, staged);
+                    try self.AddStaged(entity_id, staged);
                 }
                 fn DeinitStaged(ptr: *anyopaque, engine_context: *EngineContext, staged: *anyopaque) void {
                     internal_type.DeinitStaged(ptr, engine_context, staged);
@@ -78,7 +80,14 @@ pub fn ComponentArray(entity_t: type) type {
             };
 
             const new_component_array = try keep_allocator.create(internal_type);
-            new_component_array.* = .{ .mKeep = keep_allocator };
+            new_component_array.* = .{ .mKeep = keep_allocator, .mArrayKeep = keep_allocator };
+            //a node of its own under its ECS's, when the ECS has one: the array's struct is its ECS's memory, so the node's
+            //size is nothing
+            if (MemoryNode.FromAllocator(keep_allocator)) |parent| {
+                new_component_array.mMemory.Init(parent.Context(), component_type.Name);
+                new_component_array.mMemory.Attach(parent, 0, false);
+                new_component_array.mKeep = new_component_array.mMemory.Keep();
+            }
 
             return Self{
                 .mPtr = new_component_array,
@@ -133,8 +142,8 @@ pub fn ComponentArray(entity_t: type) type {
         }
         /// Copies a staged component (see ECSManager.AddComponent) onto the entity. `staged` has to point at a
         /// value of this array's component type.
-        pub fn AddStaged(self: Self, keep_allocator: std.mem.Allocator, entity_id: entity_t, staged: *anyopaque) anyerror!void {
-            try self.mVtable.AddStaged(self.mPtr, keep_allocator, entity_id, staged);
+        pub fn AddStaged(self: Self, entity_id: entity_t, staged: *anyopaque) anyerror!void {
+            try self.mVtable.AddStaged(self.mPtr, entity_id, staged);
         }
         /// Deinitializes a staged component that will never be added. `staged` has to point at a value of this
         /// array's component type.

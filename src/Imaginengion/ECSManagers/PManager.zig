@@ -105,7 +105,7 @@ pub fn ProcessConfig(self: PManager, engine_context: *EngineContext, player_id: 
     }
     if (config.bAddNameComponent) {
         const name_component = try self.mECSManager.AddComponentSync(engine_context, player_id, PComponents.NameComponent.empty);
-        name_component.mName.appendSlice(self.mECSManager.Keep(), "New Game Context");
+        name_component.mName.appendSlice(self.mECSManager.KeepFor(NameComponent), "New Game Context");
     }
 }
 
@@ -119,7 +119,7 @@ pub fn OnManagerEvents(_: *PManager, _: *EngineContext, event: EventData.EventT)
 pub fn ApplyConfig(self: *PManager, engine_context: *EngineContext, player_id: Player.Type, config: Player.CreateConfig) !void {
     if (config.bAddNameComponent) {
         var name_component: NameComponent = .empty;
-        try name_component.mName.appendSlice(self.mECSManager.Keep(), "New Player");
+        try name_component.mName.appendSlice(self.mECSManager.KeepFor(NameComponent), "New Player");
         _ = try self.AddComponent(engine_context, player_id, name_component);
     }
     if (config.bAddUUIDComponent) {

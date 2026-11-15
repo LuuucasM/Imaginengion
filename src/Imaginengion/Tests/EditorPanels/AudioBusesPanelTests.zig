@@ -159,7 +159,7 @@ test "a volume edit is written into the bus, and a renamed bus's node follows it
 
     const name = child.GetComponentMut(NameComponent).?;
     name.mName.clearRetainingCapacity();
-    try name.mName.appendSlice(engine_context.Keep(), "Music");
+    try name.mName.appendSlice(child.KeepFor(NameComponent), "Music");
     try panel.Update(engine_context);
     try std.testing.expectEqualStrings("Music", TextOf(panel.mTitles.items[1]));
 }

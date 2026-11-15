@@ -8,7 +8,7 @@ const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType;
 const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
 const WorldBVH = @import("WorldBVH.zig");
-const WorldAllocators = @import("Allocators.zig").WorldAllocators;
+const MemoryNode = @import("Allocators.zig").MemoryNode;
 const ESceneComponents = @import("../ECSComponents/SComponents.zig").EComponents;
 
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -53,8 +53,9 @@ const ClearAndFreeOptions = enum {
     SManager,
 };
 
-/// This world's own Keep and Scratch (Keep, Scratch), so what it takes is told apart from the engine's and other worlds'
-mAllocators: WorldAllocators = .{},
+/// This world's node of the memory tree, under the engine's: its own Keep and Scratch (Keep, Scratch), so what it takes is
+/// told apart from the engine's and other worlds', and its ECSs' nodes under it
+mMemory: MemoryNode = .{},
 
 mEManager: EManager = .empty,
 mGCManager: GCManager = .empty,
@@ -114,18 +115,21 @@ pub fn GetScene(self: *WorldManager, scene_id: Scene.Type) Scene {
 /// Memory of this world's that lasts until it is freed: its ECSs and everything in them, its queues, its physics state.
 /// The engine's Keep (EngineContext.Keep) is for what every world shares
 pub fn Keep(self: *WorldManager) std.mem.Allocator {
-    return self.mAllocators.Keep();
+    return self.mMemory.Keep();
 }
 
 /// Memory for work on this world during this pass of the loop only, emptied at its end. Never freed by hand
 pub fn Scratch(self: *WorldManager) std.mem.Allocator {
-    return self.mAllocators.Scratch();
+    return self.mMemory.Scratch();
 }
 
 /// Sets up the world, and makes its four ECSs (an entity's, a game context's, a player's, a scene's) known to the
 /// systems layer
 pub fn Init(self: *WorldManager, engine_context: *EngineContext) !void {
-    self.mAllocators.Init(engine_context);
+    const tag = engine_context.WorldTag(self);
+    self.mMemory.Init(engine_context, if (tag == 0) "World" else EngineContext.WorldName(tag));
+    //inside the engine's context by value
+    self.mMemory.Attach(&engine_context._Internal.Memory, @sizeOf(WorldManager), true);
     const keep_allocator = self.Keep();
     try self.mEManager.Init(keep_allocator);
     try self.mGCManager.Init(keep_allocator);
@@ -213,6 +217,7 @@ pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
     self.mEventManager.Deinit(self.Keep());
     self.mGameEventManager.Deinit(self.Keep());
     self.mBVH.Deinit(self.Keep());
+    self.mMemory.Detach();
 }
 
 /// Sends the game event `event` (an instance of an event file's struct, see Scripts/GameEvents.zig) in this world: every

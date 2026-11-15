@@ -107,7 +107,7 @@ pub fn OnManagerEvents(_: *EManager, _: *EngineContext, event: EventData.EventT)
 pub fn ApplyConfig(self: *EManager, engine_context: *EngineContext, entity_id: Entity.Type, config: Entity.CreateConfig) !void {
     if (config.bAddName) {
         var name_component: NameComponent = .empty;
-        try name_component.mName.appendSlice(self.mECSManager.Keep(), "New Entity");
+        try name_component.mName.appendSlice(self.mECSManager.KeepFor(NameComponent), "New Entity");
         _ = try self.AddComponent(engine_context, entity_id, name_component);
     }
     if (config.bAddUUID) {

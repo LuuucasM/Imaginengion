@@ -39,6 +39,21 @@ test "the profiler window shows a row per node under its parent's, with numbers 
     try panel.Update(engine_context, &profiler);
     try std.testing.expectEqualStrings("Not measuring", TextOf(panel.mNote));
     try std.testing.expect(panel.mTree == null);
+    //the memory tree shows all the same: the engine's node at the top here (no Application), the editor world under it
+    try std.testing.expect(panel.mMemoryTree != null);
+    try std.testing.expect(std.mem.startsWith(u8, TextOf(panel.mMemoryRows.items[0].Title), "Engine   "));
+    var editor_row: ?usize = null;
+    for (panel.mMemoryRows.items, 0..) |row, row_ind| {
+        if (row.Node == &engine_context.mEditorWorld.mMemory) editor_row = row_ind;
+    }
+    try std.testing.expectEqual(@as(?usize, 0), panel.mMemoryRows.items[editor_row.?].Parent);
+    try std.testing.expect(std.mem.startsWith(u8, TextOf(panel.mMemoryRows.items[editor_row.?].Title), "Editor   "));
+    //every row's own count is at or above nothing: what is taken through a node is freed through it (styles included)
+    for (panel.mMemoryRows.items) |row| {
+        const own = row.Node.mCounts.Read();
+        if (own.KeepBytes < 0) std.debug.print("{s} holds {d} bytes\n", .{ row.Node.mName, own.KeepBytes });
+        try std.testing.expect(own.KeepBytes >= 0);
+    }
 
     try profiler.Start(engine_context.Keep(), std.testing.io);
     defer profiler.Stop();

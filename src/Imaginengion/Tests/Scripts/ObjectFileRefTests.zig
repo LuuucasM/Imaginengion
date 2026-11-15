@@ -157,7 +157,7 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         const asset_manager = &engine_context.mAssetManager;
         const keep_allocator = engine_context.Keep();
-        const asset_id = try asset_manager.mECSManager.CreateEntity(keep_allocator);
+        const asset_id = try asset_manager.mECSManager.CreateEntity();
         _ = try asset_manager.mECSManager.AddComponentSync(engine_context, asset_id, Assets.AssetMetaData{ .mRefs = 1 });
         var file_meta_data = Assets.FileMetaData{ .mPathType = .Prj };
         _ = try file_meta_data.mRelPath.print(keep_allocator, "scripts/Menu.zig", .{});
@@ -203,7 +203,7 @@ const TestWorld = struct {
     fn FileTile(self: *TestWorld, rel_path: []const u8) !Entity {
         const engine_context = self.mEngineContext;
         const tile = try self.mUIScene.CreateEntity(engine_context, Entity.DefaultConfig);
-        _ = try tile.AddComponent(engine_context, try FileRefComponent.Init(tile.Keep(), rel_path, .Eng));
+        _ = try tile.AddComponent(engine_context, try FileRefComponent.Init(tile.KeepFor(FileRefComponent), rel_path, .Eng));
         return tile;
     }
 

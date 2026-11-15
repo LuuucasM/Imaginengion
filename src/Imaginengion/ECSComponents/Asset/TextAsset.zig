@@ -118,7 +118,7 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
     defer file_png.?.close(engine_context.Io());
 
     //every slot starts as no glyph (mAdvance -1), so one the font has no glyph for is never read as garbage
-    for (&self.mGlyphs) |*glyph| glyph.* = .{ .mKernings = KerningsT.init(engine_context.Keep()) };
+    for (&self.mGlyphs) |*glyph| glyph.* = .{ .mKernings = KerningsT.init(engine_context.mAssetManager.KeepFor(TextAsset)) };
     try self.ProcessTextJson(engine_context, file_json.?);
     //the charset has codepoints no font draws (unassigned ones, U+3130 and U+318F): they draw the box, the same as any
     //codepoint outside the charset
@@ -126,7 +126,7 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
     for (&self.mGlyphs) |*glyph| {
         if (glyph.mAdvance >= 0) continue;
         glyph.* = box;
-        glyph.mKernings = KerningsT.init(engine_context.Keep());
+        glyph.mKernings = KerningsT.init(engine_context.mAssetManager.KeepFor(TextAsset));
     }
 
     const rel_ext = std.fs.path.extension(rel_path);
@@ -180,7 +180,7 @@ fn ProcessTextJson(self: *TextAsset, engine_context: *EngineContext, text_json: 
         } else if (std.mem.eql(u8, actual_value, "metrics")) {
             try self.ProcessMetrics(&reader, scratch_allocator);
         } else if (std.mem.eql(u8, actual_value, "glyphs")) {
-            try self.ProcessGlyphs(engine_context.Keep(), &reader, scratch_allocator);
+            try self.ProcessGlyphs(engine_context.mAssetManager.KeepFor(TextAsset), &reader, scratch_allocator);
         } else if (std.mem.eql(u8, actual_value, "kerning")) {
             try self.ProcessKerning(&reader, scratch_allocator);
         }

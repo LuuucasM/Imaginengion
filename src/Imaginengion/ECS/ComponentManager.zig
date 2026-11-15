@@ -105,8 +105,8 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         /// Gives a never before used id its SkipFieldComponent. Only valid when ReuseFreeEntity returned null.
-        pub fn CreateNewEntity(self: *Self, keep_allocator: std.mem.Allocator, entity_id: entity_t) !void {
-            _ = try self._SkipFieldArray().AddComponent(keep_allocator, entity_id, _NewSkipField());
+        pub fn CreateNewEntity(self: *Self, entity_id: entity_t) !void {
+            _ = try self._SkipFieldArray().AddComponent(entity_id, _NewSkipField());
         }
 
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) void {
@@ -180,7 +180,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return try self.mComponentsArrays.items[component_ind].CloneStaged(engine_context, arena, source);
         }
 
-        pub fn AddComponent(self: *Self, keep_allocator: std.mem.Allocator, entity_id: entity_t, component: anytype) !*@TypeOf(component) {
+        pub fn AddComponent(self: *Self, entity_id: entity_t, component: anytype) !*@TypeOf(component) {
             const component_t = @TypeOf(component);
             std.debug.assert(!self.HasComponent(component_t, entity_id));
 
@@ -189,7 +189,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
             const internal_array: *InternalComponentArray(entity_t, component_t) = @ptrCast(@alignCast(self.mComponentsArrays.items[ComponentInd(component_t)].mPtr));
 
-            return try internal_array.AddComponent(keep_allocator, entity_id, component);
+            return try internal_array.AddComponent(entity_id, component);
         }
 
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) void {
@@ -204,21 +204,21 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         /// Copies a staged component (see ECSManager.AddComponent) onto the entity
-        pub fn AddStaged(self: *Self, keep_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize, staged: *anyopaque) !void {
+        pub fn AddStaged(self: *Self, entity_id: entity_t, component_ind: usize, staged: *anyopaque) !void {
             std.debug.assert(component_ind < components_types.len + BuiltinComponentCount);
             std.debug.assert(component_ind != SkipFieldComponent.Ind); // only added through entity creation
             std.debug.assert(!self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
 
             // added before the skipfield bit is set, so a failed add leaves the entity as it was
-            try self.mComponentsArrays.items[component_ind].AddStaged(keep_allocator, entity_id, staged);
+            try self.mComponentsArrays.items[component_ind].AddStaged(entity_id, staged);
             self.GetComponent(SkipFieldComponent, entity_id).?.mSkipField.ChangeToUnskipped(component_ind);
         }
 
         /// Puts the tag in this slot on the entity: a tag has no value, so none is needed
-        pub fn AddTagInd(self: *Self, keep_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize) !void {
+        pub fn AddTagInd(self: *Self, entity_id: entity_t, component_ind: usize) !void {
             std.debug.assert(self.IsTag(component_ind));
             var no_value: u8 = 0;
-            try self.AddStaged(keep_allocator, entity_id, component_ind, &no_value);
+            try self.AddStaged(entity_id, component_ind, &no_value);
         }
 
         /// Whether the component in this slot is zero sized
@@ -555,6 +555,12 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         /// The empty mark in _MarkEntities. Its index is the largest there is, so it only clashes with a real id
         /// once an ECS has handed out every index
         const NoEntity: entity_t = std.math.maxInt(entity_t);
+
+        /// The Keep of `component_type`'s array: what a component of that type owns is taken from it, since that is what
+        /// frees it (the component's Deinit). Its own node's when the ECS has a node, the ECS's allocator otherwise
+        pub fn KeepFor(self: Self, comptime component_type: type) std.mem.Allocator {
+            return self._InternalArray(component_type).mKeep;
+        }
 
         fn _InternalArray(self: Self, comptime component_type: type) *InternalComponentArray(entity_t, component_type) {
             return @ptrCast(@alignCast(self.mComponentsArrays.items[ComponentInd(component_type)].mPtr));

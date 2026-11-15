@@ -269,9 +269,9 @@ test "the Scripts panel takes each kind of script onto its kind of object, and n
     var scripts = try ScriptsPanel.Build(engine_context, page, .{ .StockScripts = false });
     defer scripts.Deinit(engine_context.mEditorWorld.Keep());
     const texture = try browser.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try texture.AddComponent(engine_context, try FileRefComponent.Init(texture.Keep(), "hero.png", .Prj));
+    _ = try texture.AddComponent(engine_context, try FileRefComponent.Init(texture.KeepFor(FileRefComponent), "hero.png", .Prj));
     const script = try browser.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try script.AddComponent(engine_context, try FileRefComponent.Init(script.Keep(), "Mover.zig", .Prj));
+    _ = try script.AddComponent(engine_context, try FileRefComponent.Init(script.KeepFor(FileRefComponent), "Mover.zig", .Prj));
 
     const drop_target = scripts.mArea.GetComponent(EntityComponents.DropTargetComponent).?.*;
     try std.testing.expect(!PointerSystem.Takes(drop_target, texture));

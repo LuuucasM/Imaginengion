@@ -79,7 +79,7 @@ pub const GetComponent = Core.GetComponent;
 pub const GetComponentMut = Core.GetComponentMut;
 
 pub const HasComponent = Core.HasComponent;
-pub const Keep = Core.Keep;
+pub const KeepFor = Core.KeepFor;
 
 pub const GetUUID = Core.GetUUID;
 

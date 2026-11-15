@@ -68,13 +68,6 @@ pub const ObjectRef = union(enum) {
             else => @compileError("Not an object type: " ++ @typeName(@TypeOf(object))),
         };
     }
-
-    /// The Keep of the ECS the object is in (Entity.Keep and the like)
-    pub fn Keep(self: ObjectRef) std.mem.Allocator {
-        return switch (self) {
-            inline else => |object| object.Keep(),
-        };
-    }
 };
 
 /// A field's value as a widget shows it
@@ -176,6 +169,8 @@ pub const Builder = struct {
     /// the component as it was when this was built, which field offsets are measured from
     mBase: usize,
     mResolve: *const fn (ObjectRef) ?*anyopaque,
+    /// the Keep of the component's array (KeepOfFor), for what an edit gives a field to own
+    mKeepOf: *const fn (ObjectRef) std.mem.Allocator,
     mAfterEdit: *const fn (*EngineContext, ObjectRef) anyerror!bool,
     mOptions: Widgets.Options,
 
@@ -526,6 +521,7 @@ pub const Builder = struct {
         _ = try UIManager.ElementOf(widget).?.AddComponent(engine_context, FieldBindingComponent{
             .mObject = self.mObject,
             .mResolve = self.mResolve,
+            .mKeepOf = self.mKeepOf,
             .mOffset = @intFromPtr(field) - self.mBase,
             .mAccess = access,
             .mAfterEdit = self.mAfterEdit,
@@ -587,9 +583,20 @@ pub fn ForComponent(engine_context: *EngineContext, parent: Entity, root: Entity
         .mObject = ObjectRef.Of(object),
         .mBase = @intFromPtr(component),
         .mResolve = ResolveFor(@TypeOf(object), component_type),
+        .mKeepOf = KeepOfFor(@TypeOf(object), component_type),
         .mAfterEdit = AfterEditFor(@TypeOf(object), component_type),
         .mOptions = options,
     };
+}
+
+/// The Keep of the array an object's component of one type is in (the object's KeepFor): what a field of it owns, like
+/// a name's text, is taken from it, since that is what frees it
+pub fn KeepOfFor(comptime object_type: type, comptime component_type: type) *const fn (ObjectRef) std.mem.Allocator {
+    return &struct {
+        fn KeepOf(object: ObjectRef) std.mem.Allocator {
+            return @field(object, ObjectTag(object_type)).KeepFor(component_type);
+        }
+    }.KeepOf;
 }
 
 /// Finds an object's component of one type again: null once the object or its component has gone

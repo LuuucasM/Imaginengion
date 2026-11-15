@@ -104,9 +104,8 @@ const TestECS = struct {
 test "RemoveComponentSync takes the component off before it returns" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
 
-    const entity_id = try test_ecs.mECSManager.CreateEntity(allocator);
+    const entity_id = try test_ecs.mECSManager.CreateEntity();
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, entity_id, Health{});
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, entity_id, Position{ .x = 3 });
 
@@ -134,9 +133,8 @@ test "RemoveComponentSync takes the component off before it returns" {
 test "a sync removal and a queued removal of the same component do not collide" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
 
-    const entity_id = try test_ecs.mECSManager.CreateEntity(allocator);
+    const entity_id = try test_ecs.mECSManager.CreateEntity();
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, entity_id, Health{});
 
     try test_ecs.mECSManager.RemoveComponent(test_ecs.mEngineContext, entity_id, Health.Ind);
@@ -153,8 +151,8 @@ test "ECS create, add components and query groups" {
     defer test_ecs.Deinit() catch unreachable;
     const allocator = test_ecs.Allocator();
 
-    const entity_1 = try test_ecs.mECSManager.CreateEntity(allocator);
-    const entity_2 = try test_ecs.mECSManager.CreateEntity(allocator);
+    const entity_1 = try test_ecs.mECSManager.CreateEntity();
+    const entity_2 = try test_ecs.mECSManager.CreateEntity();
 
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, entity_1, Position{ .x = 5 });
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, entity_1, try MakeLabel(test_ecs, "player"));
@@ -201,10 +199,10 @@ test "ECS entity list difference, union and intersection" {
     const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
-    const a = try ecs.CreateEntity(allocator);
-    const b = try ecs.CreateEntity(allocator);
-    const c = try ecs.CreateEntity(allocator);
-    const d = try ecs.CreateEntity(allocator);
+    const a = try ecs.CreateEntity();
+    const b = try ecs.CreateEntity();
+    const c = try ecs.CreateEntity();
+    const d = try ecs.CreateEntity();
 
     var list2: std.ArrayList(u32) = .empty;
     defer list2.deinit(allocator);
@@ -232,7 +230,7 @@ test "ECS entity list difference, union and intersection" {
     // an id whose index was reused by a newer entity is not the same entity
     try ecs.DestroyEntity(test_ecs.mEngineContext, d);
     try test_ecs.ProcessEvents();
-    const new_d = try ecs.CreateEntity(allocator);
+    const new_d = try ecs.CreateEntity();
     try std.testing.expect(new_d != d);
 
     var stale: std.ArrayList(u32) = .empty;
@@ -249,11 +247,11 @@ test "ECS compound queries walk the right lists and give each match once" {
     const ecs = &test_ecs.mECSManager;
 
     // p: Position only, h: Health only, ph: both, phl: all three, none: no components
-    const p = try ecs.CreateEntity(allocator);
-    const h = try ecs.CreateEntity(allocator);
-    const ph = try ecs.CreateEntity(allocator);
-    const phl = try ecs.CreateEntity(allocator);
-    _ = try ecs.CreateEntity(allocator);
+    const p = try ecs.CreateEntity();
+    const h = try ecs.CreateEntity();
+    const ph = try ecs.CreateEntity();
+    const phl = try ecs.CreateEntity();
+    _ = try ecs.CreateEntity();
 
     _ = try ecs.AddComponentSync(test_ecs.mEngineContext, p, Position{});
     _ = try ecs.AddComponentSync(test_ecs.mEngineContext, h, Health{});
@@ -309,14 +307,13 @@ test "ECS compound queries walk the right lists and give each match once" {
 test "ECS destroy is right away, and waits during a run" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
 
-    const entity_id = try test_ecs.mECSManager.CreateEntity(allocator);
+    const entity_id = try test_ecs.mECSManager.CreateEntity();
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, entity_id, try MakeLabel(test_ecs, "doomed"));
     try test_ecs.mECSManager.DestroyEntity(test_ecs.mEngineContext, entity_id);
     try std.testing.expect(!test_ecs.mECSManager.IsActiveEntity(entity_id));
 
-    const locked_id = try test_ecs.mECSManager.CreateEntity(allocator);
+    const locked_id = try test_ecs.mECSManager.CreateEntity();
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, locked_id, try MakeLabel(test_ecs, "locked"));
     test_ecs.Hold();
     try test_ecs.mECSManager.DestroyEntity(test_ecs.mEngineContext, locked_id);
@@ -328,9 +325,8 @@ test "ECS destroy is right away, and waits during a run" {
 test "ECS destroy takes the whole subtree" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
 
-    const root = try test_ecs.mECSManager.CreateEntity(allocator);
+    const root = try test_ecs.mECSManager.CreateEntity();
     const child_1 = try test_ecs.mECSManager.AddChild(test_ecs.mEngineContext, root, .Entity);
     const child_2 = try test_ecs.mECSManager.AddChild(test_ecs.mEngineContext, root, .Entity);
     const script = try test_ecs.mECSManager.AddChild(test_ecs.mEngineContext, root, .Script);
@@ -352,9 +348,8 @@ test "ECS destroy takes the whole subtree" {
 test "ECS destroying one child keeps the list and mFirst valid" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
 
-    const root = try test_ecs.mECSManager.CreateEntity(allocator);
+    const root = try test_ecs.mECSManager.CreateEntity();
     const child_1 = try test_ecs.mECSManager.AddChild(test_ecs.mEngineContext, root, .Entity);
     const child_2 = try test_ecs.mECSManager.AddChild(test_ecs.mEngineContext, root, .Entity);
     const child_3 = try test_ecs.mECSManager.AddChild(test_ecs.mEngineContext, root, .Entity);
@@ -388,9 +383,8 @@ test "ECS destroying one child keeps the list and mFirst valid" {
 test "ECS scripts and entities are separate child lists" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
 
-    const root = try test_ecs.mECSManager.CreateEntity(allocator);
+    const root = try test_ecs.mECSManager.CreateEntity();
     const child = try test_ecs.mECSManager.AddChild(test_ecs.mEngineContext, root, .Entity);
     const script = try test_ecs.mECSManager.AddChild(test_ecs.mEngineContext, root, .Script);
 
@@ -410,18 +404,17 @@ test "ECS scripts and entities are separate child lists" {
 test "ECS recycles destroyed ids with a new generation" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
 
-    const entity_1 = try test_ecs.mECSManager.CreateEntity(allocator);
-    const entity_2 = try test_ecs.mECSManager.CreateEntity(allocator);
-    const entity_3 = try test_ecs.mECSManager.CreateEntity(allocator);
+    const entity_1 = try test_ecs.mECSManager.CreateEntity();
+    const entity_2 = try test_ecs.mECSManager.CreateEntity();
+    const entity_3 = try test_ecs.mECSManager.CreateEntity();
 
     try test_ecs.mECSManager.DestroyEntity(test_ecs.mEngineContext, entity_1);
     try test_ecs.mECSManager.DestroyEntity(test_ecs.mEngineContext, entity_3);
     try test_ecs.ProcessEvents();
 
-    const reused_1 = try test_ecs.mECSManager.CreateEntity(allocator);
-    const reused_2 = try test_ecs.mECSManager.CreateEntity(allocator);
+    const reused_1 = try test_ecs.mECSManager.CreateEntity();
+    const reused_2 = try test_ecs.mECSManager.CreateEntity();
 
     try std.testing.expect(reused_1 != reused_2);
     try std.testing.expect(test_ecs.mECSManager.IsActiveEntity(entity_2));
@@ -440,10 +433,9 @@ test "ECS recycles destroyed ids with a new generation" {
 test "ECS a destroy during a run takes what is under the entity when it lands" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
-    const root = try ecs.CreateEntity(allocator);
+    const root = try ecs.CreateEntity();
     const child = try ecs.AddChild(test_ecs.mEngineContext, root, .Entity);
     const grandchild = try ecs.AddChild(test_ecs.mEngineContext, child, .Script);
     _ = try ecs.AddComponentSync(test_ecs.mEngineContext, grandchild, Health{});
@@ -453,7 +445,7 @@ test "ECS a destroy during a run takes what is under the entity when it lands" {
     try std.testing.expect(ecs.IsActiveEntity(root));
     try std.testing.expect(ecs.IsActiveEntity(grandchild));
 
-    const unrelated = try ecs.CreateEntity(allocator);
+    const unrelated = try ecs.CreateEntity();
     try ecs.DestroyEntity(test_ecs.mEngineContext, unrelated);
     try std.testing.expect(ecs.IsActiveEntity(unrelated)); //queued too
 
@@ -467,10 +459,9 @@ test "ECS a destroy during a run takes what is under the entity when it lands" {
 test "ECS remove component is right away, and queued ones survive duplicates" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
-    const entity_id = try ecs.CreateEntity(allocator);
+    const entity_id = try ecs.CreateEntity();
     _ = try ecs.AddComponentSync(test_ecs.mEngineContext, entity_id, try MakeLabel(test_ecs, "temp"));
     _ = try ecs.AddComponentSync(test_ecs.mEngineContext, entity_id, Health{});
 
@@ -493,9 +484,8 @@ test "ECS remove component is right away, and queued ones survive duplicates" {
 test "ECS duplicate copies components, clones owned memory and copies the subtree" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
 
-    const root = try test_ecs.mECSManager.CreateEntity(allocator);
+    const root = try test_ecs.mECSManager.CreateEntity();
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, root, Position{ .x = 3 });
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, root, try MakeLabel(test_ecs, "original"));
 
@@ -538,9 +528,8 @@ test "ECS duplicate copies components, clones owned memory and copies the subtre
 test "ECS duplicating a child joins the same parent" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
 
-    const root = try test_ecs.mECSManager.CreateEntity(allocator);
+    const root = try test_ecs.mECSManager.CreateEntity();
     const child = try test_ecs.mECSManager.AddChild(test_ecs.mEngineContext, root, .Entity);
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, child, Position{ .x = 1 });
 
@@ -556,13 +545,12 @@ test "ECS duplicating a child joins the same parent" {
 test "ECS clearAndFree empties everything and drops queued events" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
 
-    const entity_id = try test_ecs.mECSManager.CreateEntity(allocator);
+    const entity_id = try test_ecs.mECSManager.CreateEntity();
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, entity_id, try MakeLabel(test_ecs, "gone"));
     _ = try test_ecs.mECSManager.AddChild(test_ecs.mEngineContext, entity_id, .Entity);
     //a staged add that owns memory, which the clear has to deinit since it never reaches its entity
-    const staged_entity = try test_ecs.mECSManager.CreateEntity(allocator);
+    const staged_entity = try test_ecs.mECSManager.CreateEntity();
     test_ecs.Hold();
     _ = try test_ecs.mECSManager.AddComponent(test_ecs.mEngineContext, staged_entity, try MakeLabel(test_ecs, "staged"));
     try test_ecs.mECSManager.DestroyEntity(test_ecs.mEngineContext, entity_id); //leave an event queued too
@@ -572,7 +560,7 @@ test "ECS clearAndFree empties everything and drops queued events" {
 
     try std.testing.expect(!test_ecs.mECSManager.IsActiveEntity(entity_id));
 
-    const fresh_entity = try test_ecs.mECSManager.CreateEntity(allocator);
+    const fresh_entity = try test_ecs.mECSManager.CreateEntity();
     try std.testing.expectEqual(@as(u32, 0), fresh_entity); //ids start over
     try std.testing.expect(test_ecs.mECSManager.IsActiveEntity(fresh_entity));
 
@@ -584,10 +572,9 @@ test "ECS clearAndFree empties everything and drops queued events" {
 test "ECS copy is a deep copy that keeps every id" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const engine_context = test_ecs.mEngineContext;
 
-    const root = try test_ecs.mECSManager.CreateEntity(allocator);
+    const root = try test_ecs.mECSManager.CreateEntity();
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, root, Position{ .x = 4 });
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, root, try MakeLabel(test_ecs, "root"));
 
@@ -597,7 +584,7 @@ test "ECS copy is a deep copy that keeps every id" {
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, script, Health{ .mHP = 7 });
 
     //a destroyed id, so the free list has something in it to carry over
-    const recycled = try test_ecs.mECSManager.CreateEntity(allocator);
+    const recycled = try test_ecs.mECSManager.CreateEntity();
     try test_ecs.mECSManager.DestroyEntity(engine_context, recycled);
     try test_ecs.ProcessEvents();
 
@@ -627,8 +614,8 @@ test "ECS copy is a deep copy that keeps every id" {
     try std.testing.expect(original_label.mText.items.ptr != copied_label.mText.items.ptr);
 
     //both sides hand out the same next id, recycling the same freed one first
-    const next_original = try test_ecs.mECSManager.CreateEntity(allocator);
-    const next_copy = try other.mECSManager.CreateEntity(allocator);
+    const next_original = try test_ecs.mECSManager.CreateEntity();
+    const next_copy = try other.mECSManager.CreateEntity();
     try std.testing.expectEqual(next_original, next_copy);
     try std.testing.expectEqual(recycled & ((1 << 20) - 1), next_copy & ((1 << 20) - 1));
 
@@ -643,10 +630,9 @@ test "ECS copy is a deep copy that keeps every id" {
 test "ECS copy carries the queued events" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const engine_context = test_ecs.mEngineContext;
 
-    const entity_id = try test_ecs.mECSManager.CreateEntity(allocator);
+    const entity_id = try test_ecs.mECSManager.CreateEntity();
     _ = try test_ecs.mECSManager.AddComponentSync(test_ecs.mEngineContext, entity_id, try MakeLabel(test_ecs, "doomed"));
     test_ecs.Hold();
     try test_ecs.mECSManager.DestroyEntity(engine_context, entity_id); //queued, a run going on
@@ -672,7 +658,7 @@ test "ECS a staged component reads as on its entity, and queries find it, while 
     const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
-    const entity_id = try ecs.CreateEntity(allocator);
+    const entity_id = try ecs.CreateEntity();
     test_ecs.Hold();
     const staged_position = try ecs.AddComponent(test_ecs.mEngineContext, entity_id, Position{ .x = 1 });
     _ = try ecs.AddComponent(test_ecs.mEngineContext, entity_id, try MakeLabel(test_ecs, "staged"));
@@ -712,17 +698,16 @@ test "ECS a staged component reads as on its entity, and queries find it, while 
 test "ECS staged adds don't move components already in the array" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
-    const first = try ecs.CreateEntity(allocator);
+    const first = try ecs.CreateEntity();
     _ = try ecs.AddComponentSync(test_ecs.mEngineContext, first, Position{ .x = 2 });
     const held_position = ecs.GetComponent(Position, first).?;
 
     test_ecs.Hold();
     //plenty of adds to the same array, which would have grown it and moved held_position had they been immediate
     for (0..256) |i| {
-        const entity_id = try ecs.CreateEntity(allocator);
+        const entity_id = try ecs.CreateEntity();
         _ = try ecs.AddComponent(test_ecs.mEngineContext, entity_id, Position{ .x = @floatFromInt(i) });
     }
 
@@ -737,17 +722,16 @@ test "ECS staged adds don't move components already in the array" {
 test "ECS a staged add and a destroy in one frame clean up in either order" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
     test_ecs.Hold();
     //added then destroyed: the add lands and the destroy takes it off again
-    const add_first = try ecs.CreateEntity(allocator);
+    const add_first = try ecs.CreateEntity();
     _ = try ecs.AddComponent(test_ecs.mEngineContext, add_first, try MakeLabel(test_ecs, "added first"));
     try ecs.DestroyEntity(test_ecs.mEngineContext, add_first);
 
     //destroyed then added: the add finds the entity gone and deinits its staged component
-    const destroy_first = try ecs.CreateEntity(allocator);
+    const destroy_first = try ecs.CreateEntity();
     try ecs.DestroyEntity(test_ecs.mEngineContext, destroy_first);
     _ = try ecs.AddComponent(test_ecs.mEngineContext, destroy_first, try MakeLabel(test_ecs, "destroyed first"));
 
@@ -763,18 +747,17 @@ test "ECS a staged add and a destroy in one frame clean up in either order" {
 test "ECS queued removes and adds of one component apply in order" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
     //remove then add: the add used to hit the "already has it" assert, the removal not having happened yet
-    const swapped = try ecs.CreateEntity(allocator);
+    const swapped = try ecs.CreateEntity();
     _ = try ecs.AddComponentSync(test_ecs.mEngineContext, swapped, Health{ .mHP = 100 });
     test_ecs.Hold();
     try ecs.RemoveComponent(test_ecs.mEngineContext, swapped, Health.Ind);
     _ = try ecs.AddComponent(test_ecs.mEngineContext, swapped, Health{ .mHP = 7 });
 
     //add then remove: never seen by anyone
-    const brief = try ecs.CreateEntity(allocator);
+    const brief = try ecs.CreateEntity();
     _ = try ecs.AddComponent(test_ecs.mEngineContext, brief, try MakeLabel(test_ecs, "brief"));
     try ecs.RemoveComponent(test_ecs.mEngineContext, brief, Label.Ind);
 
@@ -788,10 +771,9 @@ test "ECS queued removes and adds of one component apply in order" {
 test "ECS a tag goes on right away and shows in queries" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
-    const entity_id = try ecs.CreateEntity(allocator);
+    const entity_id = try ecs.CreateEntity();
     _ = try ecs.AddComponent(test_ecs.mEngineContext, entity_id, ECS.MainObjectComponent{});
 
     try std.testing.expectEqual(@as(usize, 1), ecs.NumWithComponent(ECS.MainObjectComponent));
@@ -803,10 +785,9 @@ test "ECS a tag goes on right away and shows in queries" {
 test "ECS RemoveComponentSync takes a staged component back off the stage" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
-    const entity_id = try ecs.CreateEntity(allocator);
+    const entity_id = try ecs.CreateEntity();
     test_ecs.Hold();
     _ = try ecs.AddComponent(test_ecs.mEngineContext, entity_id, try MakeLabel(test_ecs, "first"));
     try ecs.RemoveComponentSync(test_ecs.mEngineContext, entity_id, Label.Ind);
@@ -826,10 +807,9 @@ test "ECS RemoveComponentSync takes a staged component back off the stage" {
 test "ECS DuplicateEntity copies the original's staged components too" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
-    const root = try ecs.CreateEntity(allocator);
+    const root = try ecs.CreateEntity();
     test_ecs.Hold();
     _ = try ecs.AddComponent(test_ecs.mEngineContext, root, try MakeLabel(test_ecs, "staged"));
     _ = try ecs.AddComponent(test_ecs.mEngineContext, root, Position{ .x = 6 });
@@ -856,10 +836,9 @@ test "ECS DuplicateEntity copies the original's staged components too" {
 test "ECS copy only clones adds that are still staged" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const engine_context = test_ecs.mEngineContext;
 
-    const entity_id = try test_ecs.mECSManager.CreateEntity(allocator);
+    const entity_id = try test_ecs.mECSManager.CreateEntity();
     test_ecs.Hold();
     _ = try test_ecs.mECSManager.AddComponent(engine_context, entity_id, try MakeLabel(test_ecs, "taken off"));
     try test_ecs.mECSManager.RemoveComponentSync(engine_context, entity_id, Label.Ind);
@@ -907,21 +886,20 @@ const RemovalWatcher = struct {
 test "ECS the removal hook hears of each removal and destroy while it can still be read" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
     var watcher = RemovalWatcher{ .mECS = ecs };
     ecs.SetRemovalHook(.{ .mCtx = &watcher, .mFn = RemovalWatcher.OnRemoval });
 
     //right away
-    const removed_from = try ecs.CreateEntity(allocator);
+    const removed_from = try ecs.CreateEntity();
     _ = try ecs.AddComponent(test_ecs.mEngineContext, removed_from, Health{});
     try ecs.RemoveComponent(test_ecs.mEngineContext, removed_from, Health.Ind);
     try std.testing.expect(!ecs.HasComponent(Health, removed_from));
     try std.testing.expectEqual(@as(usize, 1), watcher.mRemovals);
 
     //a parent and its child, each told of on its own, the child first
-    const parent = try ecs.CreateEntity(allocator);
+    const parent = try ecs.CreateEntity();
     _ = try ecs.AddComponent(test_ecs.mEngineContext, parent, Health{});
     const child = try ecs.AddChild(test_ecs.mEngineContext, parent, .Entity);
     _ = try ecs.AddComponent(test_ecs.mEngineContext, child, Health{});
@@ -931,7 +909,7 @@ test "ECS the removal hook hears of each removal and destroy while it can still 
     try std.testing.expectEqual(@as(usize, 2), watcher.mDestroys);
 
     //and a removal that waits for a run, told of when the queue drains rather than when it was asked for
-    const locked = try ecs.CreateEntity(allocator);
+    const locked = try ecs.CreateEntity();
     _ = try ecs.AddComponent(test_ecs.mEngineContext, locked, Health{});
     test_ecs.Hold();
     try ecs.RemoveComponent(test_ecs.mEngineContext, locked, Health.Ind);
@@ -947,10 +925,9 @@ test "ECS the removal hook hears of each removal and destroy while it can still 
 test "ECS AddChild links the child before it returns" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
-    const root = try ecs.CreateEntity(allocator);
+    const root = try ecs.CreateEntity();
     const child_1 = try ecs.AddChild(test_ecs.mEngineContext, root, .Entity);
     const child_2 = try ecs.AddChild(test_ecs.mEngineContext, root, .Entity);
     const script = try ecs.AddChild(test_ecs.mEngineContext, root, .Script);
@@ -981,10 +958,9 @@ test "ECS AddChild links the child before it returns" {
 test "ECS a child added under a parent whose destroy waits goes with it" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
-    const root = try ecs.CreateEntity(allocator);
+    const root = try ecs.CreateEntity();
     _ = try ecs.AddComponentSync(test_ecs.mEngineContext, root, Health{});
     test_ecs.Hold();
     try ecs.DestroyEntity(test_ecs.mEngineContext, root);
@@ -1004,10 +980,9 @@ test "ECS a child added under a parent whose destroy waits goes with it" {
 test "ECS a child destroyed in the frame it was added leaves its parent as it was" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
-    const root = try ecs.CreateEntity(allocator);
+    const root = try ecs.CreateEntity();
     const kept = try ecs.AddChild(test_ecs.mEngineContext, root, .Entity);
     const brief = try ecs.AddChild(test_ecs.mEngineContext, root, .Entity);
     try ecs.DestroyEntity(test_ecs.mEngineContext, brief);
@@ -1027,7 +1002,7 @@ test "ECS DuplicateEntity stages a copy of the original as it is now" {
     const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
-    const root = try ecs.CreateEntity(allocator);
+    const root = try ecs.CreateEntity();
     _ = try ecs.AddComponentSync(test_ecs.mEngineContext, root, Position{ .x = 3 });
     _ = try ecs.AddComponentSync(test_ecs.mEngineContext, root, try MakeLabel(test_ecs, "original"));
     const child = try ecs.AddChild(test_ecs.mEngineContext, root, .Entity);
@@ -1058,10 +1033,9 @@ test "ECS DuplicateEntity stages a copy of the original as it is now" {
 test "ECS a duplicate destroyed in the frame it was made frees its staged copies" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const ecs = &test_ecs.mECSManager;
 
-    const root = try ecs.CreateEntity(allocator);
+    const root = try ecs.CreateEntity();
     _ = try ecs.AddComponentSync(test_ecs.mEngineContext, root, try MakeLabel(test_ecs, "original"));
     const child = try ecs.AddChild(test_ecs.mEngineContext, root, .Entity);
     _ = try ecs.AddComponentSync(test_ecs.mEngineContext, child, try MakeLabel(test_ecs, "child"));
@@ -1084,7 +1058,7 @@ test "ECS copy gives queued adds clones of their own" {
     const allocator = test_ecs.Allocator();
     const engine_context = test_ecs.mEngineContext;
 
-    const entity_id = try test_ecs.mECSManager.CreateEntity(allocator);
+    const entity_id = try test_ecs.mECSManager.CreateEntity();
     test_ecs.Hold();
     const staged_label = try test_ecs.mECSManager.AddComponent(engine_context, entity_id, try MakeLabel(test_ecs, "staged"));
     _ = try test_ecs.mECSManager.AddComponent(engine_context, entity_id, Position{ .x = 4 });
@@ -1112,10 +1086,9 @@ test "ECS copy gives queued adds clones of their own" {
 test "ECS a copy's queued adds are freed if it is torn down before processing them" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;
-    const allocator = test_ecs.Allocator();
     const engine_context = test_ecs.mEngineContext;
 
-    const entity_id = try test_ecs.mECSManager.CreateEntity(allocator);
+    const entity_id = try test_ecs.mECSManager.CreateEntity();
     test_ecs.Hold();
     _ = try test_ecs.mECSManager.AddComponent(engine_context, entity_id, try MakeLabel(test_ecs, "staged"));
 

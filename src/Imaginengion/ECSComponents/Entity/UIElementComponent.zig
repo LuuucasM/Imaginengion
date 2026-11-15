@@ -63,9 +63,8 @@ pub fn jsonParse(scratch_allocator: std.mem.Allocator, source: anytype, options:
     //a file that fails to read part way leaves no element behind that nothing would ever delete
     errdefer element.Delete(engine_context) catch {};
 
-    //its components go in UI land's ECS, so what they own is the engine's (JsonUtils.KeepFromAllocator)
+    //what each of its components owns is that component's array's in UI land's ECS (JsonUtils.KeepFromAllocator)
     const outer_keep = engine_context.mSerializer.mCurrDeserialize.keep;
-    engine_context.mSerializer.mCurrDeserialize.keep = engine_context.mUIManager.mECSManager.Keep();
     defer engine_context.mSerializer.mCurrDeserialize.keep = outer_keep;
 
     if (.object_begin != try source.next()) return error.UnexpectedToken;
@@ -77,6 +76,7 @@ pub fn jsonParse(scratch_allocator: std.mem.Allocator, source: anytype, options:
         };
         inline for (UIComponents.SerializeList) |component_type| {
             if (std.mem.eql(u8, key, component_type.Name)) {
+                engine_context.mSerializer.mCurrDeserialize.keep = element.KeepFor(component_type);
                 const component = try std.json.innerParse(component_type, scratch_allocator, source, options);
                 _ = element.AddComponent(engine_context, component) catch return error.OutOfMemory;
                 break;

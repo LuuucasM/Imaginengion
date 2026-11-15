@@ -518,7 +518,7 @@ test "a file dropped on the panel: another type's file not taken, an entity file
 
     const ui_scene = world.mPage.GetComponent(EntityComponents.EntitySceneComponent).?.mScene;
     const goblin_file = try ui_scene.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try goblin_file.AddComponent(engine_context, try FileRefComponent.Init(goblin_file.Keep(), "goblin.imen", .Prj));
+    _ = try goblin_file.AddComponent(engine_context, try FileRefComponent.Init(goblin_file.KeepFor(FileRefComponent), "goblin.imen", .Prj));
 
     //an entity file is for the Entities panel, not the Scenes panel
     try std.testing.expect(!PointerSystem.Takes(scenes.mArea.GetComponent(DropTargetComponent).?.*, goblin_file));

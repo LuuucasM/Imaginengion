@@ -17,11 +17,15 @@ const EngineContext = @import("EngineContext.zig");
 const sdl = @import("CImports.zig").sdl;
 const Tracy = @import("Tracy.zig");
 const Profiler = @import("Profiler.zig");
+const Allocators = @import("Allocators.zig");
 
 const Application: type = @This();
 
 mProgram: Program = .{},
 mEngineContext: EngineContext = .{},
+/// The top of the memory tree (Allocators.MemoryNode): the engine's node and the program's are under it, so its total is
+/// all the memory the application holds
+mMemory: Allocators.MemoryNode = .{ .mName = "Application" },
 
 /// Initializes the engine application.
 ///
@@ -41,6 +45,12 @@ pub fn Init(self: *Application, init: std.process.Init.Minimal) !void {
         sdl.SDL_SetLogOutputFunction(SDLLogCallback, null);
         sdl.SDL_SetLogPriority(sdl.SDL_LOG_CATEGORY_GPU, sdl.SDL_LOG_PRIORITY_VERBOSE);
     }
+    //the memory tree's top, first, so everything made from here on is under it
+    self.mMemory.Init(&self.mEngineContext, "Application");
+    self.mMemory.mSize = @sizeOf(Application);
+    self.mEngineContext._Internal.Memory.Attach(&self.mMemory, @sizeOf(EngineContext), true);
+    self.mProgram.mMemory.Init(&self.mEngineContext, "Program");
+    self.mProgram.mMemory.Attach(&self.mMemory, @sizeOf(Program), true);
     try self.mEngineContext.Init(init.environ);
     try self.mProgram.Init(&self.mEngineContext, init.args);
     self.mEngineContext.SetSyncCallbacks(&self.mProgram);

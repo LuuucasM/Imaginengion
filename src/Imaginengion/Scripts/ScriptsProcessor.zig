@@ -706,7 +706,7 @@ pub fn SetUpScript(comptime ObjectType: type, script: ObjectType, engine_context
 
     if (script_asset) |asset| {
         if (script.GetComponent(ScriptComponent).?.mInstance == null) {
-            const id = try asset.NewInstance(engine_context, script.Keep(), null);
+            const id = try asset.NewInstance(engine_context, script.KeepFor(ScriptComponent), null);
             script.GetComponentMut(ScriptComponent).?.mInstance = id;
         }
     }

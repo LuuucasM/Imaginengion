@@ -178,6 +178,12 @@ pub fn Setup(self: *AManager, engine_context: *EngineContext) !void {
     try self._internal.DefaultAudioAsset.Init(engine_context, audio_abs_path, audio_rel_path, audio_file);
 }
 
+/// The Keep of an asset type's array: what an asset of that type owns (an enum's names, a theme's styles) is taken from
+/// it, since that is what frees it, so it is counted on that array's node of the memory tree
+pub fn KeepFor(self: *AManager, comptime asset_type: type) std.mem.Allocator {
+    return self.mECSManager.KeepFor(asset_type);
+}
+
 pub fn Deinit(self: *AManager, engine_context: *EngineContext) void {
     Core.Deinit(self, engine_context);
     self.mCWDPath.deinit(engine_context.Keep());
@@ -222,7 +228,8 @@ pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, requested
 
     const asset_id = self.GetWorldID(asset_hash);
 
-    const keep_allocator = engine_context.Keep();
+    //the UUID map is the manager's own, so its ECS's, as Deinit frees it
+    const keep_allocator = self.mECSManager.Keep();
 
     if (asset_id) |id| {
         std.debug.assert(self.mECSManager.HasComponent(AssetMetaData, id));
@@ -582,9 +589,10 @@ fn CreateAssetFile(self: *AManager, engine_context: *EngineContext, file_source:
     const zone = Tracy.ZoneInit("AssetManager::CreateAssetFile", @src());
     defer zone.Deinit();
 
-    const keep_allocator = engine_context.Keep();
+    //the path is its FileMetaData's, which frees it
+    const keep_allocator = self.mECSManager.KeepFor(FileMetaData);
 
-    const new_asset_id = try self.mECSManager.CreateEntity(keep_allocator);
+    const new_asset_id = try self.mECSManager.CreateEntity();
 
     _ = try self.mECSManager.AddComponentSync(engine_context, new_asset_id, AssetMetaData{ .mRefs = 0 });
 
@@ -610,7 +618,7 @@ fn CreateAssetGen(self: *AManager, engine_context: *EngineContext) !AssetHandle.
     const zone = Tracy.ZoneInit("AssetManager::CreateAssetGen", @src());
     defer zone.Deinit();
 
-    const new_asset_id = try self.mECSManager.CreateEntity(engine_context.Keep());
+    const new_asset_id = try self.mECSManager.CreateEntity();
 
     _ = try self.mECSManager.AddComponentSync(engine_context, new_asset_id, AssetMetaData{ .mRefs = 0 });
     _ = try self.mECSManager.AddComponentSync(engine_context, new_asset_id, GenMetaData{});

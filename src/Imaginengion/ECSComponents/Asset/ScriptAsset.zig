@@ -161,7 +161,7 @@ fn WatchDependencies(self: *ScriptAsset, engine_context: *EngineContext) !void {
             std.log.warn("couldn't watch {s}, a file a script imports: {s}", .{ abs_path, @errorName(err) });
             continue;
         };
-        try self._Dependencies.append(engine_context.Keep(), handle);
+        try self._Dependencies.append(engine_context.mAssetManager.KeepFor(ScriptAsset), handle);
     }
 }
 
@@ -186,7 +186,7 @@ fn IsSeparator(c: u8) bool {
 
 fn ReleaseDependencies(self: *ScriptAsset, engine_context: *EngineContext) void {
     for (self._Dependencies.items) |*dependency| dependency.ReleaseAsset();
-    self._Dependencies.deinit(engine_context.Keep());
+    self._Dependencies.deinit(engine_context.mAssetManager.KeepFor(ScriptAsset));
     self._Dependencies = .empty;
 }
 
@@ -207,7 +207,7 @@ pub fn HasHook(self: *const ScriptAsset, hook: Hook) bool {
 /// `keep_allocator` is the Keep of the script child it is for (Entity.Keep and the like), which it is made in
 pub fn NewInstance(self: *ScriptAsset, engine_context: *EngineContext, keep_allocator: std.mem.Allocator, copy_from: ?u32) !u32 {
     //which ids are taken is the asset's, so the engine's
-    const asset_keep = engine_context.Keep();
+    const asset_keep = engine_context.mAssetManager.KeepFor(ScriptAsset);
     var free_ids = self._Live.iterator(.{ .kind = .unset });
     const id = free_ids.next() orelse blk: {
         const old_len = self._Live.bit_length;

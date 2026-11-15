@@ -68,14 +68,25 @@ pub const MemoryOwner = enum {
         };
     }
 
-    fn CountsOf(self: MemoryOwner, engine_context: *EngineContext) *const Allocators.Counts {
+    /// What it holds, everything under its node of the memory tree included. The engine's is only what isn't a world's
+    fn TotalOf(self: MemoryOwner, engine_context: *EngineContext) Allocators.MemoryNode.Total {
         return switch (self) {
-            .Game => &engine_context.mGameWorld.mAllocators.mCounts,
-            .Simulate => &engine_context.mSimulateWorld.mAllocators.mCounts,
-            .Editor => &engine_context.mEditorWorld.mAllocators.mCounts,
-            .Engine => &engine_context._Internal.Counts,
-            .Assets => &engine_context.mAssetWorld.mAllocators.mCounts,
-            .Templates => &engine_context.mTmplEditWorld.mAllocators.mCounts,
+            .Game => engine_context.mGameWorld.mMemory.Totals(),
+            .Simulate => engine_context.mSimulateWorld.mMemory.Totals(),
+            .Editor => engine_context.mEditorWorld.mMemory.Totals(),
+            .Assets => engine_context.mAssetWorld.mMemory.Totals(),
+            .Templates => engine_context.mTmplEditWorld.mMemory.Totals(),
+            .Engine => blk: {
+                var total = engine_context._Internal.Memory.Totals();
+                for (engine_context.Worlds()) |world| {
+                    const below = world.mMemory.Totals();
+                    total.Held -= below.Held;
+                    total.Allocs -= below.Allocs;
+                    total.Scratch -= below.Scratch;
+                    total.Size -= below.Size;
+                }
+                break :blk total;
+            },
         };
     }
 };
@@ -176,22 +187,20 @@ pub fn Update(self: *StatsPanel, engine_context: *EngineContext, stats: *const E
 
 /// The Memory section, open to start with: a line for each owner of memory
 fn BuildMemory(self: *StatsPanel, engine_context: *EngineContext, content: Entity, options: Widgets.Options) !void {
-    const section = try Widgets.CollapsingHeader(engine_context, .{ .Entity = content }, "Memory (Keep held / peak, Scratch a pass / peak, GPU held / peak)", true, options);
+    const section = try Widgets.CollapsingHeader(engine_context, .{ .Entity = content }, "Memory (Keep held, Scratch a pass, GPU held / peak; the Profiler window has the whole tree)", true, options);
     const lines: Widgets.Parent = .{ .Entity = section.Content.? };
     for (&self.mMemoryLines) |*line| line.* = try Widgets.Label(engine_context, lines, "");
 }
 
 fn SetMemory(self: *StatsPanel, engine_context: *EngineContext) !void {
     for (self.mMemoryLines, std.enums.values(MemoryOwner)) |line, owner| {
-        const counts = owner.CountsOf(engine_context).Read();
+        const total = owner.TotalOf(engine_context);
         const gpu = engine_context.mGPUAllocator.CountsOf(owner.GPUOwner(engine_context));
-        try SetLine(engine_context, line, "{s}: Keep {f} / {f} in {d} allocations, Scratch {f} / {f}, GPU {f} / {f} in {d} textures, {d} buffers", .{
+        try SetLine(engine_context, line, "{s}: Keep {f} in {d} allocations, Scratch {f} a pass, GPU {f} / {f} in {d} textures, {d} buffers", .{
             owner.Title(),
-            Bytes{ .mBytes = counts.KeepBytes },
-            Bytes{ .mBytes = counts.KeepPeak },
-            counts.KeepAllocs,
-            Bytes{ .mBytes = counts.ScratchLast },
-            Bytes{ .mBytes = counts.ScratchPeak },
+            Bytes{ .mBytes = total.Held },
+            total.Allocs,
+            Bytes{ .mBytes = total.Scratch },
             Bytes{ .mBytes = @intCast(gpu.Bytes) },
             Bytes{ .mBytes = @intCast(gpu.Peak) },
             gpu.Textures,

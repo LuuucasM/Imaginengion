@@ -85,7 +85,7 @@ const TestLayer = struct {
     }
 
     fn NewBody(self: *TestLayer) !u32 {
-        return try self.mBodies.CreateEntity(self.mEngineContext.Keep());
+        return try self.mBodies.CreateEntity();
     }
 };
 
@@ -102,7 +102,7 @@ const AddsPositions = struct {
     pub const Name = "AddsPositions";
 
     pub fn Run(engine_context: *EngineContext, bodies: *BodyECS, seen: *Seen) !void {
-        const entity_id = try bodies.CreateEntity(engine_context.Keep());
+        const entity_id = try bodies.CreateEntity();
         _ = try bodies.AddComponent(engine_context, entity_id, Position{ .x = 3 });
         seen.mStagedVisible = bodies.HasComponent(Position, entity_id);
         seen.mPositionsDuring = bodies.mComponentManager.NumWithComponent(Position);
@@ -133,7 +133,7 @@ const FailsAfterAdding = struct {
     pub const Name = "FailsAfterAdding";
 
     pub fn Run(engine_context: *EngineContext, bodies: *BodyECS) !u32 {
-        const entity_id = try bodies.CreateEntity(engine_context.Keep());
+        const entity_id = try bodies.CreateEntity();
         _ = try bodies.AddComponent(engine_context, entity_id, Position{});
         return error.SystemFailed;
     }
@@ -196,10 +196,9 @@ const HoldsEverywhere = struct {
 test "while a run goes on every ECS holds its adds, and they land when it ends" {
     const layer = try TestLayer.Init();
     defer layer.Deinit() catch unreachable;
-    const keep_allocator = layer.mEngineContext.Keep();
     const body = try layer.NewBody();
-    const other_body = try layer.mOtherBodies.CreateEntity(keep_allocator);
-    const scene = try layer.mScene.CreateEntity(keep_allocator);
+    const other_body = try layer.mOtherBodies.CreateEntity();
+    const scene = try layer.mScene.CreateEntity();
 
     try layer.mSystems.RunSystem(HoldsEverywhere, layer.mEngineContext, .{ layer, body, other_body, scene });
 
@@ -297,7 +296,7 @@ test "what landing sets off lands too, even in an ECS it has already been past" 
     defer layer.Deinit() catch unreachable;
     const engine_context = layer.mEngineContext;
     const body = try layer.NewBody();
-    const scene = try layer.mScene.CreateEntity(engine_context.Keep());
+    const scene = try layer.mScene.CreateEntity();
     _ = try layer.mScene.AddComponent(engine_context, scene, Gravity{});
 
     var chain = LandingChain{ .mLayer = layer, .mBody = body };

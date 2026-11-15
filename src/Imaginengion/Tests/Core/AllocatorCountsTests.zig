@@ -9,6 +9,7 @@ const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
 const NameComponent = @import("../../ECSComponents/EComponents.zig").NameComponent;
 const StatsPanel = @import("../../EditorPanels/StatsPanel.zig");
+const WorldManager = @import("../../Core/WorldManager.zig");
 
 fn NewContext() !*EngineContext {
     const engine_context = try std.heap.page_allocator.create(EngineContext);
@@ -41,25 +42,25 @@ test "a world's Keep is counted on that world only, and goes back down when free
     defer FreeContext(engine_context);
     const game = &engine_context.mGameWorld;
 
-    const game_before = CountsOf(&game.mAllocators.mCounts);
-    const simulate_before = CountsOf(&engine_context.mSimulateWorld.mAllocators.mCounts);
-    const engine_before = CountsOf(&engine_context._Internal.Counts);
+    const game_before = CountsOf(&game.mMemory.mCounts);
+    const simulate_before = CountsOf(&engine_context.mSimulateWorld.mMemory.mCounts);
+    const engine_before = CountsOf(&engine_context._Internal.Memory.mCounts);
 
     const bytes = try game.Keep().alloc(u8, 100);
-    const held = CountsOf(&game.mAllocators.mCounts);
+    const held = CountsOf(&game.mMemory.mCounts);
     try std.testing.expectEqual(game_before.KeepBytes + 100, held.KeepBytes);
     try std.testing.expectEqual(game_before.KeepAllocs + 1, held.KeepAllocs);
     try std.testing.expect(held.KeepPeak >= held.KeepBytes);
     //nothing on anyone else
-    try std.testing.expectEqual(simulate_before, CountsOf(&engine_context.mSimulateWorld.mAllocators.mCounts));
-    try std.testing.expectEqual(engine_before, CountsOf(&engine_context._Internal.Counts));
+    try std.testing.expectEqual(simulate_before, CountsOf(&engine_context.mSimulateWorld.mMemory.mCounts));
+    try std.testing.expectEqual(engine_before, CountsOf(&engine_context._Internal.Memory.mCounts));
 
     //growing it in place or by moving it counts the difference
     const grown = try game.Keep().realloc(bytes, 300);
-    try std.testing.expectEqual(game_before.KeepBytes + 300, CountsOf(&game.mAllocators.mCounts).KeepBytes);
+    try std.testing.expectEqual(game_before.KeepBytes + 300, CountsOf(&game.mMemory.mCounts).KeepBytes);
 
     game.Keep().free(grown);
-    const freed = CountsOf(&game.mAllocators.mCounts);
+    const freed = CountsOf(&game.mMemory.mCounts);
     try std.testing.expectEqual(game_before.KeepBytes, freed.KeepBytes);
     try std.testing.expectEqual(game_before.KeepAllocs, freed.KeepAllocs);
     //the peak stays where it got to
@@ -76,16 +77,16 @@ test "Scratch is counted for the pass, and becomes the last pass's when it ends"
     _ = try game.Scratch().alloc(u8, 36);
     _ = try engine_context.Scratch().alloc(u8, 8);
     //nothing shows until the pass ends
-    try std.testing.expectEqual(@as(i64, 0), CountsOf(&game.mAllocators.mCounts).ScratchLast);
+    try std.testing.expectEqual(@as(i64, 0), CountsOf(&game.mMemory.mCounts).ScratchLast);
 
     engine_context.EndScratchPass();
-    try std.testing.expectEqual(@as(i64, 100), CountsOf(&game.mAllocators.mCounts).ScratchLast);
-    try std.testing.expectEqual(@as(i64, 8), CountsOf(&engine_context._Internal.Counts).ScratchLast);
-    try std.testing.expectEqual(@as(i64, 0), CountsOf(&engine_context.mSimulateWorld.mAllocators.mCounts).ScratchLast);
+    try std.testing.expectEqual(@as(i64, 100), CountsOf(&game.mMemory.mCounts).ScratchLast);
+    try std.testing.expectEqual(@as(i64, 8), CountsOf(&engine_context._Internal.Memory.mCounts).ScratchLast);
+    try std.testing.expectEqual(@as(i64, 0), CountsOf(&engine_context.mSimulateWorld.mMemory.mCounts).ScratchLast);
 
     //a pass that takes nothing: the last is nothing, the peak stays
     engine_context.EndScratchPass();
-    const quiet = CountsOf(&game.mAllocators.mCounts);
+    const quiet = CountsOf(&game.mMemory.mCounts);
     try std.testing.expectEqual(@as(i64, 0), quiet.ScratchLast);
     try std.testing.expectEqual(@as(i64, 100), quiet.ScratchPeak);
 }
@@ -102,19 +103,20 @@ test "play's copy of the game world is the Simulate world's memory, and none of 
         try entity.SetName(engine_context, "A name long enough to be its own allocation");
     }
 
-    const game_before = CountsOf(&game.mAllocators.mCounts);
-    const simulate_before = CountsOf(&simulate.mAllocators.mCounts);
+    //what is under each world's node counts as the world's: the copy goes into the Simulate world's ECSs
+    const game_before = game.mMemory.Totals();
+    const simulate_before = simulate.mMemory.Totals();
     try game.Copy(engine_context, simulate);
-    try std.testing.expectEqual(game_before.KeepBytes, CountsOf(&game.mAllocators.mCounts).KeepBytes);
-    const copied = CountsOf(&simulate.mAllocators.mCounts);
-    try std.testing.expect(copied.KeepBytes > simulate_before.KeepBytes);
+    try std.testing.expectEqual(game_before.Held, game.mMemory.Totals().Held);
+    const copied = simulate.mMemory.Totals();
+    try std.testing.expect(copied.Held > simulate_before.Held);
 
     //stopping frees it from the Simulate world, through the same world that took it
     simulate.clearAndFree(engine_context, .All);
-    const stopped = CountsOf(&simulate.mAllocators.mCounts);
-    try std.testing.expect(stopped.KeepBytes < copied.KeepBytes);
-    try std.testing.expect(stopped.KeepBytes >= 0);
-    try std.testing.expectEqual(game_before.KeepBytes, CountsOf(&game.mAllocators.mCounts).KeepBytes);
+    const stopped = simulate.mMemory.Totals();
+    try std.testing.expect(stopped.Held < copied.Held);
+    try std.testing.expect(stopped.Held >= 0);
+    try std.testing.expectEqual(game_before.Held, game.mMemory.Totals().Held);
 }
 
 test "byte counts are shown in the largest unit they fill" {
@@ -157,4 +159,118 @@ test "nothing on the GPU to start with, for any owner" {
         try std.testing.expectEqual(GPUAllocator.Counts{}, gpu.CountsOf(@intCast(owner)));
     }
     gpu.Deinit(std.testing.allocator);
+}
+
+test "the memory tree: worlds under the engine, their ECSs under them, each ECS's component arrays under it" {
+    const engine_context = try NewContext();
+    defer FreeContext(engine_context);
+    const engine_node = &engine_context._Internal.Memory;
+    const game = &engine_context.mGameWorld;
+
+    //the worlds made, in the order they were
+    var worlds = engine_node.Children();
+    try std.testing.expectEqual(&game.mMemory, worlds.next().?);
+    try std.testing.expectEqual(&engine_context.mSimulateWorld.mMemory, worlds.next().?);
+    try std.testing.expectEqualStrings("Game", game.mMemory.mName);
+    try std.testing.expectEqualStrings("Playing", engine_context.mSimulateWorld.mMemory.mName);
+
+    //the four ECSs, and each of their component arrays
+    var ecs_count: usize = 0;
+    var ecss = game.mMemory.Children();
+    while (ecss.next()) |ecs| : (ecs_count += 1) {
+        try std.testing.expect(ecs.mFirstChild != null);
+        try std.testing.expectEqual(&game.mMemory, ecs.mParent.?);
+    }
+    try std.testing.expectEqual(@as(usize, 4), ecs_count);
+    const entity_ecs = &game.mEManager.mECSManager.mMemory;
+    try std.testing.expectEqualStrings("EntityECS", entity_ecs.mName);
+
+    //a component's memory is its array's, and so its ECS's and its world's
+    const scene = try game.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const before = game.mMemory.Totals();
+    const world_own_before = CountsOf(&game.mMemory.mCounts).KeepBytes;
+    const entity_before = entity_ecs.Totals();
+    const entity = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    try entity.SetName(engine_context, "A name long enough to be its own allocation");
+    try std.testing.expect(entity_ecs.Totals().Held > entity_before.Held);
+    try std.testing.expect(game.mMemory.Totals().Held > before.Held);
+    //and none of it is the world's own: it all went through the nodes under it
+    try std.testing.expectEqual(world_own_before, CountsOf(&game.mMemory.mCounts).KeepBytes);
+
+    //an ECS is inside its world by value, so its bytes are its own size and not the world's too
+    try std.testing.expectEqual(@as(usize, @sizeOf(WorldManager)) - EcsSizes(game), game.mMemory.mSize);
+}
+
+fn EcsSizes(world: *WorldManager) usize {
+    var total: usize = 0;
+    var ecss = world.mMemory.Children();
+    while (ecss.next()) |ecs| total += ecs.mSize;
+    return total;
+}
+
+test "a world's node leaves the tree with it, and gives its size back" {
+    const engine_context = try std.heap.page_allocator.create(EngineContext);
+    defer std.heap.page_allocator.destroy(engine_context);
+    engine_context.* = .{};
+    defer _ = engine_context._Internal.KeepHeap.deinit();
+    const engine_node = &engine_context._Internal.Memory;
+    engine_node.mSize = @sizeOf(EngineContext);
+
+    try engine_context.mGameWorld.Init(engine_context);
+    try std.testing.expectEqual(@as(usize, @sizeOf(EngineContext) - @sizeOf(WorldManager)), engine_node.mSize);
+    try std.testing.expect(engine_node.mFirstChild != null);
+
+    engine_context.mGameWorld.Deinit(engine_context);
+    try std.testing.expect(engine_node.mFirstChild == null);
+    try std.testing.expectEqual(@as(usize, @sizeOf(EngineContext)), engine_node.mSize);
+}
+
+fn ChildNamed(node: *Allocators.MemoryNode, name: []const u8) ?*Allocators.MemoryNode {
+    var children = node.Children();
+    while (children.next()) |child| {
+        if (std.mem.eql(u8, child.mName, name)) return child;
+    }
+    return null;
+}
+
+/// Fails when memory was taken through one node and freed through another: that node's own count goes below nothing
+fn ExpectNoneBelowNothing(node: *Allocators.MemoryNode) !void {
+    const own = node.mCounts.Read();
+    if (own.KeepBytes < 0 or own.KeepAllocs < 0) {
+        std.debug.print("{s} holds {d} bytes in {d} allocations\n", .{ node.mName, own.KeepBytes, own.KeepAllocs });
+        return error.TakenAndFreedThroughDifferentNodes;
+    }
+    var children = node.Children();
+    while (children.next()) |child| try ExpectNoneBelowNothing(child);
+}
+
+test "a component's memory is taken and freed through the same node: its array's" {
+    const engine_context = try NewContext();
+    defer FreeContext(engine_context);
+    const game = &engine_context.mGameWorld;
+    const simulate = &engine_context.mSimulateWorld;
+
+    const TextComponent = @import("../../ECSComponents/EComponents.zig").TextComponent;
+    const scene = try game.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    for (0..10) |_| {
+        const entity = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+        try entity.SetName(engine_context, "A name long enough to be its own allocation");
+        const text = try entity.AddComponent(engine_context, TextComponent{});
+        try text.SetText(entity.KeepFor(TextComponent), "Some text, also long enough to be its own allocation");
+    }
+    //a name is its NameComponent array's, held there and not on the ECS
+    const name_array = ChildNamed(&game.mEManager.mECSManager.mMemory, NameComponent.Name).?;
+    try std.testing.expect(name_array.mCounts.Read().KeepBytes > 0);
+    try ExpectNoneBelowNothing(&engine_context._Internal.Memory);
+
+    //play's copy clones every component into the Simulate world's arrays, and stopping frees them all through those
+    try game.Copy(engine_context, simulate);
+    try ExpectNoneBelowNothing(&engine_context._Internal.Memory);
+    simulate.clearAndFree(engine_context, .All);
+    try ExpectNoneBelowNothing(&engine_context._Internal.Memory);
+    var ecss = simulate.mMemory.Children();
+    while (ecss.next()) |ecs| {
+        var arrays = ecs.Children();
+        while (arrays.next()) |array| try std.testing.expectEqual(@as(i64, 0), array.mCounts.Read().KeepBytes);
+    }
 }

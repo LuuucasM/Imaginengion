@@ -1,14 +1,15 @@
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
+const MemoryNode = @import("../Core/Allocators.zig").MemoryNode;
 
-/// std.json only hands custom jsonParse functions an allocator. The serializer always parses with
-/// EngineContext.Scratch(), whose ptr is the EngineContext itself, so it can be recovered here.
-/// Checked against the vtable stored on the context, not &MakeAllocatorVTable(.Scratch).vtable: inside a
-/// script DLL that address is the DLL's own copy, while the allocator carries the engine binary's.
+/// std.json only hands custom jsonParse functions an allocator. The serializer always parses with a Scratch allocator,
+/// whose ptr is the node of the memory tree it is taken through (Allocators.MemoryNode), which knows its context.
+/// Checked against the vtable stored on the node, not &MakeAllocatorVTable(.Scratch).vtable: inside a script DLL that
+/// address is the DLL's own copy, while the allocator carries the engine binary's.
 pub fn EngineContextFromAllocator(scratch_allocator: std.mem.Allocator) *EngineContext {
-    const engine_context: *EngineContext = @ptrCast(@alignCast(scratch_allocator.ptr));
-    std.debug.assert(scratch_allocator.vtable == engine_context._Internal.ScratchVTable);
-    return engine_context;
+    const node: *MemoryNode = @ptrCast(@alignCast(scratch_allocator.ptr));
+    std.debug.assert(scratch_allocator.vtable == node.mScratchVTable);
+    return node.Context();
 }
 
 /// The Keep that what is parsed now goes into: the Keep of the ECS whose component is being read (set by the reader,

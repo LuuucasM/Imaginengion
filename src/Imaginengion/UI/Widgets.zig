@@ -178,7 +178,7 @@ pub fn AddQuad(engine_context: *EngineContext, entity: Entity, quad: ShapeCompon
 pub fn Label(engine_context: *EngineContext, parent: Parent, text: []const u8) !Entity {
     const entity = try NewEntity(engine_context, parent);
     var text_component = TextComponent{ .mFontSize = TEXT_SIZE };
-    try text_component.SetText(entity.Keep(), text);
+    try text_component.SetText(entity.KeepFor(TextComponent), text);
     _ = try entity.AddComponent(engine_context, text_component);
     _ = try entity.AddComponent(engine_context, SurfaceComponent{});
     _ = try entity.AddComponent(engine_context, LayoutItemComponent{});

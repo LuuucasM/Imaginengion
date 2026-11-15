@@ -1,10 +1,11 @@
 //! The engine's allocators, each named for what its memory is for (EngineContext.AllocType):
 //!   - Keep: lasts until it is freed. Taken from KeepHeap
 //!   - Scratch: for the current pass of the loop only, emptied all at once at its end. An arena per thread
-//! Each has an owner (Owner): the engine, for what every world shares (UI land, assets, audio, the renderer), or one world,
-//! for what is only that world's (WorldAllocators). Every owner takes from the same KeepHeap and scratch arenas, so memory
-//! freed through another owner than the one that took it is only counted against the wrong one, never lost. Every
-//! allocation passes through MakeAllocatorVTable, the one place to count or limit them.
+//! Each is taken through an owner, a node of the memory tree (MemoryNode): Application, then the engine and the program,
+//! then the worlds and the engine's managers, then their ECSs, then each ECS's component arrays. A node counts what is
+//! taken through it, and a node's total is its own and every node's under it. Every node takes from the same KeepHeap
+//! and scratch arenas, so memory freed through another node than the one that took it is only counted against the wrong
+//! one, never lost. Every allocation passes through MakeAllocatorVTable, the one place to count or limit them.
 const std = @import("std");
 const builtin = @import("builtin");
 const EngineContext = @import("EngineContext.zig");
@@ -93,7 +94,8 @@ pub fn ScratchArenaOf(engine_context: *EngineContext) *std.heap.ArenaAllocator {
     return &made.mArena;
 }
 
-/// What one owner (the engine, or one world) has taken, counted by MakeAllocatorVTable as it is taken. Atomic, since the
+/// What one node of the memory tree has taken through its own Keep and Scratch, not the nodes under it, counted by
+/// MakeAllocatorVTable as it is taken. Atomic, since the
 /// job pool's threads take memory too. Signed: memory taken through one owner and freed through another (Allocators.zig)
 /// moves bytes from one to the other, so an owner can go below nothing, which shows rather than wrapping around
 pub const Counts = struct {
@@ -171,59 +173,161 @@ pub const Counts = struct {
     }
 };
 
-/// Who an allocation is taken for: what an allocator's context points at
-pub const Owner = enum {
-    /// the context is the EngineContext itself
-    Engine,
-    /// the context is a world's WorldAllocators
-    World,
-};
-
-/// One world's own Keep and Scratch (WorldManager.Keep, WorldManager.Scratch): the engine's heap and scratch arenas,
-/// taken through the world so what it takes can be told apart from the engine's and the other worlds'
-pub const WorldAllocators = struct {
-    /// Set by Init, before anything is taken
-    mEngineContext: *EngineContext = undefined,
-    /// What the world has taken
+/// One owner of memory, a node of the memory tree: its own Keep and Scratch, what has been taken through them (mCounts),
+/// and where it sits. A node is made for each thing that owns memory worth telling apart: Application, the engine
+/// (EngineContext._Internal.Memory), the program, each world, each ECS, each component array. Linked by pointer, so a
+/// node mustn't move while it is attached. The tree is only changed on the main thread
+pub const MemoryNode = struct {
+    mName: []const u8 = "",
+    /// Set by Init. Null only for the engine's own node, which finds the context it is in (EngineContext._Internal.Memory)
+    mEngineContext: ?*EngineContext = null,
+    mParent: ?*MemoryNode = null,
+    mFirstChild: ?*MemoryNode = null,
+    mLastChild: ?*MemoryNode = null,
+    mPrevSibling: ?*MemoryNode = null,
+    mNextSibling: ?*MemoryNode = null,
+    /// The bytes of the struct the node is for, less those of the nodes inside it by value: those count as theirs.
+    /// 0 for a struct whose bytes were taken from its parent's Keep, and so are counted there
+    mSize: usize = 0,
+    /// Whether its size was taken off its parent's (Attach), to give back when it goes
+    mEmbedded: bool = false,
+    /// What was taken through its own Keep and Scratch
     mCounts: Counts = .{},
 
-    // Stored for the same reason EngineContext stores its own (see EngineContext.InternalData): a script DLL reading them
-    // through the world runs the engine's allocator code, not its own copy
-    mKeepVTable: *const std.mem.Allocator.VTable = &MakeAllocatorVTable(.Keep, .World).vtable,
-    mScratchVTable: *const std.mem.Allocator.VTable = &MakeAllocatorVTable(.Scratch, .World).vtable,
+    // Stored for the same reason as EngineContext's Io: a script DLL taking memory through a node runs the engine's
+    // allocator code, not its own copy, and FromAllocator can tell a node's allocator by its vtable
+    mKeepVTable: *const std.mem.Allocator.VTable = &MakeAllocatorVTable(.Keep).vtable,
+    mScratchVTable: *const std.mem.Allocator.VTable = &MakeAllocatorVTable(.Scratch).vtable,
 
-    pub fn Init(self: *WorldAllocators, engine_context: *EngineContext) void {
+    pub fn Init(self: *MemoryNode, engine_context: *EngineContext, name: []const u8) void {
         self.mEngineContext = engine_context;
+        self.mName = name;
     }
 
-    pub fn Keep(self: *WorldAllocators) std.mem.Allocator {
+    /// Puts it under `parent`, after its other children. `size` is the bytes of the struct it is for; `embedded` says
+    /// that struct is inside the parent's by value, so those bytes are taken off the parent's size
+    pub fn Attach(self: *MemoryNode, parent: *MemoryNode, size: usize, embedded: bool) void {
+        std.debug.assert(self.mParent == null);
+        self.mParent = parent;
+        self.mPrevSibling = parent.mLastChild;
+        if (parent.mLastChild) |last| last.mNextSibling = self else parent.mFirstChild = self;
+        parent.mLastChild = self;
+        self.mSize = size;
+        self.mEmbedded = embedded;
+        if (embedded) parent.mSize -|= size;
+        gTreeVersion +%= 1;
+    }
+
+    /// Takes it out of the tree, with what is under it, and gives its size back to its parent if it was taken off it
+    pub fn Detach(self: *MemoryNode) void {
+        const parent = self.mParent orelse return;
+        if (self.mPrevSibling) |prev| prev.mNextSibling = self.mNextSibling else parent.mFirstChild = self.mNextSibling;
+        if (self.mNextSibling) |next| next.mPrevSibling = self.mPrevSibling else parent.mLastChild = self.mPrevSibling;
+        if (self.mEmbedded) parent.mSize += self.mSize;
+        self.mParent = null;
+        self.mPrevSibling = null;
+        self.mNextSibling = null;
+        gTreeVersion +%= 1;
+    }
+
+    pub fn Keep(self: *MemoryNode) std.mem.Allocator {
         return .{ .ptr = self, .vtable = self.mKeepVTable };
     }
 
-    pub fn Scratch(self: *WorldAllocators) std.mem.Allocator {
+    pub fn Scratch(self: *MemoryNode) std.mem.Allocator {
         return .{ .ptr = self, .vtable = self.mScratchVTable };
+    }
+
+    /// The node `allocator` takes through, if it is a node's Keep or Scratch: what a part of the engine given an allocator
+    /// attaches its own node under (ECSManager.Init). Null for any other allocator, like a test's
+    pub fn FromAllocator(allocator: std.mem.Allocator) ?*MemoryNode {
+        if (allocator.vtable != &MakeAllocatorVTable(.Keep).vtable and allocator.vtable != &MakeAllocatorVTable(.Scratch).vtable) return null;
+        return @ptrCast(@alignCast(allocator.ptr));
+    }
+
+    pub fn Context(self: *MemoryNode) *EngineContext {
+        if (self.mEngineContext) |engine_context| return engine_context;
+        const internal: *@FieldType(EngineContext, "_Internal") = @alignCast(@fieldParentPtr("Memory", self));
+        return @alignCast(@fieldParentPtr("_Internal", internal));
+    }
+
+    /// The node at the top of the tree it is in
+    pub fn Root(self: *MemoryNode) *MemoryNode {
+        var node = self;
+        while (node.mParent) |parent| node = parent;
+        return node;
+    }
+
+    pub fn Children(self: *const MemoryNode) ChildIterator {
+        return .{ .mNext = self.mFirstChild };
+    }
+
+    pub const ChildIterator = struct {
+        mNext: ?*MemoryNode,
+
+        pub fn next(self: *ChildIterator) ?*MemoryNode {
+            const child = self.mNext orelse return null;
+            self.mNext = child.mNextSibling;
+            return child;
+        }
+    };
+
+    /// A node and everything under it, added up
+    pub const Total = struct {
+        /// Keep bytes held now
+        Held: i64 = 0,
+        /// Keep allocations held now
+        Allocs: i64 = 0,
+        /// Scratch bytes the last pass of the loop took
+        Scratch: i64 = 0,
+        /// The bytes of the structs themselves (mSize)
+        Size: u64 = 0,
+
+        /// Everything: what is held and the structs that hold it
+        pub fn Bytes(self: Total) i64 {
+            return self.Held + @as(i64, @intCast(self.Size));
+        }
+    };
+
+    pub fn Totals(self: *const MemoryNode) Total {
+        const own = self.mCounts.Read();
+        var total: Total = .{ .Held = own.KeepBytes, .Allocs = own.KeepAllocs, .Scratch = own.ScratchLast, .Size = self.mSize };
+        var children = self.Children();
+        while (children.next()) |child| {
+            const below = child.Totals();
+            total.Held += below.Held;
+            total.Allocs += below.Allocs;
+            total.Scratch += below.Scratch;
+            total.Size += below.Size;
+        }
+        return total;
+    }
+
+    /// Ends the pass of the loop for it and every node under it (Counts.EndPass)
+    pub fn EndPass(self: *MemoryNode) void {
+        self.mCounts.EndPass();
+        var children = self.Children();
+        while (children.next()) |child| child.EndPass();
     }
 };
 
-/// Every Keep and Scratch allocation passes through here, which is what lets Tracy see all of them.
-/// Each allocator reports to its own named pool so the two show up separately in Tracy's memory window.
-pub inline fn MakeAllocatorVTable(comptime alloc_type: AllocType, comptime owner: Owner) type {
+/// Goes up whenever a node is attached or detached, so what shows the tree knows to build its rows again
+pub var gTreeVersion: u32 = 0;
+
+/// Every Keep and Scratch allocation passes through here, which is what lets Tracy see all of them. The context is the
+/// MemoryNode it is taken through. Each allocator reports to its own named pool so the two show up separately in
+/// Tracy's memory window.
+pub inline fn MakeAllocatorVTable(comptime alloc_type: AllocType) type {
     const pool: Tracy.MemoryPool = switch (alloc_type) {
         .Keep => .Keep,
         .Scratch => .Scratch,
     };
     const fns = struct {
         fn CountsOf(context: *anyopaque) *Counts {
-            return switch (owner) {
-                .Engine => &@as(*EngineContext, @ptrCast(@alignCast(context)))._Internal.Counts,
-                .World => &@as(*WorldAllocators, @ptrCast(@alignCast(context))).mCounts,
-            };
+            return &@as(*MemoryNode, @ptrCast(@alignCast(context))).mCounts;
         }
         fn Backing(context: *anyopaque) std.mem.Allocator {
-            const engine_context: *EngineContext = switch (owner) {
-                .Engine => @ptrCast(@alignCast(context)),
-                .World => @as(*WorldAllocators, @ptrCast(@alignCast(context))).mEngineContext,
-            };
+            const engine_context = @as(*MemoryNode, @ptrCast(@alignCast(context))).Context();
             return switch (alloc_type) {
                 .Keep => engine_context._Internal.KeepHeap.allocator(),
                 //a thread of the job pool has an arena of its own: the engine's isn't safe to share

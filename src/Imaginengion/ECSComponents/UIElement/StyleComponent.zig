@@ -32,10 +32,11 @@ pub fn Clone(self: *const StyleComponent, _: *EngineContext, keep_allocator: std
     return .{ .mStyle = try self.mStyle.clone(keep_allocator), .mTheme = self.mTheme, .mOnce = self.mOnce };
 }
 
-/// A style component for the style called `name`
-pub fn Init(engine_context: *EngineContext, name: []const u8) !StyleComponent {
+/// A style component for the style called `name`. `keep_allocator` is the Keep of the element it goes on
+/// (UIElement.KeepFor(StyleComponent)), which frees the name
+pub fn Init(keep_allocator: std.mem.Allocator, name: []const u8) !StyleComponent {
     var style = StyleComponent{};
-    try style.mStyle.appendSlice(engine_context.Keep(), name);
+    try style.mStyle.appendSlice(keep_allocator, name);
     return style;
 }
 

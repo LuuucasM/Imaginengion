@@ -103,7 +103,7 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn CreateObj(self: *Self, engine_context: *EngineContext, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {
-            const new_obj: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.CreateEntity(self.mECSManager.Keep()), .mManager = ObjManager(self) };
+            const new_obj: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.CreateEntity(), .mManager = ObjManager(self) };
             try self.ApplyConfig(engine_context, new_obj.mID, config);
             return new_obj;
         }

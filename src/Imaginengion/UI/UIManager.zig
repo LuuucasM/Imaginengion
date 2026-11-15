@@ -328,8 +328,7 @@ pub fn GetManager(self: *UIManager, comptime obj_t: type) *UIManager {
 
 /// A new element with no components of its own and no entity yet. Usually made through Adopt instead
 pub fn NewElement(self: *UIManager, engine_context: *EngineContext) !UIElement {
-    const keep_allocator = engine_context.Keep();
-    const element_id = try self.mECSManager.CreateEntity(keep_allocator);
+    const element_id = try self.mECSManager.CreateEntity();
     //not AddComponentSync: an element made inside a system that reads owners (a scrollbar's, during the scroll pass)
     //would move what that system holds. Waiting is still readable, so Adopt can set the owner straight away
     _ = try self.mECSManager.AddComponent(engine_context, element_id, ElementOwnerComponent{});
@@ -344,7 +343,7 @@ pub fn CopyElement(self: *UIManager, engine_context: *EngineContext, original: U
     if (!original.IsActive()) return copy;
     inline for (UIComponents.SerializeList) |component_type| {
         if (original.GetComponent(component_type)) |component| {
-            const value = if (@hasDecl(component_type, "Clone")) try component.Clone(engine_context, self.mECSManager.Keep()) else component.*;
+            const value = if (@hasDecl(component_type, "Clone")) try component.Clone(engine_context, copy.KeepFor(component_type)) else component.*;
             _ = try copy.AddComponent(engine_context, value);
         }
     }
@@ -454,11 +453,12 @@ pub fn LabelOf(entity: Entity) ?Entity {
 pub fn Style(engine_context: *EngineContext, entity: Entity, style_name: []const u8) !void {
     if (!entity.HasComponent(UIElementComponent)) _ = try entity.AddComponent(engine_context, UIElementComponent{});
     const element = ElementOf(entity).?;
-    var style = try UIComponents.StyleComponent.Init(engine_context, style_name);
-    //UI land is the engine's, so its components' memory is the engine's Keep
-    errdefer style.Deinit(engine_context, engine_context.Keep());
+    //the style's name is its array's, which frees it
+    const keep_allocator = element.KeepFor(UIComponents.StyleComponent);
+    var style = try UIComponents.StyleComponent.Init(keep_allocator, style_name);
+    errdefer style.Deinit(engine_context, keep_allocator);
     if (element.GetComponentMut(UIComponents.StyleComponent)) |existing| {
-        existing.Deinit(engine_context, engine_context.Keep());
+        existing.Deinit(engine_context, keep_allocator);
         existing.* = style;
         try engine_context.mUIManager.MarkElementStyleDirty(engine_context, element);
     } else {

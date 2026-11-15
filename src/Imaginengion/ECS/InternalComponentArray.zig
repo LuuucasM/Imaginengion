@@ -1,6 +1,7 @@
 const std = @import("std");
 const SparseSet = @import("../Core/SparseSet.zig").SparseSet;
 const EngineContext = @import("../Core/EngineContext.zig");
+const MemoryNode = @import("../Core/Allocators.zig").MemoryNode;
 
 pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: type) type {
     return struct {
@@ -13,6 +14,11 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         /// The Keep of whoever owns the ECS this array is in (the engine, or one world): the array's storage, and every
         /// component's own memory, handed to the component's Deinit and Clone
         mKeep: std.mem.Allocator,
+        /// This array's node of the memory tree, under its ECS's, that mKeep takes through. Unused (detached) when the ECS
+        /// was given an allocator that isn't a node's
+        mMemory: MemoryNode = .{},
+        /// What the array itself was made with, its ECS's Keep, to give it back with
+        mArrayKeep: std.mem.Allocator,
 
         /// Runs every component's Deinit without freeing the storage. A component's Deinit can reach into
         /// other arrays of the same ECS (a ThemeAsset releasing its font handle), so the ComponentManager
@@ -64,10 +70,10 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
                 other.mComponents.mValues.items[cloned] = try self.mComponents.mValues.items[cloned].Clone(engine_context, other.mKeep);
             }
         }
-        pub fn AddComponent(self: *Self, keep_allocator: std.mem.Allocator, entity_id: entity_t, component: component_type) !*component_type {
+        pub fn AddComponent(self: *Self, entity_id: entity_t, component: component_type) !*component_type {
             std.debug.assert(!self.mComponents.HasSparse(entity_id));
 
-            return try self.mComponents.AddValue(keep_allocator, entity_id, component);
+            return try self.mComponents.AddValue(self.mKeep, entity_id, component);
         }
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entityID: entity_t) void {
             std.debug.assert(self.mComponents.HasSparse(entityID));
@@ -111,9 +117,9 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         }
         /// Copies the staged value in. The value now belongs to this array, so the staged copy is left as is and
         /// goes when the staging arena is reset.
-        pub fn AddStaged(self: *Self, keep_allocator: std.mem.Allocator, entity_id: entity_t, staged: *anyopaque) !void {
+        pub fn AddStaged(self: *Self, entity_id: entity_t, staged: *anyopaque) !void {
             const staged_component: *component_type = @ptrCast(@alignCast(staged));
-            _ = try self.AddComponent(keep_allocator, entity_id, staged_component.*);
+            _ = try self.AddComponent(entity_id, staged_component.*);
         }
         /// Puts a transaction's copy of the entity's component (Transaction.Copy) in its place, the old one deinitialized.
         /// One the entity no longer has takes the copy with it. Transaction.CopyFns.mCommit, through ComponentArray

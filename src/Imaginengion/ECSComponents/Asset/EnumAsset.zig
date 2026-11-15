@@ -38,7 +38,7 @@ pub fn Init(self: *EnumAsset, engine_context: *EngineContext, abs_path: []const 
         return error.AssetInitFailed;
     };
 
-    const keep_allocator = engine_context.Keep();
+    const keep_allocator = engine_context.mAssetManager.KeepFor(EnumAsset);
     errdefer self.Deinit(engine_context, keep_allocator);
     try self.mNames.ensureTotalCapacityPrecise(keep_allocator, names.len);
     for (names) |name| self.mNames.appendAssumeCapacity(try keep_allocator.dupe(u8, name));

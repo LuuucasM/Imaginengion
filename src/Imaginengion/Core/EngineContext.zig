@@ -37,7 +37,6 @@ pub const WorldEventCallback = WorldManager.EventManagerT.EventCallback;
 
 const Allocators = @import("Allocators.zig");
 const GPUAllocator = @import("GPUAllocator.zig");
-const MakeAllocatorVTable = Allocators.MakeAllocatorVTable;
 const MakeIoVTable = @import("Ios.zig").MakeIoVTable;
 const JobGroup = @import("JobGroup.zig");
 
@@ -48,16 +47,10 @@ const InternalData = struct {
     ScratchArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
     /// The job pool's threads' own scratch arenas (Allocators.ScratchArenaOf), emptied with ScratchArena
     ThreadScratchArenas: Allocators.ThreadScratchArenas = .{},
-    /// What the engine's own Keep and Scratch have taken. Each world counts its own (WorldManager.mAllocators)
-    Counts: Allocators.Counts = .{},
+    /// The engine's node of the memory tree (Allocators.MemoryNode): what is taken through Keep and Scratch is counted on
+    /// it, and every world, manager and ECS of the engine has its node under it
+    Memory: Allocators.MemoryNode = .{ .mName = "Engine" },
 
-    // Stored rather than taken straight from MakeAllocatorVTable inside Keep/Scratch,
-    // because a script DLL compiles its own copy of those functions: taking the address there would give
-    // the DLL's copy of the vtable. These defaults are filled in by the engine binary when the context is
-    // created, so a script reading them through the context always runs the engine's allocator code, the
-    // same code (and the same Tracy memory tracking) that later frees or grows that memory.
-    KeepVTable: *const std.mem.Allocator.VTable = &MakeAllocatorVTable(.Keep, .Engine).vtable,
-    ScratchVTable: *const std.mem.Allocator.VTable = &MakeAllocatorVTable(.Scratch, .Engine).vtable,
 
     /// The engine's thread pool, under both its Ios (Io, AriaIo): the file calls they pass on run on the thread that
     /// makes them, and its workers (one fewer than the machine has cores) run their groups' tasks (mJobPool)
@@ -255,30 +248,24 @@ pub fn DeInit(self: *EngineContext) void {
 /// Memory that lasts until it is freed (AllocType.Keep), for what every world shares: UI land, assets, audio, the
 /// renderer, the editor's own state. What belongs to one world is taken from that world's (WorldManager.Keep)
 pub fn Keep(self: *EngineContext) std.mem.Allocator {
-    return .{
-        .ptr = self,
-        .vtable = self._Internal.KeepVTable,
-    };
+    return self._Internal.Memory.Keep();
 }
 
 /// Memory for this pass of the loop only, emptied at its end (AllocType.Scratch). Never freed by hand. Work on one world
 /// takes from that world's (WorldManager.Scratch)
 pub fn Scratch(self: *EngineContext) std.mem.Allocator {
-    return .{
-        .ptr = self,
-        .vtable = self._Internal.ScratchVTable,
-    };
+    return self._Internal.Memory.Scratch();
 }
 
-/// Ends the pass of the loop for Scratch: every scratch arena is emptied, and what the engine and each world took of
-/// it becomes their last pass's count (Allocators.Counts.EndPass). While no task is running
+/// Ends the pass of the loop for Scratch: every scratch arena is emptied, and what each node of the memory tree took of
+/// it becomes its last pass's count (Allocators.Counts.EndPass). While no task is running
 pub fn EndScratchPass(self: *EngineContext) void {
     //the arena empties all at once, so Tracy is told the whole Scratch pool is gone rather than each allocation
     Tracy.MemDiscard(.Scratch);
     _ = self._Internal.ScratchArena.reset(.retain_capacity);
     self._Internal.ThreadScratchArenas.Reset();
-    self._Internal.Counts.EndPass();
-    for (self.Worlds()) |world| world.mAllocators.mCounts.EndPass();
+    //from the top of the tree, so a node outside the engine's (the program's) has its pass ended too
+    self._Internal.Memory.Root().EndPass();
 }
 
 /// Every world, each with allocators of its own

@@ -302,7 +302,7 @@ fn RemoveScene(self: *SManager, scratch_allocator: std.mem.Allocator, scene_laye
 pub fn ApplyConfig(self: *SManager, engine_context: *EngineContext, player_id: Scene.Type, config: Scene.CreateConfig) !void {
     if (config.bAddSceneName) {
         var name_component: NameComponent = .empty;
-        try name_component.mName.appendSlice(self.mECSManager.Keep(), "New Scene");
+        try name_component.mName.appendSlice(self.mECSManager.KeepFor(NameComponent), "New Scene");
         _ = try self.AddComponent(engine_context, player_id, name_component);
     }
     if (config.bAddSceneUUID) {

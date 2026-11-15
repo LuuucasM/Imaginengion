@@ -8,6 +8,8 @@ const Program = @This();
 /// EditorProgram (src/Editor.zig) or a game's GameProgram (src/Game.zig)
 const Impl = @import("root").Program;
 _Impl: Impl = .{},
+/// The program's node of the memory tree, under Application's (Application.Init)
+mMemory: @import("../Core/Allocators.zig").MemoryNode = .{ .mName = "Program" },
 
 /// `args` are the executable's command line arguments
 pub fn Init(self: *Program, engine_context: *EngineContext, args: std.process.Args) !void {

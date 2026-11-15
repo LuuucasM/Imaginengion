@@ -3,6 +3,7 @@ const ComponentManager = @import("ComponentManager.zig").ComponentManager;
 const Transaction = @import("Transaction.zig");
 const Transactions = @import("Transactions.zig");
 const Tracy = @import("../Core/Tracy.zig");
+const MemoryNode = @import("../Core/Allocators.zig").MemoryNode;
 const EngineContext = @import("../Core/EngineContext.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
 const EventManager = @import("../Events/EventManager.zig");
@@ -55,6 +56,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             .mRemovalHook = null,
             .mRunDepth = null,
             .mTransactions = null,
+            .mMemory = .{},
         };
 
         /// Told about each removal and destroy just before it happens, made right away or drained from the queue,
@@ -93,19 +95,34 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         /// The transactions layer (Transactions), null for an ECS it doesn't know. While a transaction is open on the calling
         /// thread (Transactions.Current), components are read and changed through it, see Transaction
         mTransactions: ?*const Transactions,
+        /// This ECS's node of the memory tree, with a node for each component array under it (Init)
+        mMemory: MemoryNode,
 
-        /// `keep_allocator` is the Keep of whoever owns this ECS (the engine, or one world): its storage, its queues, and the
-        /// memory every component in it owns (handed to the component's Deinit and Clone)
+        /// `keep_allocator` is the Keep of whoever owns this ECS (the engine, or one world). Given a node's Keep, the ECS gets
+        /// a node of its own under it (Allocators.MemoryNode), and its storage, its queues and the memory every component
+        /// in it owns (handed to the component's Deinit and Clone) are taken through that; given any other allocator (a
+        /// test's), through that allocator itself
         pub fn Init(self: *Self, keep_allocator: std.mem.Allocator) !void {
             _ValidateCompList(components_types);
             const zone = Tracy.ZoneInit(debug_name ++ "::Init", @src());
             defer zone.Deinit();
-            try self.mComponentManager.Init(keep_allocator);
+            const keep = if (MemoryNode.FromAllocator(keep_allocator)) |parent| blk: {
+                self.mMemory.Init(parent.Context(), debug_name);
+                //inside its owner's struct by value
+                self.mMemory.Attach(parent, @sizeOf(Self), true);
+                break :blk self.mMemory.Keep();
+            } else keep_allocator;
+            try self.mComponentManager.Init(keep);
         }
 
-        /// The Keep given to Init
+        /// The ECS's own Keep: its node's when it has one (Init), for what is the ECS's own (its queues, its staging)
         pub fn Keep(self: Self) std.mem.Allocator {
             return self.mComponentManager.mKeep;
+        }
+
+        /// The Keep of `component_type`'s array, for what a component of that type owns (ComponentManager.KeepFor)
+        pub fn KeepFor(self: Self, comptime component_type: type) std.mem.Allocator {
+            return self.mComponentManager.KeepFor(component_type);
         }
 
         pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
@@ -117,6 +134,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             self.mECSEventManager.Deinit(self.Keep());
             self.mStagingArena.promote(self.Keep()).deinit();
             self.mStaged.deinit(self.Keep());
+            self.mMemory.Detach();
         }
 
         pub fn SetRemovalHook(self: *Self, hook: RemovalHook) void {
@@ -172,19 +190,19 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         pub const SlotOf = ComponentManagerT.SlotOf;
 
         //---------------entity lifetime--------------
-        pub fn CreateEntity(self: *Self, keep_allocator: std.mem.Allocator) !entity_t {
+        pub fn CreateEntity(self: *Self) !entity_t {
             const zone = Tracy.ZoneInit(debug_name ++ "::CreateEntity", @src());
             defer zone.Deinit();
 
-            const new_entity_id = try self._CreateID(keep_allocator);
-            _ = try self.mComponentManager.AddComponent(keep_allocator, new_entity_id, EntityTagComponent{});
+            const new_entity_id = try self._CreateID();
+            _ = try self.mComponentManager.AddComponent(new_entity_id, EntityTagComponent{});
 
             return new_entity_id;
         }
 
-        fn CreateScript(self: *Self, keep_allocator: std.mem.Allocator) !entity_t {
-            const new_entity_id = try self._CreateID(keep_allocator);
-            _ = try self.mComponentManager.AddComponent(keep_allocator, new_entity_id, ScriptTagComponent{});
+        fn CreateScript(self: *Self) !entity_t {
+            const new_entity_id = try self._CreateID();
+            _ = try self.mComponentManager.AddComponent(new_entity_id, ScriptTagComponent{});
 
             return new_entity_id;
         }
@@ -192,7 +210,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         // returns an active id that has only its SkipFieldComponent, reusing a destroyed id when there is one. An open
         // transaction writes it down, to destroy it if it is dropped. A speculating one refuses (error.RunSerially): ids
         // come from the shared free list, and the hook is run again on its own
-        fn _CreateID(self: *Self, keep_allocator: std.mem.Allocator) !entity_t {
+        fn _CreateID(self: *Self) !entity_t {
             const transaction = self._OpenTransaction();
             if (transaction) |open| {
                 if (open.RefuseSpeculative()) |err| return err;
@@ -203,7 +221,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                 const next_id = self.mNextID;
                 std.debug.assert(!self.IsActiveEntity(next_id));
 
-                try self.mComponentManager.CreateNewEntity(keep_allocator, next_id);
+                try self.mComponentManager.CreateNewEntity(next_id);
                 self.mNextID += 1; // only consume the id once it has actually been created
                 break :blk next_id;
             };
@@ -243,8 +261,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             const new_entity_id = if (self.GetComponent(ChildComponent, original_entity_id)) |child_component|
                 try self.AddChild(engine_context, child_component.mParent, child_type)
             else switch (child_type) {
-                .Entity => try self.CreateEntity(keep_allocator),
-                .Script => try self.CreateScript(keep_allocator),
+                .Entity => try self.CreateEntity(),
+                .Script => try self.CreateScript(),
             };
 
             // the adds still staged for anything, found in one pass over the queue rather than one per node of the
@@ -332,7 +350,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             }
             if (self.mComponentManager.IsTag(component_ind) or !self._Queues()) {
                 self._CheckStorageChange(component_ind, "Adding");
-                try self.mComponentManager.AddStaged(self.Keep(), new_entity_id, component_ind, staged_component);
+                try self.mComponentManager.AddStaged(new_entity_id, component_ind, staged_component);
             } else {
                 try self._QueueStagedAdd(self.Keep(), new_entity_id, component_ind, staged_component);
             }
@@ -493,10 +511,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             const zone = Tracy.ZoneInit(debug_name ++ "::AddChild", @src());
             defer zone.Deinit();
 
-            const keep_allocator = self.Keep();
             const new_entity_id = switch (child_type) {
-                .Entity => try self.CreateEntity(keep_allocator),
-                .Script => try self.CreateScript(keep_allocator),
+                .Entity => try self.CreateEntity(),
+                .Script => try self.CreateScript(),
             };
 
             try self._InternalLinkChild(engine_context, entity_id, new_entity_id);
@@ -783,14 +800,14 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
                     if (self._Queues()) {
                         try self._QueueStagedAdd(keep_allocator, id, op.mComponentInd, staged);
                     } else {
-                        try self.mComponentManager.AddStaged(keep_allocator, id, op.mComponentInd, staged);
+                        try self.mComponentManager.AddStaged(id, op.mComponentInd, staged);
                     }
                 },
                 .Tag => {
                     if (!self.IsActiveEntity(id)) return;
                     const has = self.mComponentManager.HasComponentInd(op.mComponentInd, id);
                     if (op.mOn and !has) {
-                        try self.mComponentManager.AddTagInd(keep_allocator, id, op.mComponentInd);
+                        try self.mComponentManager.AddTagInd(id, op.mComponentInd);
                         var no_value: u8 = 0;
                         _ = try self.mECSEventManager.Dispatch(engine_context, .{ .AddComponent = .{ .mEntityID = id, .mComponentInd = op.mComponentInd, .mData = &no_value } });
                     } else if (!op.mOn and has) {
@@ -946,7 +963,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             }
 
             self._CheckStorageChange(ComponentInd(component_t), "Adding");
-            const component_ptr = try self.mComponentManager.AddComponent(self.Keep(), entity_id, new_component);
+            const component_ptr = try self.mComponentManager.AddComponent(entity_id, new_component);
 
             _ = try self.mECSEventManager.Dispatch(engine_context, .{ .AddComponent = .{
                 .mEntityID = entity_id,
@@ -1168,7 +1185,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             const zone = Tracy.ZoneInit(debug_name ++ "::_InternalAddComponent", @src());
             defer zone.Deinit();
 
-            try self.mComponentManager.AddStaged(self.Keep(), entity_id, component_ind, staged);
+            try self.mComponentManager.AddStaged(entity_id, component_ind, staged);
         }
 
         // deinitializes every component still staged, for when the queue is dropped unprocessed

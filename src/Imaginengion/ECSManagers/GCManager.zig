@@ -103,7 +103,7 @@ pub fn ProcessConfig(self: GCManager, engine_context: *EngineContext, gamecontex
     }
     if (config.bAddNameComponent) {
         const name_component = try self.mECSManager.AddComponentSync(engine_context, gamecontext_id, GCComponents.NameComponent.empty);
-        name_component.mName.appendSlice(self.mECSManager.Keep(), "New Game Context");
+        name_component.mName.appendSlice(self.mECSManager.KeepFor(NameComponent), "New Game Context");
     }
 }
 
@@ -117,7 +117,7 @@ pub fn OnManagerEvents(_: *GCManager, _: *EngineContext, event: EventData.EventT
 pub fn ApplyConfig(self: *GCManager, engine_context: *EngineContext, gamecontext_id: GameContext.Type, config: GameContext.CreateConfig) !void {
     if (config.bAddNameComponent) {
         var name_component: NameComponent = .empty;
-        try name_component.mName.appendSlice(self.mECSManager.Keep(), "New Game Context");
+        try name_component.mName.appendSlice(self.mECSManager.KeepFor(NameComponent), "New Game Context");
         _ = try self.AddComponent(engine_context, gamecontext_id, name_component);
     }
     if (config.bAddUUIDComponent) {

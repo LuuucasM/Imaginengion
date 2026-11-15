@@ -57,7 +57,7 @@ const TestWorld = struct {
         //as the editor has it (EditorProgram), so a theme's sizes are the overlay's own units (StyleSystem.ThemeUnit)
         engine_context.mEditorWorld.mOverlayScaleMode = .ConstantPixelSize;
         self.mScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
-        try self.mTheme.FromJson(engine_context, THEME);
+        try self.mTheme.FromJson(engine_context, engine_context.Keep(), THEME);
         return self;
     }
 
@@ -377,7 +377,7 @@ test "the engine's default theme reads, with every style the editor's look needs
 
     const contents = try std.Io.Dir.cwd().readFileAlloc(engine_context.Io(), UIManager.DEFAULT_THEME_PATH, engine_context.Scratch(), .unlimited);
     var theme: ThemeAsset = .{};
-    try theme.FromJson(engine_context, contents);
+    try theme.FromJson(engine_context, engine_context.Keep(), contents);
     for ([_][]const u8{ "Window", "Header", "Button", "Field", "Tab", "Title", "Popup", "Text", "Caret", "Scrollbar", "AxisX", "AxisY", "AxisZ", "AxisW", "Checkbox", "Separator", "Swatch", "TextDim", "MenuBar", "MenuCheck", "Arrow" }) |name| {
         if (theme.GetStyle(name) == null) {
             std.debug.print("the default theme has no style '{s}'\n", .{name});
@@ -415,7 +415,7 @@ test "a style names a theme file of its own, and is taken out of it instead of t
     try engine_context.mUIManager.Init(engine_context);
     try engine_context.mEditorWorld.Init(engine_context);
     var editor_theme = ThemeAsset{};
-    try editor_theme.FromJson(engine_context, THEME);
+    try editor_theme.FromJson(engine_context, engine_context.Keep(), THEME);
     defer {
         editor_theme.Deinit(engine_context, engine_context.Keep());
         engine_context.mEditorWorld.Deinit(engine_context);

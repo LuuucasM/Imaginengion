@@ -85,7 +85,7 @@ pub const GetComponent = Core.GetComponent;
 pub const GetComponentMut = Core.GetComponentMut;
 
 pub const HasComponent = Core.HasComponent;
-pub const Keep = Core.Keep;
+pub const KeepFor = Core.KeepFor;
 
 pub const GetName = Core.GetName;
 pub const SetName = Core.SetName;
@@ -168,7 +168,7 @@ pub fn AddOverlay(self: Player, engine_context: *EngineContext, scene: Scene) !P
 
     var name_component: PlayerNameComponent = .empty;
     const name = if (scene.HasComponent(PlayerNameComponent)) scene.GetName() else "Overlay";
-    const keep_allocator = child.Keep();
+    const keep_allocator = child.KeepFor(PlayerNameComponent);
     name_component.mName.appendSlice(keep_allocator, name) catch |err| {
         name_component.Deinit(engine_context, keep_allocator);
         return err;
