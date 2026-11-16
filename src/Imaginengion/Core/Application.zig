@@ -18,6 +18,7 @@ const sdl = @import("CImports.zig").sdl;
 const Tracy = @import("Tracy.zig");
 const Profiler = @import("Profiler.zig");
 const Allocators = @import("Allocators.zig");
+const CAllocators = @import("CAllocators.zig");
 
 const Application: type = @This();
 
@@ -38,6 +39,8 @@ mMemory: Allocators.MemoryNode = .{ .mName = "Application" },
 pub fn Init(self: *Application, init: std.process.Init.Minimal) !void {
     const zone = Tracy.ZoneInit("Application::Init", @src());
     defer zone.Deinit();
+    //the C libraries' memory is counted from the start: their allocators can only be swapped before they take anything
+    CAllocators.Hook();
     if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO)) {
         return error.SDLInitFail;
     }
@@ -49,6 +52,7 @@ pub fn Init(self: *Application, init: std.process.Init.Minimal) !void {
     self.mMemory.Init(&self.mEngineContext, "Application");
     self.mMemory.mSize = @sizeOf(Application);
     self.mEngineContext._Internal.Memory.Attach(&self.mMemory, @sizeOf(EngineContext), true);
+    CAllocators.Attach(&self.mEngineContext._Internal.Memory);
     self.mProgram.mMemory.Init(&self.mEngineContext, "Program");
     self.mProgram.mMemory.Attach(&self.mMemory, @sizeOf(Program), true);
     try self.mEngineContext.Init(init.environ);
@@ -68,6 +72,7 @@ pub fn Deinit(self: *Application) void {
     self.mProgram.Deinit(&self.mEngineContext);
     self.mEngineContext.DeInit();
     sdl.SDL_Quit();
+    CAllocators.Detach();
 }
 
 /// Starts the main loop of the engine.

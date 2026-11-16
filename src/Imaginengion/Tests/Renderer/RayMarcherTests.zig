@@ -1094,10 +1094,11 @@ test "walking the BVH finds the same color as testing every shape, on random sce
 
 //==================================walking into a text's letters==================================
 
-/// A text the way the renderer draws one from the world's tree (Renderer.FillLayer): a stand in shape in the world
-/// tree's leaf, its letters' shapes after every other, and its letter tree (BVH.BuildInOrder over their layout boxes)
-/// after the world tree's nodes. Its letters are placed from their layout boxes the way ShapeGeometry.GlyphBox places
-/// them: their centers off its left bound, stretched, turned and moved, their sizes stretched
+/// A text the way the renderer draws one from the world's tree (Renderer.FillLayer): a shape a ray never hits in the
+/// world tree's leaf, its letters' shapes after every other, and its letter tree (BVH.BuildInOrder over their layout
+/// boxes), each node placed where the text is, hung under that leaf (BVH.GraftTrees). Its letters are placed from their
+/// layout boxes the way ShapeGeometry.GlyphBox places them: their centers off its left bound, stretched, turned and
+/// moved, their sizes stretched
 const TestText = struct {
     Position: Vec3(f32),
     Rotation: Quat(f32),
@@ -1141,7 +1142,7 @@ fn TraceTexts(quads: []const TestShape, texts: []const TestText, shadings: []con
     var nodes: std.ArrayList(BVH.Node) = .empty;
     defer nodes.deinit(allocator);
 
-    //the world tree over the quads and one stand in for each text, boxed around its letters
+    //the world tree over the quads and one item for each text, boxed around its letters
     var items: std.ArrayList(BVH.Item) = .empty;
     defer items.deinit(allocator);
     for (quads, 0..) |quad, i| try items.append(allocator, .{ .Id = @intCast(i), .Bounds = SDFFunc.aabbIMShape(quad.Shape), .Mask = BVH.Mask.RENDER });
@@ -1150,43 +1151,57 @@ fn TraceTexts(quads: []const TestShape, texts: []const TestText, shadings: []con
         for (text.Letters) |letter| bounds = bounds.Union(SDFFunc.aabbIMShape(text.LetterShape(letter)));
         try items.append(allocator, .{ .Id = @intCast(quads.len + i), .Bounds = bounds, .Mask = BVH.Mask.RENDER });
     }
-    try BVH.Build(allocator, items.items, &nodes);
+    var world_nodes: std.ArrayList(BVH.Node) = .empty;
+    defer world_nodes.deinit(allocator);
+    try BVH.Build(allocator, items.items, &world_nodes);
     for (items.items) |item| {
         if (item.Id < quads.len) {
             try shapes.append(allocator, quads[item.Id].Shape);
             try surfaces.append(allocator, quads[item.Id].Surface);
             continue;
         }
-        const text = texts[item.Id - quads.len];
-        //where its letters are is filled in below, once they're added
-        const axes = Renderer2D.TextLayoutAxes(text.Position, text.Rotation, text.Stretch, text.LeftBound).?;
-        try shapes.append(allocator, .{ .AxisX = axes[0], .AxisY = axes[1], .AxisZ = axes[2], .Size = .{ 0, 0, 0 }, .Params = .{ 0, 0, 0, 0 }, .Type = .Text, .MaskIndex = NO_MASK, .SurfaceIndex = undefined, .Flags = 0 });
+        //a text's own shape is never hit: its letters are drawn instead
+        const zero = [4]f32{ 0, 0, 0, 0 };
+        try shapes.append(allocator, .{ .AxisX = zero, .AxisY = zero, .AxisZ = zero, .Size = .{ 0, 0, 0 }, .Params = zero, .Type = .None, .MaskIndex = NO_MASK, .SurfaceIndex = undefined, .Flags = 0 });
         try surfaces.append(allocator, .{ .ShadingHandle = 0, .BorderShadingHandle = 0, .BorderWidth = 0 });
     }
 
-    //then each text's letters and letter tree, in the text's order
-    var letter_tree: std.ArrayList(BVH.Node) = .empty;
-    defer letter_tree.deinit(allocator);
+    //then each text's letters, in the text's order, and its letter tree placed where it is, under the leaf that holds it
+    var letter_trees = std.ArrayList([]BVH.Node).empty;
+    defer {
+        for (letter_trees.items) |tree| allocator.free(tree);
+        letter_trees.deinit(allocator);
+    }
+    var grafts: std.ArrayList(BVH.Graft) = .empty;
+    defer grafts.deinit(allocator);
     var letter_items: std.ArrayList(BVH.Item) = .empty;
     defer letter_items.deinit(allocator);
     for (texts, 0..) |text, text_ind| {
-        const stand_in_ind = for (items.items, 0..) |item, i| {
+        const item_ind = for (items.items, 0..) |item, i| {
             if (item.Id == quads.len + text_ind) break i;
+        } else unreachable;
+        const leaf = for (world_nodes.items, 0..) |node, node_ind| {
+            if (node.IsLeaf() and item_ind >= node.FirstItem() and item_ind < node.FirstItem() + node.ItemCount()) break node_ind;
         } else unreachable;
         letter_items.clearRetainingCapacity();
         for (text.Letters, 0..) |letter, i| try letter_items.append(allocator, .{ .Id = @intCast(i), .Bounds = letter, .Mask = BVH.Mask.RENDER });
+        var letter_tree: std.ArrayList(BVH.Node) = .empty;
         try BVH.BuildInOrder(allocator, letter_items.items, text.LineStarts, &letter_tree);
-        shapes.items[stand_in_ind].Params = Renderer2D.TextParamsOf(.{
-            .FirstNode = @intCast(nodes.items.len),
-            .NodeCount = @intCast(letter_tree.items.len),
-            .FirstLetter = @intCast(shapes.items.len),
-        });
-        try nodes.appendSlice(allocator, letter_tree.items);
+        const placed = try letter_tree.toOwnedSlice(allocator);
+        try letter_trees.append(allocator, placed);
+        for (placed) |*node| node.SetBounds(SDFFunc.aabbIMShape(text.LetterShape(node.Bounds())));
+        try grafts.append(allocator, .{ .Leaf = @intCast(leaf), .Nodes = placed, .FirstItem = @intCast(shapes.items.len) });
         for (text.Letters) |letter| {
             try shapes.append(allocator, text.LetterShape(letter));
             try surfaces.append(allocator, TEXT_LETTER_SURFACE);
         }
     }
+    std.sort.block(BVH.Graft, grafts.items, {}, struct {
+        fn Before(_: void, a: BVH.Graft, b: BVH.Graft) bool {
+            return a.Leaf < b.Leaf;
+        }
+    }.Before);
+    try BVH.GraftTrees(allocator, allocator, world_nodes.items, grafts.items, &nodes);
     //draw order is buffer order
     for (shapes.items, 0..) |*shape, i| shape.SurfaceIndex = @intCast(i);
 
@@ -1211,7 +1226,7 @@ fn TraceTexts(quads: []const TestShape, texts: []const TestText, shadings: []con
     return marcher.GenerateColor(FakeSample, &TEXTURES);
 }
 
-test "walking into texts' letter trees finds the same color as testing every letter, however the texts are turned and stretched" {
+test "walking texts' letter trees hung under the world tree finds the same color as testing every letter, however the texts are turned and stretched" {
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{
         ColorShading(RED),

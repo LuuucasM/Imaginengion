@@ -1,7 +1,5 @@
 const std = @import("std");
 const ShapeData = @import("Renderer2D.zig").ShapeData;
-const TextLettersOf = @import("Renderer2D.zig").TextLettersOf;
-const TextLetters = @import("Renderer2D.zig").TextLetters;
 const ShapeSurface = @import("Renderer2D.zig").ShapeSurface;
 
 const MathTypes = @import("../Math/MathTypes.zig");
@@ -143,8 +141,7 @@ fn HitShape(comptime features: Features, ray: Ray, shape: ShapeData) HitInfo {
         .Merge => if (features.Merges) SDFFunc.rayIMMerge(ray, shape) else .miss,
         .Box => SDFFunc.rayIMBox(ray, shape),
         .Sphere => SDFFunc.rayIMSphere(ray, shape),
-        //a stand in for its letters, which the search walks into instead (NearestByBVH)
-        .None, .Text => .miss,
+        .None => .miss,
     };
 }
 
@@ -191,7 +188,7 @@ fn TieRank(shape_type: ShapeType) u32 {
         .Quad => 0,
         .Merge, .Box, .Sphere => 1,
         .Glyph => 2,
-        .None, .Text => 3,
+        .None => 3,
     };
 }
 
@@ -695,15 +692,14 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             if (self.Accepts(ray, shape, drawn.Hit, sample_sampler, textures_array)) nearest.* = .{ .Order = order, .Hit = drawn.Hit, .Exit = drawn.Exit };
         }
 
-        /// The shapes of one BVH leaf, `count` of them from `first`, checked nearest first: each is ray tested, then the
-        /// ones that beat the nearest so far are checked (Accepts) in order along the ray, stopping at the first that's
-        /// really drawn, since every one after it is further away. Whatever order the leaf holds them in, a stack of
-        /// shapes facing the ray costs one check, not one per shape that was nearest for a moment. Every loop over the
-        /// leaf is unrolled, so each slot is read with a constant index and stays in a register: a runtime indexed array
-        /// would sit in slow local memory. Returns which slots hold a text's stand in (ShapeType.Text), one bit each, for
-        /// NearestByBVH to walk into next
-        fn ConsiderLeaf(self: *Self, ray: Ray, first: u32, count: u32, start: EdgeStart, nearest: *Candidate, sample_sampler: anytype, textures_array: textures_array_type) u32 {
-            var text_slots: u32 = 0;
+        /// The shapes of one BVH leaf, checked nearest first: each is ray tested, then the ones that beat the nearest so
+        /// far are checked (Accepts) in order along the ray, stopping at the first that's really drawn, since every one
+        /// after it is further away. Whatever order the leaf holds them in, a stack of shapes facing the ray costs one
+        /// check, not one per shape that was nearest for a moment. Every loop over the leaf is unrolled, so each slot is
+        /// read with a constant index and stays in a register: a runtime indexed array would sit in slow local memory
+        fn ConsiderLeaf(self: *Self, ray: Ray, leaf: BVHNode, start: EdgeStart, nearest: *Candidate, sample_sampler: anytype, textures_array: textures_array_type) void {
+            const first = leaf.FirstItem();
+            const count = leaf.ItemCount();
 
             //where along the ray each slot's shape is hit, none for one that's missed, skipped or can't win
             var orders: [BVH.MAX_LEAF_ITEMS]HitOrder = undefined;
@@ -714,7 +710,6 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                     const shape: ShapeData = self.mShapes[shape_ind];
                     self.Count(.ShapeTests);
                     self.Loaded(ShapeData);
-                    if (shape.Type == .Text) text_slots |= 1 << slot;
                     const drawn = DrawnHitOn(features, ray, shape, shape_ind == start.Inside);
                     if (drawn.Hit.IsHit()) {
                         const hit_order = HitOrder.Of(drawn.Hit.T, shape, shape_ind);
@@ -730,7 +725,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 inline for (orders) |order| {
                     if (order.Before(best)) best = order;
                 }
-                if (best.Shape == NO_SHAPE) return text_slots;
+                if (best.Shape == NO_SHAPE) return;
 
                 //its hit again, rather than keeping every slot's whole hit in registers for the one or two checked
                 const shape: ShapeData = self.mShapes[best.Shape];
@@ -740,13 +735,12 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 self.LoadedForAccept(shape);
                 if (self.Accepts(ray, shape, drawn.Hit, sample_sampler, textures_array)) {
                     nearest.* = .{ .Order = best, .Hit = drawn.Hit, .Exit = drawn.Exit };
-                    return text_slots;
+                    return;
                 }
                 inline for (&orders) |*order| {
                     if (order.Shape == best.Shape) order.* = .none;
                 }
             }
-            return text_slots;
         }
 
         //==================================the two direct searches (DirectSearch)==================================
@@ -756,127 +750,60 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// one usually starts before its box does, so it's passed over without going in: a menu in front of a panel is
         /// searched first, and everything behind it skipped. Each inner node has its left child right after it and its
         /// right one in its Info. A leaf's shapes are a run of mShapes, since the tree was built over them in that order.
-        ///
-        /// A leaf can hold a text's stand in (ShapeType.Text): before the world walk goes on, it walks that text's own
-        /// letter tree (WorldBVH.TextEntry) with the ray moved into the text's layout space by the stand in's axes
-        /// (Renderer2D.TextLayoutAxes), which reaches every box at the same distance along it, so the nearest hit so far
-        /// prunes it the same. That walk is the stack free one in the tree's own fixed order (BVH.WalkRay), since a
-        /// letter tree is small, and its leaves are its letters' Glyph shapes, considered with the ray as it is.
-        ///
-        /// Both walks are one loop, each turn finding the next leaf from whichever is going, so the shader has one
-        /// ConsiderLeaf. The driver inlines every call, and a second, inside the letter walk, made it too big for the
-        /// driver to compile in any reasonable time (the editor hung at startup)
+        /// A text's letters are a branch like any other, its letter tree hung under the leaf that holds the text
+        /// (BVH.GraftTrees)
         fn NearestByBVH(self: *Self, ray: Ray, start: EdgeStart, sample_sampler: anytype, textures_array: textures_array_type) Candidate {
             var nearest = self.NoCandidate();
             const inv_dir = Vec3(f32).FromVector(@as(Vec3(f32).VectorT, @splat(1.0)) / ray.Dir.ToVector());
-            //the farther children still to come back to, the next on top: at most one per level (BVH.MAX_DEPTH)
-            var waiting: [BVH.MAX_DEPTH]u32 = undefined;
+            //the farther children still to come back to, the next on top: at most one per level (BVH.MAX_GRAFTED_DEPTH)
+            var waiting: [BVH.MAX_GRAFTED_DEPTH]u32 = undefined;
             var waiting_count: u32 = 0;
 
             self.Count(.BVHNodes);
             self.Loaded(BVHNode);
             if (NodeEnter(ray, inv_dir, self.mBVHNodes[0], nearest.Order) == null) return nearest;
-            //the world node to go to next, and whether the walk has just finished one (a leaf, or a node neither of
-            //whose children the ray reaches), so it goes back to the last waiting child next
             var node_ind: u32 = 0;
-            var world_back = false;
-
-            //the slots of the texts' stand ins the last world leaf held, still to walk into, from its first shape
-            var text_slots: u32 = 0;
-            var text_leaf: u32 = 0;
-            //the letter tree being walked, its next node counting from its root, and the ray in its text's layout space
-            var letters = TextLetters{ .FirstNode = 0, .NodeCount = 0, .FirstLetter = 0 };
-            var letter_node: u32 = 0;
-            var local = ray;
-            var local_inv_dir = inv_dir;
-
             while (true) {
-                //the next leaf to consider: from the letter tree being walked, else the next text the last world leaf
-                //held, else the world tree's
-                var leaf_first: u32 = 0;
-                var leaf_count: u32 = 0;
-                var world_leaf = false;
-                if (letter_node < letters.NodeCount) {
-                    const node: BVHNode = self.mBVHNodes[letters.FirstNode + letter_node];
+                const node: BVHNode = self.mBVHNodes[node_ind];
+                self.Loaded(BVHNode);
+                if (node.IsLeaf()) {
+                    self.ConsiderLeaf(ray, node, start, &nearest, sample_sampler, textures_array);
+                } else {
+                    const left_ind = node_ind + 1;
+                    const right_ind = node.RightChild();
                     self.Count(.BVHNodes);
                     self.Loaded(BVHNode);
-                    if (NodeEnter(local, local_inv_dir, node, nearest.Order) == null) {
-                        letter_node = node.Skip;
-                        continue;
-                    }
-                    if (!node.IsLeaf()) {
-                        letter_node += 1;
-                        continue;
-                    }
-                    leaf_first = letters.FirstLetter + node.FirstItem();
-                    leaf_count = node.ItemCount();
-                    letter_node = node.Skip;
-                } else if (text_slots != 0) {
-                    //the lowest slot left: its text's letter tree is walked next
-                    var slot: u32 = 0;
-                    while (text_slots & (@as(u32, 1) << @intCast(slot)) == 0) slot += 1;
-                    text_slots &= ~(@as(u32, 1) << @intCast(slot));
-                    const text: ShapeData = self.mShapes[text_leaf + slot];
-                    self.Loaded(ShapeData);
-                    letters = TextLettersOf(text);
-                    letter_node = 0;
-                    local = .{ .Origin = SDFFunc.ShapeLocalPoint(text, ray.Origin), .Dir = SDFFunc.ShapeLocalDir(text, ray.Dir) };
-                    local_inv_dir = Vec3(f32).FromVector(@as(Vec3(f32).VectorT, @splat(1.0)) / local.Dir.ToVector());
-                    continue;
-                } else if (world_back) {
-                    //back to the last waiting child whose box still starts before the nearest hit, or done
-                    world_back = false;
-                    while (waiting_count > 0) {
-                        waiting_count -= 1;
-                        const next = waiting[waiting_count];
-                        self.Count(.BVHNodes);
-                        self.Loaded(BVHNode);
-                        if (NodeEnter(ray, inv_dir, self.mBVHNodes[next], nearest.Order) != null) {
-                            node_ind = next;
-                            break;
-                        }
-                    } else return nearest;
-                    continue;
-                } else {
-                    const node: BVHNode = self.mBVHNodes[node_ind];
+                    const left_enter = NodeEnter(ray, inv_dir, self.mBVHNodes[left_ind], nearest.Order);
+                    self.Count(.BVHNodes);
                     self.Loaded(BVHNode);
-                    world_back = true;
-                    if (node.IsLeaf()) {
-                        leaf_first = node.FirstItem();
-                        leaf_count = node.ItemCount();
-                        world_leaf = true;
-                    } else {
-                        const left_ind = node_ind + 1;
-                        const right_ind = node.RightChild();
-                        self.Count(.BVHNodes);
-                        self.Loaded(BVHNode);
-                        const left_enter = NodeEnter(ray, inv_dir, self.mBVHNodes[left_ind], nearest.Order);
-                        self.Count(.BVHNodes);
-                        self.Loaded(BVHNode);
-                        const right_enter = NodeEnter(ray, inv_dir, self.mBVHNodes[right_ind], nearest.Order);
-                        if (left_enter) |left| {
-                            world_back = false;
-                            if (right_enter) |right| {
-                                //both: into the one the ray reaches first, the other waits
-                                const left_first = left <= right;
-                                waiting[waiting_count] = if (left_first) right_ind else left_ind;
-                                waiting_count += 1;
-                                node_ind = if (left_first) left_ind else right_ind;
-                            } else node_ind = left_ind;
-                        } else if (right_enter != null) {
-                            world_back = false;
-                            node_ind = right_ind;
-                        }
+                    const right_enter = NodeEnter(ray, inv_dir, self.mBVHNodes[right_ind], nearest.Order);
+                    if (left_enter) |left| {
+                        if (right_enter) |right| {
+                            //both: into the one the ray reaches first, the other waits
+                            const left_first = left <= right;
+                            waiting[waiting_count] = if (left_first) right_ind else left_ind;
+                            waiting_count += 1;
+                            node_ind = if (left_first) left_ind else right_ind;
+                        } else node_ind = left_ind;
+                        continue;
+                    }
+                    if (right_enter != null) {
+                        node_ind = right_ind;
                         continue;
                     }
                 }
 
-                //the one place the search considers a leaf's shapes
-                const found_texts = self.ConsiderLeaf(ray, leaf_first, leaf_count, start, &nearest, sample_sampler, textures_array);
-                if (world_leaf) {
-                    text_slots = found_texts;
-                    text_leaf = leaf_first;
-                }
+                //back to the last waiting child whose box still starts before the nearest hit, or done
+                while (waiting_count > 0) {
+                    waiting_count -= 1;
+                    const next = waiting[waiting_count];
+                    self.Count(.BVHNodes);
+                    self.Loaded(BVHNode);
+                    if (NodeEnter(ray, inv_dir, self.mBVHNodes[next], nearest.Order) != null) {
+                        node_ind = next;
+                        break;
+                    }
+                } else return nearest;
             }
         }
 
@@ -952,7 +879,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                     .Merge => SDFProgram.sdIMMerge(point, shape, self.mInstrs, self.mParts),
                     //solids are only ever direct: marching into and out of one would need the march to know when
                     //it's inside, which nothing needs yet
-                    .Box, .Sphere, .None, .Text => continue,
+                    .Box, .Sphere, .None => continue,
                 };
                 const dist = SDFProgram.Masked(self.mMasks, self.mInstrs, self.mParts, shape.MaskIndex, shape_dist, point);
                 //an exact tie goes the way HitOrder settles one: a quad before a glyph, then the one drawn first
@@ -1002,7 +929,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 //the box only says where it could be: the program says whether it is there. Left out of a variant
                 //without merges (Features), along with all it calls
                 .Merge => features.Merges and SDFProgram.Eval(self.mInstrs, self.mParts, SDFProgram.MergeRange(shape), hit_point, SDFProgram.NoColor{}, {}, {}).D <= 0,
-                .None, .Text => false,
+                .None => false,
             };
         }
 
@@ -1081,7 +1008,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                         .ShadingHandle = if (in_band) surface.BorderShadingHandle else surface.ShadingHandle,
                     };
                 },
-                .None, .Text => return .none,
+                .None => return .none,
             }
         }
 

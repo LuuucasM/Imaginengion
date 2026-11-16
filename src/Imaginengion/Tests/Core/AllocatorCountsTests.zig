@@ -5,6 +5,7 @@ const std = @import("std");
 
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Allocators = @import("../../Core/Allocators.zig");
+const CAllocators = @import("../../Core/CAllocators.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
 const NameComponent = @import("../../ECSComponents/EComponents.zig").NameComponent;
@@ -273,4 +274,41 @@ test "a component's memory is taken and freed through the same node: its array's
         var arrays = ecs.Children();
         while (arrays.next()) |array| try std.testing.expectEqual(@as(i64, 0), array.mCounts.Read().KeepBytes);
     }
+}
+
+test "a C library's memory is counted on its node as it takes, grows, shrinks and frees it" {
+    //called straight, not through the library: swapping its real functions in a test could free C's memory here
+    const Stb = CAllocators.Functions(.StbImage);
+    const counts = &CAllocators.gNodes.getPtr(.StbImage).mCounts;
+    const before = counts.Read();
+
+    const memory: [*]u8 = @ptrCast(Stb.Malloc(100).?);
+    try std.testing.expectEqual(0, @intFromPtr(memory) % 16);
+    @memset(memory[0..100], 7);
+    try std.testing.expectEqual(before.KeepBytes + 100, counts.Read().KeepBytes);
+    try std.testing.expectEqual(before.KeepAllocs + 1, counts.Read().KeepAllocs);
+
+    //what fits is kept as it grows and shrinks
+    const grown: [*]u8 = @ptrCast(Stb.Realloc(memory, 5000).?);
+    try std.testing.expectEqual(7, grown[99]);
+    try std.testing.expectEqual(before.KeepBytes + 5000, counts.Read().KeepBytes);
+    const shrunk: [*]u8 = @ptrCast(Stb.Realloc(grown, 10).?);
+    try std.testing.expectEqual(7, shrunk[9]);
+    try std.testing.expectEqual(before.KeepBytes + 10, counts.Read().KeepBytes);
+
+    //calloc's is zeroed, and realloc of nothing is malloc
+    const zeroed: [*]u8 = @ptrCast(Stb.Calloc(4, 8).?);
+    try std.testing.expect(std.mem.allEqual(u8, zeroed[0..32], 0));
+    const fresh = Stb.Realloc(null, 3).?;
+    try std.testing.expectEqual(before.KeepBytes + 10 + 32 + 3, counts.Read().KeepBytes);
+
+    Stb.Free(shrunk);
+    Stb.Free(zeroed);
+    Stb.Free(fresh);
+    Stb.Free(null);
+    try std.testing.expectEqual(before.KeepBytes, counts.Read().KeepBytes);
+    try std.testing.expectEqual(before.KeepAllocs, counts.Read().KeepAllocs);
+    try std.testing.expect(counts.Read().KeepPeak >= before.KeepBytes + 5000);
+    //the other libraries' are left alone
+    try std.testing.expectEqual(0, CAllocators.gNodes.getPtr(.MiniAudio).mCounts.Read().KeepAllocs);
 }

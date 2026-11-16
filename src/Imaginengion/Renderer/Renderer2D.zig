@@ -79,8 +79,7 @@ pub const ShapeData = extern struct {
     //half extents for the box shapes, quads and glyphs, including their THICKNESS_2D depth
     Size: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT,
     //what Type says. A quad's corner radii: world units, already scaled and clamped to at most half the smaller
-    //side, in SDFFunctions' order (x top right, y bottom right, z top left, w bottom left). Unused (0) for a glyph. A
-    //text's stand in: where its letter tree and letters are (TextParamsOf)
+    //side, in SDFFunctions' order (x top right, y bottom right, z top left, w bottom left). Unused (0) for a glyph
     Params: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT align(16),
     Type: ShapeType,
     //the mask it is cut by (SDFProgram.MaskData), which is cut by the masks around it in turn. SDFProgram.NO_MASK for none
@@ -100,45 +99,6 @@ pub fn ShapeAxes(center: Vec3(f32), rotation: Quat(f32)) [3]Vec4(f32).ArrayT {
         axis.* = .{ world_axis.x, world_axis.y, world_axis.z, -world_axis.Dot(center) };
     }
     return axes;
-}
-
-/// The AxisX, AxisY and AxisZ of a text's stand in shape (ShapeType.Text): the move from its tree's space into the
-/// text's layout space (WorldBVH.LetterBounds), the way back from where ShapeGeometry.GlyphBox places a letter: off the
-/// text's `position`, turned by `rotation`, stretched by `stretch`, its `left_bound` at x 0. Each axis is divided by its
-/// stretch rather than kept unit length, so a ray moved by them reaches every box at the same distance along it (t) as
-/// before. Null for a text stretched to nothing, which draws nothing
-pub fn TextLayoutAxes(position: Vec3(f32), rotation: Quat(f32), stretch: Vec2(f32), left_bound: f32) ?[3]Vec4(f32).ArrayT {
-    if (stretch.x == 0 or stretch.y == 0) return null;
-    const scales = [3]f32{ stretch.x, stretch.y, 1 };
-    const offsets = [3]f32{ left_bound, 0, 0 };
-    var axes: [3]Vec4(f32).ArrayT = undefined;
-    for (rotation.Axes(), scales, offsets, &axes) |world_axis, scale, offset, *axis| {
-        const row = world_axis.DivScalar(scale);
-        axis.* = .{ row.x, row.y, row.z, offset - row.Dot(position) };
-    }
-    return axes;
-}
-
-/// Where a text's letter tree and letters are, which its stand in shape (ShapeType.Text) holds in its Params
-pub const TextLetters = struct {
-    /// its letter tree's root in the pass's BVH nodes, and how many nodes it has. Its nodes' children and Skips count
-    /// from its root (WorldBVH.TextEntry)
-    FirstNode: u32,
-    NodeCount: u32,
-    /// its first letter's shape. Its leaves' items count from here
-    FirstLetter: u32,
-};
-
-/// A stand in's Params from where its letters are: whole numbers as floats, exact up to 2^24, past BVH.MAX_ITEMS. Not
-/// bit cast, since a GPU may flush the tiny floats small numbers' bits make to 0
-pub fn TextParamsOf(letters: TextLetters) Vec4(f32).ArrayT {
-    return .{ @floatFromInt(letters.FirstNode), @floatFromInt(letters.NodeCount), @floatFromInt(letters.FirstLetter), 0 };
-}
-
-/// Where a stand in's letters are, from its Params (TextParamsOf)
-pub fn TextLettersOf(shape: ShapeData) TextLetters {
-    const params: Vec4(f32) = .FromVector(shape.Params);
-    return .{ .FirstNode = @intFromFloat(params.x), .NodeCount = @intFromFloat(params.y), .FirstLetter = @intFromFloat(params.z) };
 }
 
 /// What only the shape that was hit needs: which surfaces it is shaded with. The same slots for every kind of shape,
@@ -182,8 +142,9 @@ pub const RenderBuffers = struct {
     /// Every shape is direct for now. Set by FinishTree or FinishView
     mDirectCount: u32 = 0,
 
-    /// The BVH over the direct shapes: the world's tree for this layer (FinishTree), whose leaves' items are runs of the
-    /// shapes, since they were added in its order. Empty for a view filled the old way (FinishView)
+    /// The BVH over the direct shapes: the world's tree for this layer with its texts' letter trees under their leaves
+    /// (FinishTree), whose leaves' items are runs of the shapes, since they were added in its order. Empty for a view
+    /// filled the old way (FinishView)
     mBVHNodes: std.ArrayList(BVH.Node) = .empty,
     /// mBVHNodes on the GPU, uploaded with the shapes. Its node count is the root's Skip, and there is no tree when
     /// there are no direct shapes
@@ -304,24 +265,8 @@ pub const RenderBuffers = struct {
             .Quad => self.mQuadCount += 1,
             .Glyph => self.mGlyphCount += 1,
             .Merge => self.mMergeCount += 1,
-            .Box, .Sphere, .None, .Text => {},
+            .Box, .Sphere, .None => {},
         }
-    }
-
-    /// A text's stand in shape (ShapeType.Text), moving a ray into its layout space by `axes` (TextLayoutAxes). Where
-    /// its letters are goes in its Params once they are added (TextParamsOf)
-    pub fn AddTextStandIn(self: *RenderBuffers, keep_allocator: std.mem.Allocator, axes: [3]Vec4(f32).ArrayT) !void {
-        try self.AddShape(keep_allocator, .{
-            .AxisX = axes[0],
-            .AxisY = axes[1],
-            .AxisZ = axes[2],
-            .Size = .{ 0, 0, 0 },
-            .Params = .{ 0, 0, 0, 0 },
-            .Type = .Text,
-            .MaskIndex = SDFProgram.NO_MASK,
-            .SurfaceIndex = undefined,
-            .Flags = 0,
-        }, .{ .ShadingHandle = 0, .BorderShadingHandle = 0, .BorderWidth = 0 });
     }
 
     /// A shape that is never drawn, which a ray test always misses: a tree item with nothing to draw this render (a
@@ -342,12 +287,12 @@ pub const RenderBuffers = struct {
         }, .{ .ShadingHandle = 0, .BorderShadingHandle = 0, .BorderWidth = 0 });
     }
 
-    /// Done adding one shape for each of `tree`'s items, in its order, then its texts' letters' shapes: the tree's nodes
-    /// are this layer's BVH, followed by `letter_nodes`, the texts' letter trees their stand ins point into. Every shape
-    /// is direct. Each item's shape's SurfaceIndex, which is what a tie at exactly the same depth goes by
+    /// Done adding one shape for each of `tree`'s items, in its order, then its texts' letters' shapes: this layer's BVH
+    /// is the tree with `grafts`, the texts' letter trees, hung under their leaves (BVH.GraftTrees). Every shape is
+    /// direct. Each item's shape's SurfaceIndex, which is what a tie at exactly the same depth goes by
     /// (SDFRayMarcher.HitOrder), becomes its item's Order, so the tie goes the same way whatever shape the tree is in.
     /// A letter's is its own place, after every item's, its texts in the order they were added
-    pub fn FinishTree(self: *RenderBuffers, keep_allocator: std.mem.Allocator, scratch_allocator: std.mem.Allocator, tree: *const WorldBVH.LayerTree, letter_nodes: []const BVH.Node) !void {
+    pub fn FinishTree(self: *RenderBuffers, keep_allocator: std.mem.Allocator, scratch_allocator: std.mem.Allocator, tree: *const WorldBVH.LayerTree, grafts: []const BVH.Graft) !void {
         const items = tree.mItems.items;
         std.debug.assert(self.mShapeBufferBase.items.len >= items.len);
         const added = try scratch_allocator.dupe(ShapeSurface, self.mSurfaceBufferBase.items[0..items.len]);
@@ -355,8 +300,7 @@ pub const RenderBuffers = struct {
             self.mSurfaceBufferBase.items[item.Order] = added[shape.SurfaceIndex];
             shape.SurfaceIndex = item.Order;
         }
-        try self.mBVHNodes.appendSlice(keep_allocator, tree.mNodes.items);
-        try self.mBVHNodes.appendSlice(keep_allocator, letter_nodes);
+        try BVH.GraftTrees(keep_allocator, scratch_allocator, tree.mNodes.items, grafts, &self.mBVHNodes);
         self.mDirectCount = @intCast(self.mShapeBufferBase.items.len);
     }
 

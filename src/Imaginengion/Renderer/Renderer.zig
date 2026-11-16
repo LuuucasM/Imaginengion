@@ -160,10 +160,6 @@ pub const ShapeType = enum(u32) {
     Box,
     /// a solid sphere, its radius in each of Size's components, so its box is its bounds
     Sphere,
-    /// a text's stand in in its tree's leaf (WorldBVH's one item per text): never hit itself. Its axes move a ray into
-    /// the text's layout space (Renderer2D.TextLayoutAxes), where the search walks the text's own letter tree, whose
-    /// leaves are its letters' Glyph shapes. Its Params say where those are (Renderer2D.TextParamsOf)
-    Text,
 };
 
 pub const ShadingBuffers = struct {
@@ -501,15 +497,13 @@ fn FillLayer(self: *Renderer, engine_context: *EngineContext, world: *WorldManag
     }
     try buffers.SetMasks(keep_allocator, &masks);
 
-    //one shape for each item, a text's its stand in, which points into its letters added after every item's shape
+    //one shape for each item. A text's is never hit (its letters are drawn instead, added after every item's shape)
     var texts: std.ArrayList(DrawnText) = .empty;
     for (items, drawn, item_masks, 0..) |item, draws, mask, item_ind| {
         const before = buffers.mShapeBufferBase.items.len;
         if (draws) {
             if (item.Kind == .Text) {
-                if (try DrawTextStandIn(engine_context, world, buffers, item)) {
-                    try texts.append(scratch_allocator, .{ .Item = item, .Shape = @intCast(item_ind), .Mask = mask });
-                }
+                if (DrawsLetters(world, item)) try texts.append(scratch_allocator, .{ .Item = item, .Shape = @intCast(item_ind), .Mask = mask });
             } else {
                 try self.DrawItem(engine_context, world, buffers, item, mask, &masks, view, colliders);
                 if (buffers.mShapeBufferBase.items.len != before) stats.TotalObjects += 1;
@@ -519,26 +513,58 @@ fn FillLayer(self: *Renderer, engine_context: *EngineContext, world: *WorldManag
         std.debug.assert(buffers.mShapeBufferBase.items.len == before + 1);
     }
 
-    //each text's letters and letter tree, in the order the texts were added (WorldItem.Order) rather than the tree's,
-    //so a tie between two texts' letters goes the same way however the tree is built. Its nodes go after the world
-    //tree's, its letters' shapes after every item's
+    //each text's letters, in the order the texts were added (WorldItem.Order) rather than the tree's, so a tie between
+    //two texts' letters goes the same way however the tree is built. Its letter tree, placed where the text is now,
+    //hangs under the leaf that holds the text, so the GPU walks one tree
     std.sort.pdq(DrawnText, texts.items, {}, DrawnText.AddedBefore);
-    var letter_nodes: std.ArrayList(BVH.Node) = .empty;
+    const leaf_of = try LeafOfEachItem(scratch_allocator, tree.mNodes.items, items.len);
+    var grafts: std.ArrayList(BVH.Graft) = .empty;
     var text_fills: std.AutoHashMapUnmanaged(Entity.Type, Renderer2D.TextFill) = .empty;
     for (texts.items) |text| {
         const entry = world.mBVH.mTexts.items[text.Item.Index];
-        buffers.mShapeBufferBase.items[text.Shape].Params = Renderer2D.TextParamsOf(.{
-            .FirstNode = @intCast(tree.mNodes.items.len + letter_nodes.items.len),
-            .NodeCount = entry.NodeCount,
-            .FirstLetter = @intCast(buffers.mShapeBufferBase.items.len),
+        try grafts.append(scratch_allocator, .{
+            .Leaf = leaf_of[text.Shape],
+            .Nodes = try PlacedLetterTree(scratch_allocator, world, text.Item, entry),
+            .FirstItem = @intCast(buffers.mShapeBufferBase.items.len),
         });
-        try letter_nodes.appendSlice(scratch_allocator, world.mBVH.LetterTree(entry));
         try self.DrawLetters(engine_context, world, buffers, text, entry, &masks, &text_fills, stats);
     }
-    try buffers.FinishTree(keep_allocator, scratch_allocator, tree, letter_nodes.items);
+    //in their leaves' order, as GraftTrees takes them; a stable sort keeps one leaf's texts in the order they were added
+    std.sort.block(BVH.Graft, grafts.items, {}, struct {
+        fn Before(_: void, a: BVH.Graft, b: BVH.Graft) bool {
+            return a.Leaf < b.Leaf;
+        }
+    }.Before);
+    try buffers.FinishTree(keep_allocator, scratch_allocator, tree, grafts.items);
 }
 
-/// A text drawn this render: its item, the place of its stand in shape and the mask its letters are cut by
+/// The leaf each of a tree's `item_count` items is in
+fn LeafOfEachItem(scratch_allocator: std.mem.Allocator, nodes: []const BVH.Node, item_count: usize) ![]u32 {
+    const leaf_of = try scratch_allocator.alloc(u32, item_count);
+    for (nodes, 0..) |node, node_ind| {
+        if (!node.IsLeaf()) continue;
+        for (leaf_of[node.FirstItem()..][0..node.ItemCount()]) |*leaf| leaf.* = @intCast(node_ind);
+    }
+    return leaf_of;
+}
+
+/// A copy of a drawn text's letter tree, each node boxed where the text is now (WorldBVH.PlacedInk), to hang under its
+/// leaf. Its right children and items still count from its root and its first letter
+fn PlacedLetterTree(scratch_allocator: std.mem.Allocator, world: *WorldManager, item: WorldBVH.WorldItem, entry: WorldBVH.TextEntry) ![]BVH.Node {
+    const zone = Tracy.ZoneInit("Renderer::PlacedLetterTree", @src());
+    defer zone.Deinit();
+    zone.Value(entry.NodeCount);
+
+    const entity = world.GetEntity(item.Entity);
+    //DrawsLetters found both
+    const transform = entity.GetComponent(TransformComponent).?;
+    const params = ShapeGeometry.GetTextParams(transform, entity.GetComponent(TextComponent).?);
+    const nodes = try scratch_allocator.dupe(BVH.Node, world.mBVH.LetterTree(entry));
+    for (nodes) |*node| node.SetBounds(WorldBVH.PlacedInk(transform, params, node.Bounds()));
+    return nodes;
+}
+
+/// A text drawn this render: its item, its item's place (and its never hit shape's) and the mask its letters are cut by
 const DrawnText = struct {
     Item: WorldBVH.WorldItem,
     Shape: u32,
@@ -549,19 +575,17 @@ const DrawnText = struct {
     }
 };
 
-/// A text item's stand in shape (ShapeType.Text), its letters left for DrawLetters. False, adding nothing, for a text
-/// with nothing to draw: shown off, no letters, or stretched to nothing
-fn DrawTextStandIn(engine_context: *EngineContext, world: *WorldManager, buffers: *Renderer2D.RenderBuffers, item: WorldBVH.WorldItem) !bool {
+/// Whether a text item's letters are drawn (DrawLetters): not for a text with nothing to draw, shown off, no letters,
+/// or stretched to nothing
+fn DrawsLetters(world: *WorldManager, item: WorldBVH.WorldItem) bool {
     const entity = world.GetEntity(item.Entity);
     const transform = entity.GetComponent(TransformComponent) orelse return false;
     const surface = entity.GetComponent(SurfaceComponent) orelse return false;
     if (!surface.mShouldRender) return false;
     const text = entity.GetComponent(TextComponent) orelse return false;
     if (world.mBVH.mTexts.items[item.Index].NodeCount == 0) return false;
-    const params = ShapeGeometry.GetTextParams(transform, text);
-    const axes = Renderer2D.TextLayoutAxes(transform.GetWorldPosition(), transform.GetWorldRotation(), params.Stretch, params.LeftBound) orelse return false;
-    try buffers.AddTextStandIn(engine_context.Keep(), axes);
-    return true;
+    const stretch = ShapeGeometry.GetTextParams(transform, text).Stretch;
+    return stretch.x != 0 and stretch.y != 0;
 }
 
 /// One shape for each of a text's letters, in its letter tree's order (its letters' own), placed where the text is now.
@@ -569,7 +593,7 @@ fn DrawTextStandIn(engine_context: *EngineContext, world: *WorldManager, buffers
 fn DrawLetters(self: *Renderer, engine_context: *EngineContext, world: *WorldManager, buffers: *Renderer2D.RenderBuffers, text: DrawnText, entry: WorldBVH.TextEntry, masks: *const ShapeGeometry.ViewMasks, text_fills: *std.AutoHashMapUnmanaged(Entity.Type, Renderer2D.TextFill), stats: *RenderStats) !void {
     const keep_allocator = engine_context.Keep();
     const entity = world.GetEntity(text.Item.Entity);
-    //DrawTextStandIn found all of these
+    //DrawsLetters found all of these
     const transform = entity.GetComponent(TransformComponent).?;
     const surface = entity.GetComponent(SurfaceComponent).?;
     const text_component = entity.GetComponent(TextComponent).?;
@@ -611,7 +635,7 @@ fn Draws(world: *WorldManager, item: WorldBVH.WorldItem, item_mask: u4, scenes: 
     };
 }
 
-/// Draws one tree item other than a text (DrawTextStandIn), in its tree's units (no canvas). Adds at most one shape,
+/// Draws one tree item other than a text (DrawLetters), in its tree's units (no canvas). Adds at most one shape,
 /// none for one with nothing to draw
 fn DrawItem(self: *Renderer, engine_context: *EngineContext, world: *WorldManager, buffers: *Renderer2D.RenderBuffers, item: WorldBVH.WorldItem, mask: u32, masks: *const ShapeGeometry.ViewMasks, view: CameraView, colliders: ?Renderer2D.ColliderShadings) !void {
     const entity = world.GetEntity(item.Entity);

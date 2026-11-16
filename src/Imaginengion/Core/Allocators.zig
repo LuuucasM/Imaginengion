@@ -135,7 +135,7 @@ pub const Counts = struct {
         self.mScratchPeak = @max(self.mScratchPeak, self.mScratchLast);
     }
 
-    fn Took(self: *Counts, comptime alloc_type: AllocType, bytes: usize) void {
+    pub fn Took(self: *Counts, comptime alloc_type: AllocType, bytes: usize) void {
         const signed: i64 = @intCast(bytes);
         switch (alloc_type) {
             .Keep => {
@@ -147,7 +147,7 @@ pub const Counts = struct {
         }
     }
 
-    fn Gave(self: *Counts, comptime alloc_type: AllocType, bytes: usize) void {
+    pub fn Gave(self: *Counts, comptime alloc_type: AllocType, bytes: usize) void {
         switch (alloc_type) {
             .Keep => {
                 _ = self.mKeepBytes.fetchSub(@intCast(bytes), .monotonic);
@@ -159,7 +159,7 @@ pub const Counts = struct {
     }
 
     /// An allocation that grew or shrank in place, or moved
-    fn Changed(self: *Counts, comptime alloc_type: AllocType, old_bytes: usize, new_bytes: usize) void {
+    pub fn Changed(self: *Counts, comptime alloc_type: AllocType, old_bytes: usize, new_bytes: usize) void {
         const change = @as(i64, @intCast(new_bytes)) - @as(i64, @intCast(old_bytes));
         switch (alloc_type) {
             .Keep => {

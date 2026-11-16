@@ -221,8 +221,7 @@ pub fn aabbIMShape(shape: ShapeData) Aabb {
         .Merge => aabbIMBoxShape(shape),
         //a sphere's Size is its radius on every axis, so the box around it is exact
         .Box, .Sphere => aabbIMBoxShape(shape),
-        //never hit itself: its letters are shapes of their own
-        .None, .Text => Aabb.empty,
+        .None => Aabb.empty,
     };
 }
 

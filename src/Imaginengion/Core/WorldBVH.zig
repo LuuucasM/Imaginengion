@@ -6,8 +6,9 @@
 //! One flat item per thing a ray or a box can meet: a quad, a text, a merge (its root standing for all its parts) and a
 //! collider. A text is one item however many letters it has: its letters are in a small tree of its own, in its own
 //! layout space (TextEntry), which only its layout changes. Where the text is, how it is turned or stretched never does,
-//! so moving it refits one box, and the renderer walks into its letter tree from the text's item (like a mesh's own
-//! tree under an object in a bigger engine's world tree). Each item carries its entity, its scene and which systems it is for (BVH.Mask), so a walk
+//! so moving it refits one box. The renderer hangs each drawn text's letter tree, placed where the text is now, under
+//! the leaf that holds the text (BVH.GraftTrees), so the GPU walks one tree (like a mesh's own tree under an object in
+//! a bigger engine's world tree). Each item carries its entity, its scene and which systems it is for (BVH.Mask), so a walk
 //! passes over what isn't its own: a view over scenes it doesn't show, physics over what is only drawn.
 const std = @import("std");
 const Tracy = @import("Tracy.zig");
@@ -208,11 +209,16 @@ pub fn TextBounds(self: *const WorldBVH, transform: *const TransformComponent, t
     var bounds = Aabb.empty;
     if (mask & BVH.Mask.PICK != 0) bounds = bounds.Union(BoxBounds(ShapeGeometry.TextBoxFromMetrics(transform, text, entry.Metrics, null)));
     if (mask & BVH.Mask.RENDER != 0 and entry.NodeCount > 0) {
-        const ink = self.LetterTree(entry)[0].Bounds();
-        const params = ShapeGeometry.GetTextParams(transform, text);
-        bounds = bounds.Union(BoxBounds(ShapeGeometry.TextInkBox(transform, params, .{ .x = ink.Min.x, .y = ink.Min.y }, .{ .x = ink.Max.x, .y = ink.Max.y }, null)));
+        bounds = bounds.Union(PlacedInk(transform, ShapeGeometry.GetTextParams(transform, text), self.LetterTree(entry)[0].Bounds()));
     }
     return bounds;
+}
+
+/// A box in a text's layout space (a letter tree node's, LetterBounds), placed in its tree's units by the text's
+/// transform, the way ShapeGeometry.GlyphBox places each letter: what the text's item is boxed with, and each letter
+/// tree node the renderer hangs under it (Renderer.FillLayer), so the two can't disagree
+pub fn PlacedInk(transform: *const TransformComponent, params: ShapeGeometry.TextParams, layout: Aabb) Aabb {
+    return BoxBounds(ShapeGeometry.TextInkBox(transform, params, .{ .x = layout.Min.x, .y = layout.Min.y }, .{ .x = layout.Max.x, .y = layout.Max.y }, null));
 }
 
 /// A collider's box grown by how far it can reach this substep (CollisionManager.SubstepReach), so any two the narrow

@@ -97,7 +97,7 @@ pub const Node = extern struct {
     fn SetMask(self: *Node, mask: u32) void {
         self.Info = (self.Info & ~(INFO_MASK_FIELD << INFO_COUNT_BITS)) | ((mask & INFO_MASK_FIELD) << INFO_COUNT_BITS);
     }
-    fn SetBounds(self: *Node, bounds: Aabb) void {
+    pub fn SetBounds(self: *Node, bounds: Aabb) void {
         self.MinX = bounds.Min.x;
         self.MinY = bounds.Min.y;
         self.MinZ = bounds.Min.z;
@@ -511,6 +511,109 @@ pub fn Refit(items: []const Item, nodes: []Node) void {
     }
 }
 
+//==================================grafting==================================
+
+/// The deepest a leaf can be in a tree made by GraftTrees: a tree's own depth, the links that hang a leaf's grafts
+/// under it (one per graft, at most one per item a leaf holds), and a graft's own depth. A walk that keeps the farther
+/// child to come back to can be holding this many (SDFRayMarcher.NearestByBVH)
+pub const MAX_GRAFTED_DEPTH: u32 = MAX_DEPTH + MAX_LEAF_ITEMS + MAX_DEPTH;
+
+/// A tree of its own to hang under one of another tree's leaves (GraftTrees), like a text's letter tree under the world
+/// tree's leaf that holds the text
+pub const Graft = struct {
+    /// the leaf it goes under, in the other tree
+    Leaf: u32,
+    /// its nodes, already boxed in the other tree's space: its root first, its right children counting from its root
+    /// and its leaves' items from FirstItem
+    Nodes: []const Node,
+    /// where its leaves' items start among the other tree's
+    FirstItem: u32,
+};
+
+/// `tree` with each of `grafts` hung under its leaf, into `out` (cleared first, its memory kept). A leaf with grafts
+/// becomes a chain of links: each link's left child is the next piece (the leaf itself, then each graft in the order
+/// given), its right child the next link, the last link's the last graft, and every box above a graft holds it. So
+/// the leaf keeps its own items and a walk goes into each graft like any other branch, with no idea it was ever a tree
+/// of its own. `grafts` are in order of their leaves; `scratch` is only used while it works. Depth first like any
+/// tree, every Skip filled in
+pub fn GraftTrees(allocator: std.mem.Allocator, scratch: std.mem.Allocator, tree: []const Node, grafts: []const Graft, out: *std.ArrayList(Node)) !void {
+    const zone = Tracy.ZoneInit("BVH::GraftTrees", @src());
+    defer zone.Deinit();
+
+    out.clearRetainingCapacity();
+    if (tree.len == 0) {
+        std.debug.assert(grafts.len == 0);
+        return;
+    }
+    var graft_nodes: usize = 0;
+    for (grafts) |graft| graft_nodes += graft.Nodes.len + 1;
+    try out.ensureTotalCapacity(allocator, tree.len + graft_nodes);
+
+    //where each of the tree's nodes lands, for its parent's right child
+    const new_inds = try scratch.alloc(u32, tree.len);
+    defer scratch.free(new_inds);
+
+    var next_graft: usize = 0;
+    for (tree, new_inds, 0..) |node, *new_ind, node_ind| {
+        new_ind.* = @intCast(out.items.len);
+        const first_graft = next_graft;
+        while (next_graft < grafts.len and grafts[next_graft].Leaf == node_ind) next_graft += 1;
+        const these = grafts[first_graft..next_graft];
+        if (these.len == 0) {
+            out.appendAssumeCapacity(node);
+            continue;
+        }
+        std.debug.assert(node.IsLeaf() and these.len <= node.ItemCount());
+
+        //each link, then its piece right after it as its left child (the leaf, then each graft), then the next link as
+        //its right. Their boxes are filled in at the end
+        for (0..these.len) |link| {
+            const link_ind = out.items.len;
+            out.appendAssumeCapacity(Node.Init(0, 0));
+            if (link == 0) out.appendAssumeCapacity(node) else AppendGraft(out, these[link - 1]);
+            out.items[link_ind].SetIndex(@intCast(out.items.len));
+        }
+        AppendGraft(out, these[these.len - 1]);
+    }
+    std.debug.assert(next_graft == grafts.len);
+
+    //the tree's own inner nodes' right children, now they've moved
+    for (tree, new_inds) |node, new_ind| {
+        if (!node.IsLeaf()) out.items[new_ind].SetIndex(new_inds[node.RightChild()]);
+    }
+    FillSkips(out.items);
+    RefitInner(out.items);
+    zone.Value(out.items.len);
+}
+
+/// Every inner node's box and mask from its children's, going back up, the leaves' left as they are: the links' boxes,
+/// and every box above a graft grown to hold it if it reaches past its leaf's
+fn RefitInner(nodes: []Node) void {
+    var node_ind = nodes.len;
+    while (node_ind > 0) {
+        node_ind -= 1;
+        const node = &nodes[node_ind];
+        if (node.IsLeaf()) continue;
+        const left = nodes[node_ind + 1];
+        const right = nodes[node.RightChild()];
+        node.SetBounds(left.Bounds().Union(right.Bounds()));
+        node.SetMask(left.ItemMask() | right.ItemMask());
+    }
+}
+
+/// One graft's nodes onto the end of `out`, its right children and items moved to where they are now
+fn AppendGraft(out: *std.ArrayList(Node), graft: Graft) void {
+    const root: u32 = @intCast(out.items.len);
+    for (graft.Nodes) |graft_node| {
+        var node = graft_node;
+        if (node.IsLeaf()) {
+            std.debug.assert(graft.FirstItem + node.FirstItem() < MAX_ITEMS);
+            node.SetIndex(graft.FirstItem + node.FirstItem());
+        } else node.SetIndex(root + node.RightChild());
+        out.appendAssumeCapacity(node);
+    }
+}
+
 /// What a built tree looks like, for the editor's stats: how much a walk has to go through. The deeper its leaves, the
 /// more boxes every ray tests on its way down
 pub const TreeStats = struct {
@@ -555,7 +658,7 @@ pub fn Stats(nodes: []const Node) TreeStats {
 
     //the branches still to go down, each with its depth. Going down one keeps the other, at most one per level
     const Branch = struct { Node: u32, Depth: u32 };
-    var waiting: [MAX_DEPTH + 1]Branch = undefined;
+    var waiting: [MAX_GRAFTED_DEPTH + 1]Branch = undefined;
     var waiting_count: usize = 1;
     waiting[0] = .{ .Node = 0, .Depth = 0 };
     while (waiting_count > 0) {

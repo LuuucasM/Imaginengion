@@ -33,6 +33,12 @@ fn RandomItems(random: std.Random, count: usize) ![]BVH.Item {
 /// over MAX_LEAF_ITEMS, every Skip leading just past its node's subtree, and every box and mask exactly that of
 /// everything under it
 fn ExpectValidTree(items: []const BVH.Item, nodes: []const BVH.Node) !void {
+    return ExpectWellFormed(items, nodes, true);
+}
+
+/// ExpectValidTree, with the leaves' runs in any order when `in_order` is false (a grafted tree: each graft's items
+/// sit where it says, not after the leaf before it), each item still in exactly one leaf
+fn ExpectWellFormed(items: []const BVH.Item, nodes: []const BVH.Node, in_order: bool) !void {
     if (items.len == 0) return std.testing.expectEqual(@as(usize, 0), nodes.len);
     try std.testing.expectEqual(@as(u32, @intCast(nodes.len)), nodes[0].Skip);
 
@@ -54,12 +60,18 @@ fn ExpectValidTree(items: []const BVH.Item, nodes: []const BVH.Node) !void {
     for (nodes, 0..) |node, i| try std.testing.expectEqual(@as(u32, @intCast(i)) + sizes[i], node.Skip);
 
     var next_item: u32 = 0;
+    var seen = try std.DynamicBitSetUnmanaged.initEmpty(std.testing.allocator, items.len);
+    defer seen.deinit(std.testing.allocator);
     for (nodes, 0..) |node, i| {
         var bounds = Aabb.empty;
         var mask: u32 = 0;
         if (node.IsLeaf()) {
-            try std.testing.expectEqual(next_item, node.FirstItem());
+            if (in_order) try std.testing.expectEqual(next_item, node.FirstItem());
             try std.testing.expect(node.ItemCount() >= 1 and node.ItemCount() <= BVH.MAX_LEAF_ITEMS);
+            for (node.FirstItem()..node.FirstItem() + node.ItemCount()) |item_ind| {
+                try std.testing.expect(!seen.isSet(item_ind));
+                seen.set(item_ind);
+            }
             next_item += node.ItemCount();
             for (items[node.FirstItem()..][0..node.ItemCount()]) |item| {
                 bounds = bounds.Union(item.Bounds);
@@ -299,6 +311,149 @@ test "a tree in order splits a run at the break nearest its middle, the earlier 
         defer nodes.deinit(std.testing.allocator);
         try std.testing.expectEqual(case.Split, FirstItemUnder(nodes.items, nodes.items[0].RightChild()));
     }
+}
+
+//==================================grafting==================================
+
+/// A tree with trees of their own hung under some of its leaves (BVH.GraftTrees), and every item: the tree's, then
+/// each graft's in the order they were hung
+const GraftedTree = struct {
+    Items: []BVH.Item,
+    Nodes: std.ArrayList(BVH.Node),
+
+    fn Deinit(self: *GraftedTree) void {
+        std.testing.allocator.free(self.Items);
+        self.Nodes.deinit(std.testing.allocator);
+    }
+};
+
+/// `tree_count` random items built into a tree, with one or more in order trees over runs of new random items hung under
+/// about half its leaves, never more than a leaf has items (like texts under the leaves holding them)
+fn RandomGraftedTree(random: std.Random, tree_count: usize) !GraftedTree {
+    const allocator = std.testing.allocator;
+    const tree_items = try RandomItems(random, tree_count);
+    defer allocator.free(tree_items);
+    var tree = try BuildTree(tree_items);
+    defer tree.deinit(allocator);
+
+    var items: std.ArrayList(BVH.Item) = .empty;
+    defer items.deinit(allocator);
+    try items.appendSlice(allocator, tree_items);
+    var graft_trees: std.ArrayList(std.ArrayList(BVH.Node)) = .empty;
+    defer {
+        for (graft_trees.items) |*graft_tree| graft_tree.deinit(allocator);
+        graft_trees.deinit(allocator);
+    }
+    var grafts: std.ArrayList(BVH.Graft) = .empty;
+    defer grafts.deinit(allocator);
+    for (tree.items, 0..) |node, node_ind| {
+        if (!node.IsLeaf() or random.boolean()) continue;
+        for (0..1 + random.uintLessThan(u32, node.ItemCount())) |_| {
+            const run = try RandomItems(random, 1 + random.uintLessThan(usize, 40));
+            defer allocator.free(run);
+            try graft_trees.append(allocator, try BuildInOrder(run, &.{}));
+            try grafts.append(allocator, .{ .Leaf = @intCast(node_ind), .Nodes = graft_trees.getLast().items, .FirstItem = @intCast(items.items.len) });
+            try items.appendSlice(allocator, run);
+        }
+    }
+    var nodes: std.ArrayList(BVH.Node) = .empty;
+    try BVH.GraftTrees(allocator, allocator, tree.items, grafts.items, &nodes);
+    return .{ .Items = try items.toOwnedSlice(allocator), .Nodes = nodes };
+}
+
+test "a grafted tree holds every item once, its own and its grafts', with every box exactly around what is under it" {
+    var prng = std.Random.DefaultPrng.init(0x6EAF7);
+    const random = prng.random();
+    for ([_]usize{ 1, 3, 5, 17, 64, 300 }) |count| {
+        for (0..4) |_| {
+            var grafted = try RandomGraftedTree(random, count);
+            defer grafted.Deinit();
+            try ExpectWellFormed(grafted.Items, grafted.Nodes.items, false);
+            try std.testing.expect(BVH.Stats(grafted.Nodes.items).Depth <= BVH.MAX_GRAFTED_DEPTH);
+        }
+    }
+}
+
+test "a ray walk over a grafted tree reaches every item the ray goes through, its grafts' too" {
+    var prng = std.Random.DefaultPrng.init(0x6EAF8);
+    const random = prng.random();
+    var grafted = try RandomGraftedTree(random, 120);
+    defer grafted.Deinit();
+    try std.testing.expect(grafted.Items.len > 400);
+    const max_t: f32 = 100;
+
+    var graft_hits: usize = 0;
+    for (0..400) |_| {
+        const ray = RandomRay(random);
+        const inv_dir = InvDir(ray);
+        var collect = CollectVisitor{ .Visited = try .initEmpty(std.testing.allocator, grafted.Items.len), .MaxT = max_t };
+        defer collect.Visited.deinit(std.testing.allocator);
+        BVH.WalkRay(grafted.Nodes.items, ray, max_t, BVH.Mask.RENDER, &collect);
+        for (grafted.Items, 0..) |item, i| {
+            const span = RayIntersect.RayAabb(ray.Origin, inv_dir, item.Bounds.Min, item.Bounds.Max) orelse continue;
+            if (span.Enter > max_t) continue;
+            try std.testing.expect(collect.Visited.isSet(i));
+            if (i >= 120) graft_hits += 1;
+        }
+    }
+    try std.testing.expect(graft_hits > 200);
+}
+
+test "a leaf's grafts hang off a chain of links: the leaf first, then each graft in the order given" {
+    var tree_items = [_]BVH.Item{
+        .{ .Id = 0, .Bounds = BoxAt(.{ .x = 0, .y = 0, .z = 0 }, 0.5), .Mask = BVH.Mask.RENDER },
+        .{ .Id = 1, .Bounds = BoxAt(.{ .x = 1, .y = 0, .z = 0 }, 0.5), .Mask = BVH.Mask.RENDER },
+    };
+    var tree = try BuildTree(&tree_items);
+    defer tree.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 1), tree.items.len);
+
+    //one tree of a single leaf, and one over five items in two leaves (0..2, 2..5)
+    const one = [_]BVH.Item{.{ .Id = 0, .Bounds = BoxAt(.{ .x = 0, .y = 5, .z = 0 }, 0.5), .Mask = BVH.Mask.PICK }};
+    var five: [5]BVH.Item = undefined;
+    for (&five, 0..) |*item, i| item.* = .{ .Id = @intCast(i), .Bounds = BoxAt(.{ .x = @floatFromInt(i), .y = -5, .z = 0 }, 0.5), .Mask = BVH.Mask.RENDER };
+    var one_tree = try BuildInOrder(&one, &.{});
+    defer one_tree.deinit(std.testing.allocator);
+    var five_tree = try BuildInOrder(&five, &.{});
+    defer five_tree.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 3), five_tree.items.len);
+
+    var nodes: std.ArrayList(BVH.Node) = .empty;
+    defer nodes.deinit(std.testing.allocator);
+    const grafts = [_]BVH.Graft{
+        .{ .Leaf = 0, .Nodes = one_tree.items, .FirstItem = 2 },
+        .{ .Leaf = 0, .Nodes = five_tree.items, .FirstItem = 3 },
+    };
+    try BVH.GraftTrees(std.testing.allocator, std.testing.allocator, tree.items, &grafts, &nodes);
+
+    //link, leaf, link, the one tree's leaf, then the five tree: its root and its two leaves
+    const n = nodes.items;
+    try std.testing.expectEqual(@as(usize, 7), n.len);
+    try std.testing.expect(!n[0].IsLeaf() and n[0].RightChild() == 2);
+    try std.testing.expectEqual(@as(u32, 0), n[1].FirstItem());
+    try std.testing.expect(!n[2].IsLeaf() and n[2].RightChild() == 4);
+    try std.testing.expectEqual(@as(u32, 2), n[3].FirstItem());
+    try std.testing.expect(!n[4].IsLeaf() and n[4].RightChild() == 6);
+    try std.testing.expectEqual(@as(u32, 3), n[5].FirstItem());
+    try std.testing.expectEqual(@as(u32, 5), n[6].FirstItem());
+    try std.testing.expectEqual([_]u32{ 7, 2, 7, 4, 7, 6, 7 }, [_]u32{ n[0].Skip, n[1].Skip, n[2].Skip, n[3].Skip, n[4].Skip, n[5].Skip, n[6].Skip });
+    //each link's box and mask are everything under it
+    try std.testing.expectEqual(n[1].Bounds().Union(n[2].Bounds()), n[0].Bounds());
+    try std.testing.expectEqual(n[3].Bounds().Union(n[4].Bounds()), n[2].Bounds());
+    try std.testing.expectEqual(@as(u32, BVH.Mask.RENDER | BVH.Mask.PICK), n[0].ItemMask());
+    try std.testing.expectEqual(@as(u32, BVH.Mask.RENDER | BVH.Mask.PICK), n[2].ItemMask());
+}
+
+test "a tree with nothing grafted comes out the same" {
+    var prng = std.Random.DefaultPrng.init(0x6EAF9);
+    const items = try RandomItems(prng.random(), 50);
+    defer std.testing.allocator.free(items);
+    var tree = try BuildTree(items);
+    defer tree.deinit(std.testing.allocator);
+    var nodes: std.ArrayList(BVH.Node) = .empty;
+    defer nodes.deinit(std.testing.allocator);
+    try BVH.GraftTrees(std.testing.allocator, std.testing.allocator, tree.items, &.{}, &nodes);
+    try std.testing.expectEqualSlices(BVH.Node, tree.items, nodes.items);
 }
 
 test "a tree's stats count its nodes, leaves and items, and how deep its leaves are" {

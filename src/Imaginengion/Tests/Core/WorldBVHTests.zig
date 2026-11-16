@@ -15,9 +15,6 @@ const TransformSystem = @import("../../Physics/TransformSystem.zig");
 const BVHBuildSystem = @import("../../Core/BVHBuildSystem.zig");
 const BVHRefitSystem = @import("../../Core/BVHRefitSystem.zig");
 const EngineStats = @import("../../Core/EngineStats.zig");
-const Renderer2D = @import("../../Renderer/Renderer2D.zig");
-const SDFFunctions = @import("../../Math/SDFFunctions.zig");
-const RayIntersect = @import("../../Math/RayIntersect.zig");
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec2 = MathTypes.Vec2;
 const Vec3 = MathTypes.Vec3;
@@ -238,7 +235,7 @@ test "quads, letters, merges and colliders each get items in their own layer, wi
     try ExpectTreeHoldsItems(overlay);
 }
 
-test "a text's stand in moves where each letter is placed back to where it is in its layout, at the same distance along a ray" {
+test "each node of a text's letter tree, placed where the text is, holds every letter under it where it is drawn" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
@@ -261,43 +258,25 @@ test "a text's stand in moves where each letter is placed back to where it is in
 
     const transform = text.GetComponent(TransformComponent).?;
     const params = ShapeGeometry.GetTextParams(transform, text.GetComponent(TextComponent).?);
-    const axes = Renderer2D.TextLayoutAxes(transform.GetWorldPosition(), transform.GetWorldRotation(), params.Stretch, params.LeftBound).?;
-    var stand_in: Renderer2D.ShapeData = undefined;
-    stand_in.AxisX = axes[0];
-    stand_in.AxisY = axes[1];
-    stand_in.AxisZ = axes[2];
-    const item_box = tree.mBVHItems.items[0].Bounds;
-    for (bvh.Letters(entry)) |letter| {
-        //where the renderer draws it, inside the text's one box
-        const placed = ShapeGeometry.GlyphBox(transform, params, letter, null);
-        try std.testing.expect(BoxHolds(item_box.Grow(0.0001), WorldBVH.BoxBounds(placed)));
-        //and back in its layout
-        try ExpectNear(WorldBVH.LetterBounds(letter).Center(), SDFFunctions.ShapeLocalPoint(stand_in, placed.Center));
-
-        //a ray to it reaches its layout box at the same distance along it as its placed one
-        const origin = Vec3(f32){ .x = -2, .y = 1, .z = 9 };
-        const dir = Unit(placed.Center.SubVec(origin));
-        const placed_bounds = WorldBVH.BoxBounds(placed);
-        const world_span = RayIntersect.RayAabb(origin, Inverse(dir), placed_bounds.Min, placed_bounds.Max).?;
-        const local_dir = SDFFunctions.ShapeLocalDir(stand_in, dir);
-        const layout_box = WorldBVH.LetterBounds(letter);
-        const local_span = RayIntersect.RayAabb(SDFFunctions.ShapeLocalPoint(stand_in, origin), Inverse(local_dir), layout_box.Min, layout_box.Max).?;
-        //the boxes differ (an axis lined up box around a turned one is bigger), but both hold the center
-        const center_t = @sqrt(placed.Center.SubVec(origin).Dot(placed.Center.SubVec(origin)));
-        try std.testing.expect(world_span.Enter <= center_t + 0.0001 and local_span.Enter <= center_t + 0.0001);
-        try std.testing.expect(local_span.Exit >= center_t - 0.0001);
-        try ExpectNear(placed.Center, origin.AddVec(dir.MulScalar(center_t)));
-        try ExpectNear(WorldBVH.LetterBounds(letter).Center(), SDFFunctions.ShapeLocalPoint(stand_in, origin).AddVec(local_dir.MulScalar(center_t)));
+    const nodes = bvh.LetterTree(entry);
+    const letters = bvh.Letters(entry);
+    for (nodes, 0..) |node, node_ind| {
+        const placed = WorldBVH.PlacedInk(transform, params, node.Bounds());
+        //every letter under it: the leaves from it up to its Skip
+        for (nodes[node_ind..node.Skip]) |under| {
+            if (!under.IsLeaf()) continue;
+            for (letters[under.FirstItem()..][0..under.ItemCount()]) |letter| {
+                try std.testing.expect(BoxHolds(placed.Grow(0.0001), WorldBVH.BoxBounds(ShapeGeometry.GlyphBox(transform, params, letter, null))));
+            }
+        }
     }
+    //and the text's one item holds its placed root, where the renderer hangs the tree
+    try std.testing.expect(BoxHolds(tree.mBVHItems.items[0].Bounds, WorldBVH.PlacedInk(transform, params, nodes[0].Bounds())));
     try ExpectTreeHoldsItems(tree);
 }
 
 fn Unit(v: Vec3(f32)) Vec3(f32) {
     return v.MulScalar(1 / @sqrt(v.Dot(v)));
-}
-
-fn Inverse(dir: Vec3(f32)) Vec3(f32) {
-    return .{ .x = 1 / dir.x, .y = 1 / dir.y, .z = 1 / dir.z };
 }
 
 test "a letter's box in canvas units, placed by a view's canvas, is the box that view draws it with" {
