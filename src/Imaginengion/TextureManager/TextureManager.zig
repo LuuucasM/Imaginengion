@@ -29,6 +29,13 @@ pub fn BindCompute(self: TextureManager, render_pass: *anyopaque) void {
     self._Impl.BindCompute(render_pass);
 }
 
+pub const Usage = Impl.Usage;
+
+/// How much of the atlas is in use, by size of texture
+pub fn GetUsage(self: *TextureManager) Usage {
+    return self._Impl.GetUsage();
+}
+
 pub fn Register(self: *TextureManager, engine_context: *EngineContext, pixels: ?*anyopaque, width: usize, height: usize) !u32 {
     return try self._Impl.Register(engine_context, pixels, width, height);
 }

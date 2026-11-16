@@ -94,6 +94,20 @@ pub fn ScratchArenaOf(engine_context: *EngineContext) *std.heap.ArenaAllocator {
     return &made.mArena;
 }
 
+/// A count of bytes in the largest unit it fills one of (1024 to the next), e.g. "12.3 MB"
+pub const Bytes = struct {
+    mBytes: i64,
+
+    pub fn format(self: Bytes, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        const units = [_][]const u8{ "B", "KB", "MB", "GB" };
+        var value: f64 = @floatFromInt(self.mBytes);
+        var unit: usize = 0;
+        while (@abs(value) >= 1024 and unit + 1 < units.len) : (unit += 1) value /= 1024;
+        if (unit == 0) return writer.print("{d} B", .{self.mBytes});
+        try writer.print("{d:.1} {s}", .{ value, units[unit] });
+    }
+};
+
 /// What one node of the memory tree has taken through its own Keep and Scratch, not the nodes under it, counted by
 /// MakeAllocatorVTable as it is taken. Atomic, since the
 /// job pool's threads take memory too. Signed: memory taken through one owner and freed through another (Allocators.zig)

@@ -106,7 +106,6 @@ const ComponentsPanel = @import("../EditorPanels/ComponentsPanel.zig");
 const ContentBrowserPanel = @import("../EditorPanels/ContentBrowserPanel.zig");
 const TmplEditPanel = @import("../EditorPanels/TmplEditPanel.zig");
 const ScriptsPanel = @import("../EditorPanels/ScriptsPanel.zig");
-const StatsPanel = @import("../EditorPanels/StatsPanel.zig");
 const ProfilerPanel = @import("../EditorPanels/ProfilerPanel.zig");
 const Profiler = @import("../Core/Profiler.zig");
 const SaveNotice = @import("../EditorPanels/SaveNotice.zig");
@@ -174,8 +173,6 @@ mContentBrowserPanel: ContentBrowserPanel = .{},
 mTmplEditPanels: std.ArrayList(TmplEditPanel) = .empty,
 /// The Scripts tab, in the editor UI
 mScriptsPanel: ScriptsPanel = .{},
-/// The Stats window, in the editor UI
-mStatsPanel: StatsPanel = .{},
 /// The Profiler window, in the editor UI: how long each zone takes, as a tree of where it was called from
 mProfilerPanel: ProfilerPanel = .{},
 /// The box in the editor UI's bottom right corner saying what was just saved
@@ -278,8 +275,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process
     //the shell: the menu bar's space, the viewport, the panels' panes
     self.mShell = try EditorShell.Build(engine_context, self.mEditorUIRoot, .{});
     self.mMenuBar = try EditorMenuBar.Build(engine_context, self.mShell.mMenuBar, .{});
-    self.mStatsPanel = try StatsPanel.Build(engine_context, self.mEditorUIScene, .{});
-    self.mProfilerPanel = try ProfilerPanel.Build(engine_context, self.mEditorUIScene, .{});
+    self.mProfilerPanel = try ProfilerPanel.Build(engine_context, self.mEditorUIScene, .Editor, .{});
     self.mSaveNotice = try SaveNotice.Build(engine_context, self.mEditorUIScene);
     self.mAssetHandlesPanel = try AssetHandlesPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mAudioBusesPanel = try AudioBusesPanel.Build(engine_context, self.mEditorUIScene, .{});
@@ -1194,7 +1190,6 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
     shown.set(.Components, self.mComponentsPanel.IsOpen());
     shown.set(.ContentBrowser, self.mContentBrowserPanel.IsOpen());
     shown.set(.Scripts, self.mScriptsPanel.IsOpen());
-    shown.set(.Stats, self.mStatsPanel.IsOpen());
     shown.set(.Profiler, self.mProfilerPanel.IsOpen());
     shown.set(.PickingDebug, self.mPickingDebugPanel.IsOpen());
     shown.set(.UIElement, self.mUIElementPanel.IsOpen());
@@ -1313,7 +1308,6 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
             .Components => try self.mComponentsPanel.Toggle(engine_context),
             .ContentBrowser => try self.mContentBrowserPanel.Toggle(engine_context),
             .Scripts => try self.mScriptsPanel.Toggle(engine_context),
-            .Stats => try self.mStatsPanel.Toggle(engine_context),
             .Profiler => try self.mProfilerPanel.Toggle(engine_context),
             .PickingDebug => try self.mPickingDebugPanel.Toggle(engine_context),
             .UIElement => try self.mUIElementPanel.Toggle(engine_context),
@@ -1341,7 +1335,6 @@ fn UpdateShell(self: *EditorProgram, engine_context: *EngineContext) !void {
     defer zone.Deinit();
     try self.mShell.ShowPlayPreview(engine_context, self.mShowPlayPreview);
     try self.UpdateMenuBar(engine_context);
-    try self.mStatsPanel.Update(engine_context, &engine_context.mEngineStats);
     try self.mProfilerPanel.Update(engine_context, &Profiler.gMain);
     try self.mAssetHandlesPanel.Update(engine_context);
     try self.mAudioBusesPanel.Update(engine_context);

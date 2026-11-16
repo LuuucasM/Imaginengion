@@ -5,11 +5,11 @@ const std = @import("std");
 
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Allocators = @import("../../Core/Allocators.zig");
+const GPUAllocator = @import("../../Core/GPUAllocator.zig");
 const CAllocators = @import("../../Core/CAllocators.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
 const NameComponent = @import("../../ECSComponents/EComponents.zig").NameComponent;
-const StatsPanel = @import("../../EditorPanels/StatsPanel.zig");
 const WorldManager = @import("../../Core/WorldManager.zig");
 
 fn NewContext() !*EngineContext {
@@ -122,14 +122,13 @@ test "play's copy of the game world is the Simulate world's memory, and none of 
 
 test "byte counts are shown in the largest unit they fill" {
     var buffer: [32]u8 = undefined;
-    try std.testing.expectEqualStrings("12 B", try std.fmt.bufPrint(&buffer, "{f}", .{StatsPanel.Bytes{ .mBytes = 12 }}));
-    try std.testing.expectEqualStrings("1.5 KB", try std.fmt.bufPrint(&buffer, "{f}", .{StatsPanel.Bytes{ .mBytes = 1536 }}));
-    try std.testing.expectEqualStrings("3.0 MB", try std.fmt.bufPrint(&buffer, "{f}", .{StatsPanel.Bytes{ .mBytes = 3 * 1024 * 1024 }}));
-    try std.testing.expectEqualStrings("-2.0 KB", try std.fmt.bufPrint(&buffer, "{f}", .{StatsPanel.Bytes{ .mBytes = -2048 }}));
+    try std.testing.expectEqualStrings("12 B", try std.fmt.bufPrint(&buffer, "{f}", .{Allocators.Bytes{ .mBytes = 12 }}));
+    try std.testing.expectEqualStrings("1.5 KB", try std.fmt.bufPrint(&buffer, "{f}", .{Allocators.Bytes{ .mBytes = 1536 }}));
+    try std.testing.expectEqualStrings("3.0 MB", try std.fmt.bufPrint(&buffer, "{f}", .{Allocators.Bytes{ .mBytes = 3 * 1024 * 1024 }}));
+    try std.testing.expectEqualStrings("-2.0 KB", try std.fmt.bufPrint(&buffer, "{f}", .{Allocators.Bytes{ .mBytes = -2048 }}));
 }
 
 test "a GPU texture's size is its texels for every level, layer and sample" {
-    const GPUAllocator = @import("../../Core/GPUAllocator.zig");
     const sdl = @import("../../Core/CImports.zig").sdl;
     var info = std.mem.zeroes(sdl.SDL_GPUTextureCreateInfo);
     info.type = sdl.SDL_GPU_TEXTURETYPE_2D;
@@ -154,7 +153,6 @@ test "a GPU texture's size is its texels for every level, layer and sample" {
 }
 
 test "nothing on the GPU to start with, for any owner" {
-    const GPUAllocator = @import("../../Core/GPUAllocator.zig");
     var gpu: GPUAllocator = .{};
     for (0..GPUAllocator.OWNER_COUNT) |owner| {
         try std.testing.expectEqual(GPUAllocator.Counts{}, gpu.CountsOf(@intCast(owner)));
@@ -311,4 +309,20 @@ test "a C library's memory is counted on its node as it takes, grows, shrinks an
     try std.testing.expect(counts.Read().KeepPeak >= before.KeepBytes + 5000);
     //the other libraries' are left alone
     try std.testing.expectEqual(0, CAllocators.gNodes.getPtr(.MiniAudio).mCounts.Read().KeepAllocs);
+}
+
+test "the driver's count of video memory is read on Windows, and set beside the engine's own" {
+    var gpu: GPUAllocator = .{};
+    defer gpu.Deinit(std.testing.allocator);
+    const usage = gpu.mDriver.Read();
+    if (@import("builtin").os.tag == .windows) {
+        //every adapter has a budget, even one this process hasn't touched yet
+        try std.testing.expect(usage != null);
+        try std.testing.expect(usage.?.Budget > 0);
+    } else try std.testing.expect(usage == null);
+
+    var buffer: [512]u8 = undefined;
+    var fixed = std.heap.FixedBufferAllocator.init(&buffer);
+    const line = try gpu.DriverLine(fixed.allocator());
+    try std.testing.expect(std.mem.startsWith(u8, line, "Video memory, as the driver counts it: "));
 }

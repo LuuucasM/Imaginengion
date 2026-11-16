@@ -142,7 +142,7 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
                 .sample_count = sdl.SDL_GPU_SAMPLECOUNT_1, // storage images: no MSAA
                 .props = 0,
             };
-            self.mTexture = gpu.CreateTexture(engine_context, &info, self.mOwner) orelse return error.CreateComputeTexture;
+            self.mTexture = gpu.CreateTexture(engine_context, &info, self.mOwner, "Render target") orelse return error.CreateComputeTexture;
 
             const sampler_info = sdl.SDL_GPUSamplerCreateInfo{
                 .min_filter = sdl.SDL_GPU_FILTER_NEAREST,
@@ -152,7 +152,7 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
                 .address_mode_v = sdl.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
                 .address_mode_w = sdl.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
             };
-            self.mSampler = gpu.CreateSampler(engine_context, &sampler_info, self.mOwner) orelse return error.CreateComputeTexture;
+            self.mSampler = gpu.CreateSampler(engine_context, &sampler_info, self.mOwner, "Render target") orelse return error.CreateComputeTexture;
         }
 
         fn Destroy(self: *Self, engine_context: *EngineContext) void {

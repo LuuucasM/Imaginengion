@@ -155,21 +155,22 @@ pub const RenderBuffers = struct {
     mGlyphCount: usize = 0,
     mMergeCount: usize = 0,
 
-    pub fn Init(self: *RenderBuffers, engine_context: *EngineContext) !void {
-        self.mShapeBuffer.Init(engine_context, @sizeOf(ShapeData) * 100, 2, .Compute);
+    /// `layer` names the layer they are for, at the front of their names ("Game layer shapes")
+    pub fn Init(self: *RenderBuffers, engine_context: *EngineContext, comptime layer: []const u8) !void {
+        self.mShapeBuffer.Init(engine_context, layer ++ " shapes", @sizeOf(ShapeData) * 100, 2, .Compute);
         self.mShapeBufferBase = try std.ArrayList(ShapeData).initCapacity(engine_context.Keep(), 100);
 
-        self.mSurfaceBuffer.Init(engine_context, @sizeOf(ShapeSurface) * 100, 3, .Compute);
+        self.mSurfaceBuffer.Init(engine_context, layer ++ " surfaces", @sizeOf(ShapeSurface) * 100, 3, .Compute);
         self.mSurfaceBufferBase = try std.ArrayList(ShapeSurface).initCapacity(engine_context.Keep(), 100);
 
-        self.mMaskBuffer.Init(engine_context, @sizeOf(SDFProgram.MaskData) * 16, 4, .Compute);
+        self.mMaskBuffer.Init(engine_context, layer ++ " masks", @sizeOf(SDFProgram.MaskData) * 16, 4, .Compute);
 
         //a tree over 100 shapes in leaves of up to 4 is around 50 to 70 nodes
-        self.mNodeBuffer.Init(engine_context, @sizeOf(BVH.Node) * 64, 5, .Compute);
+        self.mNodeBuffer.Init(engine_context, layer ++ " BVH nodes", @sizeOf(BVH.Node) * 64, 5, .Compute);
 
         //a one shape mask is one instruction and one part
-        self.mInstrBuffer.Init(engine_context, @sizeOf(SDFProgram.Instr) * 16, 6, .Compute);
-        self.mPartBuffer.Init(engine_context, @sizeOf(SDFProgram.Part) * 16, 7, .Compute);
+        self.mInstrBuffer.Init(engine_context, layer ++ " mask instructions", @sizeOf(SDFProgram.Instr) * 16, 6, .Compute);
+        self.mPartBuffer.Init(engine_context, layer ++ " mask parts", @sizeOf(SDFProgram.Part) * 16, 7, .Compute);
     }
     pub fn Deinit(self: *RenderBuffers, engine_context: *EngineContext) void {
         self.mShapeBuffer.Deinit(engine_context);
@@ -317,8 +318,8 @@ mOverlayData: RenderBuffers = .{},
 mWarnedMerges: std.AutoHashMapUnmanaged(Entity.Type, void) = .empty,
 
 pub fn Init(self: *Renderer2D, engine_context: *EngineContext) !void {
-    try self.mGameData.Init(engine_context);
-    try self.mOverlayData.Init(engine_context);
+    try self.mGameData.Init(engine_context, "Game layer");
+    try self.mOverlayData.Init(engine_context, "Overlay layer");
 }
 
 pub fn Deinit(self: *Renderer2D, engine_context: *EngineContext) void {

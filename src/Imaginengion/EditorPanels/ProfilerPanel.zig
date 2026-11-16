@@ -11,6 +11,16 @@
 //! and the program, then the worlds and the engine's managers, then their ECSs and each ECS's component arrays, each
 //! row with what it and everything under it holds now. It doesn't need the profiler running, and is built again
 //! whenever a node comes or goes.
+//!
+//! Then the video memory tree: the driver's count of all of it at the top (PlatformUtils.VideoMemory), then what the
+//! engine made (GPUAllocator), by owner and then by what each resource is for (GPUAllocator.Group), and what it didn't
+//! (the swapchain, pipelines, the driver's own). Built again whenever a group is met for the first time. Beside it, how
+//! much of the texture atlas is in use, by size of texture (TextureManager.GetUsage).
+//!
+//! Then the last rendered frame's stats for each world (EngineStats): what was drawn, the BVHs and how many entities
+//! there are, a folded section per world, the editor's three worlds in the editor and the Game world's in a game. And
+//! the Conflicts section: whether hooks would conflict if each system run's hooks ran in parallel (ConflictReport), with
+//! the checkbox that turns measuring on. Above every section, frames and passes of the loop a second.
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const Profiler = @import("../Core/Profiler.zig");
@@ -25,7 +35,12 @@ const LayoutItemComponent = @import("../ECSComponents/EComponents.zig").LayoutIt
 const Vec2 = @import("../Math/MathTypes.zig").Vec2;
 const MemoryNode = @import("../Core/Allocators.zig").MemoryNode;
 const GPUAllocator = @import("../Core/GPUAllocator.zig");
-const Bytes = @import("StatsPanel.zig").Bytes;
+const Bytes = @import("../Core/Allocators.zig").Bytes;
+const EngineStats = @import("../Core/EngineStats.zig");
+const BVH = @import("../Core/BVH.zig");
+const ConflictReport = @import("../ECS/ConflictReport.zig");
+const SelectedTag = @import("../ECSComponents/EComponents.zig").SelectedTag;
+const TextureManager = @import("../TextureManager/TextureManager.zig");
 
 const ProfilerPanel = @This();
 
@@ -33,13 +48,64 @@ const ProfilerPanel = @This();
 const AT = Vec2(f32){ .x = 0, .y = 50 };
 const SIZE = Vec2(f32){ .x = 900, .y = 620 };
 
-/// How often the rows are refreshed, as the Stats panel's are
+/// How often the rows are refreshed. A line that changes is laid out and drawn again, so refreshing every pass of the
+/// loop would cost more than most of what it shows
 pub const REFRESH_SECONDS: f32 = 0.25;
+
+/// How many systems the Conflicts section shows, those with the most hooks
+const CONFLICT_LINES = 8;
+
+/// Which program it is in, which decides the worlds whose rendering it shows
+pub const Shows = enum {
+    /// the Game, Editor and Simulate worlds
+    Editor,
+    /// the Game world only, the one a game has
+    Game,
+};
+
+/// One world's rendering section: a line for each stat
+const WorldLines = struct {
+    Objects: Entity,
+    Quads: Entity,
+    Glyphs: Entity,
+    Shadings: Entity,
+    /// the BVH over each layer's shapes: how deep a ray walks down it
+    OverlayBVH: Entity,
+    GameBVH: Entity,
+    /// how good each tree is (BVH.TreeStats.Cost): lower is better for the same shapes
+    BVHCosts: Entity,
+    /// the world's own trees (WorldBVH), every scene in them, built once a frame
+    WorldBVH: Entity,
+    Entities: Entity,
+};
 
 /// A profiler node's row
 const Row = struct {
     Node: Widgets.Fold,
     /// its title, the line its numbers are on
+    Title: Entity,
+};
+
+/// What a row of the video memory tree is for
+const VideoRowOf = union(enum) {
+    /// everything, as the driver counts it
+    All,
+    /// what the engine made
+    Ours,
+    /// what it didn't: the driver's count less the engine's
+    Rest,
+    Owner: GPUAllocator.Owner,
+    /// a GPUAllocator.Group, by its index
+    Group: u32,
+    /// how much of the texture atlas is in use
+    Atlas,
+    /// one size of texture's use of it, by its bin's index
+    AtlasBin: u8,
+};
+
+/// A video memory tree node's row
+const VideoRow = struct {
+    Of: VideoRowOf,
     Title: Entity,
 };
 
@@ -53,11 +119,20 @@ const MemoryRow = struct {
 };
 
 mWindow: Entity = .uninit,
+/// Above the sections: frames drawn and passes of the loop a second
+mRates: Entity = .uninit,
 /// The Time section's content, where the time tree goes
 mContent: Entity = .uninit,
 /// The Memory section's content, its note and the memory tree
 mMemoryContent: Entity = .uninit,
 mMemoryNote: Entity = .uninit,
+/// The Video memory section's content, where its tree goes
+mVideoContent: Entity = .uninit,
+/// Made the first time the window is open, and again when a GPU resource group is met for the first time
+mVideoTree: ?Entity = null,
+mVideoRows: std.ArrayList(VideoRow) = .empty,
+/// How many groups GPUAllocator had when the video rows were built
+mVideoGroups: usize = 0,
 /// Made the first time the window is open, and again when the tree changes (mMemoryVersion)
 mMemoryTree: ?Entity = null,
 /// A row per memory node, parents before their children
@@ -72,26 +147,48 @@ mWorlds: Entity = .uninit,
 mTree: ?Entity = null,
 /// A row per profiler node, at the node's index. The root's is never used: its children go straight in the tree
 mRows: std.ArrayList(Row) = .empty,
+/// The Rendering section: a folded section of lines for each world it shows (Shows)
+mGame: WorldLines = undefined,
+mEditor: ?WorldLines = null,
+mSimulate: ?WorldLines = null,
+/// The Conflicts section: the Measure checkbox's box (checked is SelectedTag on it), a total, and a line for each of
+/// the systems with the most hooks, see ConflictReport
+mMeasureBox: Entity = .uninit,
+mConflictTotal: Entity = .uninit,
+mConflictLines: [CONFLICT_LINES]Entity = undefined,
 /// Since the rows were last refreshed. Starts due, so they show as soon as it opens
 mSinceRefresh: f32 = REFRESH_SECONDS,
 mOptions: Widgets.Options = .{},
 
 /// Builds the window, closed and empty, at the top of `scene`
-pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Options) !ProfilerPanel {
+pub fn Build(engine_context: *EngineContext, scene: Scene, shows: Shows, options: Widgets.Options) !ProfilerPanel {
     const zone = Tracy.ZoneInit("ProfilerPanel::Build", @src());
     defer zone.Deinit();
     const window = try Widgets.FloatingWindow(engine_context, scene, "Profiler", SIZE, AT, options);
+    const rates = try Widgets.Label(engine_context, .{ .Entity = window.Content }, "");
     const time = try Widgets.CollapsingHeader(engine_context, .{ .Entity = window.Content }, "Time", true, options);
     const memory = try Widgets.CollapsingHeader(engine_context, .{ .Entity = window.Content }, "Memory", true, options);
-    const self = ProfilerPanel{
+    const video = try Widgets.CollapsingHeader(engine_context, .{ .Entity = window.Content }, "Video memory", true, options);
+    var self = ProfilerPanel{
         .mWindow = window.Window,
+        .mRates = rates,
         .mContent = time.Content.?,
         .mNote = try Widgets.Label(engine_context, .{ .Entity = time.Content.? }, ""),
         .mWorlds = try Widgets.Label(engine_context, .{ .Entity = time.Content.? }, ""),
         .mMemoryContent = memory.Content.?,
-        .mMemoryNote = try Widgets.Label(engine_context, .{ .Entity = memory.Content.? }, "Held now, everything under each included: total (structs and what they hold), held, of it its own, the structs' own bytes, allocations, Scratch taken the last pass, GPU"),
+        .mMemoryNote = try Widgets.Label(engine_context, .{ .Entity = memory.Content.? }, "Held now, everything under each included: total (structs and what they hold), held, of it its own, the structs' own bytes, allocations, Scratch taken the last pass"),
+        .mVideoContent = video.Content.?,
         .mOptions = options,
     };
+
+    const rendering = try Widgets.CollapsingHeader(engine_context, .{ .Entity = window.Content }, "Rendering (the last rendered frame)", false, options);
+    self.mGame = try WorldSection(engine_context, rendering.Content.?, "Game World", options);
+    if (shows == .Editor) {
+        self.mEditor = try WorldSection(engine_context, rendering.Content.?, "Editor World", options);
+        self.mSimulate = try WorldSection(engine_context, rendering.Content.?, "Simulate World", options);
+    }
+    try self.BuildConflicts(engine_context, window.Content, options);
+
     try WidgetActions.CloseWindow(engine_context, self.mWindow);
     return self;
 }
@@ -99,6 +196,7 @@ pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Opti
 pub fn Deinit(self: *ProfilerPanel, keep_allocator: std.mem.Allocator) void {
     self.mRows.deinit(keep_allocator);
     self.mMemoryRows.deinit(keep_allocator);
+    self.mVideoRows.deinit(keep_allocator);
 }
 
 pub fn IsOpen(self: ProfilerPanel) bool {
@@ -123,17 +221,26 @@ pub fn Update(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *c
         self.mSinceRefresh = REFRESH_SECONDS;
         return;
     }
+    try self.SyncMeasuring(engine_context);
     self.mSinceRefresh += engine_context.mDT;
     if (self.mSinceRefresh < REFRESH_SECONDS) return;
     self.mSinceRefresh = 0;
 
+    //a pass of the loop can skip rendering when the GPU is behind, so frames drawn are counted apart from it
+    const stats = &engine_context.mEngineStats;
+    try SetLine(engine_context, self.mRates, "{d:.0} FPS   {d:.0} passes of the loop a second", .{ stats.FrameRate.mRate, stats.LoopRate.mRate });
     try self.UpdateMemory(engine_context);
+    try self.UpdateVideo(engine_context);
+    try SetWorld(engine_context, self.mGame, stats.LastGameWorldStats);
+    if (self.mEditor) |lines| try SetWorld(engine_context, lines, stats.LastEditorWorldStats);
+    if (self.mSimulate) |lines| try SetWorld(engine_context, lines, stats.LastSimulateWorldStats);
+    try self.SetConflicts(engine_context, &engine_context.mTransactions.mConflicts);
 
     if (!profiler.IsRunning()) {
         try WidgetActions.SetText(engine_context, self.mNote, "Not measuring");
         return;
     }
-    try SetLine(engine_context, self.mNote, "{d:.0} FPS. A pass of the loop, over the last {d}: average, 99th percentile, worst, own time (without the zones inside), times run", .{ engine_context.mEngineStats.FrameRate.mRate, profiler.LoopsKept() });
+    try SetLine(engine_context, self.mNote, "A pass of the loop, over the last {d}: average, 99th percentile, worst, own time (without the zones inside), times run", .{profiler.LoopsKept()});
 
     try self.SetWorlds(engine_context, profiler);
     try self.AddRows(engine_context, profiler);
@@ -161,7 +268,7 @@ fn UpdateMemory(self: *ProfilerPanel, engine_context: *EngineContext) !void {
         if (!shown[row_ind]) continue;
         const total = row.Node.Totals();
         const own = row.Node.mCounts.Read();
-        try SetLine(engine_context, row.Title, "{s}   {f}   held {f} ({f} its own)   structs {f}   {d} allocs   Scratch {f}   GPU {f}", .{
+        try SetLine(engine_context, row.Title, "{s}   {f}   held {f} ({f} its own)   structs {f}   {d} allocs   Scratch {f}", .{
             row.Node.mName,
             Bytes{ .mBytes = total.Bytes() },
             Bytes{ .mBytes = total.Held },
@@ -169,7 +276,6 @@ fn UpdateMemory(self: *ProfilerPanel, engine_context: *EngineContext) !void {
             Bytes{ .mBytes = @intCast(total.Size) },
             total.Allocs,
             Bytes{ .mBytes = total.Scratch },
-            Bytes{ .mBytes = @intCast(GPUOf(engine_context, row.Node)) },
         });
     }
 }
@@ -186,16 +292,97 @@ fn AddMemoryRows(self: *ProfilerPanel, engine_context: *EngineContext, node: *Me
     while (children.next()) |child| try self.AddMemoryRows(engine_context, child, fold.Content.?, row, depth + 1);
 }
 
-/// What `node` and everything under it holds on the GPU: a world's node has its world's, the engine's has the engine's
-fn GPUOf(engine_context: *EngineContext, node: *MemoryNode) u64 {
-    var total: u64 = 0;
-    if (node == &engine_context._Internal.Memory) total += engine_context.mGPUAllocator.CountsOf(GPUAllocator.ENGINE).Bytes;
-    for (engine_context.Worlds()) |world| {
-        if (node == &world.mMemory) total += engine_context.mGPUAllocator.CountsOf(engine_context.WorldTag(world)).Bytes;
+/// The video memory tree's rows: built again if a group was met since, then the numbers on each. It is small, so every
+/// row is refreshed whether it can be seen or not
+fn UpdateVideo(self: *ProfilerPanel, engine_context: *EngineContext) !void {
+    const gpu = &engine_context.mGPUAllocator;
+    if (self.mVideoTree == null or self.mVideoGroups != gpu.mGroups.items.len) try self.BuildVideoRows(engine_context);
+
+    const driver = gpu.mDriver.Read();
+    const ours = gpu.TotalBytes();
+    const atlas = engine_context.mRenderer.mTextureManager.GetUsage();
+    for (self.mVideoRows.items) |row| {
+        switch (row.Of) {
+            .All => if (driver) |usage| {
+                try SetLine(engine_context, row.Title, "Video memory   {f}   {f} on the GPU (of a {f} budget), {f} shared", .{
+                    Bytes{ .mBytes = @intCast(usage.Used + usage.Shared) },
+                    Bytes{ .mBytes = @intCast(usage.Used) },
+                    Bytes{ .mBytes = @intCast(usage.Budget) },
+                    Bytes{ .mBytes = @intCast(usage.Shared) },
+                });
+            } else try SetLine(engine_context, row.Title, "Video memory   {f}   (the driver's count can't be read here)", .{Bytes{ .mBytes = @intCast(ours) }}),
+            .Ours => try SetLine(engine_context, row.Title, "Made by the engine   {f}", .{Bytes{ .mBytes = @intCast(ours) }}),
+            .Rest => if (driver) |usage| {
+                try SetLine(engine_context, row.Title, "Not made by the engine: the swapchain, pipelines, the driver's own   {f}", .{
+                    Bytes{ .mBytes = @as(i64, @intCast(usage.Used + usage.Shared)) - @as(i64, @intCast(ours)) },
+                });
+            } else try SetLine(engine_context, row.Title, "Not made by the engine: the swapchain, pipelines, the driver's own   can't be read here", .{}),
+            .Owner => |owner| {
+                const counts = gpu.CountsOf(owner);
+                try SetLine(engine_context, row.Title, "{s}   {f}   peak {f}", .{ OwnerName(owner), Bytes{ .mBytes = @intCast(counts.Bytes) }, Bytes{ .mBytes = @intCast(counts.Peak) } });
+            },
+            .Group => |group_ind| {
+                const group = gpu.mGroups.items[group_ind];
+                try SetLine(engine_context, row.Title, "{s}   {f}   peak {f}   {s} x{d}", .{ group.Name, Bytes{ .mBytes = @intCast(group.Bytes) }, Bytes{ .mBytes = @intCast(group.Peak) }, group.Kind.Title(), group.Count });
+            },
+            .Atlas => try SetLine(engine_context, row.Title, "Texture atlas in use   {f} of {f} in slots holding a texture   {d} of {d} layers claimed ({f})", .{
+                Bytes{ .mBytes = @intCast(atlas.UsedBytes) },
+                Bytes{ .mBytes = @intCast(atlas.MaxLayers * atlas.LayerBytes) },
+                atlas.Layers,
+                atlas.MaxLayers,
+                Bytes{ .mBytes = @intCast(atlas.Layers * atlas.LayerBytes) },
+            }),
+            .AtlasBin => |bin_ind| {
+                const bin = atlas.Bins[bin_ind];
+                try SetLine(engine_context, row.Title, "Up to {d} px   {f} in {d} of {d} slots   {d} layers", .{ bin.MaxSize, Bytes{ .mBytes = @intCast(bin.UsedSlots * bin.SlotBytes) }, bin.UsedSlots, bin.TotalSlots, bin.Layers });
+            },
+        }
     }
-    var children = node.Children();
-    while (children.next()) |child| total += GPUOf(engine_context, child);
-    return total;
+}
+
+/// Everything at the top, open, with what the engine made under it, by owner and then by group, and what it didn't
+fn BuildVideoRows(self: *ProfilerPanel, engine_context: *EngineContext) !void {
+    const gpu = &engine_context.mGPUAllocator;
+    if (self.mVideoTree) |tree| try Widgets.Remove(engine_context, tree, &.{});
+    self.mVideoRows.clearRetainingCapacity();
+    const tree = try Widgets.Tree(engine_context, .{ .Entity = self.mVideoContent });
+    self.mVideoTree = tree;
+    self.mVideoGroups = gpu.mGroups.items.len;
+
+    const all = try self.AddVideoRow(engine_context, tree, .All, false);
+    const ours = try self.AddVideoRow(engine_context, all, .Ours, false);
+    for (0..GPUAllocator.OWNER_COUNT) |owner_ind| {
+        const owner: GPUAllocator.Owner = @intCast(owner_ind);
+        var owner_row: ?Entity = null;
+        for (gpu.mGroups.items, 0..) |group, group_ind| {
+            if (group.Owner != owner) continue;
+            if (owner_row == null) owner_row = try self.AddVideoRow(engine_context, ours, .{ .Owner = owner }, false);
+            _ = try self.AddVideoRow(engine_context, owner_row.?, .{ .Group = @intCast(group_ind) }, true);
+        }
+    }
+    _ = try self.AddVideoRow(engine_context, all, .Rest, true);
+
+    //each size of texture claims whole layers of the atlas, each cut into slots of that size
+    const atlas = try self.AddVideoRow(engine_context, tree, .Atlas, false);
+    for (0..@typeInfo(@FieldType(TextureManager.Usage, "Bins")).array.len) |bin_ind| {
+        _ = try self.AddVideoRow(engine_context, atlas, .{ .AtlasBin = @intCast(bin_ind) }, true);
+    }
+}
+
+/// A row of the video memory tree under `parent`, open. Returns where the rows under it go
+fn AddVideoRow(self: *ProfilerPanel, engine_context: *EngineContext, parent: Entity, of: VideoRowOf, leaf: bool) !Entity {
+    const fold = try Widgets.TreeNode(engine_context, .{ .Entity = parent }, "", .{
+        .Open = true,
+        .Leaf = leaf,
+        .StockScripts = self.mOptions.StockScripts,
+    });
+    try self.mVideoRows.append(self.World().Keep(), .{ .Of = of, .Title = UIManager.LabelOf(fold.Header).? });
+    return fold.Content orelse fold.Node;
+}
+
+fn OwnerName(owner: GPUAllocator.Owner) []const u8 {
+    if (owner == GPUAllocator.ENGINE) return "Engine (shared)";
+    return EngineContext.WorldName(owner);
 }
 
 /// Each world that ran anything, and its time a pass on average
@@ -283,6 +470,145 @@ fn IsFolded(row: Row) bool {
 /// The world the window is in, whose memory it takes: the editor's, or the game's
 fn World(self: *const ProfilerPanel) *WorldManager {
     return self.mWindow.mManager;
+}
+
+/// A world's folded section in the Rendering section, and its lines
+fn WorldSection(engine_context: *EngineContext, content: Entity, title: []const u8, options: Widgets.Options) !WorldLines {
+    const section = try Widgets.CollapsingHeader(engine_context, .{ .Entity = content }, title, false, options);
+    const lines: Widgets.Parent = .{ .Entity = section.Content.? };
+    return .{
+        .Objects = try Widgets.Label(engine_context, lines, ""),
+        .Quads = try Widgets.Label(engine_context, lines, ""),
+        .Glyphs = try Widgets.Label(engine_context, lines, ""),
+        .Shadings = try Widgets.Label(engine_context, lines, ""),
+        .OverlayBVH = try Widgets.Label(engine_context, lines, ""),
+        .GameBVH = try Widgets.Label(engine_context, lines, ""),
+        .BVHCosts = try Widgets.Label(engine_context, lines, ""),
+        .WorldBVH = try Widgets.Label(engine_context, lines, ""),
+        .Entities = try Widgets.Label(engine_context, lines, ""),
+    };
+}
+
+/// One layer's BVH as a line: how deep its deepest and its average leaf are, then its size
+fn SetTreeLine(engine_context: *EngineContext, label: Entity, layer: []const u8, tree: BVH.TreeStats) !void {
+    try SetLine(engine_context, label, "{s} BVH: depth {d} (avg {d:.1}), {d} nodes, {d} leaves of {d:.1}", .{
+        layer,
+        tree.Depth,
+        tree.AverageLeafDepth(),
+        tree.Nodes,
+        tree.Leaves,
+        tree.AverageLeafItems(),
+    });
+}
+
+/// A world's lines, from the last rendered frame's stats: kept when a pass of the loop skips rendering
+fn SetWorld(engine_context: *EngineContext, lines: WorldLines, stats: EngineStats.WorldStats) !void {
+    const render = stats.mRenderStats;
+    try SetLine(engine_context, lines.Objects, "Objects: {d}", .{render.TotalObjects});
+    try SetLine(engine_context, lines.Quads, "Quads: {d}", .{render.OutputQuadNum});
+    try SetLine(engine_context, lines.Glyphs, "Glyphs: {d}", .{render.OutputGlyphNum});
+    try SetLine(engine_context, lines.Shadings, "Shadings: {d} (surface {d}, medium {d})", .{ render.Shadings.TotalShadings, render.Shadings.SurfShadings, render.Shadings.MedShadings });
+    try SetTreeLine(engine_context, lines.OverlayBVH, "Overlay", render.OverlayBVH);
+    try SetTreeLine(engine_context, lines.GameBVH, "Game", render.GameBVH);
+    try SetLine(engine_context, lines.BVHCosts, "BVH cost: overlay {d:.1}, game {d:.1}", .{ render.OverlayBVH.Cost, render.GameBVH.Cost });
+    const world_bvh = stats.mBVHStats;
+    try SetLine(engine_context, lines.WorldBVH, "World BVH: overlay {d} items (depth {d}), game {d} items (depth {d}), {d} letter trees ({d} nodes)", .{
+        world_bvh.Overlay.Items,
+        world_bvh.Overlay.Depth,
+        world_bvh.Game.Items,
+        world_bvh.Game.Depth,
+        world_bvh.LetterTrees,
+        world_bvh.LetterNodes,
+    });
+    try SetLine(engine_context, lines.Entities, "Entities: {d}", .{stats.mECSStats.TotalEntities});
+}
+
+/// The Conflicts section, folded to start with
+fn BuildConflicts(self: *ProfilerPanel, engine_context: *EngineContext, content: Entity, options: Widgets.Options) !void {
+    const section = try Widgets.CollapsingHeader(engine_context, .{ .Entity = content }, "Conflicts (if hooks ran in parallel)", false, options);
+    const lines: Widgets.Parent = .{ .Entity = section.Content.? };
+    const measure_row = try Widgets.Checkbox(engine_context, lines, "Measure (ticking it starts fresh counts)", options);
+    var row_children = measure_row.GetIterator(.Child);
+    self.mMeasureBox = row_children.next().?;
+    self.mConflictTotal = try Widgets.Label(engine_context, lines, "");
+    for (&self.mConflictLines) |*line| line.* = try Widgets.Label(engine_context, lines, "");
+}
+
+/// Measuring follows the checkbox, and starts from nothing each time it is ticked
+fn SyncMeasuring(self: *ProfilerPanel, engine_context: *EngineContext) !void {
+    const conflicts = &engine_context.mTransactions.mConflicts;
+    const ticked = self.mMeasureBox.HasComponent(SelectedTag);
+    if (ticked == conflicts.mOn) return;
+    if (ticked) conflicts.Clear(engine_context.Keep());
+    conflicts.mOn = ticked;
+}
+
+/// The total and a line for each of the systems with the most hooks: how many of its hooks would conflict, how many
+/// would run on their own, and the type most of its conflicts were on
+fn SetConflicts(self: *ProfilerPanel, engine_context: *EngineContext, conflicts: *const ConflictReport) !void {
+    var hooks: u64 = 0;
+    var conflicting: u64 = 0;
+    var serial: u64 = 0;
+    for (conflicts.mSystems.values()) |counts| {
+        hooks += counts.mHooks;
+        conflicting += counts.mConflicts;
+        serial += counts.mSerial;
+    }
+    if (hooks == 0) {
+        try SetLine(engine_context, self.mConflictTotal, "{s}", .{if (conflicts.mOn) "Measuring: no hooks have run yet" else "Not measuring"});
+    } else {
+        const percent = 100 * @as(f64, @floatFromInt(conflicting)) / @as(f64, @floatFromInt(hooks));
+        try SetLine(engine_context, self.mConflictTotal, "{d} of {d} hooks would conflict ({d:.1}%), {d} would run on their own", .{ conflicting, hooks, percent, serial });
+    }
+
+    //the systems with the most hooks first
+    const order = try self.World().Scratch().alloc(usize, conflicts.mSystems.count());
+    for (order, 0..) |*index, i| index.* = i;
+    const values = conflicts.mSystems.values();
+    std.mem.sort(usize, order, values, struct {
+        fn MoreHooks(all: []const ConflictReport.Counts, a: usize, b: usize) bool {
+            return all[a].mHooks > all[b].mHooks;
+        }
+    }.MoreHooks);
+
+    for (self.mConflictLines, 0..) |line, line_ind| {
+        if (line_ind >= order.len) {
+            try SetLine(engine_context, line, "", .{});
+            continue;
+        }
+        const name = conflicts.mSystems.keys()[order[line_ind]];
+        const counts = values[order[line_ind]];
+        try SetLine(engine_context, line, "{s}: {d} of {d} would conflict, {d} on their own, {d} runs{s}{s}", .{
+            ShortName(name),
+            counts.mConflicts,
+            counts.mHooks,
+            counts.mSerial,
+            counts.mBatches,
+            if (counts.mTypes.count() > 0) ", mostly on " else "",
+            MostCounted(counts),
+        });
+    }
+}
+
+/// A system's or type's name without what is in front of its last '.' or "::"
+fn ShortName(name: []const u8) []const u8 {
+    const after_colons = if (std.mem.lastIndexOf(u8, name, "::")) |at| name[at + 2 ..] else name;
+    // a type name's dots, but not those inside the brackets of a script loop's name
+    if (std.mem.indexOfScalar(u8, after_colons, '(') != null) return after_colons;
+    return if (std.mem.lastIndexOfScalar(u8, after_colons, '.')) |at| after_colons[at + 1 ..] else after_colons;
+}
+
+/// The type most of a system's conflicts were on, "" if none
+fn MostCounted(counts: ConflictReport.Counts) []const u8 {
+    var best: []const u8 = "";
+    var best_count: u64 = 0;
+    for (counts.mTypes.keys(), counts.mTypes.values()) |type_name, count| {
+        if (count > best_count) {
+            best = ShortName(type_name);
+            best_count = count;
+        }
+    }
+    return best;
 }
 
 /// Puts a formatted line on a label, if it doesn't say that already

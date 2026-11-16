@@ -5,6 +5,8 @@ const GPUAllocator = @import("../Core/GPUAllocator.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const SDLSSBO = @This();
 
+/// What it is for, shown with its GPU memory (GPUAllocator.Group)
+mName: []const u8,
 mSize: usize,
 mSlot: usize,
 mStage: Stage,
@@ -13,6 +15,7 @@ mTransferBuff: ?*sdl.SDL_GPUTransferBuffer,
 mTransferSize: usize,
 
 pub const empty: SDLSSBO = .{
+    .mName = "",
     .mBuffer = null,
     .mStage = undefined,
     .mSize = undefined,
@@ -21,15 +24,16 @@ pub const empty: SDLSSBO = .{
     .mTransferSize = 0,
 };
 
-pub fn Init(self: *SDLSSBO, engine_context: *EngineContext, size: usize, slot: usize, stage: Stage) void {
+pub fn Init(self: *SDLSSBO, engine_context: *EngineContext, name: []const u8, size: usize, slot: usize, stage: Stage) void {
+    self.mName = name;
     self.mSize = size;
     self.mSlot = slot;
     self.mStage = stage;
 
     if (size == 0) return;
 
-    self.mBuffer = CreateBuffer(engine_context, size, stage);
-    self.mTransferBuff = CreateTransferBuffer(engine_context, size);
+    self.mBuffer = CreateBuffer(engine_context, name, size, stage);
+    self.mTransferBuff = CreateTransferBuffer(engine_context, name, size);
 }
 
 pub fn Deinit(self: *SDLSSBO, engine_context: *EngineContext) void {
@@ -64,14 +68,14 @@ pub fn SetData(self: *SDLSSBO, engine_context: *EngineContext, copy_pass: *anyop
     if (size + offset > self.mSize) {
         if (self.mBuffer) |buf| engine_context.mGPUAllocator.ReleaseBuffer(engine_context, buf);
         self.mSize = size + offset;
-        self.mBuffer = CreateBuffer(engine_context, self.mSize, self.mStage);
+        self.mBuffer = CreateBuffer(engine_context, self.mName, self.mSize, self.mStage);
         resize = true;
     }
 
     if (size > self.mTransferSize) {
         if (self.mTransferBuff) |tb| engine_context.mGPUAllocator.ReleaseTransferBuffer(engine_context, tb);
         self.mTransferSize = size;
-        self.mTransferBuff = CreateTransferBuffer(engine_context, size);
+        self.mTransferBuff = CreateTransferBuffer(engine_context, self.mName, size);
     }
 
     const mapped = sdl.SDL_MapGPUTransferBuffer(device, self.mTransferBuff, true);
@@ -111,7 +115,7 @@ pub fn GetBinding(self: SDLSSBO) usize {
 /// A storage buffer the shaders of `stage` read. The usage is what SDL puts the buffer back to between passes, so it
 /// matches the stage it is bound to
 /// The renderer's, so the engine's (GPUAllocator)
-fn CreateBuffer(engine_context: *EngineContext, size: usize, stage: Stage) ?*sdl.SDL_GPUBuffer {
+fn CreateBuffer(engine_context: *EngineContext, name: []const u8, size: usize, stage: Stage) ?*sdl.SDL_GPUBuffer {
     const buffer_info = sdl.SDL_GPUBufferCreateInfo{
         .usage = switch (stage) {
             .Vertex, .Fragment => sdl.SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
@@ -120,18 +124,18 @@ fn CreateBuffer(engine_context: *EngineContext, size: usize, stage: Stage) ?*sdl
         .size = @intCast(size),
         .props = 0,
     };
-    const buffer = engine_context.mGPUAllocator.CreateBuffer(engine_context, &buffer_info, GPUAllocator.ENGINE);
+    const buffer = engine_context.mGPUAllocator.CreateBuffer(engine_context, &buffer_info, GPUAllocator.ENGINE, name);
     std.debug.assert(buffer != null);
     return buffer;
 }
 
-fn CreateTransferBuffer(engine_context: *EngineContext, size: usize) ?*sdl.SDL_GPUTransferBuffer {
+fn CreateTransferBuffer(engine_context: *EngineContext, name: []const u8, size: usize) ?*sdl.SDL_GPUTransferBuffer {
     const info = sdl.SDL_GPUTransferBufferCreateInfo{
         .usage = sdl.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
         .size = @intCast(size),
         .props = 0,
     };
-    const buffer = engine_context.mGPUAllocator.CreateTransferBuffer(engine_context, &info, GPUAllocator.ENGINE);
+    const buffer = engine_context.mGPUAllocator.CreateTransferBuffer(engine_context, &info, GPUAllocator.ENGINE, name);
     std.debug.assert(buffer != null);
     return buffer;
 }

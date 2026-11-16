@@ -12,8 +12,9 @@ const Impl = switch (builtin.os.tag) {
 
 mImpl: Impl = .empty,
 
-pub fn Init(self: *SSBO, engine_context: *EngineContext, size: usize, slot: usize, stage: Stage) void {
-    self.mImpl.Init(engine_context, size, slot, stage);
+/// `name` says what it is for, a string that lasts as long as the program, shown with its GPU memory
+pub fn Init(self: *SSBO, engine_context: *EngineContext, name: []const u8, size: usize, slot: usize, stage: Stage) void {
+    self.mImpl.Init(engine_context, name, size, slot, stage);
 }
 
 pub fn Deinit(self: *SSBO, engine_context: *EngineContext) void {

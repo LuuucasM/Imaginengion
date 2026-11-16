@@ -4,6 +4,9 @@ const nfd = @import("../Core/CImports.zig").nfd;
 const windows = std.os.windows;
 const PlatformUtils = @This();
 
+/// What the GPU driver says the application holds in video memory
+pub const VideoMemory = @import("VideoMemory.zig");
+
 /// The part of a stat the asset manager compares to tell whether a file changed
 pub const FileTimeAndSize = struct {
     mtime: std.Io.Timestamp,

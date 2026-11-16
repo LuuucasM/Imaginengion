@@ -9,6 +9,9 @@ const LoadFailedTag = Assets.LoadFailedTag;
 const FileMetaData = Assets.FileMetaData;
 const TextAsset = Assets.TextAsset;
 const AssetHandle = @import("../../../ECSObjects/AssetHandle.zig");
+const AudioAsset = Assets.AudioAsset;
+const PendingDelete = Assets.PendingDelete;
+const EngineFiles = @import("../../../GameBuild/EngineFiles.zig");
 
 /// An EngineContext with just enough set up for the asset manager. No Setup: its default assets
 /// need the GPU, and nothing here actually loads an asset.
@@ -33,6 +36,7 @@ const TestContext = struct {
         const keep_allocator = engine_context.Keep();
 
         const asset_manager = &engine_context.mAssetManager;
+        if (asset_manager._internal.DefaultAudioHandle) |*handle| handle.ReleaseAsset();
         asset_manager.mECSManager.Deinit(engine_context);
         asset_manager.mUUIDToWorldID.deinit(keep_allocator);
         asset_manager.mEventManager.Deinit(keep_allocator);
@@ -111,4 +115,63 @@ test "a change to the file marks it changed until the next update clears it" {
     try asset_manager.ClearFileChanged(engine_context);
     try std.testing.expect(!asset_manager.AnyFileChanged());
     try std.testing.expect(!asset_manager.FileChanged(asset_id));
+}
+
+test "a default is an ordinary asset: a file naming it shares it, and a failed asset hands it back" {
+    const test_context = try TestContext.Init();
+    defer test_context.Deinit();
+    const engine_context = test_context.mEngineContext;
+    const asset_manager = &engine_context.mAssetManager;
+
+    //the sound, the one default that needs no GPU
+    try asset_manager.HoldDefault(engine_context, AudioAsset, EngineFiles.DEFAULT_SOUND);
+    const held = asset_manager._internal.DefaultAudioHandle.?;
+    const default_sound = try held.GetAsset(engine_context, AudioAsset);
+    try std.testing.expect(default_sound.GetFrameCount() > 0);
+
+    //naming the same file is the same asset, read once
+    var named = try asset_manager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = EngineFiles.DEFAULT_SOUND, .path_type = .Eng } });
+    defer named.ReleaseAsset();
+    try std.testing.expectEqual(held.mID, named.mID);
+    try std.testing.expectEqual(default_sound, try named.GetAsset(engine_context, AudioAsset));
+
+    //an asset that failed gets the held default, not the empty stand-in
+    const failed_id = try CreateMissingFileAsset(engine_context);
+    _ = try asset_manager.mECSManager.AddComponentSync(engine_context, failed_id, LoadFailedTag{});
+    try std.testing.expectEqual(default_sound, try asset_manager.GetAsset(engine_context, AudioAsset, failed_id));
+}
+
+test "an asset nothing holds is destroyed after the grace period, unless something takes it up again first" {
+    const test_context = try TestContext.Init();
+    defer test_context.Deinit();
+    const engine_context = test_context.mEngineContext;
+    const asset_manager = &engine_context.mAssetManager;
+    const source: @import("../../../ECSManagers/AManager.zig").AssetSource = .{ .File = .{ .rel_path = EngineFiles.DEFAULT_SOUND, .path_type = .Eng } };
+
+    var handle = try asset_manager.GetAssetHandle(engine_context, source);
+    const asset_id = handle.mID;
+    _ = try handle.GetAsset(engine_context, AudioAsset);
+
+    //held: left alone
+    try asset_manager.ProcessDestroyedAssets(engine_context);
+    try std.testing.expect(!asset_manager.mECSManager.HasComponent(PendingDelete, asset_id));
+
+    //let go of: marked, and taken up again inside the grace period, unmarked
+    handle.ReleaseAsset();
+    try asset_manager.ProcessDestroyedAssets(engine_context);
+    try std.testing.expect(asset_manager.mECSManager.HasComponent(PendingDelete, asset_id));
+    var again = try asset_manager.GetAssetHandle(engine_context, source);
+    try std.testing.expectEqual(asset_id, again.mID);
+    try asset_manager.ProcessDestroyedAssets(engine_context);
+    try std.testing.expect(!asset_manager.mECSManager.HasComponent(PendingDelete, asset_id));
+
+    //let go of for longer than the grace period: destroyed, and out of the path map, so naming it again reads it anew
+    again.ReleaseAsset();
+    try asset_manager.ProcessDestroyedAssets(engine_context);
+    asset_manager.mECSManager.GetComponentMut(PendingDelete, asset_id).?.mTime = .zero;
+    try asset_manager.ProcessDestroyedAssets(engine_context);
+    try std.testing.expect(!asset_manager.mECSManager.IsActiveEntity(asset_id));
+    var fresh = try asset_manager.GetAssetHandle(engine_context, source);
+    defer fresh.ReleaseAsset();
+    try std.testing.expect(!asset_manager.IsLoaded(AudioAsset, fresh.mID));
 }

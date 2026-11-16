@@ -78,8 +78,18 @@ pub const ComputedSource = union(enum) {
 pub const AssetErrorFlags = struct {
     pub const Reason = enum {
         FileNotFound,
+        /// nothing holds a handle to it any more
+        Unreferenced,
     };
     pub const FileNotFound: u32 = 1 << 0;
+    pub const Unreferenced: u32 = 1 << 1;
+
+    pub fn Of(reason: Reason) u32 {
+        return switch (reason) {
+            .FileNotFound => FileNotFound,
+            .Unreferenced => Unreferenced,
+        };
+    }
 };
 
 pub const AssetSource = union(enum) {
@@ -103,15 +113,21 @@ const InternalData = struct {
         .DefaultAudioAsset = .{},
         .DefaultEnumAsset = .{},
     };
+    /// The stand-ins for a texture, font and sound are never made, so have nothing to let go of
     pub fn Deinit(self: *InternalData, engine_context: *EngineContext) void {
         const keep_allocator = engine_context.Keep();
         self.DefaultFileMetaData.Deinit(engine_context, keep_allocator);
-        self.DefaultTexture2D.Deinit(engine_context, keep_allocator);
-        self.DefaultTextAsset.Deinit(engine_context, keep_allocator);
-        self.DefaultAudioAsset.Deinit(engine_context, keep_allocator);
         self.DefaultEnumAsset.Deinit(engine_context, keep_allocator);
     }
+    /// The default texture, font and sound are ordinary assets, held for the program's whole run (Setup, HoldDefault),
+    /// so a file naming the same one (the theme naming the default font) shares it rather than loading it again. Null
+    /// before Setup
+    DefaultTexture2DHandle: ?AssetHandle = null,
+    DefaultTextHandle: ?AssetHandle = null,
+    DefaultAudioHandle: ?AssetHandle = null,
     DefaultFileMetaData: FileMetaData,
+    /// Empty stand-ins, never made: what GetDefaultAsset hands out when there is no held default (before Setup, so in
+    /// tests, which fill the font's by hand) or its file can't be read
     DefaultTexture2D: Texture2D,
     DefaultTextAsset: TextAsset,
     DefaultAudioAsset: AudioAsset,
@@ -150,32 +166,32 @@ pub fn Init(self: *AManager, engine_context: *EngineContext) !void {
 
 ///Setup needed to initialize "default" assets
 pub fn Setup(self: *AManager, engine_context: *EngineContext) !void {
-    const scratch_allocator = engine_context.Scratch();
-    const io = engine_context.Io();
-
     //FILE META DATA =======================
     _ = try self._internal.DefaultFileMetaData.mRelPath.appendSlice(engine_context.Keep(), "default");
 
-    //TEXTURE 2D =========================
-    const texture2d_rel_path = EngineFiles.DEFAULT_TEXTURE;
-    const texture2d_abs_path = try self.GetAbsPath(scratch_allocator, texture2d_rel_path, .Eng);
-    const texture2d_file = try std.Io.Dir.openFileAbsolute(io, texture2d_abs_path, .{});
-    defer texture2d_file.close(io);
-    try self._internal.DefaultTexture2D.Init(engine_context, texture2d_abs_path, texture2d_rel_path, texture2d_file);
+    try self.HoldDefault(engine_context, Texture2D, EngineFiles.DEFAULT_TEXTURE);
+    try self.HoldDefault(engine_context, TextAsset, EngineFiles.DEFAULT_FONT);
+    try self.HoldDefault(engine_context, AudioAsset, EngineFiles.DEFAULT_SOUND);
+}
 
-    //TEXT ================================
-    const text_rel_path = try PackagedPath(scratch_allocator, EngineFiles.DEFAULT_FONT);
-    const text_abs_path = try self.GetAbsPath(scratch_allocator, text_rel_path, .Eng);
-    const text_file = try std.Io.Dir.openFileAbsolute(io, text_abs_path, .{});
-    defer text_file.close(io);
-    try self._internal.DefaultTextAsset.Init(engine_context, text_abs_path, text_rel_path, text_file);
+/// Makes the engine file at `rel_path` the default `asset_type`: an ordinary asset, held until the asset manager goes
+/// and read now, so anything else naming the file gets this one. A default that can't be read stops the engine starting
+pub fn HoldDefault(self: *AManager, engine_context: *EngineContext, comptime asset_type: type, rel_path: []const u8) !void {
+    const held = self.HeldDefault(asset_type);
+    std.debug.assert(held.* == null);
+    held.* = try self.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Eng } });
+    _ = try self.GetAsset(engine_context, asset_type, held.*.?.mID);
+    if (self.mECSManager.HasComponent(LoadFailedTag, held.*.?.mID)) return error.DefaultAssetFailed;
+}
 
-    //AUDIO =================================
-    const audio_rel_path = EngineFiles.DEFAULT_SOUND;
-    const audio_abs_path = try self.GetAbsPath(scratch_allocator, audio_rel_path, .Eng);
-    const audio_file = try std.Io.Dir.openFileAbsolute(io, audio_abs_path, .{});
-    defer audio_file.close(io);
-    try self._internal.DefaultAudioAsset.Init(engine_context, audio_abs_path, audio_rel_path, audio_file);
+/// Where the held default of `asset_type` is, for the types with one read from a file
+fn HeldDefault(self: *AManager, comptime asset_type: type) *?AssetHandle {
+    return switch (asset_type) {
+        Texture2D => &self._internal.DefaultTexture2DHandle,
+        TextAsset => &self._internal.DefaultTextHandle,
+        AudioAsset => &self._internal.DefaultAudioHandle,
+        else => @compileError("no default of " ++ @typeName(asset_type) ++ " is read from a file"),
+    };
 }
 
 /// The Keep of an asset type's array: what an asset of that type owns (an enum's names, a theme's styles) is taken from
@@ -185,6 +201,11 @@ pub fn KeepFor(self: *AManager, comptime asset_type: type) std.mem.Allocator {
 }
 
 pub fn Deinit(self: *AManager, engine_context: *EngineContext) void {
+    //let go of while the assets are still there; they go with the rest of them
+    inline for (.{ Texture2D, TextAsset, AudioAsset }) |asset_type| {
+        if (self.HeldDefault(asset_type).*) |*handle| handle.ReleaseAsset();
+        self.HeldDefault(asset_type).* = null;
+    }
     Core.Deinit(self, engine_context);
     self.mCWDPath.deinit(engine_context.Keep());
 
@@ -294,7 +315,7 @@ pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_
             return asset;
         } else if (self.mECSManager.HasComponent(LoadFailedTag, asset_id)) {
             //it failed last time and the file has not changed since, so it would only fail again
-            return try self.GetDefaultAsset(asset_type);
+            return try self.GetDefaultAsset(engine_context, asset_type);
         } else {
             //a load changes the asset manager, which a hook speculating in a batch mustn't: it runs again on its own
             if (engine_context.mTransactions.RefuseSpeculative()) |err| return err;
@@ -320,14 +341,14 @@ pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_
                 if (err == error.AssetInitFailed) {
                     std.log.err("Failed To initialize asset {s} for asset type {s}\n", .{ abs_path, @typeName(asset_type) });
                     _ = try self.mECSManager.AddComponentSync(engine_context, asset_id, LoadFailedTag{});
-                    return try self.GetDefaultAsset(asset_type);
+                    return try self.GetDefaultAsset(engine_context, asset_type);
                 } else return err;
             };
 
             return self.mECSManager.AddComponentSync(engine_context, asset_id, asset_component);
         }
     } else {
-        return try self.GetDefaultAsset(asset_type);
+        return try self.GetDefaultAsset(engine_context, asset_type);
     }
 }
 
@@ -378,9 +399,8 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
             return err;
         };
 
-        //the stat worked, so the file is there: anything that marked it for deletion while it was
-        //missing no longer applies
-        try self.UnmarkForDelete(engine_context, asset_id);
+        //the stat worked, so the file is there: the mark it got while missing no longer applies
+        try self.UnmarkForDelete(engine_context, asset_id, .FileNotFound);
 
         //an edit that leaves mtime and size untouched is not detected. Catching that would mean
         //hashing every asset's full contents every frame, which is not worth it here.
@@ -398,24 +418,6 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
         if (!try file_data.Eql(engine_context, file, stat)) {
             try file_data.UpdateMetaData(engine_context, file, stat);
             try self.mEventManager.Insert(engine_context.Keep(), .EndOfFrame, .{ .FileUpdate = .{ .mAssetID = asset_id } });
-        }
-    }
-
-    //asked of the ECS rather than kept in a side map, so the mark cannot outlive the asset: a
-    //destroyed asset takes its PendingDelete with it instead of leaving an entry that re-queues
-    //ToDestroyAsset every frame against a dead (or worse, recycled) id.
-    //Queried after the loop above so a mark made this frame is already in it, as it was before.
-    const pending = try self.mECSManager.GetGroup(scratch_allocator, .{ .Component = PendingDelete });
-    const t1 = std.Io.Timestamp.now(engine_context.Io(), .awake);
-    for (pending.items) |asset_id| {
-        const pending_delete = self.mECSManager.GetComponent(PendingDelete, asset_id).?;
-
-        //TODO: here I can add different things to see if I can possibly recover the file based on its different reasons
-
-        const duration = pending_delete.mTime.durationTo(t1);
-        const ns = duration.toNanoseconds();
-        if (ns > ASSET_DELETE_TIMEOUT_NS) {
-            try self.mEventManager.Insert(engine_context.Keep(), .EndOfFrame, .{ .ToDestroyAsset = .{ .mAssetID = asset_id } });
         }
     }
 }
@@ -545,6 +547,7 @@ pub fn ProcessEvents(self: *AManager, comptime event_data: type, comptime event_
 /// Runs the asset destroys queued this frame: the manager events hand each dead asset to the ECS
 /// as a destroy, then the ECS events actually free it.
 pub fn ProcessDestroyedAssets(self: *AManager, engine_context: *EngineContext) !void {
+    try self.SweepPendingDeletes(engine_context);
     var callback_list: std.DoublyLinkedList = .{};
     try self.ProcessEvents(EventData, .EndOfFrame, engine_context, &callback_list);
     try self.mECSManager.ProcessEvents(engine_context);
@@ -632,15 +635,23 @@ fn ComputePathHash(path: []const u8) u64 {
     return hasher.final();
 }
 
-fn GetDefaultAsset(self: *AManager, asset_type: type) !*asset_type {
+/// What stands in for an asset of `asset_type` that can't be had. A texture, font or sound is the held default (Setup),
+/// read again if a change to its file unloaded it; the empty stand-in if there is none, or it can't be read either
+fn GetDefaultAsset(self: *AManager, engine_context: *EngineContext, asset_type: type) anyerror!*asset_type {
     if (asset_type == FileMetaData) {
         return &self._internal.DefaultFileMetaData;
-    } else if (asset_type == Texture2D) {
-        return &self._internal.DefaultTexture2D;
-    } else if (asset_type == TextAsset) {
-        return &self._internal.DefaultTextAsset;
-    } else if (asset_type == AudioAsset) {
-        return &self._internal.DefaultAudioAsset;
+    } else if (asset_type == Texture2D or asset_type == TextAsset or asset_type == AudioAsset) {
+        const stand_in = switch (asset_type) {
+            Texture2D => &self._internal.DefaultTexture2D,
+            TextAsset => &self._internal.DefaultTextAsset,
+            AudioAsset => &self._internal.DefaultAudioAsset,
+            else => unreachable,
+        };
+        const held = self.HeldDefault(asset_type).* orelse return stand_in;
+        if (self.mECSManager.GetComponentMut(asset_type, held.mID)) |asset| return asset;
+        //a failed read lands back here, finds the mark and takes the stand-in, so this reads it at most once
+        if (self.mECSManager.HasComponent(LoadFailedTag, held.mID)) return stand_in;
+        return try self.GetAsset(engine_context, asset_type, held.mID);
     } else if (asset_type == EnumAsset) {
         return &self._internal.DefaultEnumAsset;
     } else {
@@ -650,10 +661,47 @@ fn GetDefaultAsset(self: *AManager, asset_type: type) !*asset_type {
     }
 }
 
+/// Once a frame, at its end, once the objects deleted this frame have let go of their handles: an asset nothing holds a
+/// handle to is marked for deletion, and one held again is unmarked. Then every asset marked longer than the grace
+/// period (ASSET_DELETE_TIMEOUT_NS) is queued to be destroyed, which lets go of what it holds (a texture's atlas slot).
+/// The grace period lets the next scene take up an asset the last one let go of without reading it again
+fn SweepPendingDeletes(self: *AManager, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("AssetManager::SweepPendingDeletes", @src());
+    defer zone.Deinit();
+    const scratch_allocator = engine_context.Scratch();
+
+    //file assets only: destroying one takes it out of the map by its file's path
+    const assets = try self.mECSManager.GetGroup(scratch_allocator, .{ .Component = FileMetaData });
+    for (assets.items) |asset_id| {
+        const meta_data = self.mECSManager.GetComponent(AssetMetaData, asset_id) orelse continue;
+        const refs = @atomicLoad(usize, &meta_data.mRefs, .monotonic);
+        if (refs == 0) {
+            try self.MarkForDelete(engine_context, asset_id, .Unreferenced);
+        } else {
+            try self.UnmarkForDelete(engine_context, asset_id, .Unreferenced);
+        }
+    }
+
+    //asked of the ECS rather than kept in a side map, so the mark cannot outlive the asset: a
+    //destroyed asset takes its PendingDelete with it instead of leaving an entry that re-queues
+    //ToDestroyAsset every frame against a dead (or worse, recycled) id
+    const pending = try self.mECSManager.GetGroup(scratch_allocator, .{ .Component = PendingDelete });
+    const t1 = std.Io.Timestamp.now(engine_context.Io(), .awake);
+    for (pending.items) |asset_id| {
+        const pending_delete = self.mECSManager.GetComponent(PendingDelete, asset_id).?;
+
+        //TODO: here I can add different things to see if I can possibly recover the file based on its different reasons
+
+        const duration = pending_delete.mTime.durationTo(t1);
+        const ns = duration.toNanoseconds();
+        if (ns > ASSET_DELETE_TIMEOUT_NS) {
+            try self.mEventManager.Insert(engine_context.Keep(), .EndOfFrame, .{ .ToDestroyAsset = .{ .mAssetID = asset_id } });
+        }
+    }
+}
+
 fn MarkForDelete(self: *AManager, engine_context: *EngineContext, asset_id: AssetHandle.Type, reason: AssetErrorFlags.Reason) !void {
-    const error_flags = switch (reason) {
-        .FileNotFound => AssetErrorFlags.FileNotFound,
-    };
+    const error_flags = AssetErrorFlags.Of(reason);
 
     //already marked: add the reason and leave mTime alone, so the grace period runs from the first
     //thing that went wrong rather than restarting on every later one
@@ -668,10 +716,13 @@ fn MarkForDelete(self: *AManager, engine_context: *EngineContext, asset_id: Asse
     });
 }
 
-/// Called when an asset's file turns out to be fine after all, so a file that only briefly went
-/// missing (an editor saving by rename, say) is not destroyed a second later.
-fn UnmarkForDelete(self: *AManager, engine_context: *EngineContext, asset_id: AssetHandle.Type) !void {
-    if (!self.mECSManager.HasComponent(PendingDelete, asset_id)) return;
+/// Called when a reason an asset was marked for no longer holds: its file turns out to be fine after all, so a file that
+/// only briefly went missing (an editor saving by rename, say) is not destroyed a second later, or something holds it
+/// again. The mark goes once no reason is left
+fn UnmarkForDelete(self: *AManager, engine_context: *EngineContext, asset_id: AssetHandle.Type, reason: AssetErrorFlags.Reason) !void {
+    const pending_delete = self.mECSManager.GetComponentMut(PendingDelete, asset_id) orelse return;
+    pending_delete.mReason &= ~AssetErrorFlags.Of(reason);
+    if (pending_delete.mReason != 0) return;
     try self.mECSManager.RemoveComponentSync(engine_context, asset_id, ECSManagerT.ComponentInd(PendingDelete));
 }
 

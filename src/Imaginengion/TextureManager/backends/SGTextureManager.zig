@@ -75,7 +75,7 @@ pub fn Init(self: *SGTextureManager, engine_context: *EngineContext, vram_bytes_
     };
 
     //the atlas every texture and shown render target is copied into, shared by every world: the engine's
-    self.mTexture = engine_context.mGPUAllocator.CreateTexture(engine_context, &texture_info, GPUAllocator.ENGINE) orelse {
+    self.mTexture = engine_context.mGPUAllocator.CreateTexture(engine_context, &texture_info, GPUAllocator.ENGINE, "Texture atlas") orelse {
         std.log.err("TextureAtlasManager: SDL_CreateGPUTexture failed — {s}", .{sdl.SDL_GetError()});
         return error.InitFailed;
     };
@@ -98,7 +98,7 @@ pub fn Init(self: *SGTextureManager, engine_context: *EngineContext, vram_bytes_
         .padding2 = 0,
         .props = 0,
     };
-    self.mSampler = engine_context.mGPUAllocator.CreateSampler(engine_context, &sampler_info, GPUAllocator.ENGINE) orelse {
+    self.mSampler = engine_context.mGPUAllocator.CreateSampler(engine_context, &sampler_info, GPUAllocator.ENGINE, "Texture atlas") orelse {
         std.log.err("TextureAtlasManager: SDL_CreateGPUSampler failed — {s}", .{sdl.SDL_GetError()});
         return error.InitFailed;
     };
@@ -293,7 +293,7 @@ fn UpdateToLayer(self: *SGTextureManager, engine_context: *EngineContext, device
         .props = 0,
     };
 
-    const transfer_buf = engine_context.mGPUAllocator.CreateTransferBuffer(engine_context, &transfer_info, GPUAllocator.ENGINE) orelse return error.UpdateFailed;
+    const transfer_buf = engine_context.mGPUAllocator.CreateTransferBuffer(engine_context, &transfer_info, GPUAllocator.ENGINE, "Texture atlas") orelse return error.UpdateFailed;
     defer engine_context.mGPUAllocator.ReleaseTransferBuffer(engine_context, transfer_buf);
 
     std.log.debug("UpdateToLayer: pixels={*} w={d} h={d} data_size={d}", .{ pixels, width, height, data_size });
@@ -362,6 +362,47 @@ fn BinIndToSlotSize(bin_index: usize) usize {
         6 => BIN4096.SlotSize,
         else => undefined,
     };
+}
+
+/// How much of the atlas one size of texture uses: each size has layers of its own, cut into slots of one size
+pub const BinUsage = struct {
+    /// the biggest texture a slot of it takes, either way
+    MaxSize: usize,
+    Layers: usize,
+    /// slots holding a texture, of the slots its layers have
+    UsedSlots: usize,
+    TotalSlots: usize,
+    /// how many bytes one of its slots is, padding included
+    SlotBytes: usize,
+};
+
+/// How much of the atlas is in use: the slots holding a texture, and the whole layers claimed for them, each by one
+/// size of texture
+pub const Usage = struct {
+    /// the bytes of every slot holding a texture
+    UsedBytes: usize = 0,
+    Layers: usize = 0,
+    MaxLayers: usize = 0,
+    LayerBytes: usize = BYTES_PER_LAYER,
+    Bins: [NUM_BINS]BinUsage = undefined,
+};
+
+pub fn GetUsage(self: *SGTextureManager) Usage {
+    var usage: Usage = .{ .MaxLayers = self.mMaxLayers };
+    for (&usage.Bins, 0..) |*bin, bin_ind| {
+        const slot_size = BinIndToSlotSize(bin_ind);
+        bin.* = .{ .MaxSize = SizeBoundsList[bin_ind], .Layers = 0, .UsedSlots = 0, .TotalSlots = 0, .SlotBytes = slot_size * slot_size * 4 };
+        if (bin_ind >= self.mBins.items.len) continue;
+        var layers = self.mBins.items[bin_ind].Iterator();
+        while (layers.next()) |layer_ind| {
+            bin.Layers += 1;
+            bin.TotalSlots += BinIndToTotalSlots(bin_ind);
+            bin.UsedSlots += SlotFreeListT.SkipFieldSize - self.mLayers.items[layer_ind].mNumUnskipped;
+        }
+        usage.Layers += bin.Layers;
+        usage.UsedBytes += bin.UsedSlots * bin.SlotBytes;
+    }
+    return usage;
 }
 
 fn BinIndToTotalSlots(bin_index: usize) usize {

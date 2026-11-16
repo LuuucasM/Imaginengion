@@ -58,7 +58,7 @@ pub fn Toggle(self: *GameStats, engine_context: *EngineContext, player: Player) 
         const scene = try engine_context.mGameWorld.NewScene(engine_context, .OverlayLayer, .{ .bAddSceneName = true, .bAddSceneUUID = false });
         try scene.SetName(engine_context, "Stats");
         self.mScene = scene;
-        self.mPanel = try ProfilerPanel.Build(engine_context, scene, self.mOptions);
+        self.mPanel = try ProfilerPanel.Build(engine_context, scene, .Game, self.mOptions);
     }
     self.mShowing = try player.AddOverlay(engine_context, self.mScene.?);
     if (!self.mPanel.IsOpen()) try self.mPanel.Toggle(engine_context);

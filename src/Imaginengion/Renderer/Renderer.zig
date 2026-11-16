@@ -178,10 +178,10 @@ pub const ShadingBuffers = struct {
     };
 
     pub fn Init(self: *ShadingBuffers, engine_context: *EngineContext) !void {
-        self.mSurfShadingBuff.Init(engine_context, @sizeOf(SurfShadingData) * 100, 0, .Compute);
+        self.mSurfShadingBuff.Init(engine_context, "Surface shading", @sizeOf(SurfShadingData) * 100, 0, .Compute);
         self.mSurfShadingBuffBase = try std.ArrayList(SurfShadingData).initCapacity(engine_context.Keep(), 100);
 
-        self.mMedShadingBuff.Init(engine_context, @sizeOf(MedShadingData) * 100, 1, .Compute);
+        self.mMedShadingBuff.Init(engine_context, "Medium shading", @sizeOf(MedShadingData) * 100, 1, .Compute);
         self.mMedShadingBuffBase = try std.ArrayList(MedShadingData).initCapacity(engine_context.Keep(), 100);
     }
     pub fn Deinit(self: *ShadingBuffers, engine_context: *EngineContext) void {
@@ -342,7 +342,9 @@ pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     //what the window really does
     _ = self.SetPresentMode(engine_context, self.mPresentMode);
 
-    try self.mTextureManager.Init(engine_context, 1_000_000_000);
+    //8 layers of 64 MB, all made up front. Each size of texture claims layers of its own, and a shown render target
+    //bigger than 2044 pixels takes a whole layer: the editor used 5 and pong2 6 (2026-11-16)
+    try self.mTextureManager.Init(engine_context, 512 * 1024 * 1024);
 
     try self.mGamePipeline.Init(engine_context);
     try self.mOverlayPipeline.Init(engine_context);

@@ -43,7 +43,7 @@ const TestWorld = struct {
 
 fn State(players: []const Player, following: ?Player) EditorMenuBar.State {
     var shown = std.EnumArray(EditorMenuBar.Panel, bool).initFill(true);
-    shown.set(.Stats, false);
+    shown.set(.Profiler, false);
     return .{ .Shown = shown, .ProjectOpen = false, .Selected = null, .CanPlayStop = true, .PlayPreview = false, .VSync = true, .Players = players, .Following = following };
 }
 
@@ -56,13 +56,13 @@ test "each item has its action, and the editor's state shows as check marks and 
 
     try std.testing.expectEqual(EditorMenuBar.Action.SaveProject, menu_bar.ActionOf(menu_bar.mSaveProject).?);
     try std.testing.expectEqual(EditorMenuBar.Action.ToggleProjectSettings, menu_bar.ActionOf(menu_bar.mProjectSettings).?);
-    try std.testing.expectEqual(EditorMenuBar.Panel.Stats, menu_bar.ActionOf(menu_bar.mPanelItems.get(.Stats)).?.TogglePanel);
+    try std.testing.expectEqual(EditorMenuBar.Panel.Profiler, menu_bar.ActionOf(menu_bar.mPanelItems.get(.Profiler)).?.TogglePanel);
     //a menu itself is no item
     try std.testing.expect(menu_bar.ActionOf(world.mBar) == null);
 
     try menu_bar.Update(engine_context, State(&.{}, null));
     try std.testing.expect(WidgetActions.IsChecked(menu_bar.mPanelItems.get(.Components)));
-    try std.testing.expect(!WidgetActions.IsChecked(menu_bar.mPanelItems.get(.Stats)));
+    try std.testing.expect(!WidgetActions.IsChecked(menu_bar.mPanelItems.get(.Profiler)));
     try std.testing.expect(!WidgetActions.IsChecked(menu_bar.mPlayPreview));
     //no project to save
     try std.testing.expect(menu_bar.mSaveProject.HasComponent(DisabledTag));
