@@ -66,8 +66,8 @@ test "the profiler window shows a row per node under its parent's, with numbers 
     try std.testing.expect(std.mem.startsWith(u8, TextOf(panel.mVideoRows.items[1].Title), "Made by the engine   "));
     try std.testing.expect(std.mem.startsWith(u8, TextOf(panel.mVideoRows.items[2].Title), "Not made by the engine"));
     //no atlas made here: none of it in use
-    try std.testing.expectEqualStrings("Texture atlas in use   0 B of 0 B in slots holding a texture   0 of 0 layers claimed (0 B)", TextOf(panel.mVideoRows.items[3].Title));
-    try std.testing.expectEqualStrings("Up to 60 px   0 B in 0 of 0 slots   0 layers", TextOf(panel.mVideoRows.items[4].Title));
+    try std.testing.expectEqualStrings("Texture atlas in use   0 B in slots holding a texture   the array 0 of at most 0 layers (0 B of 0 B)", TextOf(panel.mVideoRows.items[3].Title));
+    try std.testing.expectEqualStrings("Up to 60 px   0 B in 0 slots   0 free in 0 pages of 8 x 8", TextOf(panel.mVideoRows.items[4].Title));
     //a group met since gets its owner's row and its own under what the engine made, on the next refresh
     try engine_context.mGPUAllocator.mGroups.append(engine_context.Keep(), .{ .Owner = GPUAllocator.ENGINE, .Name = "Texture atlas", .Kind = .Texture, .Bytes = 2048, .Peak = 4096, .Count = 1 });
     engine_context.mDT = ProfilerPanel.REFRESH_SECONDS;

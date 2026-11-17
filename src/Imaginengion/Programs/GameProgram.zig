@@ -272,7 +272,7 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
         defer render_zone.Deinit();
         if (engine_context.mRenderer.BeginFrame(engine_context)) {
             try RenderGame(engine_context);
-            engine_context.mRenderer.EndFrame();
+            try engine_context.mRenderer.EndFrame(engine_context);
         }
     }
     //--------------Render End-------------------

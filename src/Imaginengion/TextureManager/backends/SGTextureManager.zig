@@ -1,10 +1,19 @@
+//! The texture atlas on SDL's GPU API: one RGBA8 texture array that every texture and shown render target is copied
+//! into, shared by every world, so a shader finds any texture from one u32 handle (AtlasHandle) instead of binding it:
+//! bindless, without the bindless resources SDL's GPU API doesn't have. Where each texture goes is AtlasSlots'.
+//!
+//! The array grows a layer at a time as it fills, up to the most it may have (mMaxLayers, from the budget it was given),
+//! and gives back the free layers at its end once there are a few (OnFrameEnd). Either way it is made again at its new
+//! size with every layer kept copied across on the GPU, to the same layer, so no handle changes. An array replaced while
+//! a frame is being recorded may already be in that frame's commands, so it is only let go of once the frame is
+//! submitted.
 const std = @import("std");
 const sdl = @import("../../Core/CImports.zig").sdl;
-const Bin = @import("../Bin.zig").Bin;
 const GPUAllocator = @import("../../Core/GPUAllocator.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Tracy = @import("../../Core/Tracy.zig");
-const SkipField = @import("../../Core/SkipField.zig").StaticSkipField;
+const AtlasHandle = @import("../AtlasHandle.zig");
+const AtlasSlots = @import("../AtlasSlots.zig");
 
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec2 = MathTypes.Vec2;
@@ -12,73 +21,27 @@ const Vec3 = MathTypes.Vec3;
 
 const SGTextureManager = @This();
 
-pub const ATLAS_SIZE: u32 = 4096;
-pub const MAX_POSSIBLE_LAYERS = 170;
-pub const PADDING: u32 = 2;
-pub const NUM_BINS: u32 = 7;
+pub const ATLAS_SIZE = AtlasHandle.ATLAS_SIZE;
 pub const BYTES_PER_LAYER: usize = ATLAS_SIZE * ATLAS_SIZE * 4; // RGBA8
-pub const SLOT_BYTES = 18;
-pub const LAYER_BYTES = 10;
-pub const BINS_BYTES = 4;
-
-const BIN64 = Bin(ATLAS_SIZE, 64, 2);
-const BIN128 = Bin(ATLAS_SIZE, 128, 2);
-const BIN256 = Bin(ATLAS_SIZE, 256, 2);
-const BIN512 = Bin(ATLAS_SIZE, 512, 2);
-const BIN1024 = Bin(ATLAS_SIZE, 1024, 2);
-const BIN2048 = Bin(ATLAS_SIZE, 2048, 2);
-const BIN4096 = Bin(ATLAS_SIZE, 4096, 2);
-
-const LayersFreeListT = SkipField(MAX_POSSIBLE_LAYERS);
-const SlotFreeListT = SkipField(BIN64.TotalSlots);
-const SizeBoundsList = [_]usize{
-    BIN64.MaxTextureSize,
-    BIN128.MaxTextureSize,
-    BIN256.MaxTextureSize,
-    BIN512.MaxTextureSize,
-    BIN1024.MaxTextureSize,
-    BIN2048.MaxTextureSize,
-    BIN4096.MaxTextureSize,
-};
+/// Free layers left at the end when it shrinks, so loading the next texture doesn't grow it straight back
+const SPARE_LAYERS = 1;
 
 mTexture: ?*sdl.SDL_GPUTexture = null,
 mSampler: ?*sdl.SDL_GPUSampler = null,
+/// The most layers it may grow to
 mMaxLayers: usize = 0,
-mBins: std.ArrayList(LayersFreeListT) = .empty,
-mLayers: std.ArrayList(SlotFreeListT) = .empty,
-mLayersFreeList: LayersFreeListT = .NoSkip,
-mNumLayers: usize = 0,
+mSlots: AtlasSlots = .{},
+/// Arrays replaced while a frame was being recorded, let go of once it is submitted (OnFrameEnd)
+mRetired: std.ArrayList(*sdl.SDL_GPUTexture) = .empty,
 
+/// Starts with one layer, and may grow to as many as `vram_bytes_size` holds
 pub fn Init(self: *SGTextureManager, engine_context: *EngineContext, vram_bytes_size: usize) !void {
     const zone = Tracy.ZoneInit("SGTextureManager::Init", @src());
     defer zone.Deinit();
 
-    self.mMaxLayers = vram_bytes_size / BYTES_PER_LAYER;
-
+    self.mMaxLayers = @min(vram_bytes_size / BYTES_PER_LAYER, AtlasHandle.MAX_LAYERS);
     std.debug.assert(self.mMaxLayers != 0);
-
-    std.log.info("TextureAtlasManager: {d} layers ({d}MB VRAM budget)", .{
-        self.mMaxLayers,
-        vram_bytes_size / (1024 * 1024),
-    });
-
-    const texture_info = sdl.SDL_GPUTextureCreateInfo{
-        .type = sdl.SDL_GPU_TEXTURETYPE_2D_ARRAY,
-        .format = sdl.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        .usage = sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER | sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
-        .width = ATLAS_SIZE,
-        .height = ATLAS_SIZE,
-        .layer_count_or_depth = @intCast(self.mMaxLayers),
-        .num_levels = 1,
-        .sample_count = sdl.SDL_GPU_SAMPLECOUNT_1,
-        .props = 0,
-    };
-
-    //the atlas every texture and shown render target is copied into, shared by every world: the engine's
-    self.mTexture = engine_context.mGPUAllocator.CreateTexture(engine_context, &texture_info, GPUAllocator.ENGINE, "Texture atlas") orelse {
-        std.log.err("TextureAtlasManager: SDL_CreateGPUTexture failed — {s}", .{sdl.SDL_GetError()});
-        return error.InitFailed;
-    };
+    std.log.info("TextureAtlasManager: up to {d} layers ({d}MB VRAM budget)", .{ self.mMaxLayers, vram_bytes_size / (1024 * 1024) });
 
     const sampler_info = sdl.SDL_GPUSamplerCreateInfo{
         .min_filter = sdl.SDL_GPU_FILTER_LINEAR,
@@ -103,23 +66,15 @@ pub fn Init(self: *SGTextureManager, engine_context: *EngineContext, vram_bytes_
         return error.InitFailed;
     };
 
-    try self.mLayers.ensureTotalCapacityPrecise(engine_context.Keep(), self.mMaxLayers);
-    for (0..self.mMaxLayers) |i| {
-        _ = i;
-        self.mLayers.appendAssumeCapacity(.NoSkip);
-    }
-
-    for (0..NUM_BINS) |i| {
-        _ = i;
-        try self.mBins.append(engine_context.Keep(), .AllSkip);
-    }
+    try self.Resize(engine_context, 1, .Now);
 }
 
 pub fn Deinit(self: *SGTextureManager, engine_context: *EngineContext) void {
     const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
     _ = sdl.SDL_WaitForGPUIdle(device);
-    self.mBins.deinit(engine_context.Keep());
-    self.mLayers.deinit(engine_context.Keep());
+    self.ReleaseRetired(engine_context);
+    self.mRetired.deinit(engine_context.Keep());
+    self.mSlots.Deinit(engine_context.Keep());
 
     if (self.mSampler) |s| engine_context.mGPUAllocator.ReleaseSampler(engine_context, s);
     if (self.mTexture) |t| engine_context.mGPUAllocator.ReleaseTexture(engine_context, t);
@@ -128,45 +83,50 @@ pub fn Deinit(self: *SGTextureManager, engine_context: *EngineContext) void {
     self.mSampler = null;
 }
 
+/// A slot for a texture `width` by `height`, its pixels copied in if given (a render target's are copied in each frame
+/// that shows it, CopyFromTexture). Grows the array a layer when it is full
 pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?*anyopaque, width: usize, height: usize) !u32 {
     const zone = Tracy.ZoneInit("SGTextureManager::Register", @src());
     defer zone.Deinit();
 
-    const max_dim = @max(width, height);
-    const bin_index = std.sort.lowerBound(
-        usize,
-        &SizeBoundsList,
-        max_dim,
-        struct {
-            fn comparison(key: usize, mid: usize) std.math.Order {
-                return std.math.order(key, mid);
-            }
-        }.comparison,
-    );
-
-    if (bin_index == SizeBoundsList.len) {
-        std.log.err("TextureAtlasManager: texture {d}x{d} exceeds max size {d}", .{
-            width, height, BIN2048.MaxTextureSize,
-        });
+    const class = AtlasHandle.ClassOf(width, height) orelse {
+        std.log.err("TextureAtlasManager: texture {d}x{d} exceeds max size {d}", .{ width, height, AtlasHandle.MaxTextureSize(AtlasHandle.CLASS_COUNT - 1) });
         return error.TextureTooLarge;
-    }
+    };
 
-    const layer_index, const slot_index = try self.FindLayerIndex(bin_index);
-
-    errdefer {
-        self.mLayers.items[layer_index].ChangeToUnskipped(slot_index);
-        self.CheckReleaseLayer(bin_index, layer_index);
-    }
-
-    const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
-
-    const offset_x, const offset_y = GetPixelOffsets(bin_index, slot_index);
+    const handle = while (true) {
+        if (try self.mSlots.Alloc(engine_context.Keep(), class)) |handle| break handle;
+        if (self.mSlots.LayerCount() >= self.mMaxLayers) return error.OutOfTextureMemory;
+        //this may be in the middle of recording a frame that already uses the array
+        try self.Resize(engine_context, self.mSlots.LayerCount() + 1, .AfterFrame);
+    };
+    errdefer self.mSlots.Free(handle);
 
     if (data) |d| {
-        try self.UpdateToLayer(engine_context, device, d, width, height, layer_index, offset_x, offset_y);
+        const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
+        try self.UpdateToLayer(engine_context, device, d, width, height, AtlasHandle.Layer(handle), AtlasHandle.PixelX(handle), AtlasHandle.PixelY(handle));
     }
+    return handle;
+}
 
-    return (@as(u32, @intCast(slot_index)) << (LAYER_BYTES + BINS_BYTES)) | (@as(u32, @intCast(layer_index)) << BINS_BYTES) | @as(u32, @intCast(bin_index));
+pub fn Unregister(self: *SGTextureManager, texture_location: u32) void {
+    std.debug.assert(AtlasHandle.Layer(texture_location) < self.mSlots.LayerCount());
+    self.mSlots.Free(texture_location);
+}
+
+/// Once a frame, after it has been submitted: lets go of the arrays replaced while it was recorded, and gives back the
+/// free layers at the end when there are more than SPARE_LAYERS of them
+pub fn OnFrameEnd(self: *SGTextureManager, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("SGTextureManager::OnFrameEnd", @src());
+    defer zone.Deinit();
+    self.ReleaseRetired(engine_context);
+
+    const free = self.mSlots.TrailingFreeLayers();
+    const layers = self.mSlots.LayerCount();
+    if (free <= SPARE_LAYERS or layers <= 1) return;
+    const keep = @max(1, layers - free + SPARE_LAYERS);
+    //nothing is being recorded now, and SDL keeps a released array until the submitted frames using it are done
+    try self.Resize(engine_context, keep, .Now);
 }
 
 /// Copies `width` x `height` of `source` (a GPU texture of the same RGBA8 format, from its top left corner) into the slot
@@ -175,15 +135,14 @@ pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?
 pub fn CopyFromTexture(self: *SGTextureManager, copy_pass: *anyopaque, source: *anyopaque, texture_location: u32, width: usize, height: usize) void {
     const zone = Tracy.ZoneInit("SGTextureManager::CopyFromTexture", @src());
     defer zone.Deinit();
-    const offset_x, const offset_y = GetPixelOffsets(GetBinIndex(texture_location), GetSlotIndex(texture_location));
 
     const src = sdl.SDL_GPUTextureLocation{ .texture = @ptrCast(@alignCast(source)), .mip_level = 0, .layer = 0, .x = 0, .y = 0, .z = 0 };
     const dst = sdl.SDL_GPUTextureLocation{
         .texture = self.mTexture,
         .mip_level = 0,
-        .layer = @intCast(GetLayerIndex(texture_location)),
-        .x = @intCast(offset_x),
-        .y = @intCast(offset_y),
+        .layer = AtlasHandle.Layer(texture_location),
+        .x = AtlasHandle.PixelX(texture_location),
+        .y = AtlasHandle.PixelY(texture_location),
         .z = 0,
     };
     sdl.SDL_CopyGPUTextureToTexture(@ptrCast(@alignCast(copy_pass)), &src, &dst, @intCast(width), @intCast(height), 1, false);
@@ -209,17 +168,6 @@ pub fn BindCompute(self: SGTextureManager, compute_pass: *anyopaque) void {
     sdl.SDL_BindGPUComputeSamplers(sdl_compute_pass, 0, &binding, 1);
 }
 
-pub fn Unregister(self: *SGTextureManager, texture_location: u32) void {
-    const layer_index = GetLayerIndex(texture_location);
-    const slot_index = GetSlotIndex(texture_location);
-    const bin_index = GetBinIndex(texture_location);
-
-    std.debug.assert(layer_index < self.mLayers.items.len);
-    self.mLayers.items[layer_index].ChangeToUnskipped(slot_index);
-
-    self.CheckReleaseLayer(bin_index, layer_index);
-}
-
 pub fn GetTexture(self: SGTextureManager) *sdl.SDL_GPUTexture {
     return self.mTexture.?;
 }
@@ -227,64 +175,91 @@ pub fn GetSampler(self: SGTextureManager) *sdl.SDL_GPUSampler {
     return self.mSampler.?;
 }
 
-fn FindLayerIndex(self: *SGTextureManager, bin_index: usize) !struct { usize, usize } {
-    var iter = self.mBins.items[bin_index].Iterator();
-    const bin_total_slots = BinIndToTotalSlots(bin_index);
+/// How much of the atlas is in use: the slots holding a texture, by size class, and the layers the array has
+pub const Usage = struct {
+    /// the bytes of every slot holding a texture
+    UsedBytes: usize = 0,
+    /// layers the array has now, and the most it may grow to
+    Layers: usize = 0,
+    MaxLayers: usize = 0,
+    LayerBytes: usize = BYTES_PER_LAYER,
+    Classes: [AtlasHandle.CLASS_COUNT]AtlasSlots.ClassUsage = undefined,
+};
 
-    while (iter.next()) |layer_index| {
-        //if we go into the while loop then this layer_index is one that the bin owns
-        if (self.mLayers.items[layer_index].GetFirstUnskipped()) |slot_index| {
-            if (slot_index < bin_total_slots) {
-                //if we can get an unskipped index that means theres space in this layer so return the slot index
-                self.mLayers.items[layer_index].ChangeToSkipped(slot_index);
-                return .{ layer_index, slot_index };
-            }
+pub fn GetUsage(self: *SGTextureManager) Usage {
+    var usage: Usage = .{ .Layers = self.mSlots.LayerCount(), .MaxLayers = self.mMaxLayers, .Classes = self.mSlots.Usage() };
+    for (usage.Classes) |class| usage.UsedBytes += class.Used * class.SlotBytes;
+    return usage;
+}
+
+const ReleaseOld = enum {
+    /// let go of the old array straight away: nothing is being recorded
+    Now,
+    /// keep it until the frame being recorded is submitted (OnFrameEnd)
+    AfterFrame,
+};
+
+/// Makes the array again with `layers` layers, copying every layer both have across on the GPU, and grows or shrinks the
+/// slots' layers to match
+fn Resize(self: *SGTextureManager, engine_context: *EngineContext, layers: usize, release_old: ReleaseOld) !void {
+    const zone = Tracy.ZoneInit("SGTextureManager::Resize", @src());
+    defer zone.Deinit();
+    std.debug.assert(layers >= 1 and layers <= self.mMaxLayers);
+
+    const texture_info = sdl.SDL_GPUTextureCreateInfo{
+        .type = sdl.SDL_GPU_TEXTURETYPE_2D_ARRAY,
+        .format = sdl.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+        .usage = sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER | sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
+        .width = ATLAS_SIZE,
+        .height = ATLAS_SIZE,
+        .layer_count_or_depth = @intCast(layers),
+        .num_levels = 1,
+        .sample_count = sdl.SDL_GPU_SAMPLECOUNT_1,
+        .props = 0,
+    };
+    //the atlas every texture and shown render target is copied into, shared by every world: the engine's
+    const texture = engine_context.mGPUAllocator.CreateTexture(engine_context, &texture_info, GPUAllocator.ENGINE, "Texture atlas") orelse {
+        std.log.err("TextureAtlasManager: SDL_CreateGPUTexture failed — {s}", .{sdl.SDL_GetError()});
+        return error.InitFailed;
+    };
+    errdefer engine_context.mGPUAllocator.ReleaseTexture(engine_context, texture);
+
+    const old_layers = self.mSlots.LayerCount();
+    if (self.mTexture) |old| {
+        const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
+        const cmd = sdl.SDL_AcquireGPUCommandBuffer(device) orelse return error.InitFailed;
+        const copy_pass = sdl.SDL_BeginGPUCopyPass(cmd) orelse {
+            _ = sdl.SDL_CancelGPUCommandBuffer(cmd);
+            return error.InitFailed;
+        };
+        for (0..@min(old_layers, layers)) |layer| {
+            const src = sdl.SDL_GPUTextureLocation{ .texture = old, .mip_level = 0, .layer = @intCast(layer), .x = 0, .y = 0, .z = 0 };
+            const dst = sdl.SDL_GPUTextureLocation{ .texture = texture, .mip_level = 0, .layer = @intCast(layer), .x = 0, .y = 0, .z = 0 };
+            sdl.SDL_CopyGPUTextureToTexture(copy_pass, &src, &dst, ATLAS_SIZE, ATLAS_SIZE, 1, false);
+        }
+        sdl.SDL_EndGPUCopyPass(copy_pass);
+        _ = sdl.SDL_SubmitGPUCommandBuffer(cmd);
+
+        switch (release_old) {
+            .Now => engine_context.mGPUAllocator.ReleaseTexture(engine_context, old),
+            .AfterFrame => try self.mRetired.append(engine_context.Keep(), old),
         }
     }
+    self.mTexture = texture;
 
-    //we did not get a layer index while iterating through the bins freelist so we need to try and claim a new one
-    if (self.mLayersFreeList.GetFirstUnskipped()) |layer_index| {
-        self.mBins.items[bin_index].ChangeToUnskipped(layer_index);
-        self.mLayersFreeList.ChangeToSkipped(layer_index);
-
-        const slot_index = self.mLayers.items[layer_index].GetFirstUnskipped().?;
-        self.mLayers.items[layer_index].ChangeToSkipped(slot_index);
-
-        return .{ layer_index, slot_index };
+    if (layers > old_layers) {
+        for (old_layers..layers) |_| try self.mSlots.AddLayer(engine_context.Keep());
     } else {
-        //no more available layers so error
-        return error.OutOfTextureMemory;
+        self.mSlots.RemoveLayers(old_layers - layers);
     }
 }
 
-fn CheckReleaseLayer(self: *SGTextureManager, bin_index: usize, layer_index: usize) void {
-    if (self.mLayers.items[layer_index].IsAllUnskipped()) {
-        self.mBins.items[bin_index].ChangeToSkipped(layer_index);
-        self.mLayersFreeList.ChangeToUnskipped(layer_index);
-        self.mLayers.items[layer_index] = .NoSkip;
-    }
+fn ReleaseRetired(self: *SGTextureManager, engine_context: *EngineContext) void {
+    for (self.mRetired.items) |texture| engine_context.mGPUAllocator.ReleaseTexture(engine_context, texture);
+    self.mRetired.clearRetainingCapacity();
 }
 
-pub fn GetPixelOffsets(bin_index: usize, slot_index: usize) struct { usize, usize } {
-    const slots_per_row = BinIndToSlotsPerRow(bin_index);
-    const slot_size = BinIndToSlotSize(bin_index);
-    const slot_col = slot_index % slots_per_row;
-    const slot_row = slot_index / slots_per_row;
-    return .{
-        slot_col * slot_size + PADDING,
-        slot_row * slot_size + PADDING,
-    };
-}
-
-fn GetUVOffsets(bin_index: usize, slot_index: usize) struct { f32, f32 } {
-    const px_x, const px_y = GetPixelOffsets(bin_index, slot_index);
-    return .{
-        @as(f32, @floatFromInt(px_x)) / ATLAS_SIZE,
-        @as(f32, @floatFromInt(px_y)) / ATLAS_SIZE,
-    };
-}
-
-fn UpdateToLayer(self: *SGTextureManager, engine_context: *EngineContext, device: ?*sdl.SDL_GPUDevice, pixels: *anyopaque, width: usize, height: usize, layer_index: usize, offset_x: usize, offset_y: usize) !void {
+fn UpdateToLayer(self: *SGTextureManager, engine_context: *EngineContext, device: ?*sdl.SDL_GPUDevice, pixels: *anyopaque, width: usize, height: usize, layer_index: u32, offset_x: u32, offset_y: u32) !void {
     const data_size = width * height * 4; //4 because RGBA8
 
     const transfer_info = sdl.SDL_GPUTransferBufferCreateInfo{
@@ -296,12 +271,7 @@ fn UpdateToLayer(self: *SGTextureManager, engine_context: *EngineContext, device
     const transfer_buf = engine_context.mGPUAllocator.CreateTransferBuffer(engine_context, &transfer_info, GPUAllocator.ENGINE, "Texture atlas") orelse return error.UpdateFailed;
     defer engine_context.mGPUAllocator.ReleaseTransferBuffer(engine_context, transfer_buf);
 
-    std.log.debug("UpdateToLayer: pixels={*} w={d} h={d} data_size={d}", .{ pixels, width, height, data_size });
-
     const mapped = sdl.SDL_MapGPUTransferBuffer(device, transfer_buf, false) orelse return error.InitFailed;
-
-    std.log.debug("UpdateToLayer: mapped={*}", .{mapped});
-
     @memcpy(
         @as([*]u8, @ptrCast(mapped))[0..data_size],
         @as([*]const u8, @ptrCast(pixels))[0..data_size],
@@ -324,9 +294,9 @@ fn UpdateToLayer(self: *SGTextureManager, engine_context: *EngineContext, device
     const dst = sdl.SDL_GPUTextureRegion{
         .texture = self.mTexture,
         .mip_level = 0,
-        .layer = @intCast(layer_index), // which layer in the array
-        .x = @intCast(offset_x), // horizontal offset within the layer
-        .y = @intCast(offset_y), // vertical offset within the layer
+        .layer = layer_index,
+        .x = offset_x,
+        .y = offset_y,
         .z = 0,
         .w = @intCast(width),
         .h = @intCast(height),
@@ -338,111 +308,23 @@ fn UpdateToLayer(self: *SGTextureManager, engine_context: *EngineContext, device
     _ = sdl.SDL_SubmitGPUCommandBuffer(cmd);
 }
 
-fn BinIndToSlotsPerRow(bin_index: usize) usize {
-    return switch (bin_index) {
-        0 => BIN64.SlotsPerRow,
-        1 => BIN128.SlotsPerRow,
-        2 => BIN256.SlotsPerRow,
-        3 => BIN512.SlotsPerRow,
-        4 => BIN1024.SlotsPerRow,
-        5 => BIN2048.SlotsPerRow,
-        6 => BIN4096.SlotsPerRow,
-        else => undefined,
-    };
+/// The layer of the texture array a handle's texture is in
+pub fn GetLayerIndex(texture_handle: u32) usize {
+    return AtlasHandle.Layer(texture_handle);
 }
 
-fn BinIndToSlotSize(bin_index: usize) usize {
-    return switch (bin_index) {
-        0 => BIN64.SlotSize,
-        1 => BIN128.SlotSize,
-        2 => BIN256.SlotSize,
-        3 => BIN512.SlotSize,
-        4 => BIN1024.SlotSize,
-        5 => BIN2048.SlotSize,
-        6 => BIN4096.SlotSize,
-        else => undefined,
-    };
-}
-
-/// How much of the atlas one size of texture uses: each size has layers of its own, cut into slots of one size
-pub const BinUsage = struct {
-    /// the biggest texture a slot of it takes, either way
-    MaxSize: usize,
-    Layers: usize,
-    /// slots holding a texture, of the slots its layers have
-    UsedSlots: usize,
-    TotalSlots: usize,
-    /// how many bytes one of its slots is, padding included
-    SlotBytes: usize,
-};
-
-/// How much of the atlas is in use: the slots holding a texture, and the whole layers claimed for them, each by one
-/// size of texture
-pub const Usage = struct {
-    /// the bytes of every slot holding a texture
-    UsedBytes: usize = 0,
-    Layers: usize = 0,
-    MaxLayers: usize = 0,
-    LayerBytes: usize = BYTES_PER_LAYER,
-    Bins: [NUM_BINS]BinUsage = undefined,
-};
-
-pub fn GetUsage(self: *SGTextureManager) Usage {
-    var usage: Usage = .{ .MaxLayers = self.mMaxLayers };
-    for (&usage.Bins, 0..) |*bin, bin_ind| {
-        const slot_size = BinIndToSlotSize(bin_ind);
-        bin.* = .{ .MaxSize = SizeBoundsList[bin_ind], .Layers = 0, .UsedSlots = 0, .TotalSlots = 0, .SlotBytes = slot_size * slot_size * 4 };
-        if (bin_ind >= self.mBins.items.len) continue;
-        var layers = self.mBins.items[bin_ind].Iterator();
-        while (layers.next()) |layer_ind| {
-            bin.Layers += 1;
-            bin.TotalSlots += BinIndToTotalSlots(bin_ind);
-            bin.UsedSlots += SlotFreeListT.SkipFieldSize - self.mLayers.items[layer_ind].mNumUnskipped;
-        }
-        usage.Layers += bin.Layers;
-        usage.UsedBytes += bin.UsedSlots * bin.SlotBytes;
-    }
-    return usage;
-}
-
-fn BinIndToTotalSlots(bin_index: usize) usize {
-    return switch (bin_index) {
-        0 => BIN64.TotalSlots,
-        1 => BIN128.TotalSlots,
-        2 => BIN256.TotalSlots,
-        3 => BIN512.TotalSlots,
-        4 => BIN1024.TotalSlots,
-        5 => BIN2048.TotalSlots,
-        6 => BIN4096.TotalSlots,
-        else => undefined,
-    };
-}
-
-pub fn GetSlotIndex(loc: u32) usize { //slot is which slot in the layer its in
-    return @intCast((loc >> (LAYER_BYTES + BINS_BYTES)) & ((1 << SLOT_BYTES) - 1));
-}
-
-pub fn GetLayerIndex(loc: u32) usize { //layer is which layer in the entire texture array
-    return @intCast((loc >> BINS_BYTES) & ((1 << LAYER_BYTES) - 1));
-}
-
-//this gets us the index of the bin based on SizeBoundsList
-//this way we can calculated the exact uv the "slot" starts at
-//by using slot index in combination with getting the metadata for the bin
-pub fn GetBinIndex(loc: u32) usize {
-    return @intCast(loc & ((1 << BINS_BYTES) - 1));
-}
-
+/// Where in the texture array a texture's `local_uv` (0 to 1 across the texture) is: the UV in its layer, and the layer.
+/// What the shaders do with a handle
 pub fn GetTextureUV(texture_handle: u32, local_uv: Vec2(f32), tex_width: u32, tex_height: u32) Vec3(f32) {
-    const bin_ind = GetBinIndex(texture_handle);
-    const slot_ind = GetSlotIndex(texture_handle);
-    const offset_u, const offset_v = GetUVOffsets(bin_ind, slot_ind);
+    const atlas_size: f32 = @floatFromInt(ATLAS_SIZE);
+    const offset_u = @as(f32, @floatFromInt(AtlasHandle.PixelX(texture_handle))) / atlas_size;
+    const offset_v = @as(f32, @floatFromInt(AtlasHandle.PixelY(texture_handle))) / atlas_size;
 
-    const scale_x: f32 = @as(f32, @floatFromInt(tex_width)) / ATLAS_SIZE;
-    const scale_y: f32 = @as(f32, @floatFromInt(tex_height)) / ATLAS_SIZE;
+    const scale_x: f32 = @as(f32, @floatFromInt(tex_width)) / atlas_size;
+    const scale_y: f32 = @as(f32, @floatFromInt(tex_height)) / atlas_size;
 
     const uv_x = offset_u + local_uv.x * scale_x;
     const uv_y = offset_v + local_uv.y * scale_y;
 
-    return .{ .x = uv_x, .y = uv_y, .z = @floatFromInt(GetLayerIndex(texture_handle)) };
+    return .{ .x = uv_x, .y = uv_y, .z = @floatFromInt(AtlasHandle.Layer(texture_handle)) };
 }

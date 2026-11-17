@@ -342,8 +342,7 @@ pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     //what the window really does
     _ = self.SetPresentMode(engine_context, self.mPresentMode);
 
-    //8 layers of 64 MB, all made up front. Each size of texture claims layers of its own, and a shown render target
-    //bigger than 2044 pixels takes a whole layer: the editor used 5 and pong2 6 (2026-11-16)
+    //the most the atlas may grow to: 8 layers of 64 MB. It starts at one and grows as it fills
     try self.mTextureManager.Init(engine_context, 512 * 1024 * 1024);
 
     try self.mGamePipeline.Init(engine_context);
@@ -377,8 +376,10 @@ pub fn BeginFrame(self: *Renderer, engine_context: *EngineContext) bool {
     return began;
 }
 
-pub fn EndFrame(self: *Renderer) void {
+pub fn EndFrame(self: *Renderer, engine_context: *EngineContext) !void {
     self.mPlatform.EndFrame();
+    //the frame is submitted, so what it used can go
+    try self.mTextureManager.OnFrameEnd(engine_context);
 }
 
 pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {

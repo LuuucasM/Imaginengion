@@ -49,8 +49,10 @@ pub fn Unregister(self: *TextureManager, texture_location: u32) void {
     self._Impl.Unregister(texture_location);
 }
 
-pub fn GetPixelOffsets(bin_index: usize, slot_index: usize) struct { usize, usize } {
-    return Impl.GetPixelOffsets(bin_index, slot_index);
+/// Once a frame, after it is submitted: lets go of what the atlas replaced while it was recorded, and shrinks it if it
+/// has free layers to give back
+pub fn OnFrameEnd(self: *TextureManager, engine_context: *EngineContext) !void {
+    try self._Impl.OnFrameEnd(engine_context);
 }
 
 pub fn GetTexture(self: TextureManager) *anyopaque {
@@ -60,16 +62,8 @@ pub fn GetSampler(self: TextureManager) *anyopaque {
     return self._Impl.GetSampler();
 }
 
-pub fn GetSlotIndex(texture_handle: u32) usize {
-    return Impl.GetSlotIndex(texture_handle);
-}
-
 pub fn GetLayerIndex(texture_handle: u32) usize {
     return Impl.GetLayerIndex(texture_handle);
-}
-
-pub fn GetBinIndex(texture_handle: u32) usize {
-    return Impl.GetBinIndex(texture_handle);
 }
 
 pub fn GetTextureUV(texture_handle: u32, local_uv: Vec2(f32), tex_width: u32, tex_height: u32) Vec3(f32) {

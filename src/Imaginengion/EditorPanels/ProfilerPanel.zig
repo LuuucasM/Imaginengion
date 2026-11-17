@@ -99,7 +99,7 @@ const VideoRowOf = union(enum) {
     Group: u32,
     /// how much of the texture atlas is in use
     Atlas,
-    /// one size of texture's use of it, by its bin's index
+    /// one size class's use of it (AtlasHandle), by the class
     AtlasBin: u8,
 };
 
@@ -325,16 +325,16 @@ fn UpdateVideo(self: *ProfilerPanel, engine_context: *EngineContext) !void {
                 const group = gpu.mGroups.items[group_ind];
                 try SetLine(engine_context, row.Title, "{s}   {f}   peak {f}   {s} x{d}", .{ group.Name, Bytes{ .mBytes = @intCast(group.Bytes) }, Bytes{ .mBytes = @intCast(group.Peak) }, group.Kind.Title(), group.Count });
             },
-            .Atlas => try SetLine(engine_context, row.Title, "Texture atlas in use   {f} of {f} in slots holding a texture   {d} of {d} layers claimed ({f})", .{
+            .Atlas => try SetLine(engine_context, row.Title, "Texture atlas in use   {f} in slots holding a texture   the array {d} of at most {d} layers ({f} of {f})", .{
                 Bytes{ .mBytes = @intCast(atlas.UsedBytes) },
-                Bytes{ .mBytes = @intCast(atlas.MaxLayers * atlas.LayerBytes) },
                 atlas.Layers,
                 atlas.MaxLayers,
                 Bytes{ .mBytes = @intCast(atlas.Layers * atlas.LayerBytes) },
+                Bytes{ .mBytes = @intCast(atlas.MaxLayers * atlas.LayerBytes) },
             }),
-            .AtlasBin => |bin_ind| {
-                const bin = atlas.Bins[bin_ind];
-                try SetLine(engine_context, row.Title, "Up to {d} px   {f} in {d} of {d} slots   {d} layers", .{ bin.MaxSize, Bytes{ .mBytes = @intCast(bin.UsedSlots * bin.SlotBytes) }, bin.UsedSlots, bin.TotalSlots, bin.Layers });
+            .AtlasBin => |class_ind| {
+                const class = atlas.Classes[class_ind];
+                try SetLine(engine_context, row.Title, "Up to {d} px   {f} in {d} slots   {d} free in {d} pages of 8 x 8", .{ class.MaxSize, Bytes{ .mBytes = @intCast(class.Used * class.SlotBytes) }, class.Used, class.Capacity - class.Used, class.Pages });
             },
         }
     }
@@ -364,8 +364,8 @@ fn BuildVideoRows(self: *ProfilerPanel, engine_context: *EngineContext) !void {
 
     //each size of texture claims whole layers of the atlas, each cut into slots of that size
     const atlas = try self.AddVideoRow(engine_context, tree, .Atlas, false);
-    for (0..@typeInfo(@FieldType(TextureManager.Usage, "Bins")).array.len) |bin_ind| {
-        _ = try self.AddVideoRow(engine_context, atlas, .{ .AtlasBin = @intCast(bin_ind) }, true);
+    for (0..@typeInfo(@FieldType(TextureManager.Usage, "Classes")).array.len) |class_ind| {
+        _ = try self.AddVideoRow(engine_context, atlas, .{ .AtlasBin = @intCast(class_ind) }, true);
     }
 }
 

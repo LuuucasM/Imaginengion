@@ -542,7 +542,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             try self.RenderRenderTargets(engine_context);
             //the editor's own UI fills the window
             try self.RenderEditorUI(engine_context);
-            engine_context.mRenderer.EndFrame();
+            try engine_context.mRenderer.EndFrame(engine_context);
         }
     }
     //--------------Render End-------------------

@@ -10,7 +10,7 @@ const Quat = MathTypes.Quat;
 const Ray = @import("../../Math/CameraRay.zig").Ray;
 const SDFFunc = @import("../../Math/SDFFunctions.zig");
 const TextureManager = @import("../../TextureManager/TextureManager.zig");
-const BINS_BYTES = @import("../../TextureManager/backends/SGTextureManager.zig").BINS_BYTES;
+const AtlasHandle = @import("../../TextureManager/AtlasHandle.zig");
 
 const Renderer2D = @import("../../Renderer/Renderer2D.zig");
 const ShapeData = Renderer2D.ShapeData;
@@ -41,9 +41,9 @@ const WHITE = Vec4(f32){ .x = 1, .y = 1, .z = 1, .w = 1 };
 
 //==================================the stand in texture array==================================
 
-/// Texture manager handles in bin 0, slot 0 of a layer, so the layer alone says which stand in texture a sample is from
+/// Texture atlas handles at the top left of a layer, so the layer alone says which stand in texture a sample is from
 fn LayerHandle(layer: u32) u32 {
-    return layer << BINS_BYTES;
+    return AtlasHandle.Make(layer, 0, 0, 0);
 }
 
 const TEX_SIZE: u32 = 64;
