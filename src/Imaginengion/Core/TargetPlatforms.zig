@@ -2,13 +2,16 @@
 //! editor checks against now (the target). Kept per project, in ProjectSettings/Platforms.json (see Project.zig); a new
 //! project has one, PC, with budgets roomy enough that nothing is near them until they are set.
 //!
-//! Check compares what the game is using with the target's budgets: in the editor, as near as the editor can tell what
-//! is the game's (EditorUsage), in a game what it all is (GameUsage). Going over is a warning, once, until it is back
-//! under. In a game, going over will be the hard limit made in its build, which isn't built yet.
+//! Check compares what the game is using with the target's budgets. In the editor that is the game's own parts
+//! (GameMemory: its world, loaded objects, the assets it uses) and the engine's baseline a game built with -Dstats
+//! measured and recorded in the project (EditorUsage); without one yet, only the parts. In a game it is all of it, the
+//! baseline being what is beyond the parts (GameUsage). Going over is a warning, once, until it is back under. In a
+//! game, going over will be the hard limit made in its build, which isn't built yet.
 const std = @import("std");
 const EngineContext = @import("EngineContext.zig");
 const WorldManager = @import("WorldManager.zig");
 const GPUAllocator = @import("GPUAllocator.zig");
+const GameMemory = @import("GameMemory.zig");
 
 const TargetPlatforms = @This();
 
@@ -45,8 +48,17 @@ pub const Platform = struct {
 /// What a new project has
 const DEFAULT_PLATFORM = Platform{ .mName = Name.Of("PC"), .mCPUMemoryMB = 8192, .mVideoMemoryMB = 4096 };
 
-/// What the game is using, to set against a budget
+/// What the game is using, to set against a budget, and what it is made of
 pub const Usage = struct {
+    CPU: u64 = 0,
+    Video: u64 = 0,
+    Parts: GameMemory.Parts = .{},
+    /// the engine itself: in the editor, the baseline a game recorded, null until one has; in a game, the rest
+    Baseline: ?Baseline = null,
+};
+
+/// The engine's own memory in a game, beyond the game's parts
+pub const Baseline = struct {
     CPU: u64 = 0,
     Video: u64 = 0,
 };
@@ -62,6 +74,11 @@ mLastUsage: Usage = .{},
 /// Whether the last Check found each budget gone over, so it warns once when it goes over, not every time
 mOverCPU: bool = false,
 mOverVideo: bool = false,
+/// The engine's baseline a game built with -Dstats recorded in the project (GameMemory.BASELINE_FILE), null until one
+/// has. Read again every so often (RefreshBaseline), so a game run while the editor is open is picked up
+mRecorded: ?Baseline = null,
+/// When it was measured, YYYY-MM-DD
+mRecordedOn: [10]u8 = @splat(' '),
 
 pub const empty: TargetPlatforms = .{};
 
@@ -134,25 +151,40 @@ pub fn Remove(self: *TargetPlatforms, index: usize) !void {
     self.mVersion +%= 1;
 }
 
-/// The game's memory as near as the editor can tell: `game_world` (the Game world, or the Simulate world while playing)
-/// and the objects loaded from files (the Asset world). The engine's shared memory is left out, being mixed with the
-/// editor's own. Video: the world's render targets and atlas slots, and the loaded textures' slots, the engine's, which
-/// has the editor's own icons in it too, so it reads a little high
-pub fn EditorUsage(engine_context: *EngineContext, game_world: *WorldManager) Usage {
-    const gpu = &engine_context.mGPUAllocator;
-    const owner = engine_context.WorldTag(game_world);
-    return .{
-        .CPU = @intCast(game_world.mMemory.Totals().Bytes() + engine_context.mAssetWorld.mMemory.Totals().Bytes()),
-        .Video = gpu.CountsOf(owner).Bytes + gpu.AtlasBytesOf(owner) + gpu.AtlasBytesOf(GPUAllocator.ENGINE),
-    };
+/// The game's memory as the editor counts it: the game's own `parts` (GameMemory.MeasureParts), and the engine's
+/// baseline a game recorded, once one has (RefreshBaseline)
+pub fn EditorUsage(self: *const TargetPlatforms, parts: GameMemory.Parts) Usage {
+    const baseline = self.mRecorded orelse Baseline{};
+    return .{ .CPU = parts.CPU() + baseline.CPU, .Video = parts.Video() + baseline.Video, .Parts = parts, .Baseline = self.mRecorded };
 }
 
 /// A game's memory, all of it: the whole application's, and the video memory the driver counts it holding (what the
-/// engine made, if the driver can't be asked)
-pub fn GameUsage(engine_context: *EngineContext) Usage {
+/// engine made, if the driver can't be asked). The engine's baseline is what is beyond the game's `parts`
+pub fn GameUsage(engine_context: *EngineContext, parts: GameMemory.Parts) Usage {
     const gpu = &engine_context.mGPUAllocator;
+    const cpu: u64 = @intCast(engine_context._Internal.Memory.Root().Totals().Bytes());
     const video = if (gpu.mDriver.Read()) |driver| driver.Used + driver.Shared else gpu.TotalBytes();
-    return .{ .CPU = @intCast(engine_context._Internal.Memory.Root().Totals().Bytes()), .Video = video };
+    return .{ .CPU = cpu, .Video = video, .Parts = parts, .Baseline = .{ .CPU = cpu -| parts.CPU(), .Video = video -| parts.Video() } };
+}
+
+/// When the recorded baseline was measured, "" if there is none
+pub fn RecordedOn(self: *const TargetPlatforms) []const u8 {
+    if (self.mRecorded == null) return "";
+    return &self.mRecordedOn;
+}
+
+/// The engine's baseline a game recorded in the open project, read again. None without a project or a record
+pub fn RefreshBaseline(self: *TargetPlatforms, engine_context: *EngineContext) void {
+    self.mRecorded = null;
+    if (!engine_context.mProject.IsOpen()) return;
+    const contents = engine_context.mProject.GetDirectory().readFileAlloc(engine_context.Io(), GameMemory.BASELINE_FILE, engine_context.Scratch(), .limited(64 * 1024)) catch return;
+    const recorded = std.json.parseFromSliceLeaky(GameMemory.Baseline, engine_context.Scratch(), contents, .{ .ignore_unknown_fields = true }) catch |err| {
+        std.log.warn("{s} could not be read: {s}", .{ GameMemory.BASELINE_FILE, @errorName(err) });
+        return;
+    };
+    self.mRecorded = .{ .CPU = recorded.CPUBytes, .Video = recorded.VideoBytes };
+    self.mRecordedOn = @splat(' ');
+    @memcpy(self.mRecordedOn[0..@min(recorded.Measured.len, self.mRecordedOn.len)], recorded.Measured[0..@min(recorded.Measured.len, self.mRecordedOn.len)]);
 }
 
 /// Sets `usage` against the target's budgets, warning when one is gone over: once, then again only after it has been

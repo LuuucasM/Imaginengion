@@ -106,7 +106,9 @@ pub fn ProjectBuild(b: *std.Build) void {
     const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Build mode, fast if not given") orelse .fast;
     //the stats window, Ctrl+Shift+F12 in the game (Programs/GameStats.zig)
     const stats = b.option(bool, "stats", "Build the stats window in: Ctrl+Shift+F12 in the game shows the profiler's time and memory trees") orelse false;
-    const engine = b.dependency("GameEngine", .{ .target = target, .optimize = optimize, .@"packaged-game" = true, .stats = stats });
+    //a -Dstats game writes the engine's measured baseline back into its project
+    const project_path = if (stats) b.root.root_dir.handle.realPathFileAlloc(b.graph.io, ".", b.allocator) catch "" else "";
+    const engine = b.dependency("GameEngine", .{ .target = target, .optimize = optimize, .@"packaged-game" = true, .stats = stats, .stats_project = project_path });
 
     const check_step = b.step("check", "Check that the project's files compile");
     const game_step = b.step("game", "Build the game into zig-out/<name>/");

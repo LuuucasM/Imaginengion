@@ -36,6 +36,7 @@ const Vec2 = @import("../Math/MathTypes.zig").Vec2;
 const MemoryNode = @import("../Core/Allocators.zig").MemoryNode;
 const GPUAllocator = @import("../Core/GPUAllocator.zig");
 const Bytes = @import("../Core/Allocators.zig").Bytes;
+const TargetPlatforms = @import("../Core/TargetPlatforms.zig");
 const EngineStats = @import("../Core/EngineStats.zig");
 const BVH = @import("../Core/BVH.zig");
 const ConflictReport = @import("../ECS/ConflictReport.zig");
@@ -262,7 +263,7 @@ pub fn Update(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *c
 /// The memory tree's rows: built again if a node came or went, then the numbers on every row that can be seen
 fn UpdateMemory(self: *ProfilerPanel, engine_context: *EngineContext) !void {
     const platforms = &engine_context.mTargetPlatforms;
-    try self.SetBudgetLine(engine_context, self.mCPUBudget, platforms.mLastUsage.CPU, platforms.Target().mCPUMemoryMB);
+    try self.SetBudgetLine(engine_context, self.mCPUBudget, .CPU, platforms.mLastUsage, platforms.Target().mCPUMemoryMB);
     const root = engine_context._Internal.Memory.Root();
     const version = @import("../Core/Allocators.zig").gTreeVersion;
     if (self.mMemoryTree == null or self.mMemoryVersion != version) {
@@ -308,27 +309,49 @@ fn AddMemoryRows(self: *ProfilerPanel, engine_context: *EngineContext, node: *Me
 
 /// What the game is using of one of the target platform's budgets, and what that is of: in the editor only as near as
 /// it can tell what is the game's, in a game all of it
-fn SetBudgetLine(self: *ProfilerPanel, engine_context: *EngineContext, label: Entity, bytes: u64, budget_mb: u32) !void {
+fn SetBudgetLine(self: *ProfilerPanel, engine_context: *EngineContext, label: Entity, kind: BudgetKind, usage: TargetPlatforms.Usage, budget_mb: u32) !void {
+    const platforms = &engine_context.mTargetPlatforms;
+    const bytes = switch (kind) {
+        .CPU => usage.CPU,
+        .Video => usage.Video,
+    };
     const budget: u64 = @as(u64, budget_mb) * 1024 * 1024;
     const percent = if (budget == 0) 0 else 100 * bytes / budget;
-    try SetLine(engine_context, label, "Budget ({s}): {f} of {f}, {d}%{s}   ({s})", .{
-        engine_context.mTargetPlatforms.GetName(engine_context.mTargetPlatforms.mTarget),
+    var line: std.Io.Writer.Allocating = .init(engine_context.ProgramScratch());
+    const writer = &line.writer;
+    try writer.print("Budget ({s}): {f} of {f}, {d}%{s}   =", .{
+        platforms.GetName(platforms.mTarget),
         Bytes{ .mBytes = @intCast(bytes) },
         Bytes{ .mBytes = @intCast(budget) },
         percent,
         if (bytes > budget) ", over" else "",
-        switch (self.mShows) {
-            .Editor => "the game's world and loaded objects, as near as the editor can tell",
-            .Game => "the whole game",
-        },
     });
+    //what it is made of: the game's own parts, then the engine's
+    const parts = usage.Parts;
+    switch (kind) {
+        .CPU => try writer.print(" world {f} + loaded objects {f} + assets {f}", .{ Bytes{ .mBytes = @intCast(parts.WorldCPU) }, Bytes{ .mBytes = @intCast(parts.ObjectsCPU) }, Bytes{ .mBytes = @intCast(parts.AssetsCPU) } }),
+        .Video => try writer.print(" world {f} + assets {f}", .{ Bytes{ .mBytes = @intCast(parts.WorldVideo) }, Bytes{ .mBytes = @intCast(parts.AssetsVideo) } }),
+    }
+    if (usage.Baseline) |baseline| {
+        const engine_bytes = switch (kind) {
+            .CPU => baseline.CPU,
+            .Video => baseline.Video,
+        };
+        switch (self.mShows) {
+            .Editor => try writer.print(" + engine {f} (measured in the game, {s})", .{ Bytes{ .mBytes = @intCast(engine_bytes) }, platforms.RecordedOn() }),
+            .Game => try writer.print(" + engine {f} (the rest)", .{Bytes{ .mBytes = @intCast(engine_bytes) }}),
+        }
+    } else try writer.writeAll(" + engine not measured yet: run the game built with -Dstats once");
+    try WidgetActions.SetText(engine_context, label, line.written());
 }
+
+const BudgetKind = enum { CPU, Video };
 
 /// The video memory tree's rows: built again if a group was met since, then the numbers on each. It is small, so every
 /// row is refreshed whether it can be seen or not
 fn UpdateVideo(self: *ProfilerPanel, engine_context: *EngineContext) !void {
     const platforms = &engine_context.mTargetPlatforms;
-    try self.SetBudgetLine(engine_context, self.mVideoBudget, platforms.mLastUsage.Video, platforms.Target().mVideoMemoryMB);
+    try self.SetBudgetLine(engine_context, self.mVideoBudget, .Video, platforms.mLastUsage, platforms.Target().mVideoMemoryMB);
     const gpu = &engine_context.mGPUAllocator;
     if (self.mVideoTree == null or self.mVideoGroups != gpu.mGroups.items.len or self.mVideoAtlasOwners != AtlasOwners(gpu)) try self.BuildVideoRows(engine_context);
 

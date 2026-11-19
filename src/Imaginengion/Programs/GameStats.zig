@@ -16,6 +16,7 @@ const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
 const ProfilerPanel = @import("../EditorPanels/ProfilerPanel.zig");
 const TargetPlatforms = @import("../Core/TargetPlatforms.zig");
+const GameMemory = @import("../Core/GameMemory.zig");
 const SceneStackPos = @import("../ECSComponents/SComponents.zig").StackPosComponent;
 
 const GameStats = @This();
@@ -34,6 +35,8 @@ mShowing: ?Player = null,
 mOptions: Widgets.Options = .{},
 /// Since the game's memory was last set against the target platform's budgets
 mSinceBudgetCheck: f32 = 0,
+/// The most the engine took beyond the game's parts over the run, written into the project at the end (Deinit)
+mPeakBaseline: TargetPlatforms.Baseline = .{},
 
 /// Starts the profiler, whose numbers it shows. Its memory is the program's, not the game's
 pub fn Start(engine_context: *EngineContext) !void {
@@ -41,6 +44,7 @@ pub fn Start(engine_context: *EngineContext) !void {
 }
 
 pub fn Deinit(self: *GameStats, engine_context: *EngineContext) void {
+    self.RecordBaseline(engine_context);
     self.mPanel.Deinit(engine_context.ProgramKeep());
     Profiler.gMain.Stop();
 }
@@ -80,7 +84,10 @@ pub fn Update(self: *GameStats, engine_context: *EngineContext, profiler: *const
     self.mSinceBudgetCheck += engine_context.mDT;
     if (self.mSinceBudgetCheck >= ProfilerPanel.REFRESH_SECONDS) {
         self.mSinceBudgetCheck = 0;
-        engine_context.mTargetPlatforms.Check(TargetPlatforms.GameUsage(engine_context));
+        const usage = TargetPlatforms.GameUsage(engine_context, try GameMemory.MeasureParts(engine_context, &engine_context.mGameWorld));
+        engine_context.mTargetPlatforms.Check(usage);
+        self.mPeakBaseline.CPU = @max(self.mPeakBaseline.CPU, usage.Baseline.?.CPU);
+        self.mPeakBaseline.Video = @max(self.mPeakBaseline.Video, usage.Baseline.?.Video);
     }
     if (self.mShowing == null) return;
     //closed with its close button, or the player showing it went (a new one was made the shown one): hidden, and
@@ -88,6 +95,30 @@ pub fn Update(self: *GameStats, engine_context: *EngineContext, profiler: *const
     if (!self.IsShown()) return self.Hide(engine_context);
     try self.KeepOnTop(engine_context);
     try self.mPanel.Update(engine_context, profiler);
+}
+
+/// The most the engine took beyond the game's parts this run, written into the project the game was built from
+/// (GameMemory.BASELINE_FILE), for the editor to add to its count of the game's parts. Nothing if it never measured
+fn RecordBaseline(self: *GameStats, engine_context: *EngineContext) void {
+    const project = @import("game_build_options").stats_project;
+    if (project.len == 0 or self.mPeakBaseline.CPU == 0) return;
+    var date: [10]u8 = undefined;
+    const baseline = GameMemory.Baseline{ .CPUBytes = self.mPeakBaseline.CPU, .VideoBytes = self.mPeakBaseline.Video, .Measured = GameMemory.Today(engine_context.Io(), &date) };
+    WriteBaseline(engine_context, project, baseline) catch |err| {
+        std.log.warn("The engine's baseline could not be written into {s}: {s}", .{ project, @errorName(err) });
+        return;
+    };
+    std.log.info("The engine's baseline, {d} MB CPU and {d} MB video, is written into {s}", .{ baseline.CPUBytes / (1024 * 1024), baseline.VideoBytes / (1024 * 1024), project });
+}
+
+fn WriteBaseline(engine_context: *EngineContext, project: []const u8, baseline: GameMemory.Baseline) !void {
+    var out: std.Io.Writer.Allocating = .init(engine_context.Scratch());
+    defer out.deinit();
+    var write_stream: std.json.Stringify = .{ .writer = &out.writer, .options = .{ .whitespace = .indent_2 } };
+    try write_stream.write(baseline);
+    var dir = try std.Io.Dir.cwd().openDir(engine_context.Io(), project, .{});
+    defer dir.close(engine_context.Io());
+    try dir.writeFile(engine_context.Io(), .{ .sub_path = GameMemory.BASELINE_FILE, .data = out.written() });
 }
 
 fn Hide(self: *GameStats, engine_context: *EngineContext) !void {

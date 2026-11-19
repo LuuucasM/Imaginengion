@@ -50,10 +50,13 @@ pub fn build(b: *std.Build) void {
     //a game's stats window (Programs/GameStats.zig), shown with Ctrl+Shift+F12: `zig build game -Dstats` in the project
     const stats = b.option(bool, "stats", "build a game's stats window in, shown with Ctrl+Shift+F12") orelse false;
     game_build_options.addOption(bool, "stats", stats);
+    //the project a -Dstats game was built from, which it writes the engine's measured baseline into (GameMemory)
+    game_build_options.addOption([]const u8, "stats_project", b.option([]const u8, "stats_project", "the project a -Dstats game was built from") orelse "");
     engine_module_eng.addOptions("game_build_options", game_build_options);
     var script_build_options = b.addOptions();
     script_build_options.addOption(bool, "packaged_game", false);
     script_build_options.addOption(bool, "stats", false);
+    script_build_options.addOption([]const u8, "stats_project", "");
     engine_module_script.addOptions("game_build_options", script_build_options);
 
     var compute_build_options = b.addOptions();

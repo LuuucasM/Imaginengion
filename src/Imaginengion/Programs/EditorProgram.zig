@@ -99,7 +99,7 @@ const OverlayComponent = PlayerComponents.OverlayComponent;
 const EditorShell = @import("EditorShell.zig");
 const EditorMenuBar = @import("EditorMenuBar.zig");
 const AssetHandlesPanel = @import("../EditorPanels/AssetHandlesPanel.zig");
-const TargetPlatforms = @import("../Core/TargetPlatforms.zig");
+const GameMemory = @import("../Core/GameMemory.zig");
 const AudioBusesPanel = @import("../EditorPanels/AudioBusesPanel.zig");
 const CollisionLayersPanel = @import("../EditorPanels/CollisionLayersPanel.zig");
 const ProjectSettingsPanel = @import("../EditorPanels/ProjectSettingsPanel.zig");
@@ -198,6 +198,8 @@ mSelectedObj: ?SelectedObject = null,
 mEditorState: EditorState = .Stop,
 /// Since the game's memory was last set against the target platform's budgets (TargetPlatforms.Check)
 mSinceBudgetCheck: f32 = 0,
+/// Since the engine's baseline a game recorded was last read (TargetPlatforms.RefreshBaseline). Starts due
+mSinceBaselineRead: f32 = BASELINE_READ_SECONDS,
 //the player whose view the pointer was last over, which a drag keeps following the mouse through once it leaves
 mPointerCamera: ?Player = null,
 mRunPlayer: ?Player = null,
@@ -1336,15 +1338,23 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
 /// camera, or while playing in it, every player's view
 /// How often the game's memory is set against the target platform's budgets
 const BUDGET_CHECK_SECONDS: f32 = 0.25;
+/// How often the engine's baseline a game recorded is read again, so a game run while the editor is open is picked up
+const BASELINE_READ_SECONDS: f32 = 2;
 
-/// Every BUDGET_CHECK_SECONDS, the game's memory as near as the editor can tell (the world being played while playing)
-/// against the target platform's budgets, which warns when one is gone over
-fn CheckBudgets(self: *EditorProgram, engine_context: *EngineContext) void {
+/// Every BUDGET_CHECK_SECONDS, the game's memory (its parts, with the world being played while playing, and the engine's
+/// recorded baseline) against the target platform's budgets, which warns when one is gone over
+fn CheckBudgets(self: *EditorProgram, engine_context: *EngineContext) !void {
+    const platforms = &engine_context.mTargetPlatforms;
+    self.mSinceBaselineRead += engine_context.mDT;
+    if (self.mSinceBaselineRead >= BASELINE_READ_SECONDS) {
+        self.mSinceBaselineRead = 0;
+        platforms.RefreshBaseline(engine_context);
+    }
     self.mSinceBudgetCheck += engine_context.mDT;
     if (self.mSinceBudgetCheck < BUDGET_CHECK_SECONDS) return;
     self.mSinceBudgetCheck = 0;
     const game_world = if (self.mEditorState == .Play) &engine_context.mSimulateWorld else &engine_context.mGameWorld;
-    engine_context.mTargetPlatforms.Check(TargetPlatforms.EditorUsage(engine_context, game_world));
+    platforms.Check(platforms.EditorUsage(try GameMemory.MeasureParts(engine_context, game_world)));
 }
 
 fn UpdateShell(self: *EditorProgram, engine_context: *EngineContext) !void {
@@ -1352,7 +1362,7 @@ fn UpdateShell(self: *EditorProgram, engine_context: *EngineContext) !void {
     defer zone.Deinit();
     try self.mShell.ShowPlayPreview(engine_context, self.mShowPlayPreview);
     try self.UpdateMenuBar(engine_context);
-    self.CheckBudgets(engine_context);
+    try self.CheckBudgets(engine_context);
     try self.mProfilerPanel.Update(engine_context, &Profiler.gMain);
     try self.mAssetHandlesPanel.Update(engine_context);
     try self.mAudioBusesPanel.Update(engine_context);

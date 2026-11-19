@@ -194,3 +194,22 @@ test "a target platform has a row with its budgets, rows come and go with platfo
     try std.testing.expectEqualStrings("Switch 2", platforms.GetName(platforms.mTarget));
     try std.testing.expectEqual(3072, platforms.Target().mCPUMemoryMB);
 }
+
+test "the engine's baseline a game recorded in the project is read, and none is none" {
+    const engine = try TestEngine.Init();
+    defer engine.Deinit();
+    const engine_context = engine.mEngineContext;
+    const platforms = &engine_context.mTargetPlatforms;
+    const GameMemory = @import("../../Core/GameMemory.zig");
+
+    platforms.RefreshBaseline(engine_context);
+    try std.testing.expect(platforms.mRecorded == null);
+    try std.testing.expectEqualStrings("", platforms.RecordedOn());
+
+    //what a game built with -Dstats writes
+    try engine_context.mProject.GetDirectory().writeFile(engine_context.Io(), .{ .sub_path = GameMemory.BASELINE_FILE, .data = "{\"CPUBytes\": 24195646, \"VideoBytes\": 413760512, \"Measured\": \"2026-11-19\"}" });
+    platforms.RefreshBaseline(engine_context);
+    try std.testing.expectEqual(24195646, platforms.mRecorded.?.CPU);
+    try std.testing.expectEqual(413760512, platforms.mRecorded.?.Video);
+    try std.testing.expectEqualStrings("2026-11-19", platforms.RecordedOn());
+}
