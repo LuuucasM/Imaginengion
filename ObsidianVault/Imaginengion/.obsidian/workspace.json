@@ -27,12 +27,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "longer term things to do or fix.md",
+                "file": "things to do and fix.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "longer term things to do or fix"
+              "title": "things to do and fix"
             }
           },
           {
@@ -202,11 +202,11 @@
   },
   "active": "afb9e7e2f167d8fe",
   "lastOpenFiles": [
+    "longer term things to do or fix.md",
     "Research/aria.pdf",
     "First game friction.md",
     "Research/2005-ppopp-composable.pdf",
     "things to do and fix.md",
-    "longer term things to do or fix.md",
     "Research/Decomposition of 3D shapes.pdf",
     "Research/Lipschitz pruning.pdf",
     "Research/LightSQ.pdf",
@@ -237,7 +237,6 @@
     "Engine Notes/2026 9 sept/event system thoughts.md",
     "Untitled.base",
     "Engine Notes/2026 9 sept",
-    "Engine Notes/2026 8 august",
     "Scene Manager.canvas",
     "ECS.canvas",
     "Home.canvas"

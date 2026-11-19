@@ -5,6 +5,7 @@ const EngineContext = @import("../../../Core/EngineContext.zig");
 const Tracy = @import("../../../Core/Tracy.zig");
 const GenDescriptor = @import("../Texture2D.zig").GenDescriptor;
 const TextureManager = @import("../../../TextureManager/TextureManager.zig");
+const GPUAllocator = @import("../../../Core/GPUAllocator.zig");
 const SDLTexture2D = @This();
 
 const SDL_TEXTURE_FORMAT = sdl.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
@@ -46,6 +47,7 @@ pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, 
 
     std.log.debug("Loaded file: {s} that is width: {d} height: {d}\n", .{ rel_path, width, height });
 
+    //a loaded texture is shared by every world: the engine's
     try self.RegisterTexture(engine_context, @intCast(width), @intCast(height), data);
 
     self._Width = @intCast(width);
@@ -68,7 +70,7 @@ pub fn InitGen(self: *SDLTexture2D, engine_context: *EngineContext, descriptor: 
 }
 
 pub fn Deinit(self: *SDLTexture2D, engine_context: *EngineContext) void {
-    engine_context.mRenderer.mTextureManager.Unregister(self._TextureHandle);
+    engine_context.mRenderer.mTextureManager.Unregister(engine_context, self._TextureHandle);
     self._TextureHandle = 0;
 }
 pub fn GetWidth(self: SDLTexture2D) usize {
@@ -123,7 +125,7 @@ pub fn UpdateDataPath(self: *SDLTexture2D, engine_context: *EngineContext, abs_p
 
     std.log.debug("Loaded file: {s} that is width: {d} height: {d}\n", .{ abs_path, width, height });
 
-    engine_context.mRenderer.mTextureManager.Unregister(self._TextureHandle);
+    engine_context.mRenderer.mTextureManager.Unregister(engine_context, self._TextureHandle);
 
     self.RegisterTexture(engine_context, width, height, data);
 
@@ -142,7 +144,7 @@ pub fn UpdateDataGen(self: *SDLTexture2D, engine_context: *EngineContext, descri
 }
 
 fn RegisterTexture(self: *SDLTexture2D, engine_context: *EngineContext, width: usize, height: usize, pixels: ?*anyopaque) !void {
-    self._TextureHandle = try engine_context.mRenderer.mTextureManager.Register(engine_context, pixels, width, height);
+    self._TextureHandle = try engine_context.mRenderer.mTextureManager.Register(engine_context, pixels, width, height, GPUAllocator.ENGINE);
 }
 
 fn CreateGPUTexture(device: *sdl.SDL_GPUDevice, width: u32, height: u32, is_render_target: bool) ?*sdl.SDL_GPUTexture {

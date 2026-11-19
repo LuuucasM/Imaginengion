@@ -4,6 +4,7 @@ const AssetManager = @import("../ECSManagers/AManager.zig");
 const Project = @import("Project.zig");
 const AudioManager = @import("../AudioManager/AudioManager.zig");
 const CollisionLayers = @import("../Physics/CollisionLayers.zig");
+const TargetPlatforms = @import("TargetPlatforms.zig");
 const InputManager = @import("../Inputs/Input.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 const Program = @import("../Programs/Program.zig");
@@ -50,6 +51,9 @@ const InternalData = struct {
     /// The engine's node of the memory tree (Allocators.MemoryNode): what is taken through Keep and Scratch is counted on
     /// it, and every world, manager and ECS of the engine has its node under it
     Memory: Allocators.MemoryNode = .{ .mName = "Engine" },
+    /// The program's node of the memory tree (Program.mMemory), set by Application: what the editor's panels or a game's
+    /// stats window keep for themselves is taken through it (ProgramKeep). Null without an Application, in a test
+    ProgramMemory: ?*Allocators.MemoryNode = null,
 
 
     /// The engine's thread pool, under both its Ios (Io, AriaIo): the file calls they pass on run on the thread that
@@ -107,6 +111,8 @@ mAssetManager: AssetManager = .empty,
 mAudioManager: AudioManager = .{},
 /// The names of the collision layers, kept per project
 mCollisionLayers: CollisionLayers = .{},
+/// The platforms the game is made for and their memory budgets, kept per project
+mTargetPlatforms: TargetPlatforms = .{},
 mInputManager: InputManager = .empty,
 mRenderer: Renderer = .{},
 /// Every GPU texture, buffer and sampler the engine makes goes through here, labelled with its owner (GPUAllocator)
@@ -247,6 +253,17 @@ pub fn DeInit(self: *EngineContext) void {
 
 /// Memory that lasts until it is freed (AllocType.Keep), for what every world shares: UI land, assets, audio, the
 /// renderer, the editor's own state. What belongs to one world is taken from that world's (WorldManager.Keep)
+/// The program's own Keep: what the editor's panels, its menu bar and the like hold for themselves, or a game's stats
+/// window, counted on the Program node of the memory tree. The engine's node without an Application (a test)
+pub fn ProgramKeep(self: *EngineContext) std.mem.Allocator {
+    return (self._Internal.ProgramMemory orelse &self._Internal.Memory).Keep();
+}
+
+/// The program's own Scratch, see ProgramKeep
+pub fn ProgramScratch(self: *EngineContext) std.mem.Allocator {
+    return (self._Internal.ProgramMemory orelse &self._Internal.Memory).Scratch();
+}
+
 pub fn Keep(self: *EngineContext) std.mem.Allocator {
     return self._Internal.Memory.Keep();
 }

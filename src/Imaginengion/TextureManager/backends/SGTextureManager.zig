@@ -84,8 +84,9 @@ pub fn Deinit(self: *SGTextureManager, engine_context: *EngineContext) void {
 }
 
 /// A slot for a texture `width` by `height`, its pixels copied in if given (a render target's are copied in each frame
-/// that shows it, CopyFromTexture). Grows the array a layer when it is full
-pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?*anyopaque, width: usize, height: usize) !u32 {
+/// that shows it, CopyFromTexture). Grows the array a layer when it is full. The slot is counted on the GPU allocator
+/// for `owner`
+pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?*anyopaque, width: usize, height: usize, owner: GPUAllocator.Owner) !u32 {
     const zone = Tracy.ZoneInit("SGTextureManager::Register", @src());
     defer zone.Deinit();
 
@@ -101,6 +102,9 @@ pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?
         try self.Resize(engine_context, self.mSlots.LayerCount() + 1, .AfterFrame);
     };
     errdefer self.mSlots.Free(handle);
+    const slot_size: u64 = AtlasHandle.SlotSize(class);
+    try engine_context.mGPUAllocator.AtlasTook(engine_context, handle, slot_size * slot_size * 4, owner);
+    errdefer engine_context.mGPUAllocator.AtlasGave(handle);
 
     if (data) |d| {
         const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
@@ -109,8 +113,9 @@ pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?
     return handle;
 }
 
-pub fn Unregister(self: *SGTextureManager, texture_location: u32) void {
+pub fn Unregister(self: *SGTextureManager, engine_context: *EngineContext, texture_location: u32) void {
     std.debug.assert(AtlasHandle.Layer(texture_location) < self.mSlots.LayerCount());
+    engine_context.mGPUAllocator.AtlasGave(texture_location);
     self.mSlots.Free(texture_location);
 }
 

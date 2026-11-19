@@ -48,7 +48,7 @@ const TestBrowser = struct {
 
     fn Deinit(self: *TestBrowser) void {
         const engine_context = self.mEngineContext;
-        self.mPanel.Deinit(engine_context.mEditorWorld.Keep());
+        self.mPanel.Deinit(engine_context.ProgramKeep());
         engine_context.mAssetManager.mCWDPath.deinit(engine_context.Keep());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
@@ -267,7 +267,7 @@ test "the Scripts panel takes each kind of script onto its kind of object, and n
     const page = try browser.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try page.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
     var scripts = try ScriptsPanel.Build(engine_context, page, .{ .StockScripts = false });
-    defer scripts.Deinit(engine_context.mEditorWorld.Keep());
+    defer scripts.Deinit(engine_context.ProgramKeep());
     const texture = try browser.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try texture.AddComponent(engine_context, try FileRefComponent.Init(texture.KeepFor(FileRefComponent), "hero.png", .Prj));
     const script = try browser.mScene.CreateEntity(engine_context, Entity.DefaultConfig);

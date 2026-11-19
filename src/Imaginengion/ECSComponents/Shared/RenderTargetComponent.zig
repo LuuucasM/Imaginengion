@@ -47,7 +47,8 @@ pub fn ShownSlot(self: *RenderTargetComponent, engine_context: *EngineContext) !
     const texture_manager = &engine_context.mRenderer.mTextureManager;
     if (self.mShownSlot == null or self.mShownWidth != width or self.mShownHeight != height) {
         self.ReleaseShownSlot(engine_context);
-        self.mShownSlot = texture_manager.Register(engine_context, null, width, height) catch |err| switch (err) {
+        //its slot is its player's world's, as the target itself is
+        self.mShownSlot = texture_manager.Register(engine_context, null, width, height, self.mComputeTexture.GetOwner()) catch |err| switch (err) {
             error.TextureTooLarge => return null,
             else => return err,
         };
@@ -58,7 +59,7 @@ pub fn ShownSlot(self: *RenderTargetComponent, engine_context: *EngineContext) !
 }
 
 fn ReleaseShownSlot(self: *RenderTargetComponent, engine_context: *EngineContext) void {
-    if (self.mShownSlot) |slot| engine_context.mRenderer.mTextureManager.Unregister(slot);
+    if (self.mShownSlot) |slot| engine_context.mRenderer.mTextureManager.Unregister(engine_context, slot);
     self.mShownSlot = null;
 }
 

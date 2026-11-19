@@ -326,3 +326,49 @@ test "the driver's count of video memory is read on Windows, and set beside the 
     const line = try gpu.DriverLine(fixed.allocator());
     try std.testing.expect(std.mem.startsWith(u8, line, "Video memory, as the driver counts it: "));
 }
+
+test "a texture atlas slot is counted on its owner, apart from what the owner holds itself" {
+    var gpu: GPUAllocator = .{};
+    const engine_context = try std.heap.page_allocator.create(EngineContext);
+    defer std.heap.page_allocator.destroy(engine_context);
+    engine_context.* = .{};
+    defer {
+        gpu.Deinit(engine_context.Keep());
+        _ = engine_context._Internal.KeepHeap.deinit();
+    }
+
+    try gpu.AtlasTook(engine_context, 1, 1000, 2);
+    try gpu.AtlasTook(engine_context, 2, 1000, 2);
+    try std.testing.expectEqual(2000, gpu.AtlasBytesOf(2));
+    try std.testing.expectEqual(0, gpu.AtlasBytesOf(GPUAllocator.ENGINE));
+    //the atlas's own texture is what is on the GPU: a slot isn't counted again on its owner
+    try std.testing.expectEqual(0, gpu.CountsOf(2).Bytes);
+    try std.testing.expectEqual(0, gpu.TotalBytes());
+
+    gpu.AtlasGave(1);
+    gpu.AtlasGave(2);
+    try std.testing.expectEqual(0, gpu.AtlasBytesOf(2));
+}
+
+test "what the program keeps for itself is counted on the Program node, and on the engine's without one" {
+    const engine_context = try std.heap.page_allocator.create(EngineContext);
+    defer std.heap.page_allocator.destroy(engine_context);
+    engine_context.* = .{};
+    defer _ = engine_context._Internal.KeepHeap.deinit();
+
+    //no Application, as in a test: the engine's node
+    const engine_before = engine_context._Internal.Memory.mCounts.Read().KeepBytes;
+    const loose = try engine_context.ProgramKeep().alloc(u8, 64);
+    try std.testing.expectEqual(engine_before + 64, engine_context._Internal.Memory.mCounts.Read().KeepBytes);
+    engine_context.ProgramKeep().free(loose);
+
+    //what Application does: its Program node
+    var program: Allocators.MemoryNode = .{ .mName = "Program" };
+    program.Init(engine_context, "Program");
+    engine_context._Internal.ProgramMemory = &program;
+    const rows = try engine_context.ProgramKeep().alloc(u8, 100);
+    try std.testing.expectEqual(100, program.mCounts.Read().KeepBytes);
+    try std.testing.expectEqual(engine_before, engine_context._Internal.Memory.mCounts.Read().KeepBytes);
+    engine_context.ProgramKeep().free(rows);
+    try std.testing.expectEqual(0, program.mCounts.Read().KeepBytes);
+}

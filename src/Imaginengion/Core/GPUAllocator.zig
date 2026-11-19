@@ -12,6 +12,11 @@
 //! Each resource is made with a name saying what it is for ("Texture atlas", "Game layer shapes"), and resources of one
 //! owner, name and kind are counted together as a Group, which the Profiler window's Video memory section lists.
 //!
+//! The texture atlas is one texture array, the engine's, carved into slots (TextureManager). Each slot is counted here
+//! too, on its owner: not on the owner's Counts, since the array the slots are in is already counted, but on
+//! mAtlasBytes, so a world's slots can be added up (AtlasBytesOf). Which texture is in which slot is the Asset Handles
+//! panel's to show.
+//!
 //! Main thread only, like the renderer. Engine code only: a script DLL can't reach SDL.
 const std = @import("std");
 const sdl = @import("CImports.zig").sdl;
@@ -59,7 +64,7 @@ pub const Kind = enum {
 /// Made the first time one is, and kept when they are all let go of, so its peak stays
 pub const Group = struct {
     Owner: Owner,
-    /// what they are for, a string that lasts as long as the program
+    /// what they are for, copied in when the group is made
     Name: []const u8,
     Kind: Kind,
     Bytes: u64 = 0,
@@ -67,6 +72,12 @@ pub const Group = struct {
     Peak: u64 = 0,
     /// how many there are now
     Count: u32 = 0,
+};
+
+/// Whose an atlas slot is and how big, so giving it back needs neither
+const AtlasRecord = struct {
+    mOwner: Owner,
+    mBytes: u64,
 };
 
 /// What a resource made here is: its group and how big it was worked out to be, so letting go of it needs neither
@@ -81,6 +92,10 @@ mCounts: [OWNER_COUNT]Counts = @splat(.{}),
 mRecords: std.AutoHashMapUnmanaged(usize, Record) = .empty,
 /// Every group met so far, in the order met. Never shrinks
 mGroups: std.ArrayList(Group) = .empty,
+/// Every atlas slot counted here and not yet given back, by its handle (AtlasTook)
+mAtlasRecords: std.AutoHashMapUnmanaged(u32, AtlasRecord) = .empty,
+/// Each owner's atlas slots' bytes, at its Owner number
+mAtlasBytes: [OWNER_COUNT]u64 = @splat(0),
 /// The driver's own count of the application's video memory
 mDriver: VideoMemory = .{},
 
@@ -88,6 +103,9 @@ mDriver: VideoMemory = .{},
 pub fn Deinit(self: *GPUAllocator, keep_allocator: std.mem.Allocator) void {
     if (self.mRecords.count() > 0) std.log.err("{d} GPU resource(s) were never released", .{self.mRecords.count()});
     self.mRecords.deinit(keep_allocator);
+    if (self.mAtlasRecords.count() > 0) std.log.err("{d} texture atlas slot(s) were never given back", .{self.mAtlasRecords.count()});
+    self.mAtlasRecords.deinit(keep_allocator);
+    for (self.mGroups.items) |group| keep_allocator.free(group.Name);
     self.mGroups.deinit(keep_allocator);
     self.mDriver.Deinit();
     self.* = .{};
@@ -95,6 +113,25 @@ pub fn Deinit(self: *GPUAllocator, keep_allocator: std.mem.Allocator) void {
 
 pub fn CountsOf(self: *const GPUAllocator, owner: Owner) Counts {
     return self.mCounts[owner];
+}
+
+/// What `owner`'s slots of the texture atlas take
+pub fn AtlasBytesOf(self: *const GPUAllocator, owner: Owner) u64 {
+    return self.mAtlasBytes[owner];
+}
+
+/// A slot of the texture atlas just given out (TextureManager.Register): `bytes` of the atlas, for `owner`. Only fails
+/// for want of memory for the record
+pub fn AtlasTook(self: *GPUAllocator, engine_context: *EngineContext, handle: u32, bytes: u64, owner: Owner) !void {
+    std.debug.assert(owner < OWNER_COUNT);
+    try self.mAtlasRecords.put(engine_context.Keep(), handle, .{ .mOwner = owner, .mBytes = bytes });
+    self.mAtlasBytes[owner] += bytes;
+}
+
+/// A slot of the texture atlas given back. One not counted here is let go of all the same, uncounted
+pub fn AtlasGave(self: *GPUAllocator, handle: u32) void {
+    const record = (self.mAtlasRecords.fetchRemove(handle) orelse return).value;
+    self.mAtlasBytes[record.mOwner] -= record.mBytes;
 }
 
 /// What every owner holds, added up
@@ -226,12 +263,14 @@ fn Gone(self: *GPUAllocator, resource: *anyopaque) void {
     }
 }
 
-/// The group of `owner`'s resources of `kind` named `name`, made if it is the first
+/// The group of `owner`'s resources of `kind` named `name`, made if it is the first, with its own copy of the name
 fn GroupOf(self: *GPUAllocator, keep_allocator: std.mem.Allocator, owner: Owner, name: []const u8, kind: Kind) !u32 {
     for (self.mGroups.items, 0..) |group, group_ind| {
         if (group.Owner == owner and group.Kind == kind and std.mem.eql(u8, group.Name, name)) return @intCast(group_ind);
     }
-    try self.mGroups.append(keep_allocator, .{ .Owner = owner, .Name = name, .Kind = kind });
+    const owned_name = try keep_allocator.dupe(u8, name);
+    errdefer keep_allocator.free(owned_name);
+    try self.mGroups.append(keep_allocator, .{ .Owner = owner, .Name = owned_name, .Kind = kind });
     return @intCast(self.mGroups.items.len - 1);
 }
 

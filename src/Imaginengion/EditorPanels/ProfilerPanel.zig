@@ -101,6 +101,8 @@ const VideoRowOf = union(enum) {
     Atlas,
     /// one size class's use of it (AtlasHandle), by the class
     AtlasBin: u8,
+    /// what one owner's slots take of it
+    AtlasOwner: GPUAllocator.Owner,
 };
 
 /// A video memory tree node's row
@@ -126,6 +128,11 @@ mContent: Entity = .uninit,
 /// The Memory section's content, its note and the memory tree
 mMemoryContent: Entity = .uninit,
 mMemoryNote: Entity = .uninit,
+/// The game's memory against the target platform's budgets (TargetPlatforms), under each memory section's note
+mCPUBudget: Entity = .uninit,
+mVideoBudget: Entity = .uninit,
+/// Which program it is in: what the budget lines are of
+mShows: Shows = .Editor,
 /// The Video memory section's content, where its tree goes
 mVideoContent: Entity = .uninit,
 /// Made the first time the window is open, and again when a GPU resource group is met for the first time
@@ -133,6 +140,8 @@ mVideoTree: ?Entity = null,
 mVideoRows: std.ArrayList(VideoRow) = .empty,
 /// How many groups GPUAllocator had when the video rows were built
 mVideoGroups: usize = 0,
+/// Which owners had atlas slots when the video rows were built, a bit each
+mVideoAtlasOwners: u32 = 0,
 /// Made the first time the window is open, and again when the tree changes (mMemoryVersion)
 mMemoryTree: ?Entity = null,
 /// A row per memory node, parents before their children
@@ -177,7 +186,10 @@ pub fn Build(engine_context: *EngineContext, scene: Scene, shows: Shows, options
         .mWorlds = try Widgets.Label(engine_context, .{ .Entity = time.Content.? }, ""),
         .mMemoryContent = memory.Content.?,
         .mMemoryNote = try Widgets.Label(engine_context, .{ .Entity = memory.Content.? }, "Held now, everything under each included: total (structs and what they hold), held, of it its own, the structs' own bytes, allocations, Scratch taken the last pass"),
+        .mCPUBudget = try Widgets.Label(engine_context, .{ .Entity = memory.Content.? }, ""),
         .mVideoContent = video.Content.?,
+        .mVideoBudget = try Widgets.Label(engine_context, .{ .Entity = video.Content.? }, ""),
+        .mShows = shows,
         .mOptions = options,
     };
 
@@ -249,6 +261,8 @@ pub fn Update(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *c
 
 /// The memory tree's rows: built again if a node came or went, then the numbers on every row that can be seen
 fn UpdateMemory(self: *ProfilerPanel, engine_context: *EngineContext) !void {
+    const platforms = &engine_context.mTargetPlatforms;
+    try self.SetBudgetLine(engine_context, self.mCPUBudget, platforms.mLastUsage.CPU, platforms.Target().mCPUMemoryMB);
     const root = engine_context._Internal.Memory.Root();
     const version = @import("../Core/Allocators.zig").gTreeVersion;
     if (self.mMemoryTree == null or self.mMemoryVersion != version) {
@@ -262,7 +276,7 @@ fn UpdateMemory(self: *ProfilerPanel, engine_context: *EngineContext) !void {
 
     //parents come before their children, so whether a parent's row can be seen is known by the time its children's are
     const rows = self.mMemoryRows.items;
-    const shown = try self.World().Scratch().alloc(bool, rows.len);
+    const shown = try engine_context.ProgramScratch().alloc(bool, rows.len);
     for (rows, 0..) |row, row_ind| {
         shown[row_ind] = if (row.Parent) |parent| shown[parent] and !IsFolded(.{ .Node = rows[parent].Fold, .Title = rows[parent].Title }) else true;
         if (!shown[row_ind]) continue;
@@ -287,16 +301,36 @@ fn AddMemoryRows(self: *ProfilerPanel, engine_context: *EngineContext, node: *Me
         .StockScripts = self.mOptions.StockScripts,
     });
     const row = self.mMemoryRows.items.len;
-    try self.mMemoryRows.append(self.World().Keep(), .{ .Node = node, .Fold = fold, .Title = UIManager.LabelOf(fold.Header).?, .Parent = parent_row });
+    try self.mMemoryRows.append(engine_context.ProgramKeep(), .{ .Node = node, .Fold = fold, .Title = UIManager.LabelOf(fold.Header).?, .Parent = parent_row });
     var children = node.Children();
     while (children.next()) |child| try self.AddMemoryRows(engine_context, child, fold.Content.?, row, depth + 1);
+}
+
+/// What the game is using of one of the target platform's budgets, and what that is of: in the editor only as near as
+/// it can tell what is the game's, in a game all of it
+fn SetBudgetLine(self: *ProfilerPanel, engine_context: *EngineContext, label: Entity, bytes: u64, budget_mb: u32) !void {
+    const budget: u64 = @as(u64, budget_mb) * 1024 * 1024;
+    const percent = if (budget == 0) 0 else 100 * bytes / budget;
+    try SetLine(engine_context, label, "Budget ({s}): {f} of {f}, {d}%{s}   ({s})", .{
+        engine_context.mTargetPlatforms.GetName(engine_context.mTargetPlatforms.mTarget),
+        Bytes{ .mBytes = @intCast(bytes) },
+        Bytes{ .mBytes = @intCast(budget) },
+        percent,
+        if (bytes > budget) ", over" else "",
+        switch (self.mShows) {
+            .Editor => "the game's world and loaded objects, as near as the editor can tell",
+            .Game => "the whole game",
+        },
+    });
 }
 
 /// The video memory tree's rows: built again if a group was met since, then the numbers on each. It is small, so every
 /// row is refreshed whether it can be seen or not
 fn UpdateVideo(self: *ProfilerPanel, engine_context: *EngineContext) !void {
+    const platforms = &engine_context.mTargetPlatforms;
+    try self.SetBudgetLine(engine_context, self.mVideoBudget, platforms.mLastUsage.Video, platforms.Target().mVideoMemoryMB);
     const gpu = &engine_context.mGPUAllocator;
-    if (self.mVideoTree == null or self.mVideoGroups != gpu.mGroups.items.len) try self.BuildVideoRows(engine_context);
+    if (self.mVideoTree == null or self.mVideoGroups != gpu.mGroups.items.len or self.mVideoAtlasOwners != AtlasOwners(gpu)) try self.BuildVideoRows(engine_context);
 
     const driver = gpu.mDriver.Read();
     const ours = gpu.TotalBytes();
@@ -325,6 +359,7 @@ fn UpdateVideo(self: *ProfilerPanel, engine_context: *EngineContext) !void {
                 const group = gpu.mGroups.items[group_ind];
                 try SetLine(engine_context, row.Title, "{s}   {f}   peak {f}   {s} x{d}", .{ group.Name, Bytes{ .mBytes = @intCast(group.Bytes) }, Bytes{ .mBytes = @intCast(group.Peak) }, group.Kind.Title(), group.Count });
             },
+            .AtlasOwner => |owner| try SetLine(engine_context, row.Title, "{s}   {f}", .{ OwnerName(owner), Bytes{ .mBytes = @intCast(gpu.AtlasBytesOf(owner)) } }),
             .Atlas => try SetLine(engine_context, row.Title, "Texture atlas in use   {f} in slots holding a texture   the array {d} of at most {d} layers ({f} of {f})", .{
                 Bytes{ .mBytes = @intCast(atlas.UsedBytes) },
                 atlas.Layers,
@@ -348,6 +383,7 @@ fn BuildVideoRows(self: *ProfilerPanel, engine_context: *EngineContext) !void {
     const tree = try Widgets.Tree(engine_context, .{ .Entity = self.mVideoContent });
     self.mVideoTree = tree;
     self.mVideoGroups = gpu.mGroups.items.len;
+    self.mVideoAtlasOwners = AtlasOwners(gpu);
 
     const all = try self.AddVideoRow(engine_context, tree, .All, false);
     const ours = try self.AddVideoRow(engine_context, all, .Ours, false);
@@ -362,11 +398,25 @@ fn BuildVideoRows(self: *ProfilerPanel, engine_context: *EngineContext) !void {
     }
     _ = try self.AddVideoRow(engine_context, all, .Rest, true);
 
-    //each size of texture claims whole layers of the atlas, each cut into slots of that size
+    //the atlas's use by size class, then by each owner that has slots in it. Which texture is where is the Asset Handles
+    //panel's
     const atlas = try self.AddVideoRow(engine_context, tree, .Atlas, false);
     for (0..@typeInfo(@FieldType(TextureManager.Usage, "Classes")).array.len) |class_ind| {
         _ = try self.AddVideoRow(engine_context, atlas, .{ .AtlasBin = @intCast(class_ind) }, true);
     }
+    for (0..GPUAllocator.OWNER_COUNT) |owner_ind| {
+        if (self.mVideoAtlasOwners & (@as(u32, 1) << @intCast(owner_ind)) == 0) continue;
+        _ = try self.AddVideoRow(engine_context, atlas, .{ .AtlasOwner = @intCast(owner_ind) }, true);
+    }
+}
+
+/// The owners with slots in the texture atlas, a bit each
+fn AtlasOwners(gpu: *const GPUAllocator) u32 {
+    var owners: u32 = 0;
+    for (0..GPUAllocator.OWNER_COUNT) |owner_ind| {
+        if (gpu.AtlasBytesOf(@intCast(owner_ind)) > 0) owners |= @as(u32, 1) << @intCast(owner_ind);
+    }
+    return owners;
 }
 
 /// A row of the video memory tree under `parent`, open. Returns where the rows under it go
@@ -376,7 +426,7 @@ fn AddVideoRow(self: *ProfilerPanel, engine_context: *EngineContext, parent: Ent
         .Leaf = leaf,
         .StockScripts = self.mOptions.StockScripts,
     });
-    try self.mVideoRows.append(self.World().Keep(), .{ .Of = of, .Title = UIManager.LabelOf(fold.Header).? });
+    try self.mVideoRows.append(engine_context.ProgramKeep(), .{ .Of = of, .Title = UIManager.LabelOf(fold.Header).? });
     return fold.Content orelse fold.Node;
 }
 
@@ -387,7 +437,7 @@ fn OwnerName(owner: GPUAllocator.Owner) []const u8 {
 
 /// Each world that ran anything, and its time a pass on average
 fn SetWorlds(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *const Profiler) !void {
-    var line: std.Io.Writer.Allocating = .init(self.World().Scratch());
+    var line: std.Io.Writer.Allocating = .init(engine_context.ProgramScratch());
     try line.writer.writeAll("Each world, a pass on average:");
     var any = false;
     for (1..EngineContext.WORLD_NAMES.len + 1) |tag| {
@@ -408,15 +458,15 @@ fn RanOn(profiler: *const Profiler, world: Profiler.World) bool {
 }
 
 /// A node's name, with its world's in front when it starts that world's part of the tree
-fn Title(self: *const ProfilerPanel, profiler: *const Profiler, node: Profiler.NodeIndex) ![]const u8 {
+fn Title(engine_context: *EngineContext, profiler: *const Profiler, node: Profiler.NodeIndex) ![]const u8 {
     if (!profiler.StartsWorld(node)) return profiler.Name(node);
-    return try std.fmt.allocPrint(self.World().Scratch(), "[{s}] {s}", .{ EngineContext.WorldName(profiler.GetNode(node).mWorld), profiler.Name(node) });
+    return try std.fmt.allocPrint(engine_context.ProgramScratch(), "[{s}] {s}", .{ EngineContext.WorldName(profiler.GetNode(node).mWorld), profiler.Name(node) });
 }
 
 /// The row of each node met since the last refresh, under its parent's row. Nodes come after their parents, so the
 /// parent's row is always there already. The top ones start open, the rest folded
 fn AddRows(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *const Profiler) !void {
-    const keep_allocator = self.World().Keep();
+    const keep_allocator = engine_context.ProgramKeep();
     if (self.mTree == null) {
         //the root's row is the tree itself, so the top nodes go in it like any other node goes in its parent's content
         const tree = try Widgets.Tree(engine_context, .{ .Entity = self.mContent });
@@ -426,7 +476,7 @@ fn AddRows(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *cons
     for (self.mRows.items.len..profiler.NodeCount()) |node_ind| {
         const node: Profiler.NodeIndex = @intCast(node_ind);
         const parent = profiler.GetNode(node).mParent;
-        const fold = try Widgets.TreeNode(engine_context, .{ .Entity = self.mRows.items[parent].Node.Content.? }, try self.Title(profiler, node), .{
+        const fold = try Widgets.TreeNode(engine_context, .{ .Entity = self.mRows.items[parent].Node.Content.? }, try Title(engine_context, profiler, node), .{
             .Open = parent == Profiler.ROOT,
             .StockScripts = self.mOptions.StockScripts,
         });
@@ -437,7 +487,7 @@ fn AddRows(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *cons
 /// The numbers on every row whose parents are all open
 fn Refresh(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *const Profiler) !void {
     const rows = self.mRows.items;
-    const shown = try self.World().Scratch().alloc(bool, rows.len);
+    const shown = try engine_context.ProgramScratch().alloc(bool, rows.len);
     shown[Profiler.ROOT] = true;
     for (rows[1..], 1..) |row, node_ind| {
         const parent = profiler.GetNode(@intCast(node_ind)).mParent;
@@ -451,7 +501,7 @@ fn Refresh(self: *ProfilerPanel, engine_context: *EngineContext, profiler: *cons
         while (children.next()) |child| inside += profiler.Average(child).toNanoseconds();
         const own: std.Io.Duration = .fromNanoseconds(@max(0, summary.Avg.toNanoseconds() - inside));
         try SetLine(engine_context, row.Title, "{s}   {f} / {f} / {f}   own {f}   x{d:.1}", .{
-            try self.Title(profiler, node),
+            try Title(engine_context, profiler, node),
             Profiler.Time{ .mDuration = summary.Avg },
             Profiler.Time{ .mDuration = summary.P99 },
             Profiler.Time{ .mDuration = summary.Max },
@@ -467,10 +517,6 @@ fn IsFolded(row: Row) bool {
     return item.mCollapsed;
 }
 
-/// The world the window is in, whose memory it takes: the editor's, or the game's
-fn World(self: *const ProfilerPanel) *WorldManager {
-    return self.mWindow.mManager;
-}
 
 /// A world's folded section in the Rendering section, and its lines
 fn WorldSection(engine_context: *EngineContext, content: Entity, title: []const u8, options: Widgets.Options) !WorldLines {
@@ -562,7 +608,7 @@ fn SetConflicts(self: *ProfilerPanel, engine_context: *EngineContext, conflicts:
     }
 
     //the systems with the most hooks first
-    const order = try self.World().Scratch().alloc(usize, conflicts.mSystems.count());
+    const order = try engine_context.ProgramScratch().alloc(usize, conflicts.mSystems.count());
     for (order, 0..) |*index, i| index.* = i;
     const values = conflicts.mSystems.values();
     std.mem.sort(usize, order, values, struct {

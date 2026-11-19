@@ -30,6 +30,7 @@ pub const SETTINGS_FOLDER = ProjectWalk.SETTINGS_FOLDER;
 const SETTINGS_OWNERS = [_][]const u8{
     "mAudioManager",
     "mCollisionLayers",
+    "mTargetPlatforms",
 };
 
 const STRINGIFY_OPTIONS: std.json.Stringify.Options = .{ .whitespace = .indent_2 };
@@ -370,7 +371,11 @@ fn SaveOwnerSettings(self: *Project, engine_context: *EngineContext, comptime ow
 fn LoadOwnerSettings(self: *Project, engine_context: *EngineContext, comptime owner_field: []const u8) !void {
     const owner = &@field(engine_context, owner_field);
 
-    const contents = try self.GetDirectory().readFileAlloc(engine_context.Io(), comptime SettingsPath(owner_field), engine_context.Scratch(), .unlimited);
+    //a project from before the owner kept settings has no file for it: it gets a new project's
+    const contents = self.GetDirectory().readFileAlloc(engine_context.Io(), comptime SettingsPath(owner_field), engine_context.Scratch(), .unlimited) catch |err| switch (err) {
+        error.FileNotFound => return try owner.ResetProjectSettings(engine_context),
+        else => return err,
+    };
 
     var scanner = std.json.Scanner.initCompleteInput(engine_context.Scratch(), contents);
     defer scanner.deinit();

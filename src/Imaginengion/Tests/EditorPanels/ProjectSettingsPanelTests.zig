@@ -1,7 +1,8 @@
 //! The Project Settings panel in the editor's own UI (EditorPanels/ProjectSettingsPanel.zig): its fields show the
 //! project's name, window icon and entries ("Not set" for a file that isn't), a file dropped on a box becomes that
-//! setting when it is the right kind of file, the name typed in renames the game, and each button has its action. No window, file dialog or renderer
-//! needed. Run with `zig build test-engine`.
+//! setting when it is the right kind of file, the name typed in renames the game, each button has its action, and the
+//! target platforms have a row each with their budgets. No window, file dialog or renderer needed. Run with
+//! `zig build test-engine`.
 const std = @import("std");
 
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -137,4 +138,59 @@ test "each button has its action" {
     try std.testing.expectEqual(ProjectSettingsPanel.Action.ClearIcon, panel.ActionOf(panel.mClearIcon).?);
     //a box is no button
     try std.testing.expect(panel.ActionOf(panel.mEntries.get(.Scene).Box) == null);
+}
+
+fn IsShown(entity: Entity) bool {
+    return !entity.GetComponent(EntityComponents.LayoutItemComponent).?.mCollapsed;
+}
+
+/// Types `text` into a field and keeps it
+fn Submit(engine: *TestEngine, field: Entity, text: []const u8) !void {
+    try field.GetComponentMut(TextComponent).?.SetText(field.KeepFor(TextComponent), text);
+    try engine.mPanel.OnUIEvent(engine.mEngineContext, .{ .mEntity = field, .mEvent = .{ .TextSubmitted = .{ .mTarget = field } } });
+}
+
+test "a target platform has a row with its budgets, rows come and go with platforms, and a budget typed in is kept" {
+    const engine = try TestEngine.Init();
+    defer engine.Deinit();
+    const engine_context = engine.mEngineContext;
+    const panel = &engine.mPanel;
+    const platforms = &engine_context.mTargetPlatforms;
+    try WidgetActions.OpenWindow(engine_context, panel.mWindow);
+
+    //a new project's one platform, the target
+    try panel.Update(engine_context);
+    try std.testing.expect(IsShown(panel.mPlatforms[0].Row));
+    try std.testing.expect(!IsShown(panel.mPlatforms[1].Row));
+    try std.testing.expectEqualStrings("PC", TestEngine.Shown(panel.mPlatforms[0].Name));
+    try std.testing.expectEqualStrings("Target", TestEngine.Shown(panel.mPlatforms[0].Target));
+
+    try ProjectSettingsPanel.Run(engine_context, panel.ActionOf(panel.mAddPlatform).?);
+    try panel.Update(engine_context);
+    try std.testing.expect(IsShown(panel.mPlatforms[1].Row));
+    try std.testing.expectEqualStrings("Make Target", TestEngine.Shown(panel.mPlatforms[1].Target));
+
+    //typed in: a name, a budget; something that isn't a whole number of MB is shown as it was again
+    try Submit(engine, panel.mPlatforms[1].Name, "Switch 2");
+    try Submit(engine, panel.mPlatforms[1].CPU, "3072");
+    try Submit(engine, panel.mPlatforms[1].Video, "lots");
+    try panel.Update(engine_context);
+    try std.testing.expectEqualStrings("Switch 2", platforms.GetName(1));
+    try std.testing.expectEqual(3072, platforms.Get(1).mCPUMemoryMB);
+    try std.testing.expectEqualStrings("4096", TestEngine.Shown(panel.mPlatforms[1].Video));
+
+    try ProjectSettingsPanel.Run(engine_context, panel.ActionOf(panel.mPlatforms[1].Target).?);
+    try std.testing.expectEqual(1, platforms.mTarget);
+    try ProjectSettingsPanel.Run(engine_context, panel.ActionOf(panel.mPlatforms[0].Remove).?);
+    try panel.Update(engine_context);
+    try std.testing.expect(!IsShown(panel.mPlatforms[1].Row));
+    try std.testing.expectEqualStrings("Switch 2", TestEngine.Shown(panel.mPlatforms[0].Name));
+    try std.testing.expectEqualStrings("Target", TestEngine.Shown(panel.mPlatforms[0].Target));
+
+    //saved with the project and read back when it is opened again
+    try engine_context.mProject.Save(engine_context);
+    const project_file = try engine_context.mProject.GetAbsPath(engine_context.Scratch(), engine_context.mProject.mFileName.items);
+    try engine_context.mProject.Open(engine_context, project_file);
+    try std.testing.expectEqualStrings("Switch 2", platforms.GetName(platforms.mTarget));
+    try std.testing.expectEqual(3072, platforms.Target().mCPUMemoryMB);
 }

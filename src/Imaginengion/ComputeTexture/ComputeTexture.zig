@@ -66,5 +66,10 @@ pub fn ComputeStorageTexture(comptime format: TextureFormat) type {
         pub fn GetHeight(self: Self) usize {
             return self._Impl.GetHeight();
         }
+
+        /// Who its GPU memory is for (GPUAllocator.Owner): the world of the player it draws
+        pub fn GetOwner(self: Self) GPUAllocator.Owner {
+            return self._Impl.GetOwner();
+        }
     };
 }

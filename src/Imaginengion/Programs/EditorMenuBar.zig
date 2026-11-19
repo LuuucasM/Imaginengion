@@ -147,7 +147,7 @@ pub fn Build(engine_context: *EngineContext, bar: Entity, options: Widgets.Optio
     const zone = Tracy.ZoneInit("EditorMenuBar::Build", @src());
     defer zone.Deinit();
     var self: EditorMenuBar = .{ .mStockScripts = options.StockScripts };
-    errdefer self.Deinit(engine_context.mEditorWorld.Keep());
+    errdefer self.Deinit(engine_context.ProgramKeep());
     const item_options = Widgets.MenuItemOptions{ .StockScripts = options.StockScripts };
     const check_options = Widgets.MenuItemOptions{ .Checkable = true, .StockScripts = options.StockScripts };
 
@@ -249,7 +249,7 @@ fn UpdatePlayers(self: *EditorMenuBar, engine_context: *EngineContext, players: 
     self.mPlayerItems.clearRetainingCapacity();
     for (players) |player| {
         const item = try Widgets.MenuItem(engine_context, self.mPlayersMenu, player.GetName(), .{ .Checkable = true, .StockScripts = self.mStockScripts });
-        try self.mPlayerItems.append(engine_context.mEditorWorld.Keep(), .{ .Item = item, .Action = .{ .FollowPlayer = player } });
+        try self.mPlayerItems.append(engine_context.ProgramKeep(), .{ .Item = item, .Action = .{ .FollowPlayer = player } });
     }
 }
 
@@ -264,6 +264,6 @@ fn SamePlayers(self: *const EditorMenuBar, players: []const Player) bool {
 /// A menu item that does `action`
 fn Add(self: *EditorMenuBar, engine_context: *EngineContext, menu: Entity, text: []const u8, options: Widgets.MenuItemOptions, action: Action) !Entity {
     const item = try Widgets.MenuItem(engine_context, menu, text, options);
-    try self.mActions.append(engine_context.mEditorWorld.Keep(), .{ .Item = item, .Action = action });
+    try self.mActions.append(engine_context.ProgramKeep(), .{ .Item = item, .Action = action });
     return item;
 }

@@ -1,6 +1,4 @@
 - add reparenting
-- fix the rendering at the ends of quads theres some weird artifacts
-	- for pngs the see through parts for some reason skips the behind objects when it should continue to march forward to the next object behind this one
 - keeping track of whats modified so we can do a SAVE ALL
 - when anchor to top as a base entity so no parent container, and no layoutcontainer it goes outside the camera
 - add a circle shape to 2d shapes
@@ -9,3 +7,4 @@
 	- this would be a decent time since it feels like a for each function would be effectively the same as a system... a function + Read and Write definitions so once I have everything else I think this should be easily follow
 - hot reloading scripts seemed to not have worked when i added a new member variable to add sound to when hovering buttons so i had to close the editor, and reopened and then the drag target in the script appeared
 - make scripts a node tree so instead of automatically being open they are closed. this is for later when objects might have many many scripts
+- be able to resize the standalone panels in the editor like the asset handle panel

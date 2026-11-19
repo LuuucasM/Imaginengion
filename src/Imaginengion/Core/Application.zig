@@ -55,6 +55,7 @@ pub fn Init(self: *Application, init: std.process.Init.Minimal) !void {
     CAllocators.Attach(&self.mEngineContext._Internal.Memory);
     self.mProgram.mMemory.Init(&self.mEngineContext, "Program");
     self.mProgram.mMemory.Attach(&self.mMemory, @sizeOf(Program), true);
+    self.mEngineContext._Internal.ProgramMemory = &self.mProgram.mMemory;
     try self.mEngineContext.Init(init.environ);
     try self.mProgram.Init(&self.mEngineContext, init.args);
     self.mEngineContext.SetSyncCallbacks(&self.mProgram);

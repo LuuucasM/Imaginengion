@@ -33,7 +33,8 @@ const Scene = @import("../ECSObjects/Scene.zig");
 
 const AManager = @This();
 
-const ASSET_DELETE_TIMEOUT_NS: i96 = 1_000_000_000;
+/// How long an asset marked for deletion (PendingDelete) is kept, in case its file comes back or something takes it up again
+pub const ASSET_DELETE_TIMEOUT_NS: i96 = 1_000_000_000;
 
 pub const ECSManagerT = ECSManager.ECSManager(AssetHandle.Type, &AssetComponentsList, "AssetECS");
 pub const EventManagerT = EventManager.EventManager(EventData);

@@ -125,6 +125,10 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
             return self.mHeight;
         }
 
+        pub fn GetOwner(self: Self) GPUAllocator.Owner {
+            return self.mOwner;
+        }
+
         fn Create(self: *Self, engine_context: *EngineContext) !void {
             const gpu = &engine_context.mGPUAllocator;
             const info = sdl.SDL_GPUTextureCreateInfo{

@@ -99,6 +99,7 @@ const OverlayComponent = PlayerComponents.OverlayComponent;
 const EditorShell = @import("EditorShell.zig");
 const EditorMenuBar = @import("EditorMenuBar.zig");
 const AssetHandlesPanel = @import("../EditorPanels/AssetHandlesPanel.zig");
+const TargetPlatforms = @import("../Core/TargetPlatforms.zig");
 const AudioBusesPanel = @import("../EditorPanels/AudioBusesPanel.zig");
 const CollisionLayersPanel = @import("../EditorPanels/CollisionLayersPanel.zig");
 const ProjectSettingsPanel = @import("../EditorPanels/ProjectSettingsPanel.zig");
@@ -195,6 +196,8 @@ mGameContextPanel: HierarchyPanel(GameContext) = .{},
 mSelectedObj: ?SelectedObject = null,
 
 mEditorState: EditorState = .Stop,
+/// Since the game's memory was last set against the target platform's budgets (TargetPlatforms.Check)
+mSinceBudgetCheck: f32 = 0,
 //the player whose view the pointer was last over, which a drag keeps following the mouse through once it leaves
 mPointerCamera: ?Player = null,
 mRunPlayer: ?Player = null,
@@ -314,33 +317,34 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process
     self.mActiveWorldType = .Game;
 
     //from the first pass of the loop on, for the Profiler window
-    try Profiler.gMain.Start(engine_context.mEditorWorld.Keep(), engine_context.Io());
+    try Profiler.gMain.Start(engine_context.ProgramKeep(), engine_context.Io());
 }
 
 pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("EditorProgram::Deinit", @src());
     defer zone.Deinit();
     Profiler.gMain.Stop();
-    self.mProfilerPanel.Deinit(engine_context.mEditorWorld.Keep());
+    self.mProfilerPanel.Deinit(engine_context.ProgramKeep());
+    self.mAssetHandlesPanel.Deinit(engine_context.ProgramKeep());
     //open template windows save on the way out, the same as their X does
     for (self.mTmplEditPanels.items) |*panel| {
         panel.Close(engine_context) catch |err| {
             std.log.err("Failed to save a template window while closing the editor: {s}", .{@errorName(err)});
         };
     }
-    self.mTmplEditPanels.deinit(engine_context.mEditorWorld.Keep());
-    self.mContentBrowserPanel.Deinit(engine_context.mEditorWorld.Keep());
-    self.mPlayQuads.deinit(engine_context.mEditorWorld.Keep());
-    self.mViewportQuads.deinit(engine_context.mEditorWorld.Keep());
-    self.mMenuBar.Deinit(engine_context.mEditorWorld.Keep());
-    self.mAudioBusesPanel.Deinit(engine_context.mEditorWorld.Keep());
-    self.mUIElementPanel.Deinit(engine_context.mEditorWorld.Keep());
-    self.mScriptsPanel.Deinit(engine_context.mEditorWorld.Keep());
-    self.mComponentsPanel.Deinit(engine_context.mEditorWorld.Keep());
-    self.mScenePanel.Deinit(engine_context.mEditorWorld.Keep());
-    self.mEntityPanel.Deinit(engine_context.mEditorWorld.Keep());
-    self.mPlayerPanel.Deinit(engine_context.mEditorWorld.Keep());
-    self.mGameContextPanel.Deinit(engine_context.mEditorWorld.Keep());
+    self.mTmplEditPanels.deinit(engine_context.ProgramKeep());
+    self.mContentBrowserPanel.Deinit(engine_context.ProgramKeep());
+    self.mPlayQuads.deinit(engine_context.ProgramKeep());
+    self.mViewportQuads.deinit(engine_context.ProgramKeep());
+    self.mMenuBar.Deinit(engine_context.ProgramKeep());
+    self.mAudioBusesPanel.Deinit(engine_context.ProgramKeep());
+    self.mUIElementPanel.Deinit(engine_context.ProgramKeep());
+    self.mScriptsPanel.Deinit(engine_context.ProgramKeep());
+    self.mComponentsPanel.Deinit(engine_context.ProgramKeep());
+    self.mScenePanel.Deinit(engine_context.ProgramKeep());
+    self.mEntityPanel.Deinit(engine_context.ProgramKeep());
+    self.mPlayerPanel.Deinit(engine_context.ProgramKeep());
+    self.mGameContextPanel.Deinit(engine_context.ProgramKeep());
 }
 
 //Note other systems to consider in the on update loop
@@ -902,7 +906,7 @@ fn PixelOffViewOf(self: *const EditorProgram, engine_context: *EngineContext, ca
 /// The viewport quad in the editor's own UI that shows `camera`'s view, null if none does
 fn ViewportQuadOf(self: *const EditorProgram, engine_context: *EngineContext, camera: Player) ?Entity {
     const world = &engine_context.mEditorWorld;
-    const entity_ids = world.GetEntityGroup(engine_context.mEditorWorld.Scratch(), .{ .Component = ViewportComponent }) catch return null;
+    const entity_ids = world.GetEntityGroup(engine_context.ProgramScratch(), .{ .Component = ViewportComponent }) catch return null;
     for (entity_ids.items) |entity_id| {
         const entity = world.GetEntity(entity_id);
         const shows = entity.GetComponent(ViewportComponent).?.mPlayer;
@@ -935,7 +939,7 @@ fn CastInView(self: *EditorProgram, engine_context: *EngineContext, camera: Play
         .Editor => &engine_context.mEditorWorld,
         .Simulate => &engine_context.mSimulateWorld,
     };
-    const view_scenes = try self.ViewScenesFor(engine_context.mEditorWorld.Scratch(), camera, world);
+    const view_scenes = try self.ViewScenesFor(engine_context.ProgramScratch(), camera, world);
     return try RayCast.CastRay(engine_context, world, pointer_view.Ray, pointer_view.CameraView, view_scenes, .{});
 }
 
@@ -973,7 +977,7 @@ fn OpenTmpl(self: *EditorProgram, engine_context: *EngineContext, tmpl: AssetHan
         handle.ReleaseAsset();
         return err;
     };
-    try self.mTmplEditPanels.append(engine_context.mEditorWorld.Keep(), panel);
+    try self.mTmplEditPanels.append(engine_context.ProgramKeep(), panel);
 }
 
 /// Saves and takes away the template windows that were closed, then updates the open ones
@@ -989,7 +993,7 @@ fn UpdateTmplEditPanels(self: *EditorProgram, engine_context: *EngineContext) !v
             continue;
         }
         //the name is the template object's, which is still there until the end of the frame, but read before closing
-        const name = try engine_context.mEditorWorld.Scratch().dupe(u8, panel.Name());
+        const name = try engine_context.ProgramScratch().dupe(u8, panel.Name());
         panel.Close(engine_context) catch |err| {
             //nothing is lost: the window opens again with the edits still in it
             std.log.err("Failed to save template, so its window stays open: {s}", .{@errorName(err)});
@@ -1007,7 +1011,7 @@ fn UpdateTmplEditPanels(self: *EditorProgram, engine_context: *EngineContext) !v
 /// name, and leaves its shell behind (see Core.MakeTmpl)
 fn MakeTmpl(self: *EditorProgram, engine_context: *EngineContext, object: anytype) !void {
     const extension = std.mem.span(Serializer.FileExtension(@TypeOf(object)));
-    const abs_path = try std.fmt.allocPrint(engine_context.mEditorWorld.Scratch(), "{s}/{s}{s}", .{ self.mContentBrowserPanel.CurrentPath(), object.GetName(), extension });
+    const abs_path = try std.fmt.allocPrint(engine_context.ProgramScratch(), "{s}/{s}{s}", .{ self.mContentBrowserPanel.CurrentPath(), object.GetName(), extension });
     //the content browser shows folders inside the project or the engine's assets
     const path_type = self.mContentBrowserPanel.CurrentPathType();
     const rel_path = engine_context.mAssetManager.GetRelPath(abs_path, path_type);
@@ -1117,7 +1121,7 @@ pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineConte
 /// game's UI names its own theme files, see StyleComponent). A file in the open project is kept by the project's path,
 /// anything else by the engine's
 fn PickTheme(_: *EditorProgram, engine_context: *EngineContext) !void {
-    const abs_path = try PlatformUtils.OpenFile(engine_context.mEditorWorld.Scratch(), ".imtheme");
+    const abs_path = try PlatformUtils.OpenFile(engine_context.ProgramScratch(), ".imtheme");
     if (abs_path.len == 0) return;
 
     const asset_manager = &engine_context.mAssetManager;
@@ -1197,10 +1201,10 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
 
     //only the players the preview can actually draw
     var players: std.ArrayList(Player) = .empty;
-    const player_group = try engine_context.mGameWorld.GetPlayerGroup(engine_context.mEditorWorld.Scratch(), .{ .Component = PossessComponent });
+    const player_group = try engine_context.mGameWorld.GetPlayerGroup(engine_context.ProgramScratch(), .{ .Component = PossessComponent });
     for (player_group.items) |player_id| {
         const player = engine_context.mGameWorld.GetPlayer(player_id);
-        if (player.GetRenderView() != null) try players.append(engine_context.mEditorWorld.Scratch(), player);
+        if (player.GetRenderView() != null) try players.append(engine_context.ProgramScratch(), player);
     }
 
     try self.mMenuBar.Update(engine_context, .{
@@ -1264,7 +1268,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
         .NewGameScene => _ = try engine_context.mGameWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig),
         .NewOverlayScene => _ = try engine_context.mGameWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig),
         .OpenScene => {
-            const abs_path = try PlatformUtils.OpenFile(engine_context.mEditorWorld.Scratch(), ".imsc");
+            const abs_path = try PlatformUtils.OpenFile(engine_context.ProgramScratch(), ".imsc");
             if (abs_path.len > 0) {
                 const asset_manager = &engine_context.mAssetManager;
                 const path_type = asset_manager.PathTypeOf(abs_path);
@@ -1281,7 +1285,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
             else => {},
         },
         .NewProject => {
-            const abs_path = try PlatformUtils.OpenFolder(engine_context.mEditorWorld.Scratch());
+            const abs_path = try PlatformUtils.OpenFolder(engine_context.ProgramScratch());
             if (abs_path.len > 0) {
                 try engine_context.mProject.New(engine_context, abs_path);
                 WriteProjectBuildFiles(engine_context);
@@ -1289,7 +1293,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
             }
         },
         .OpenProject => {
-            const abs_path = try PlatformUtils.OpenFile(engine_context.mEditorWorld.Scratch(), ".imprj");
+            const abs_path = try PlatformUtils.OpenFile(engine_context.ProgramScratch(), ".imprj");
             if (abs_path.len > 0) {
                 try engine_context.mProject.Open(engine_context, abs_path);
                 WriteProjectBuildFiles(engine_context);
@@ -1330,11 +1334,25 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
 /// Before layout, which sizes what it sets: the play preview shown or not, the menu bar's items showing the editor's
 /// state, and a viewport quad in the viewport area for each view it shows, placed by the view's area rect: the editor
 /// camera, or while playing in it, every player's view
+/// How often the game's memory is set against the target platform's budgets
+const BUDGET_CHECK_SECONDS: f32 = 0.25;
+
+/// Every BUDGET_CHECK_SECONDS, the game's memory as near as the editor can tell (the world being played while playing)
+/// against the target platform's budgets, which warns when one is gone over
+fn CheckBudgets(self: *EditorProgram, engine_context: *EngineContext) void {
+    self.mSinceBudgetCheck += engine_context.mDT;
+    if (self.mSinceBudgetCheck < BUDGET_CHECK_SECONDS) return;
+    self.mSinceBudgetCheck = 0;
+    const game_world = if (self.mEditorState == .Play) &engine_context.mSimulateWorld else &engine_context.mGameWorld;
+    engine_context.mTargetPlatforms.Check(TargetPlatforms.EditorUsage(engine_context, game_world));
+}
+
 fn UpdateShell(self: *EditorProgram, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("EditorProgram::UpdateShell", @src());
     defer zone.Deinit();
     try self.mShell.ShowPlayPreview(engine_context, self.mShowPlayPreview);
     try self.UpdateMenuBar(engine_context);
+    self.CheckBudgets(engine_context);
     try self.mProfilerPanel.Update(engine_context, &Profiler.gMain);
     try self.mAssetHandlesPanel.Update(engine_context);
     try self.mAudioBusesPanel.Update(engine_context);
@@ -1355,7 +1373,7 @@ fn UpdateShell(self: *EditorProgram, engine_context: *EngineContext) !void {
 
     //the viewport shows the editor camera, or the game's players while playing with the play preview off. The play
     //preview shows the run player while stopped, and the game's players while playing
-    const scratch_allocator = engine_context.mEditorWorld.Scratch();
+    const scratch_allocator = engine_context.ProgramScratch();
     var viewport_views: std.ArrayList(PlacedView) = .empty;
     if (self.mEditorState == .Play and !self.mShowPlayPreview) {
         for ((try self.GetViewportViews(scratch_allocator, .ViewportPanel)).items) |view| {
@@ -1398,7 +1416,7 @@ pub fn SyncViewQuads(engine_context: *EngineContext, area: Entity, quads: *std.A
         try Widgets.AddQuad(engine_context, quad, .{}, .{});
         _ = try quad.AddComponent(engine_context, ViewportComponent{});
         _ = try quad.AddComponent(engine_context, LayoutItemComponent{});
-        try quads.append(engine_context.mEditorWorld.Keep(), quad);
+        try quads.append(engine_context.ProgramKeep(), quad);
     }
     while (quads.items.len > views.len) {
         try quads.pop().?.Delete(engine_context);
@@ -1478,7 +1496,7 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext) !voi
     if (!render_component.mComputeTexture.IsCreated()) return;
     try engine_context.mRenderer.RenderWorld(
         self.mActiveWorld,
-        try self.ViewScenesFor(engine_context.mEditorWorld.Scratch(), self.mEditorViewportPlayer, self.mActiveWorld),
+        try self.ViewScenesFor(engine_context.ProgramScratch(), self.mEditorViewportPlayer, self.mActiveWorld),
         self.ActiveRenderStats(engine_context),
         engine_context,
         Renderer.BuildPushConstants(transform_component, viewpoint_component),
@@ -1492,7 +1510,7 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
     const zone = Tracy.ZoneInit("EditorProgram::RenderWorldTarget", @src());
     defer zone.Deinit();
 
-    const scratch_allocator = engine_context.mEditorWorld.Scratch();
+    const scratch_allocator = engine_context.ProgramScratch();
 
     const views = try self.GetViewportViews(scratch_allocator, viewport_type);
 

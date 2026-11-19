@@ -195,7 +195,7 @@ test "the Components panel's Possess box possesses a dropped entity, linking bot
     const page = try world.mUIScene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try page.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
     var panel = try ComponentsPanel.Build(engine_context, page, NO_SCRIPTS);
-    defer panel.Deinit(engine_context.mEditorWorld.Keep());
+    defer panel.Deinit(engine_context.ProgramKeep());
 
     var player_config = Player.DefaultConfig;
     player_config.bAddPossessComponent = true;

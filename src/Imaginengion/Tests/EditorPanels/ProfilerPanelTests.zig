@@ -26,8 +26,8 @@ test "the profiler window shows a row per node under its parent's, with numbers 
     try engine_context.mEditorWorld.Init(engine_context);
     var panel: ProfilerPanel = .{};
     defer {
-        panel.Deinit(engine_context.mEditorWorld.Keep());
-        engine_context.mGPUAllocator.mGroups.deinit(engine_context.Keep());
+        panel.Deinit(engine_context.ProgramKeep());
+        engine_context.mGPUAllocator.Deinit(engine_context.Keep());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
         _ = engine_context._Internal.KeepHeap.deinit();
@@ -69,12 +69,20 @@ test "the profiler window shows a row per node under its parent's, with numbers 
     try std.testing.expectEqualStrings("Texture atlas in use   0 B in slots holding a texture   the array 0 of at most 0 layers (0 B of 0 B)", TextOf(panel.mVideoRows.items[3].Title));
     try std.testing.expectEqualStrings("Up to 60 px   0 B in 0 slots   0 free in 0 pages of 8 x 8", TextOf(panel.mVideoRows.items[4].Title));
     //a group met since gets its owner's row and its own under what the engine made, on the next refresh
-    try engine_context.mGPUAllocator.mGroups.append(engine_context.Keep(), .{ .Owner = GPUAllocator.ENGINE, .Name = "Texture atlas", .Kind = .Texture, .Bytes = 2048, .Peak = 4096, .Count = 1 });
+    try engine_context.mGPUAllocator.mGroups.append(engine_context.Keep(), .{ .Owner = GPUAllocator.ENGINE, .Name = try engine_context.Keep().dupe(u8, "Texture atlas"), .Kind = .Texture, .Bytes = 2048, .Peak = 4096, .Count = 1 });
     engine_context.mDT = ProfilerPanel.REFRESH_SECONDS;
     try panel.Update(engine_context, &profiler);
     try std.testing.expectEqual(@as(usize, 13), panel.mVideoRows.items.len);
     try std.testing.expect(std.mem.startsWith(u8, TextOf(panel.mVideoRows.items[2].Title), "Engine (shared)   "));
     try std.testing.expectEqualStrings("Texture atlas   2.0 KB   peak 4.0 KB   texture x1", TextOf(panel.mVideoRows.items[3].Title));
+    //the atlas's slots are listed under the atlas as a total for each owner that has any
+    try engine_context.mGPUAllocator.AtlasTook(engine_context, 7, 64 * 64 * 4, GPUAllocator.ENGINE);
+    try panel.Update(engine_context, &profiler);
+    try std.testing.expectEqual(@as(usize, 14), panel.mVideoRows.items.len);
+    try std.testing.expectEqualStrings("Engine (shared)   16.0 KB", TextOf(panel.mVideoRows.items[13].Title));
+    engine_context.mGPUAllocator.AtlasGave(7);
+    try panel.Update(engine_context, &profiler);
+    try std.testing.expectEqual(@as(usize, 13), panel.mVideoRows.items.len);
 
     try profiler.Start(engine_context.Keep(), std.testing.io);
     defer profiler.Stop();
@@ -133,8 +141,8 @@ test "above the sections, frames and passes of the loop a second; then each worl
     var panel: ProfilerPanel = .{};
     var game_panel: ProfilerPanel = .{};
     defer {
-        panel.Deinit(engine_context.mEditorWorld.Keep());
-        game_panel.Deinit(engine_context.mEditorWorld.Keep());
+        panel.Deinit(engine_context.ProgramKeep());
+        game_panel.Deinit(engine_context.ProgramKeep());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
         _ = engine_context._Internal.KeepHeap.deinit();
@@ -184,7 +192,7 @@ test "ticking Measure turns conflict measuring on from fresh counts, and the sec
     try engine_context.mEditorWorld.Init(engine_context);
     var panel: ProfilerPanel = .{};
     defer {
-        panel.Deinit(engine_context.mEditorWorld.Keep());
+        panel.Deinit(engine_context.ProgramKeep());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
         _ = engine_context._Internal.KeepHeap.deinit();

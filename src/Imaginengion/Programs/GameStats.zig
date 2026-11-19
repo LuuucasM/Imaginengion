@@ -15,6 +15,7 @@ const Player = @import("../ECSObjects/Player.zig");
 const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
 const ProfilerPanel = @import("../EditorPanels/ProfilerPanel.zig");
+const TargetPlatforms = @import("../Core/TargetPlatforms.zig");
 const SceneStackPos = @import("../ECSComponents/SComponents.zig").StackPosComponent;
 
 const GameStats = @This();
@@ -31,14 +32,16 @@ mPanel: ProfilerPanel = .{},
 mShowing: ?Player = null,
 /// Off to build it without compiling the stock scripts, in a test
 mOptions: Widgets.Options = .{},
+/// Since the game's memory was last set against the target platform's budgets
+mSinceBudgetCheck: f32 = 0,
 
-/// Starts the profiler, whose numbers it shows. Its memory is the engine's, not the game's
+/// Starts the profiler, whose numbers it shows. Its memory is the program's, not the game's
 pub fn Start(engine_context: *EngineContext) !void {
-    try Profiler.gMain.Start(engine_context.Keep(), engine_context.Io());
+    try Profiler.gMain.Start(engine_context.ProgramKeep(), engine_context.Io());
 }
 
 pub fn Deinit(self: *GameStats, engine_context: *EngineContext) void {
-    self.mPanel.Deinit(engine_context.mGameWorld.Keep());
+    self.mPanel.Deinit(engine_context.ProgramKeep());
     Profiler.gMain.Stop();
 }
 
@@ -73,6 +76,12 @@ pub fn IsShown(self: GameStats) bool {
 pub fn Update(self: *GameStats, engine_context: *EngineContext, profiler: *const Profiler) !void {
     const zone = Tracy.ZoneInit("GameStats::Update", @src());
     defer zone.Deinit();
+    //shown or not: going over a budget is worth a warning either way
+    self.mSinceBudgetCheck += engine_context.mDT;
+    if (self.mSinceBudgetCheck >= ProfilerPanel.REFRESH_SECONDS) {
+        self.mSinceBudgetCheck = 0;
+        engine_context.mTargetPlatforms.Check(TargetPlatforms.GameUsage(engine_context));
+    }
     if (self.mShowing == null) return;
     //closed with its close button, or the player showing it went (a new one was made the shown one): hidden, and
     //Ctrl+Shift+TOGGLE_KEY shows it again

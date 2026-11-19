@@ -4,9 +4,12 @@
 //!     left (its TextSubmitted, OnUIEvent)
 //!   - the game window's icon, a PNG, with a Clear button to go back to none
 //!   - a row per project entry (Project.Entry: the scene, player and game context the game starts from)
+//!   - the target platforms (TargetPlatforms), a row each: a button making it the target the editor checks the game's
+//!     memory against, its name, its CPU and video memory budgets in MB, and a Remove button; and an Add Platform button
 //! A file setting shows its file, or "Not set" while it has none, in a box a file from the Content Browser can be
 //! dropped on (OnDrop), and has a Browse... button that picks the file with a file dialog (ActionOf, Run). The fields
-//! are given the project's settings again whenever they change (Project.mVersion), however they were set
+//! are given the project's settings again whenever they change (Project.mVersion, TargetPlatforms.mVersion), however
+//! they were set. A budget that isn't a whole number of MB is shown as it was again
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -17,6 +20,7 @@ const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
 const UIManager = @import("../UI/UIManager.zig");
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
+const TargetPlatforms = @import("../Core/TargetPlatforms.zig");
 const PointerDroppedEvent = @import("../Events/PointerEventData.zig").PointerDroppedEvent;
 const EntityUIEvent = @import("../Events/UIEventData.zig").EntityEvent;
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
@@ -30,7 +34,10 @@ const ProjectSettingsPanel = @This();
 
 /// Where the window opens, from the middle of the editor UI, and how big it is
 const AT = Vec2(f32){ .x = -250, .y = 100 };
-const SIZE = Vec2(f32){ .x = 500, .y = 300 };
+const SIZE = Vec2(f32){ .x = 560, .y = 480 };
+/// How wide a platform's budget fields are, and its target button
+const BUDGET_WIDTH: f32 = 90;
+const TARGET_WIDTH: f32 = 110;
 /// How wide a row's setting name is
 const NAME_WIDTH: f32 = 110;
 /// What a box says while its file isn't set
@@ -46,6 +53,20 @@ pub const Action = union(enum) {
     BrowseIcon,
     /// take the window icon away
     ClearIcon,
+    /// make a target platform, by its index, the one the editor checks against
+    MakeTarget: usize,
+    RemovePlatform: usize,
+    AddPlatform,
+};
+
+/// A target platform's row and its parts' entities: the text fields' texts, which TextSubmitted is sent from
+const PlatformRow = struct {
+    Row: Entity = .uninit,
+    Target: Entity = .uninit,
+    Name: Entity = .uninit,
+    CPU: Entity = .uninit,
+    Video: Entity = .uninit,
+    Remove: Entity = .uninit,
 };
 
 /// A file setting's row: the box showing its file, and its Browse... button
@@ -62,6 +83,11 @@ mClearIcon: Entity = .uninit,
 mEntries: std.EnumArray(Project.Entry, FileRow) = .initFill(.{}),
 /// The project's settings the fields were last given (Project.mVersion)
 mShownVersion: ?u32 = null,
+/// A row for each platform there can be, hidden while there is no platform for it
+mPlatforms: [TargetPlatforms.MAX_PLATFORMS]PlatformRow = @splat(.{}),
+mAddPlatform: Entity = .uninit,
+/// The platforms the rows were last given (TargetPlatforms.mVersion)
+mShownPlatforms: ?u32 = null,
 
 /// Builds the window, closed, at the top of `scene`
 pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Options) !ProjectSettingsPanel {
@@ -83,6 +109,11 @@ pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Opti
         self.mEntries.set(entry, try AddFile(engine_context, try NamedRow(engine_context, content, EntryName(entry)), comptime std.mem.span(entry.FileExtension())));
     }
 
+    _ = try Widgets.Separator(engine_context, .{ .Entity = content });
+    _ = try Widgets.Label(engine_context, .{ .Entity = content }, "Target platforms: memory budgets in MB, the game's memory checked against the target's");
+    for (&self.mPlatforms) |*platform| platform.* = try PlatformRowOf(engine_context, content);
+    self.mAddPlatform = try Widgets.Button(engine_context, .{ .Entity = content }, "Add Platform");
+
     try WidgetActions.CloseWindow(engine_context, self.mWindow);
     return self;
 }
@@ -94,6 +125,27 @@ fn NamedRow(engine_context: *EngineContext, parent: Entity, name: []const u8) !E
     const label = try Widgets.Label(engine_context, .{ .Entity = row }, name);
     label.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fixed = NAME_WIDTH };
     return row;
+}
+
+/// A platform's row: its target button, its name, its budgets, its Remove
+fn PlatformRowOf(engine_context: *EngineContext, parent: Entity) !PlatformRow {
+    const row = try Widgets.Row(engine_context, .{ .Entity = parent });
+    row.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fill = 1 };
+    const target = try Widgets.Button(engine_context, .{ .Entity = row }, "");
+    target.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fixed = TARGET_WIDTH };
+    const name = try Widgets.TextField(engine_context, .{ .Entity = row }, "");
+    const cpu = try Widgets.TextField(engine_context, .{ .Entity = row }, "");
+    cpu.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fixed = BUDGET_WIDTH };
+    const video = try Widgets.TextField(engine_context, .{ .Entity = row }, "");
+    video.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fixed = BUDGET_WIDTH };
+    return .{
+        .Row = row,
+        .Target = target,
+        .Name = UIManager.LabelOf(name).?,
+        .CPU = UIManager.LabelOf(cpu).?,
+        .Video = UIManager.LabelOf(video).?,
+        .Remove = try Widgets.Button(engine_context, .{ .Entity = row }, "Remove"),
+    };
 }
 
 /// A file setting's box a file with `extension` can be dropped on and its Browse..., at the end of `row`
@@ -131,12 +183,39 @@ pub fn Update(self: *ProjectSettingsPanel, engine_context: *EngineContext) !void
     const zone = Tracy.ZoneInit("ProjectSettingsPanel::Update", @src());
     defer zone.Deinit();
     if (!self.IsOpen()) return;
+    try self.ShowPlatforms(engine_context);
     const project = &engine_context.mProject;
     if (self.mShownVersion == project.mVersion) return;
     try WidgetActions.SetText(engine_context, self.mName, project.GetName());
     try ShowFile(engine_context, self.mIcon.Box, project.GetWindowIcon());
     for (std.enums.values(Project.Entry)) |entry| try ShowFile(engine_context, self.mEntries.get(entry).Box, project.GetEntry(entry));
     self.mShownVersion = project.mVersion;
+}
+
+/// The platforms' rows given the platforms again if they have changed: a row shown for each platform, the rest hidden
+fn ShowPlatforms(self: *ProjectSettingsPanel, engine_context: *EngineContext) !void {
+    const platforms = &engine_context.mTargetPlatforms;
+    if (self.mShownPlatforms == platforms.mVersion) return;
+    var number: [16]u8 = undefined;
+    for (self.mPlatforms, 0..) |row, index| {
+        const shown = index < platforms.Count();
+        try SetShown(engine_context, row.Row, shown);
+        if (!shown) continue;
+        const platform = platforms.Get(index);
+        try WidgetActions.SetText(engine_context, UIManager.LabelOf(row.Target).?, if (index == platforms.mTarget) "Target" else "Make Target");
+        try WidgetActions.SetText(engine_context, row.Name, platforms.GetName(index));
+        try WidgetActions.SetText(engine_context, row.CPU, try std.fmt.bufPrint(&number, "{d}", .{platform.mCPUMemoryMB}));
+        try WidgetActions.SetText(engine_context, row.Video, try std.fmt.bufPrint(&number, "{d}", .{platform.mVideoMemoryMB}));
+    }
+    self.mShownPlatforms = platforms.mVersion;
+}
+
+/// Shows or hides a row, through its layout item
+fn SetShown(engine_context: *EngineContext, entity: Entity, shown: bool) !void {
+    const item = entity.GetComponentMut(LayoutItemComponent) orelse return;
+    if (item.mCollapsed == !shown) return;
+    item.mCollapsed = !shown;
+    try entity.MarkLayoutDirty(engine_context);
 }
 
 fn ShowFile(engine_context: *EngineContext, box: Entity, path: []const u8) !void {
@@ -150,6 +229,11 @@ pub fn ActionOf(self: *const ProjectSettingsPanel, button: Entity) ?Action {
     for (std.enums.values(Project.Entry)) |entry| {
         if (Same(self.mEntries.get(entry).Browse, button)) return .{ .BrowseEntry = entry };
     }
+    if (Same(self.mAddPlatform, button)) return .AddPlatform;
+    for (self.mPlatforms, 0..) |row, index| {
+        if (Same(row.Target, button)) return .{ .MakeTarget = index };
+        if (Same(row.Remove, button)) return .{ .RemovePlatform = index };
+    }
     return null;
 }
 
@@ -157,14 +241,22 @@ pub fn ActionOf(self: *const ProjectSettingsPanel, button: Entity) ?Action {
 pub fn Run(engine_context: *EngineContext, action: Action) !void {
     switch (action) {
         .BrowseEntry => |entry| {
-            const abs_path = try PlatformUtils.OpenFile(engine_context.mEditorWorld.Scratch(), entry.FileExtension());
+            const abs_path = try PlatformUtils.OpenFile(engine_context.ProgramScratch(), entry.FileExtension());
             if (abs_path.len > 0) try SetEntry(engine_context, entry, abs_path);
         },
         .BrowseIcon => {
-            const abs_path = try PlatformUtils.OpenFile(engine_context.mEditorWorld.Scratch(), ICON_EXTENSION);
+            const abs_path = try PlatformUtils.OpenFile(engine_context.ProgramScratch(), ICON_EXTENSION);
             if (abs_path.len > 0) try SetWindowIcon(engine_context, abs_path);
         },
         .ClearIcon => try SetWindowIcon(engine_context, ""),
+        .MakeTarget => |index| engine_context.mTargetPlatforms.SetTarget(index),
+        .RemovePlatform => |index| engine_context.mTargetPlatforms.Remove(index) catch |err| switch (err) {
+            error.LastPlatform => std.log.warn("A project always has a target platform: the last one can't be removed", .{}),
+        },
+        .AddPlatform => engine_context.mTargetPlatforms.Add() catch |err| switch (err) {
+            error.TooManyPlatforms => std.log.warn("A project has at most {d} target platforms", .{TargetPlatforms.MAX_PLATFORMS}),
+            else => return err,
+        },
     }
 }
 
@@ -174,12 +266,12 @@ pub fn OnDrop(self: *const ProjectSettingsPanel, engine_context: *EngineContext,
     const rel_path = file_ref.mRelPath.items;
     if (Same(self.mIcon.Box, on)) {
         if (file_ref.mPathType != .Prj) return std.log.warn("The window icon has to be a file inside the project folder, not {s}", .{rel_path});
-        return try SetWindowIcon(engine_context, try engine_context.mProject.GetAbsPath(engine_context.mEditorWorld.Scratch(), rel_path));
+        return try SetWindowIcon(engine_context, try engine_context.mProject.GetAbsPath(engine_context.ProgramScratch(), rel_path));
     }
     for (std.enums.values(Project.Entry)) |entry| {
         if (!Same(self.mEntries.get(entry).Box, on)) continue;
         if (file_ref.mPathType != .Prj) return std.log.warn("The project's entry {s} has to be a file inside the project folder, not {s}", .{ EntryName(entry), rel_path });
-        return try SetEntry(engine_context, entry, try engine_context.mProject.GetAbsPath(engine_context.mEditorWorld.Scratch(), rel_path));
+        return try SetEntry(engine_context, entry, try engine_context.mProject.GetAbsPath(engine_context.ProgramScratch(), rel_path));
     }
 }
 
@@ -190,7 +282,9 @@ pub fn OnUIEvent(self: *ProjectSettingsPanel, engine_context: *EngineContext, ev
         else => return,
     };
     //one event per entity in the chain: the field's own
-    if (!Same(event.mEntity, submitted) or !Same(submitted, self.mName)) return;
+    if (!Same(event.mEntity, submitted)) return;
+    if (try self.SubmitPlatform(engine_context, submitted)) return;
+    if (!Same(submitted, self.mName)) return;
     const text = self.mName.GetComponent(TextComponent) orelse return;
     engine_context.mProject.SetName(engine_context, text.mText.items) catch |err| switch (err) {
         error.NoProjectOpen => std.log.warn("Open a project before naming it", .{}),
@@ -198,6 +292,28 @@ pub fn OnUIEvent(self: *ProjectSettingsPanel, engine_context: *EngineContext, ev
     };
     //shown the project's name again: with no project open, nothing was kept
     self.mShownVersion = null;
+}
+
+/// A platform field's text kept: a name renames the platform, a budget is set if it's a whole number of MB. True if
+/// `field` was one of them. What was typed may not be what was kept, so the rows are shown the platforms again
+fn SubmitPlatform(self: *ProjectSettingsPanel, engine_context: *EngineContext, field: Entity) !bool {
+    const platforms = &engine_context.mTargetPlatforms;
+    for (self.mPlatforms[0..platforms.Count()], 0..) |row, index| {
+        const text = (field.GetComponent(TextComponent) orelse return false).mText.items;
+        if (Same(field, row.Name)) {
+            platforms.SetName(index, text);
+        } else if (Same(field, row.CPU) or Same(field, row.Video)) {
+            const mb = std.fmt.parseUnsigned(u32, std.mem.trim(u8, text, " \t"), 10) catch {
+                std.log.warn("A budget is a whole number of MB, not {s}", .{text});
+                self.mShownPlatforms = null;
+                return true;
+            };
+            if (Same(field, row.CPU)) platforms.SetCPUMemoryMB(index, mb) else platforms.SetVideoMemoryMB(index, mb);
+        } else continue;
+        self.mShownPlatforms = null;
+        return true;
+    }
+    return false;
 }
 
 /// Makes the file at abs_path the project's `entry`, or says why it can't be

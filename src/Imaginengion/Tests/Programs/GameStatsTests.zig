@@ -29,7 +29,7 @@ test "Ctrl+Shift+F12 shows the profiler window over the game, kept over the game
     try engine_context.mGameWorld.Init(engine_context);
     var stats: GameStats = .{ .mOptions = .{ .StockScripts = false } };
     defer {
-        stats.mPanel.Deinit(engine_context.mGameWorld.Keep());
+        stats.mPanel.Deinit(engine_context.ProgramKeep());
         engine_context.mGameWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
         _ = engine_context._Internal.KeepHeap.deinit();

@@ -1,5 +1,7 @@
 const builtin = @import("builtin");
 const EngineContext = @import("../Core/EngineContext.zig");
+const GPUAllocator = @import("../Core/GPUAllocator.zig");
+const AtlasHandle = @import("AtlasHandle.zig");
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec2 = MathTypes.Vec2;
 const Vec3 = MathTypes.Vec3;
@@ -31,13 +33,20 @@ pub fn BindCompute(self: TextureManager, render_pass: *anyopaque) void {
 
 pub const Usage = Impl.Usage;
 
+/// How many bytes the atlas slot `texture_handle` takes, padding included
+pub fn SlotBytes(texture_handle: u32) u64 {
+    const slot_size: u64 = AtlasHandle.SlotSize(AtlasHandle.Class(texture_handle));
+    return slot_size * slot_size * 4;
+}
+
 /// How much of the atlas is in use, by size of texture
 pub fn GetUsage(self: *TextureManager) Usage {
     return self._Impl.GetUsage();
 }
 
-pub fn Register(self: *TextureManager, engine_context: *EngineContext, pixels: ?*anyopaque, width: usize, height: usize) !u32 {
-    return try self._Impl.Register(engine_context, pixels, width, height);
+/// A slot for a texture, counted for `owner` (GPUAllocator.AtlasTook)
+pub fn Register(self: *TextureManager, engine_context: *EngineContext, pixels: ?*anyopaque, width: usize, height: usize, owner: GPUAllocator.Owner) !u32 {
+    return try self._Impl.Register(engine_context, pixels, width, height, owner);
 }
 
 /// Copies a GPU texture's pixels into a registered slot, on the GPU, in a copy pass (see the backend's CopyFromTexture)
@@ -45,8 +54,8 @@ pub fn CopyFromTexture(self: *TextureManager, copy_pass: *anyopaque, source: *an
     self._Impl.CopyFromTexture(copy_pass, source, texture_location, width, height);
 }
 
-pub fn Unregister(self: *TextureManager, texture_location: u32) void {
-    self._Impl.Unregister(texture_location);
+pub fn Unregister(self: *TextureManager, engine_context: *EngineContext, texture_location: u32) void {
+    self._Impl.Unregister(engine_context, texture_location);
 }
 
 /// Once a frame, after it is submitted: lets go of what the atlas replaced while it was recorded, and shrinks it if it
