@@ -165,9 +165,7 @@ fn TracePass(renderer: *const Renderer, buffers: *const Renderer2D.RenderBuffers
         .mPerspectiveFar = push_constants.mPerspectiveFar,
         .mMediumScale = push_constants.mMediumScale,
     };
-    marcher.Start(PassRay(push_constants, pixel));
-    marcher.March(FakeSample, &TEXTURES);
-    return marcher.GenerateColor(FakeSample, &TEXTURES);
+    return marcher.Trace(PassRay(push_constants, pixel), FakeSample, &TEXTURES);
 }
 
 const OVERLAY_BACKGROUND: Vec4(f32) = .FromArray(PushConstants.OVERLAY_BACKGROUND);

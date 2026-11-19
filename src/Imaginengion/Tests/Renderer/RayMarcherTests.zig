@@ -246,8 +246,10 @@ const TestScene = struct {
     Shapes: []const TestShape = &.{},
     Programs: TestPrograms = .{},
     Shadings: []const SurfShadingData,
-    //by an edge's MaterialHandle, which is always 0 so far
+    //the air every segment goes through is medium 0, the only one used so far
     Mediums: []const MedShadingData = &.{CLEAR_MEDIUM},
+    //what a ray ends on behind everything: solid here, see-through for the overlay pass
+    Background: Vec4(f32) = DEFAULT_COLOR,
 };
 
 fn TestMarcher(comptime search: SDFRayMarcher.DirectSearch, comptime features: SDFRayMarcher.Features) type {
@@ -371,7 +373,7 @@ fn TraceCounted(scene: TestScene, ray: Ray, direct_count: usize, comptime search
 
     const Marcher = TestMarcher(search, features);
     var marcher = Marcher{
-        .mDefaultColor = DEFAULT_COLOR,
+        .mDefaultColor = scene.Background,
         .mShapes = &shapes,
         .mShapeSurfaces = &surfaces,
         .mShapesCount = scene.Shapes.len,
@@ -385,10 +387,7 @@ fn TraceCounted(scene: TestScene, ray: Ray, direct_count: usize, comptime search
         .mPerspectiveFar = FAR,
     };
 
-    marcher.Start(ray);
-
-    marcher.March(FakeSample, &TEXTURES);
-    return .{ .Color = marcher.GenerateColor(FakeSample, &TEXTURES), .Counters = marcher.mCounters };
+    return .{ .Color = marcher.Trace(ray, FakeSample, &TEXTURES), .Counters = marcher.mCounters };
 }
 
 /// Straight down -z from in front of everything, at (x, y)
@@ -1221,9 +1220,7 @@ fn TraceTexts(quads: []const TestShape, texts: []const TestText, shadings: []con
         .mMedShading = &[_]MedShadingData{CLEAR_MEDIUM},
         .mPerspectiveFar = FAR,
     };
-    marcher.Start(ray);
-    marcher.March(FakeSample, &TEXTURES);
-    return marcher.GenerateColor(FakeSample, &TEXTURES);
+    return marcher.Trace(ray, FakeSample, &TEXTURES);
 }
 
 test "walking texts' letter trees hung under the world tree finds the same color as testing every letter, however the texts are turned and stretched" {
@@ -1310,9 +1307,9 @@ test "a ray that misses everything tests the tree's root and nothing in it" {
     const shadings = [_]SurfShadingData{ColorShading(RED)};
     const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
     const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(5, 5));
-    //it still loads the root's box, and the shadings and medium its colors are worked out from
-    const loaded = @sizeOf(BVH.Node) + 2 * @sizeOf(SurfShadingData) + @sizeOf(MedShadingData);
-    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 0, .AcceptChecks = 0, .Edges = 1, .MarchSteps = 0, .BytesLoaded = loaded, .TreeBytes = counted.TreeBytes }, counted);
+    //it still loads the root's box, and the air it goes through
+    const loaded = @sizeOf(BVH.Node) + @sizeOf(MedShadingData);
+    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 0, .AcceptChecks = 0, .Segments = 1, .MarchSteps = 0, .BytesLoaded = loaded }, counted);
 }
 
 test "a ray onto one quad tests it once and checks it once" {
@@ -1320,7 +1317,7 @@ test "a ray onto one quad tests it once and checks it once" {
     const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
     const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0));
     //its bytes are added up on their own below
-    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 1, .AcceptChecks = 1, .Edges = 1, .MarchSteps = 0, .BytesLoaded = counted.BytesLoaded, .TreeBytes = counted.TreeBytes }, counted);
+    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 1, .AcceptChecks = 1, .Segments = 1, .MarchSteps = 0, .BytesLoaded = counted.BytesLoaded }, counted);
 }
 
 test "a ray through a letter's gap checks both the glyph and the quad behind it, in one walk" {
@@ -1336,7 +1333,7 @@ test "a ray through a letter's gap checks both the glyph and the quad behind it,
         MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 2, 0),
     };
     const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0.25, 0));
-    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 2, .AcceptChecks = 2, .Edges = 1, .MarchSteps = 0, .BytesLoaded = counted.BytesLoaded, .TreeBytes = counted.TreeBytes }, counted);
+    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 2, .AcceptChecks = 2, .Segments = 1, .MarchSteps = 0, .BytesLoaded = counted.BytesLoaded }, counted);
 }
 
 test "a ray onto the front of a stack of shapes in one leaf checks only the front one" {
@@ -1381,28 +1378,19 @@ test "UI layers a thousandth of a unit apart, as far out as an overlay canvas, a
     try std.testing.expectEqual(@as(u32, 1), counted.AcceptChecks);
 }
 
-test "a ray onto one opaque quad loads and writes exactly what it reads: its scene data, and its ray tree" {
+test "a ray onto one opaque quad loads exactly what it reads" {
     const shadings = [_]SurfShadingData{ColorShading(RED)};
     const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
     const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0));
 
     //the tree's one node, tested at the root and read going in; the quad read to ray test it and again to check it;
-    //then Shade's shape, surface and shading; its flags; each node's shading (the hit's and the start's) and the
-    //edge's medium for the colors
-    const loaded = 2 * @sizeOf(BVH.Node) + 3 * @sizeOf(ShapeData) + @sizeOf(ShapeSurface) + 3 * @sizeOf(SurfShadingData) +
+    //then Shade's shape, surface and shading; the hit's shading again for its color; the air in front of it; its flags
+    const loaded = 2 * @sizeOf(BVH.Node) + 3 * @sizeOf(ShapeData) + @sizeOf(ShapeSurface) + 2 * @sizeOf(SurfShadingData) +
         @sizeOf(MedShadingData) + @sizeOf(u32);
     try std.testing.expectEqual(@as(u32, loaded), counted.BytesLoaded);
-
-    //even one hit fills in the tree and reads it all back: the start node and edge written, the edge and its start
-    //read and the hit node written by the march, then every node and edge read again for the color, with the colors
-    //they each come out with written and read
-    const Node = SDFRayMarcher.Node;
-    const Edge = SDFRayMarcher.Edge;
-    const tree = 7 * @sizeOf(Node) + 3 * @sizeOf(Edge) + @sizeOf(Vec3(f32)) + @sizeOf(f32) + 2 * @sizeOf(u32) + 5 * @sizeOf(Vec4(f32));
-    try std.testing.expectEqual(@as(u32, tree), counted.TreeBytes);
 }
 
-test "a see-through quad moves more of the ray tree than an opaque one" {
+test "a see-through quad loads more than an opaque one, and only the heatmap marcher counts it" {
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{ ColorShading(BLUE), ColorShading(half_red) };
     const opaque_shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
@@ -1412,14 +1400,13 @@ test "a see-through quad moves more of the ray tree than an opaque one" {
     };
     const opaque_work = try CountWork(.{ .Shapes = &opaque_shapes, .Shadings = &shadings }, RayAt(0, 0));
     const see_through_work = try CountWork(.{ .Shapes = &see_through_shapes, .Shadings = &shadings }, RayAt(0, 0));
-    try std.testing.expect(see_through_work.TreeBytes > opaque_work.TreeBytes);
     try std.testing.expect(see_through_work.BytesLoaded > opaque_work.BytesLoaded);
     //only the heatmap marcher counts
     const uncounted = (try TraceCounted(.{ .Shapes = &see_through_shapes, .Shadings = &shadings }, RayAt(0, 0), see_through_shapes.len, .BVH, .full)).Counters;
     try std.testing.expectEqualDeep(SDFRayMarcher.Counters{}, uncounted);
 }
 
-test "a see-through quad sends its ray on through, one more edge" {
+test "a see-through quad sends its ray on through, one more segment" {
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{ ColorShading(BLUE), ColorShading(half_red) };
     const shapes = [_]TestShape{
@@ -1427,7 +1414,7 @@ test "a see-through quad sends its ray on through, one more edge" {
         MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, TRANSPARENT, NO_MASK),
     };
     const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0));
-    try std.testing.expectEqual(@as(u32, 2), counted.Edges);
+    try std.testing.expectEqual(@as(u32, 2), counted.Segments);
 }
 
 /// The color of a stack of see-through `colors`, front first, over a solid `behind`, blended back to front
@@ -1462,7 +1449,66 @@ test "a deep stack of see-through quads blends every layer" {
     const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
     try ExpectColor(StackColor(&colors, BLUE), try Trace(scene, RayAt(0, 0)));
     const counted = try CountWork(scene, RayAt(0, 0));
-    try std.testing.expectEqual(@as(u32, 7), counted.Edges);
+    try std.testing.expectEqual(@as(u32, 7), counted.Segments);
+}
+
+/// The air over `length` in front of `behind`, the way the old back to front ray tree blended it: what is behind thinned
+/// by Beer-Lambert and the sky's scattered light added, its alpha kept
+fn AirOver(behind: Vec4(f32), air: MedShadingData, length: f32) Vec4(f32) {
+    const absorption = Vec3(f32).FromArray(air.Absorption);
+    const scattering = Vec3(f32).FromArray(air.Scattering);
+    const through = absorption.AddVec(scattering).Neg().MulScalar(length).Exp();
+    const scattered = (Vec3(f32){ .x = 1, .y = 1, .z = 1 }).SubVec(scattering.Neg().MulScalar(length).Exp());
+    const rgb = through.MulVec(behind.ToVec3()).AddVec(scattered.MulVec(SDFRayMarcher.SKY_COLOR));
+    return .{ .x = rgb.x, .y = rgb.y, .z = rgb.z, .w = behind.w };
+}
+
+/// A ray's color blended back to front, the way the old ray tree did, as the answer key for Trace's front to back
+/// blend: from `background` up, each of `colors` (front first) Over what is behind it, with the air of the gap in front
+/// of it (`gaps`, front first) over that. A ray that `ends_on_miss` goes on through the last out to the far distance
+/// in air; otherwise the last color is solid and the background sits right behind it. Then the start of the ray, which
+/// adds nothing, over the lot (Over's drops a color with nothing to it)
+fn BackToFront(colors: []const Vec4(f32), gaps: []const f32, ends_on_miss: bool, air: MedShadingData, background: Vec4(f32)) Vec4(f32) {
+    var color = background;
+    if (ends_on_miss) color = AirOver(color, air, FAR);
+    var i = colors.len;
+    while (i > 0) {
+        i -= 1;
+        color = AirOver(Over(colors[i], color), air, gaps[i]);
+    }
+    return Over(.{ .x = 0, .y = 0, .z = 0, .w = 0 }, color);
+}
+
+test "air that thins and lights what is behind it blends front to back the same as back to front" {
+    //thick enough over a unit that both its thinning and its scattered light show
+    const air = MedShadingData{ .Color = .{ 0, 0, 0, 0 }, .Absorption = .{ 0.3, 0.1, 0.05 }, .Scattering = .{ 0.05, 0.1, 0.2 } };
+    var shapes: [4]TestShape = undefined;
+    var shadings: [4]SurfShadingData = undefined;
+    var colors: [3]Vec4(f32) = undefined;
+    SeeThroughStack(3, &shapes, &shadings, &colors);
+    const backgrounds = [_]Vec4(f32){ DEFAULT_COLOR, .{ .x = 0, .y = 0, .z = 0, .w = 0 }, .{ .x = 0.2, .y = 0.4, .z = 0.6, .w = 0.5 } };
+    for (backgrounds) |background| {
+        //ending on the solid blue quad: the ray starts at z 10, the see-through quads are at 3, 2 and 1, blue at 0
+        const ends_on_blue = TestScene{ .Shapes = &shapes, .Shadings = &shadings, .Mediums = &.{air}, .Background = background };
+        try ExpectColor(BackToFront(&(colors ++ [_]Vec4(f32){BLUE}), &.{ 7, 1, 1, 1 }, false, air, background), try Trace(ends_on_blue, RayAt(0, 0)));
+        //and with nothing behind them, out through the air to the far distance
+        const ends_on_miss = TestScene{ .Shapes = shapes[0..3], .Shadings = &shadings, .Mediums = &.{air}, .Background = background };
+        try ExpectColor(BackToFront(&colors, &.{ 7, 1, 1 }, true, air, background), try Trace(ends_on_miss, RayAt(0, 0)));
+        //missing everything: the air all the way out, over the background
+        try ExpectColor(BackToFront(&.{}, &.{}, true, air, background), try Trace(ends_on_blue, RayAt(5, 5)));
+    }
+}
+
+test "past MAX_SEGMENTS see-through layers, what is behind the last one is the background" {
+    var shapes: [11]TestShape = undefined;
+    var shadings: [11]SurfShadingData = undefined;
+    var colors: [10]Vec4(f32) = undefined;
+    SeeThroughStack(10, &shapes, &shadings, &colors);
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
+    //from further out than RayAt, since the front quad is at z 10
+    const ray = Ray{ .Origin = .{ .x = 0, .y = 0, .z = 20 }, .Dir = .{ .x = 0, .y = 0, .z = -1 } };
+    try ExpectColor(StackColor(colors[0..SDFRayMarcher.MAX_SEGMENTS], DEFAULT_COLOR), try Trace(scene, ray));
+    try std.testing.expectEqual(SDFRayMarcher.MAX_SEGMENTS, (try CountWork(scene, ray)).Segments);
 }
 
 test "a see-through quad whose color turns out solid still hides what is behind it" {
@@ -1474,7 +1520,7 @@ test "a see-through quad whose color turns out solid still hides what is behind 
     };
     const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
     try ExpectColor(RED, try Trace(scene, RayAt(0, 0)));
-    try std.testing.expectEqual(@as(u32, 1), (try CountWork(scene, RayAt(0, 0))).Edges);
+    try std.testing.expectEqual(@as(u32, 1), (try CountWork(scene, RayAt(0, 0))).Segments);
 }
 
 test "a marched see-through quad between two direct ones is still blended in its place" {

@@ -356,22 +356,22 @@ fn MakePixelRay(pose: CameraRay.Pose, params: CameraRay.RayParams, x: u32, y: u3
 }
 
 /// One pixel's ray with every walk it takes: on through each see-through shape it ends on, from where it hit it and
-/// skipping it, the way SDFRayMarcher.March starts a new edge, up to its MAX_EDGES
+/// skipping it, the way SDFRayMarcher.Trace starts a new segment, up to its MAX_SEGMENTS
 const Traced = struct {
-    Walks: [MAX_EDGES]Replay.Walked = undefined,
+    Walks: [MAX_SEGMENTS]Replay.Walked = undefined,
     WalkCount: u32 = 0,
     Total: Replay.Walked = .{},
     FirstShape: ?u32 = null,
 };
 
-/// SDFRayMarcher.MAX_EDGES
-const MAX_EDGES = 8;
+/// SDFRayMarcher.MAX_SEGMENTS
+const MAX_SEGMENTS = 8;
 
 fn Trace(replay: Replay, first_ray: Ray, entered: *std.ArrayList(u32)) Traced {
     var traced = Traced{};
     var ray = first_ray;
     var skip: ?u32 = null;
-    while (traced.WalkCount < MAX_EDGES) {
+    while (traced.WalkCount < MAX_SEGMENTS) {
         const walked = replay.Walk(ray, skip, entered);
         traced.Walks[traced.WalkCount] = walked;
         traced.WalkCount += 1;

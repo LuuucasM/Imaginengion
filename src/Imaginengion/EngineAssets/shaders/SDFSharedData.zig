@@ -9,12 +9,10 @@ const ProgramPart = @import("IM").ProgramPart;
 const BVHNode = @import("IM").BVHNode;
 const SurfShadingData = @import("IM").SurfShadingData;
 const MedShadingData = @import("IM").MedShadingData;
-const RayMarcher = @import("IM").RayMarcher;
 const Vec2 = @import("IM").Vec2;
 const Vec3 = @import("IM").Vec3;
 const Vec4 = @import("IM").Vec4;
 const Quat = @import("IM").Quat;
-const NO_EDGE = RayMarcher.NO_EDGE;
 
 pub const Image2DArray = @SpirvType(
     .{ .image = .{

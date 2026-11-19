@@ -68,12 +68,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .mMediumScale = CameraUBO.mMediumScale,
     };
 
-    marcher.Start(ray);
-
-    marcher.March(SDFShared.imageSampleExplicitLod, TexturesArray);
-
-    //traverse ray tree backwards to obtain final output color
-    const overlay_color = marcher.GenerateColor(SDFShared.imageSampleExplicitLod, TexturesArray);
+    const overlay_color = marcher.Trace(ray, SDFShared.imageSampleExplicitLod, TexturesArray);
     //the game layer has nothing in it this render, so its pass is skipped and this puts its background under instead
     const picture = if (CameraUBO.mFlags & PushConstants.FLAG_GAME_BACKGROUND != 0)
         @import("IM").Over(overlay_color, .FromArray(PushConstants.GAME_BACKGROUND))

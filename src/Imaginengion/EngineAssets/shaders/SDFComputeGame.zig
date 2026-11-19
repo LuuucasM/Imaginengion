@@ -77,12 +77,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .mMediumScale = CameraUBO.mMediumScale,
     };
 
-    marcher.Start(ray);
-
-    marcher.March(SDFShared.imageSampleExplicitLod, TexturesArray);
-
-    //traverse ray tree backwards to obtain final output color
-    const march_color = marcher.GenerateColor(SDFShared.imageSampleExplicitLod, TexturesArray);
+    const march_color = marcher.Trace(ray, SDFShared.imageSampleExplicitLod, TexturesArray);
 
     //the overlay over the game. The heatmap draws how much work this pixel's ray did over a dimmed copy of that
     const picture = @import("IM").Over(sample, march_color);

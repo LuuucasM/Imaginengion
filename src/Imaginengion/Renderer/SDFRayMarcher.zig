@@ -23,7 +23,6 @@ const MedShading = @import("Renderer.zig").MedShadingData;
 
 const THICKNESS_2D = SDFFunc.THICKNESS_2D;
 
-const Stack = @import("../Core/Stack.zig").Stack;
 
 //A ray that runs out of steps is treated as a miss, so this is a budget rather than a safety net:
 //every step costs one SDF evaluation against every marched shape, for every pixel. At 9999 a
@@ -52,45 +51,19 @@ fn SurfaceEpsilon(dist_origin: f32) f32 {
     return SURF_DIST * @max(1.0, dist_origin);
 }
 
-pub const MAX_NODES: u32 = 9;
-pub const MAX_EDGES: u32 = 8;
-const SKY_COLOR: Vec3(f32) = .{ .x = 0.53, .y = 0.81, .z = 0.92 }; //FOR SIMULATING
+/// The most segments one pixel's ray is traced in: the first, and one more for each see-through surface it goes on
+/// through. Behind the last one's surface is the background
+pub const MAX_SEGMENTS: u32 = 8;
+/// the light air scatters in toward the camera, for now one fixed sky color (Trace)
+pub const SKY_COLOR: Vec3(f32) = .{ .x = 0.53, .y = 0.81, .z = 0.92 }; //FOR SIMULATING
 
-//NOTE: This represents a surface that we hit
-pub const Node = extern struct {
-    AccumColor: Vec4(f32),
-    Point: Vec3(f32),
-    Normal: Vec3(f32),
-    TextureUV: Vec3(f32),
-    ParentEdge: u32,
-    FirstEdge: u32,
-    MaterialHandle: u32,
-    ShapeT: ShapeType,
-};
-
-//NOTE: This represents travelling through volume
-pub const Edge = extern struct {
-    AccumColor: Vec4(f32),
-    Direction: Vec3(f32),
-    Length: f32,
-    FromNode: u32,
-    ToNode: u32,
-    SiblingEdge: u32,
-    //the medium it travels through, into the medium shadings. 0 is air, the only one there is so far
-    MaterialHandle: u32,
-    //the shape this edge starts on, which the search ignores: a plate it passed through, or a solid it came out of. A
-    //continuation edge starts within epsilon of that surface, so without this it immediately re-hits it and spawns
-    //another edge, forever. A plate is one surface and a solid is convex, so a straight ray can't legitimately hit
-    //either again
-    SkipShape: u32 = NO_SHAPE,
-    //the solid this edge starts inside, having just gone in through its surface: it is only hit where the ray comes
-    //out the far side. Kept rather than trusting the ray test to see the ray starts inside, since within epsilon of
-    //the surface it can just as well find it outside and hit the same spot again
-    InsideShape: u32 = NO_SHAPE,
-};
-
-/// The shapes an edge starts on, which its search treats differently from any other (Edge.SkipShape, Edge.InsideShape)
-const EdgeStart = struct {
+/// The shapes a segment starts on, which its search treats differently from any other. Skip: the shape it starts on, a
+/// plate it passed through or a solid it came out of. A segment starts within epsilon of that surface, so without this
+/// it would hit it again straight away, forever; a plate is one surface and a solid is convex, so a straight ray can't
+/// really hit either again. Inside: the solid it starts in, having just gone in through its surface, only hit where the
+/// ray comes out the far side. Kept rather than trusting the ray test to see the ray starts inside, since within
+/// epsilon of the surface it can just as well find it outside and hit the same spot again
+const SegmentStart = struct {
     Skip: u32 = NO_SHAPE,
     Inside: u32 = NO_SHAPE,
 };
@@ -160,8 +133,8 @@ const DrawnHit = struct {
 
 /// Where a ray is drawn on a shape, if anywhere. A plate only on its faces (IsFaceHit). A solid on any face, on
 /// whichever side the ray reaches first: where it goes in, or for a ray already inside it, where it comes out. `inside`
-/// is a solid the edge has just gone into (Edge.InsideShape), which counts as inside whatever the ray test says. The
-/// edge's SkipShape is the caller's to leave out, before it reads the shape at all
+/// is a solid the segment has just gone into (SegmentStart.Inside), which counts as inside whatever the ray test says. The
+/// segment's SegmentStart.Skip is the caller's to leave out, before it reads the shape at all
 fn DrawnHitOn(comptime features: Features, ray: Ray, shape: ShapeData, inside: bool) DrawnHit {
     const hit = HitShape(features, ray, shape);
     if (!IsSolid(shape.Type)) return if (IsFaceHit(hit)) .{ .Hit = hit } else .miss;
@@ -224,7 +197,7 @@ const MAX_SKIPS: u32 = 4;
 
 /// What one edge's march ignores: the shape the edge starts on, and any the march has come within
 /// epsilon of and SurfaceAt turned down. A straight ray can't come back round to a flat plate it has
-/// passed, so a turned down shape stays skipped for the rest of the edge, which also stops the march
+/// passed, so a turned down shape stays skipped for the rest of the segment, which also stops the march
 /// sitting on it. When it's full the oldest goes, the one furthest behind the ray. Skipping is only to
 /// get past things: a shape that drops out and gets touched again is just turned down again.
 const SkipList = struct {
@@ -252,9 +225,6 @@ const SkipList = struct {
         return false;
     }
 };
-
-const NodeArr = [MAX_NODES]Node;
-const EdgeArr = [MAX_EDGES]Edge;
 
 const MarchData = extern struct {
     min_dist: f32,
@@ -299,16 +269,13 @@ pub const HeatMetric = enum(u32) {
     ShapeTests,
     /// hits checked for really being drawn (Accepts): masks, letters' coverage, merges' programs
     AcceptChecks,
-    /// ray tree edges: 1, and one more for each see-through surface the ray went on through
-    Edges,
+    /// segments the ray was traced in: 1, and one more for each see-through surface it went on through
+    Segments,
     /// march steps, for marched shapes
     MarchSteps,
     /// bytes of scene data read: shapes, BVH nodes and their shadings, as the code asks for them. Where the memory
     /// traffic comes from, not whether it was in cache. Mask programs aren't counted
     BytesLoaded,
-    /// bytes of the pixel's own ray tree (its Nodes and Edges) written and read: arrays indexed at runtime, which a
-    /// GPU keeps in its slow local memory rather than registers
-    TreeBytes,
 
     /// What the heatmap's shortcut switches to from `current`: off, then each count in turn, then off again
     pub fn Next(current: ?HeatMetric) ?HeatMetric {
@@ -323,10 +290,9 @@ pub const HeatMetric = enum(u32) {
             .BVHNodes => 64,
             .ShapeTests => 32,
             .AcceptChecks => 8,
-            .Edges => 8,
+            .Segments => 8,
             .MarchSteps => 64,
             .BytesLoaded => 4096,
-            .TreeBytes => 1024,
         };
     }
 };
@@ -339,6 +305,63 @@ pub fn Over(top: Vec4(f32), bottom: Vec4(f32)) Vec4(f32) {
     const out_rgb = top.ToVec3().MulScalar(top.w).AddVec(bottom.ToVec3().MulScalar(bottom.w * (1.0 - top.w))).DivScalar(out_a);
     return .{ .x = out_rgb.x, .y = out_rgb.y, .z = out_rgb.z, .w = out_a };
 }
+
+/// What everything in front of a point along a ray does to the color behind it (RayMarcher.Trace). In premultiplied
+/// color (P, the color times its alpha, and A, the alpha), each surface and each stretch of air changes what is behind
+/// it in a fixed linear way:
+///   a surface of color c and alpha a:  P -> a c + (1 - a) P,  A -> a + (1 - a) A   (Over)
+///   air letting Through through and scattering in Light:  P -> Through P + Light A,  A -> A
+/// so any run of them is one change of the same shape, P -> Scale P + FromAlpha A + Add, A -> Keep A + AddAlpha, kept
+/// here and grown at its back one surface or stretch of air at a time. Air's scattered light counts only as much as what
+/// is behind it is there (A), as blending back to front gives it
+pub const Blend = struct {
+    Scale: Vec3(f32),
+    FromAlpha: Vec3(f32),
+    Add: Vec3(f32),
+    Keep: f32,
+    AddAlpha: f32,
+
+    /// nothing in front: what is behind comes through as it is
+    pub const none: Blend = .{
+        .Scale = .{ .x = 1, .y = 1, .z = 1 },
+        .FromAlpha = .{ .x = 0, .y = 0, .z = 0 },
+        .Add = .{ .x = 0, .y = 0, .z = 0 },
+        .Keep = 1,
+        .AddAlpha = 0,
+    };
+
+    /// A stretch of air: how much of each color comes through it, and the light it scatters in
+    pub const Medium = struct {
+        Through: Vec3(f32),
+        Light: Vec3(f32),
+    };
+
+    /// A surface of `color` (not multiplied by its alpha) behind everything so far
+    pub fn AddSurface(self: *Blend, color: Vec4(f32)) void {
+        const alpha = color.w;
+        self.Add = self.Add.AddVec(self.Scale.MulVec(color.ToVec3()).AddVec(self.FromAlpha).MulScalar(alpha));
+        self.AddAlpha += self.Keep * alpha;
+        self.Scale = self.Scale.MulScalar(1 - alpha);
+        self.FromAlpha = self.FromAlpha.MulScalar(1 - alpha);
+        self.Keep *= 1 - alpha;
+    }
+
+    /// A stretch of air behind everything so far
+    pub fn AddMedium(self: *Blend, medium: Medium) void {
+        self.FromAlpha = self.FromAlpha.AddVec(self.Scale.MulVec(medium.Light));
+        self.Scale = self.Scale.MulVec(medium.Through);
+    }
+
+    /// `background` (not multiplied by its alpha) behind everything: the color that comes out, not multiplied by its
+    /// alpha either, like Over's
+    pub fn Over(self: Blend, background: Vec4(f32)) Vec4(f32) {
+        const alpha = self.Keep * background.w + self.AddAlpha;
+        if (alpha <= 0) return .{ .x = 0, .y = 0, .z = 0, .w = 0 };
+        const behind = background.ToVec3().MulScalar(background.w);
+        const rgb = self.Scale.MulVec(behind).AddVec(self.FromAlpha.MulScalar(background.w)).AddVec(self.Add).DivScalar(alpha);
+        return .{ .x = rgb.x, .y = rgb.y, .z = rgb.z, .w = alpha };
+    }
+};
 
 /// The heatmap's color for `count` of a metric that is fully red at `red_at`: black for none, then blue, green, yellow
 /// and red at a quarter, half, three quarters and all of `red_at`, and red past it. Opaque, so it hides what's below
@@ -376,10 +399,9 @@ pub const Counters = extern struct {
     BVHNodes: u32 = 0,
     ShapeTests: u32 = 0,
     AcceptChecks: u32 = 0,
-    Edges: u32 = 0,
+    Segments: u32 = 0,
     MarchSteps: u32 = 0,
     BytesLoaded: u32 = 0,
-    TreeBytes: u32 = 0,
 
     pub fn Of(self: Counters, metric: HeatMetric) u32 {
         return self.OfIndex(@intFromEnum(metric));
@@ -391,10 +413,9 @@ pub const Counters = extern struct {
             @intFromEnum(HeatMetric.BVHNodes) => self.BVHNodes,
             @intFromEnum(HeatMetric.ShapeTests) => self.ShapeTests,
             @intFromEnum(HeatMetric.AcceptChecks) => self.AcceptChecks,
-            @intFromEnum(HeatMetric.Edges) => self.Edges,
+            @intFromEnum(HeatMetric.Segments) => self.Segments,
             @intFromEnum(HeatMetric.MarchSteps) => self.MarchSteps,
             @intFromEnum(HeatMetric.BytesLoaded) => self.BytesLoaded,
-            @intFromEnum(HeatMetric.TreeBytes) => self.TreeBytes,
             else => 0,
         };
     }
@@ -410,14 +431,8 @@ const BVH_BOX_SLACK: f32 = 4.0 * std.math.floatEps(f32);
 
 pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type, comptime bvh_nodes_type: type, comptime masks_type: type, comptime instrs_type: type, comptime parts_type: type, comptime surf_shading_type: type, comptime med_shading_type: type, comptime textures_array_type: type, comptime direct_search: DirectSearch, comptime features: Features) type {
     return extern struct {
-        pub const NO_EDGE: u32 = std.math.maxInt(u32);
         const Self = @This();
 
-        /// the ray tree, filled from Start on
-        mNodes: NodeArr = undefined,
-        mEdges: EdgeArr = undefined,
-        mNodeCount: usize = 0,
-        mEdgeCount: usize = 0,
         mDefaultColor: Vec4(f32),
         /// every shape a ray looks for, every kind in one buffer (ShapeData), and what only a hit one needs
         /// (ShapeSurface), by each shape's SurfaceIndex
@@ -437,41 +452,12 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         mSurfShading: surf_shading_type,
         mMedShading: med_shading_type,
         mPerspectiveFar: f32,
-        /// world units per unit of distance along the rays (SDFPushConstants.mMediumScale): what an edge's length is
+        /// world units per unit of distance along the rays (SDFPushConstants.mMediumScale): what a segment's length is
         /// turned into before the medium it goes through thins its color, so the overlay pass, in canvas units, is
         /// thinned the same as in world space
         mMediumScale: f32 = 1.0,
         /// the work this pixel's ray did, counted only by the heatmap variant (Features.Heatmap)
         mCounters: Counters = .{},
-
-        /// Plants the ray tree's root for `ray`: the node it starts from and the edge it sets out along, through air.
-        /// Every trace starts here, then March, then GenerateColor
-        pub fn Start(self: *Self, ray: Ray) void {
-            if (features.Heatmap) self.mCounters = .{};
-            self.mNodes[0] = .{
-                .Point = ray.Origin,
-                .Normal = .{ .x = 0, .y = 0, .z = 0 },
-                .ParentEdge = NO_EDGE,
-                .FirstEdge = 0,
-                .MaterialHandle = 0,
-                .AccumColor = self.mDefaultColor,
-                .TextureUV = .{ .x = -1, .y = -1, .z = -1 },
-                .ShapeT = .None,
-            };
-            self.Tree(Node);
-            self.mEdges[0] = .{
-                .Direction = ray.Dir,
-                .Length = 0.0,
-                .FromNode = 0,
-                .ToNode = 0,
-                .SiblingEdge = NO_EDGE,
-                .AccumColor = self.mDefaultColor,
-                .MaterialHandle = 0,
-            };
-            self.mNodeCount = 1;
-            self.mEdgeCount = 1;
-            self.Tree(Edge);
-        }
 
         /// Counts one more of `counter` for the heatmap. Nothing at all in a variant without it
         inline fn Count(self: *Self, comptime counter: std.meta.FieldEnum(Counters)) void {
@@ -484,10 +470,6 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// Counts a read of a `T` of scene data (Counters.BytesLoaded)
         inline fn Loaded(self: *Self, comptime T: type) void {
             self.CountBy(.BytesLoaded, @sizeOf(T));
-        }
-        /// Counts a read or write of a `T` in the ray tree (Counters.TreeBytes)
-        inline fn Tree(self: *Self, comptime T: type) void {
-            self.CountBy(.TreeBytes, @sizeOf(T));
         }
         /// What Accepts reads for a shape past the shape itself: a glyph's atlas entry
         inline fn LoadedForAccept(self: *Self, shape: ShapeData) void {
@@ -506,147 +488,56 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         }
 
 
-        pub fn March(self: *Self, sample_sampler: anytype, textures_array: textures_array_type) void {
-            var edge_ind_stack: Stack(usize, MAX_EDGES) = .empty;
-            edge_ind_stack.Push(0);
-
-            while (edge_ind_stack.len > 0) {
-                const curr_edge_ind = edge_ind_stack.Pop();
-                self.Count(.Edges);
-                const curr_edge = self.mEdges[curr_edge_ind];
-                const from_point = self.mNodes[@intCast(curr_edge.FromNode)].Point;
-                self.Tree(Edge);
-                self.Tree(Vec3(f32));
-
-                const edge_ray = Ray{ .Origin = from_point, .Dir = curr_edge.Direction };
-                const start = EdgeStart{ .Skip = curr_edge.SkipShape, .Inside = curr_edge.InsideShape };
+        /// The color `ray` comes out with: its nearest drawn surface, and through each see-through one whatever is behind
+        /// it, front to back, in up to MAX_SEGMENTS segments, with the background behind the last. Each segment goes
+        /// through the air (Medium), which thins what is behind it and adds the light it scatters in.
+        ///
+        /// Blended as it goes, keeping nothing of the surfaces already passed: everything in front so far is one Blend,
+        /// which each new surface and stretch of air is added to the back of, and the background finally goes through.
+        /// The same color as blending each surface Over what is behind it, back to front
+        pub fn Trace(self: *Self, ray: Ray, sample_sampler: anytype, textures_array: textures_array_type) Vec4(f32) {
+            if (features.Heatmap) self.mCounters = .{};
+            var front = Blend.none;
+            var from = ray.Origin;
+            var start = SegmentStart{};
+            var segment: u32 = 1;
+            while (true) : (segment += 1) {
+                self.Count(.Segments);
+                const segment_ray = Ray{ .Origin = from, .Dir = ray.Dir };
 
                 //the direct shapes first, then the marched ones only as far as that hit, since nothing behind it
                 //can show. With no marched shapes, every pixel skips the march together
-                var surface = self.DirectSurface(edge_ray, start, sample_sampler, textures_array);
+                var surface = self.DirectSurface(segment_ray, start, sample_sampler, textures_array);
                 if (features.Marched and self.mDirectCount < self.mShapesCount) {
                     const limit = if (surface.Found) surface.T else self.mPerspectiveFar;
-                    const marched = self.MarchedSurface(edge_ray, curr_edge.SkipShape, limit, sample_sampler, textures_array);
+                    const marched = self.MarchedSurface(segment_ray, start.Skip, limit, sample_sampler, textures_array);
                     if (marched.Found and marched.T < limit) surface = marched;
                 }
 
-                //nothing drawn along it before the far distance, the ray dies
-                if (!surface.Found) {
-                    self.mEdges[curr_edge_ind].Length = self.mPerspectiveFar;
-                    const miss_node_ind = self.GetNodeIndex();
-                    self.mNodes[miss_node_ind] = .{
-                        .Point = from_point.AddVec(curr_edge.Direction.MulScalar(self.mPerspectiveFar)),
-                        .Normal = .{ .x = 0, .y = 0, .z = 0 },
-                        .ParentEdge = @intCast(curr_edge_ind),
-                        .FirstEdge = NO_EDGE,
-                        .MaterialHandle = 0,
-                        .AccumColor = self.mDefaultColor,
-                        .TextureUV = .{ .x = -1, .y = -1, .z = -1 },
-                        .ShapeT = .None,
-                    };
-                    self.mEdges[curr_edge_ind].ToNode = @intCast(miss_node_ind);
-                    self.Tree(f32);
-                    self.Tree(Node);
-                    self.Tree(u32);
-                    continue;
-                }
+                //the air up to the surface, or all the way to the far distance when nothing is drawn along it
+                front.AddMedium(self.Medium(if (surface.Found) surface.T else self.mPerspectiveFar));
+                if (!surface.Found) break;
+                const color = self.SurfaceColor(surface, sample_sampler, textures_array);
+                front.AddSurface(color);
 
-                //the exact point on the surface, rather than wherever within epsilon a march stopped
-                self.mEdges[curr_edge_ind].Length = surface.T;
-                const end_point = from_point.AddVec(curr_edge.Direction.MulScalar(surface.T));
-                const shading_handle = surface.ShadingHandle;
-
-                const new_node_ind = self.GetNodeIndex();
-                self.mNodes[new_node_ind] = Node{
-                    .Point = end_point,
-                    .Normal = surface.Normal,
-                    .ParentEdge = @intCast(curr_edge_ind),
-                    .FirstEdge = NO_EDGE,
-                    .MaterialHandle = shading_handle,
-                    .AccumColor = if (shading_handle == OWN_COLOR) surface.Color else self.mDefaultColor,
-                    .TextureUV = surface.TextureUV,
-                    .ShapeT = surface.Type,
-                };
-
-                self.mEdges[curr_edge_ind].ToNode = @intCast(new_node_ind);
-                self.Tree(f32);
-                self.Tree(Node);
-                self.Tree(u32);
-
-                //now for checking if we need to spawn more edges based off different material properties of the object
-                //in the future can expand this to do reflectivity, lighting, shadows, refraction, whatever else exists idk
+                //on through it only if it's flagged see-through, really is, and a segment is left. Through a solid's
+                //near side the ray is inside it and still has its far side to hit; past a plate or out of a solid's far
+                //side, it's done with that shape
                 const shading_flags = self.mShapes[surface.Shape].Flags;
                 self.Loaded(u32);
-
-                //if transparent bit is set, aka it can be some level of transparent and we are not already full of edges.
-                //mEdgeCount is the real bound: the stack is popped before each push so it never fills, and
-                //each edge adds exactly one node, so this also keeps mNodeCount <= MAX_NODES
-                if (shading_flags & ShapeData.FLAG_TRANSPARENT != 0 and self.mEdgeCount < MAX_EDGES and !edge_ind_stack.IsFull()) {
-                    const alpha = self.SurfaceColor(self.mNodes[new_node_ind], sample_sampler, textures_array).w;
-                    self.Tree(Node);
-                    self.Loaded(SurfShading);
-                    if (alpha < 1.0) {
-                        const new_edge_ind = self.GetEdgeIndex();
-                        //through a solid's near side the ray is inside it, and still has its far side to hit. Past a
-                        //plate or out of a solid's far side, it's done with that shape
-                        const went_in = IsSolid(surface.Type) and !surface.Exit;
-
-                        self.mEdges[new_edge_ind] = Edge{
-                            .Direction = curr_edge.Direction,
-                            .Length = 0,
-                            .FromNode = @intCast(new_node_ind),
-                            .ToNode = 0,
-                            .SiblingEdge = NO_EDGE,
-                            .AccumColor = self.mDefaultColor,
-                            .MaterialHandle = 0,
-                            .SkipShape = if (went_in) NO_SHAPE else surface.Shape,
-                            .InsideShape = if (went_in) surface.Shape else NO_SHAPE,
-                        };
-
-                        self.mNodes[new_node_ind].FirstEdge = @intCast(new_edge_ind);
-                        self.Tree(Edge);
-                        self.Tree(u32);
-                        edge_ind_stack.Push(new_edge_ind);
-                    }
-                }
+                if (shading_flags & ShapeData.FLAG_TRANSPARENT == 0 or color.w >= 1.0 or segment >= MAX_SEGMENTS) break;
+                const went_in = IsSolid(surface.Type) and !surface.Exit;
+                start = .{ .Skip = if (went_in) NO_SHAPE else surface.Shape, .Inside = if (went_in) surface.Shape else NO_SHAPE };
+                from = from.AddVec(ray.Dir.MulScalar(surface.T));
             }
-        }
-
-        pub fn GenerateColor(self: *Self, sample_sampler: anytype, textures_array: textures_array_type) Vec4(f32) {
-            var i: usize = self.mNodeCount;
-            while (i > 0) {
-                i -= 1;
-                const node = self.mNodes[i];
-                self.Tree(Node);
-
-                var ei: u32 = node.FirstEdge;
-                while (ei != NO_EDGE) {
-                    self.CalcEdgeColor(ei);
-                    ei = self.mEdges[@intCast(ei)].SiblingEdge;
-                    self.Tree(u32);
-                }
-                self.CalcNodeColor(i, sample_sampler, textures_array);
-            }
-
-            self.Tree(Vec4(f32));
-            return self.mNodes[0].AccumColor;
-        }
-
-        fn GetNodeIndex(self: *Self) usize {
-            defer self.mNodeCount += 1;
-            return self.mNodeCount;
-        }
-
-        fn GetEdgeIndex(self: *Self) usize {
-            defer self.mEdgeCount += 1;
-            return self.mEdgeCount;
+            return front.Over(self.mDefaultColor);
         }
 
         /// The nearest surface a ray draws among the direct shapes, found by a ray test straight against each candidate
         /// (picked by `direct_search`). A candidate is only taken as the nearest once it's checked to really be drawn
         /// (Accepts), so one cut off by its masks or in a gap in a letter is passed over within the same search and the
         /// ray goes on to whatever is behind it, without ever searching again
-        fn DirectSurface(self: *Self, ray: Ray, start: EdgeStart, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+        fn DirectSurface(self: *Self, ray: Ray, start: SegmentStart, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
             if (self.mDirectCount == 0) return .none;
             const nearest = switch (direct_search) {
                 .BVH => self.NearestByBVH(ray, start, sample_sampler, textures_array),
@@ -678,7 +569,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// Ray tests one direct shape, and makes it the nearest if a face of it is hit before the nearest so far and it is
         /// really drawn there. Only a hit that would win is checked, so a shape the search has already beaten never
         /// pays for its masks or its letter. All a search does with a shape, whichever way it found it
-        fn ConsiderShape(self: *Self, ray: Ray, shape_ind: u32, start: EdgeStart, nearest: *Candidate, sample_sampler: anytype, textures_array: textures_array_type) void {
+        fn ConsiderShape(self: *Self, ray: Ray, shape_ind: u32, start: SegmentStart, nearest: *Candidate, sample_sampler: anytype, textures_array: textures_array_type) void {
             if (shape_ind == start.Skip) return;
             const shape: ShapeData = self.mShapes[shape_ind];
             self.Count(.ShapeTests);
@@ -697,7 +588,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// after it is further away. Whatever order the leaf holds them in, a stack of shapes facing the ray costs one
         /// check, not one per shape that was nearest for a moment. Every loop over the leaf is unrolled, so each slot is
         /// read with a constant index and stays in a register: a runtime indexed array would sit in slow local memory
-        fn ConsiderLeaf(self: *Self, ray: Ray, leaf: BVHNode, start: EdgeStart, nearest: *Candidate, sample_sampler: anytype, textures_array: textures_array_type) void {
+        fn ConsiderLeaf(self: *Self, ray: Ray, leaf: BVHNode, start: SegmentStart, nearest: *Candidate, sample_sampler: anytype, textures_array: textures_array_type) void {
             const first = leaf.FirstItem();
             const count = leaf.ItemCount();
 
@@ -752,7 +643,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// right one in its Info. A leaf's shapes are a run of mShapes, since the tree was built over them in that order.
         /// A text's letters are a branch like any other, its letter tree hung under the leaf that holds the text
         /// (BVH.GraftTrees)
-        fn NearestByBVH(self: *Self, ray: Ray, start: EdgeStart, sample_sampler: anytype, textures_array: textures_array_type) Candidate {
+        fn NearestByBVH(self: *Self, ray: Ray, start: SegmentStart, sample_sampler: anytype, textures_array: textures_array_type) Candidate {
             var nearest = self.NoCandidate();
             const inv_dir = Vec3(f32).FromVector(@as(Vec3(f32).VectorT, @splat(1.0)) / ray.Dir.ToVector());
             //the farther children still to come back to, the next on top: at most one per level (BVH.MAX_GRAFTED_DEPTH)
@@ -808,7 +699,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         }
 
         /// DirectSearch.Linear: considers every direct shape, the BVH walk's answer key
-        fn NearestByLinearSearch(self: *Self, ray: Ray, start: EdgeStart, sample_sampler: anytype, textures_array: textures_array_type) Candidate {
+        fn NearestByLinearSearch(self: *Self, ray: Ray, start: SegmentStart, sample_sampler: anytype, textures_array: textures_array_type) Candidate {
             var nearest = self.NoCandidate();
             for (0..self.mDirectCount) |shape_ind| {
                 self.ConsiderShape(ray, @intCast(shape_ind), start, &nearest, sample_sampler, textures_array);
@@ -830,7 +721,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
 
         /// The nearest surface a ray draws among the marched shapes, stepping along it no further than `limit`. Each
         /// shape the march gets within epsilon of is checked against the shape itself, and one turned down is skipped
-        /// for the rest of the edge (SkipList)
+        /// for the rest of the segment (SkipList)
         fn MarchedSurface(self: *Self, ray: Ray, skip_shape: u32, limit: f32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
             var skips = SkipList.Init(skip_shape);
             var dist_origin: f32 = 0;
@@ -1053,61 +944,27 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             };
         }
 
-        fn CalcNodeColor(self: *Self, node_ind: usize, sample_sampler: anytype, textures_array: textures_array_type) void {
-            const curr_node = self.mNodes[node_ind];
-            self.Tree(Node);
-
-            const child_accum = if (curr_node.FirstEdge == NO_EDGE) self.mDefaultColor else self.mEdges[@intCast(curr_node.FirstEdge)].AccumColor;
-            if (features.Heatmap) {
-                if (curr_node.FirstEdge != NO_EDGE) self.Tree(Vec4(f32));
-                if (curr_node.MaterialHandle != OWN_COLOR) self.Loaded(SurfShading);
-            }
-
-            const color = self.SurfaceColor(curr_node, sample_sampler, textures_array);
-
-            self.mNodes[node_ind].AccumColor = Over(color, child_accum);
-            self.Tree(Vec4(f32));
+        /// The color of the surface a ray hit, before anything behind it shows through: its surface shading's color
+        /// tinting its texture, or for a merge the color its program gave it at the hit
+        fn SurfaceColor(self: *Self, surface: SurfaceHit, sample_sampler: anytype, textures_array: textures_array_type) Vec4(f32) {
+            if (surface.ShadingHandle == OWN_COLOR) return surface.Color;
+            self.Loaded(SurfShading);
+            const material = self.mSurfShading[surface.ShadingHandle];
+            const texture_color = SampleTexture(surface.TextureUV, sample_sampler, textures_array);
+            return Vec4(f32).FromVector(material.Color).MulVec(texture_color); // tint
         }
 
-        /// The color of the surface a node is on, before anything behind it shows through: its surface shading's
-        /// color tinting its texture, or for a merge the color its program gave it at the hit
-        fn SurfaceColor(self: *const Self, node: Node, sample_sampler: anytype, textures_array: textures_array_type) Vec4(f32) {
-            if (node.MaterialHandle == OWN_COLOR) return node.AccumColor;
-            const material = self.mSurfShading[node.MaterialHandle];
-            const texture_color = SampleTexture(node.TextureUV, sample_sampler, textures_array);
-            const material_color = Vec4(f32).FromVector(material.Color);
-            return material_color.MulVec(texture_color); // tint
-        }
-
-        fn CalcEdgeColor(self: *Self, edge_ind: u32) void {
-            const curr_edge = self.mEdges[edge_ind];
-            const to_node = self.mNodes[curr_edge.ToNode];
-            self.Tree(Edge);
-            self.Tree(Node);
+        /// The air along `length` of a segment (medium shading 0, the only medium so far), in world units
+        /// (mMediumScale): how much of what is behind comes through it, by Beer-Lambert over its length, and the sky's
+        /// light it scatters in
+        fn Medium(self: *Self, length: f32) Blend.Medium {
+            const material = self.mMedShading[0];
             self.Loaded(MedShading);
-
-            const child_accum = to_node.AccumColor;
-
-            //the medium the edge travels through is its own. The node it leaves is a surface, and its MaterialHandle
-            //is into the surface shadings, which say nothing about what is on the other side
-            const material = self.mMedShading[curr_edge.MaterialHandle];
-
-            // Beer-Lambert for absorbtion  over edge length
             const extinction = Vec3(f32).FromArray(material.Absorption).AddVec(.FromArray(material.Scattering));
-            const length = curr_edge.Length * self.mMediumScale;
-            const transmittance = extinction.Neg().MulScalar(length).Exp();
-
-            //scattering
+            const world_length = length * self.mMediumScale;
             const ONE = Vec3(f32){ .x = 1, .y = 1, .z = 1 };
-            const scatter_amount = ONE.SubVec(Vec3(f32).FromArray(material.Scattering).Neg().MulScalar(length).Exp());
-
-            const transmitted = transmittance.MulVec(.{ .x = child_accum.x, .y = child_accum.y, .z = child_accum.z });
-            const inscattered = scatter_amount.MulVec(SKY_COLOR);
-
-            const color_out = transmitted.AddVec(inscattered);
-
-            self.mEdges[edge_ind].AccumColor = .{ .x = color_out.x, .y = color_out.y, .z = color_out.z, .w = child_accum.w };
-            self.Tree(Vec4(f32));
+            const scatter_amount = ONE.SubVec(Vec3(f32).FromArray(material.Scattering).Neg().MulScalar(world_length).Exp());
+            return .{ .Through = extinction.Neg().MulScalar(world_length).Exp(), .Light = scatter_amount.MulVec(SKY_COLOR) };
         }
 
         fn SampleTexture(texture_uv: Vec3(f32), sample_sampler: anytype, textures_array: textures_array_type) Vec4(f32) {
