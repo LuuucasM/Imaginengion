@@ -9,6 +9,7 @@ const Aabb = @import("../../Math/Aabb.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
 const ShapeGeometry = @import("../../Renderer/ShapeGeometry.zig");
+const TextLayout = @import("../../Renderer/TextLayout.zig");
 const CameraView = @import("../../Renderer/Renderer.zig").CameraView;
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
 const TransformSystem = @import("../../Physics/TransformSystem.zig");
@@ -16,6 +17,7 @@ const BVHBuildSystem = @import("../../Core/BVHBuildSystem.zig");
 const BVHRefitSystem = @import("../../Core/BVHRefitSystem.zig");
 const EngineStats = @import("../../Core/EngineStats.zig");
 const MathTypes = @import("../../Math/MathTypes.zig");
+const SDFFunctions = @import("../../Math/SDFFunctions.zig");
 const Vec2 = MathTypes.Vec2;
 const Vec3 = MathTypes.Vec3;
 
@@ -52,10 +54,15 @@ const TestWorld = struct {
 
     /// WorldManager.BuildBVH, with texts in the stand in font
     fn Build(self: *TestWorld) !*WorldBVH {
+        return self.BuildWith(TestFonts{});
+    }
+
+    /// Build, with texts in the font `fonts` gives
+    fn BuildWith(self: *TestWorld, fonts: anytype) !*WorldBVH {
         const engine_context = self.mEngineContext;
         const world = &engine_context.mEditorWorld;
         try engine_context.mSystems.RunSystem(TransformSystem, engine_context, .{world});
-        try engine_context.mSystems.RunSystem(BVHBuildSystem, engine_context, .{ world, TestFonts{} });
+        try engine_context.mSystems.RunSystem(BVHBuildSystem, engine_context, .{ world, fonts });
         return &world.mBVH;
     }
 };
@@ -84,6 +91,9 @@ const TestFont = struct {
     mAscender: f32 = 0.9,
     mDescender: f32 = -0.2,
     mAtlasSize: Vec2(f32) = .{ .x = 100, .y = 100 },
+    /// what TextLayout.FontReach.Of gives for its glyphs (checked below), so the build can bound texts before laying
+    /// them out, as with a real font
+    mReach: ?TextLayout.FontReach = .{ .Step = 0.6, .InkMin = .{ .x = 0, .y = 0 }, .InkMax = .{ .x = 0.5, .y = 0.7 } },
 
     pub fn ToArrayIndex(unicode: usize) usize {
         return if (unicode == ' ') SPACE_IND else LETTER_IND;
@@ -92,9 +102,21 @@ const TestFont = struct {
 
 const TEST_FONT = TestFont{};
 
+test "the stand in font knows how far its glyphs go, as FontReach works it out" {
+    try std.testing.expectEqualDeep(TEST_FONT.mReach.?, TextLayout.FontReach.Of(TestFont, &TEST_FONT));
+}
+
 const TestFonts = struct {
     pub fn Get(_: TestFonts, _: *const TextComponent) !*const TestFont {
         return &TEST_FONT;
+    }
+};
+
+/// The stand in font not knowing how far its glyphs go, so the build lays out every text before cutting it off
+const NO_REACH_FONT = TestFont{ .mReach = null };
+const NoReachFonts = struct {
+    pub fn Get(_: NoReachFonts, _: *const TextComponent) !*const TestFont {
+        return &NO_REACH_FONT;
     }
 };
 
@@ -689,6 +711,89 @@ test "a text across a mask's edge keeps every letter in its tree, and one item f
     try ExpectTreeHoldsItems(tree);
 }
 
+/// The room a MASK_SIZE mask at the origin leaves what is under it (Builder.RoomOf): its quad grown by the build's margin
+const MASK_ROOM = [_]ShapeGeometry.Box{.{
+    .Center = .{ .x = 0, .y = 0, .z = 0 },
+    .Rotation = .{ .w = 1, .x = 0, .y = 0, .z = 0 },
+    .HalfExtents = .{ .x = MASK_REACH, .y = MASK_REACH, .z = SDFFunctions.THICKNESS_2D },
+}};
+
+test "a text that can't reach a mask's room is known to be cut off before it is laid out, and one that can isn't" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const mask = try AddMask(engine_context, level, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = MASK_SIZE, .y = MASK_SIZE }, .Intersect);
+    const Case = struct { Text: []const u8, At: Vec3(f32), Width: f32, Out: bool };
+    const cases = [_]Case{
+        //well below, and well to the right
+        .{ .Text = "AA AA", .At = .{ .x = 0, .y = -MASK_REACH - 2, .z = 1 }, .Width = 16, .Out = true },
+        .{ .Text = "AA AA", .At = .{ .x = MASK_REACH + 1, .y = 0, .z = 1 }, .Width = 16, .Out = true },
+        //one line, well above: its height is known exactly
+        .{ .Text = "AA AA", .At = .{ .x = 0, .y = MASK_REACH + 2, .z = 1 }, .Width = 16, .Out = true },
+        //starting above, but its lines come down into the room
+        .{ .Text = "A\nA\nA\nA\nA\nA", .At = .{ .x = 0, .y = MASK_REACH + 2, .z = 1 }, .Width = 16, .Out = false },
+        //starting above, but wrapping a letter a line down into the room
+        .{ .Text = "A A A A A A A A A A", .At = .{ .x = 0, .y = MASK_REACH + 2, .z = 1 }, .Width = 0.5, .Out = false },
+        //starting left, but running on along its line into the room
+        .{ .Text = "AAAAAAAAAAAAAAAAAAAA", .At = .{ .x = -MASK_REACH - 2, .y = 0, .z = 1 }, .Width = 100, .Out = false },
+    };
+    for (cases) |case| {
+        const entity = try AddChildText(engine_context, mask, case.Text, case.At, case.Width);
+        const bvh = try world.Build();
+        const transform = entity.GetComponent(TransformComponent).?;
+        const text = entity.GetComponent(TextComponent).?;
+        const params = ShapeGeometry.GetTextParams(transform, text);
+        try std.testing.expectEqual(case.Out, BVHBuildSystem.OutOfRoom(TestFont, transform, text, params, &TEST_FONT, &MASK_ROOM));
+        //one that can reach the room really does, and is kept
+        if (!case.Out) try std.testing.expectEqual(@as(usize, 1), ItemsOf(&bvh.mGame, entity));
+    }
+    //no masks, or a font that can't say how far its glyphs go: never known to be out
+    const far = try AddChildText(engine_context, mask, "AA", .{ .x = 0, .y = -100, .z = 1 }, 16);
+    _ = try world.Build();
+    const far_transform = far.GetComponent(TransformComponent).?;
+    const far_text = far.GetComponent(TextComponent).?;
+    const far_params = ShapeGeometry.GetTextParams(far_transform, far_text);
+    try std.testing.expect(!BVHBuildSystem.OutOfRoom(TestFont, far_transform, far_text, far_params, &TEST_FONT, &.{}));
+    try std.testing.expect(!BVHBuildSystem.OutOfRoom(TestFont, far_transform, far_text, far_params, &NO_REACH_FONT, &MASK_ROOM));
+}
+
+test "cutting texts off before laying them out leaves out exactly what laying them out would" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const mask = try AddMask(engine_context, level, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = MASK_SIZE, .y = MASK_SIZE }, .Intersect);
+    //texts all around the mask's room, in and out, some of many lines or wrapping, some turned and stretched
+    var prng = std.Random.DefaultPrng.init(0x7EC7);
+    const random = prng.random();
+    const texts = [_][]const u8{ "A", "AA AA", "AAAA\nAA\nA", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "A A A A A A A A A A A A A A A A" };
+    for (0..80) |_| {
+        const at = Vec3(f32){ .x = (random.float(f32) - 0.5) * 6 * MASK_REACH, .y = (random.float(f32) - 0.5) * 6 * MASK_REACH, .z = 1 };
+        const width: f32 = if (random.boolean()) 100 else 0.5 + random.float(f32) * 3;
+        const entity = try AddChildText(engine_context, mask, texts[random.uintLessThan(usize, texts.len)], at, width);
+        if (random.uintLessThan(u32, 3) == 0) {
+            try entity.SetRotation(engine_context, MathTypes.Quat(f32).FromAxisAngle(.{ .x = 0, .y = 0, .z = 1 }, random.float(f32) * 6.3));
+            try entity.SetScale(engine_context, .{ .x = 0.5 + random.float(f32) * 2, .y = 0.5 + random.float(f32) * 2, .z = 1 });
+        }
+    }
+
+    const allocator = std.testing.allocator;
+    const cut_early = try world.BuildWith(TestFonts{});
+    const items = try allocator.dupe(WorldBVH.WorldItem, cut_early.mGame.mItems.items);
+    defer allocator.free(items);
+    const bvh_items = try allocator.dupe(BVH.Item, cut_early.mGame.mBVHItems.items);
+    defer allocator.free(bvh_items);
+    const glyph_count = cut_early.mGlyphs.items.len;
+
+    const laid_out = try world.BuildWith(NoReachFonts{});
+    try std.testing.expectEqualSlices(WorldBVH.WorldItem, items, laid_out.mGame.mItems.items);
+    try std.testing.expectEqualDeep(bvh_items, laid_out.mGame.mBVHItems.items);
+    try std.testing.expectEqual(glyph_count, laid_out.mGlyphs.items.len);
+    //some texts were cut off and some kept, so both ways were really tried
+    try std.testing.expect(items.len > 10 and items.len < 70);
+}
+
 test "a subtract mask, or one with no shape, leaves everything under it in the tree, however far off" {
     const world = try TestWorld.Init();
     defer world.Deinit();
@@ -811,6 +916,10 @@ test "the build's table of what each entity is under answers the same as climbin
             const mask = try ancestry.MaskRegionAbove(entity);
             const expected_mask = ShapeGeometry.MaskRegionAbove(entity);
             try std.testing.expectEqual(if (expected_mask) |e| e.mID else null, if (mask) |e| e.mID else null);
+            //and both at once, the way the build asks
+            const both = try ancestry.Lookup(entity);
+            try std.testing.expectEqual(if (expected_merge) |e| e.mID else null, if (both.MergeRoot) |e| e.mID else null);
+            try std.testing.expectEqual(if (expected_mask) |e| e.mID else null, if (both.MaskRegion) |e| e.mID else null);
             if (merge != null) merges += 1;
             if (mask != null) masks += 1;
         }

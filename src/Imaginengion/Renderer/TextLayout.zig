@@ -171,6 +171,75 @@ pub fn Measure(comptime FontT: type, text: []const u8, font: *const FontT, font_
     return iter.GetMetrics();
 }
 
+/// How far any glyph of a font can go, at font size 1: the most one codepoint moves the pen (its advance and its
+/// largest kerning), and the box every glyph's ink lies within around its pen (the pen itself included). Worked out
+/// once for a font (TextAsset keeps it), so Reach can bound a text without laying it out
+pub const FontReach = struct {
+    Step: f32,
+    InkMin: Vec2(f32),
+    InkMax: Vec2(f32),
+
+    pub fn Of(comptime FontT: type, font: *const FontT) FontReach {
+        var reach = FontReach{ .Step = 0, .InkMin = .{ .x = 0, .y = 0 }, .InkMax = .{ .x = 0, .y = 0 } };
+        for (&font.mGlyphs) |*glyph| {
+            var kerning: f32 = 0;
+            var kernings = glyph.mKernings.valueIterator();
+            while (kernings.next()) |value| kerning = @max(kerning, value.*);
+            reach.Step = @max(reach.Step, glyph.mAdvance + kerning);
+            //no plane bounds, no ink (Iterator.Step)
+            if (glyph.mPlaneMax.x <= glyph.mPlaneMin.x) continue;
+            reach.InkMin.x = @min(reach.InkMin.x, glyph.mPlaneMin.x, glyph.mPlaneMax.x);
+            reach.InkMin.y = @min(reach.InkMin.y, glyph.mPlaneMin.y, glyph.mPlaneMax.y);
+            reach.InkMax.x = @max(reach.InkMax.x, glyph.mPlaneMin.x, glyph.mPlaneMax.x);
+            reach.InkMax.y = @max(reach.InkMax.y, glyph.mPlaneMin.y, glyph.mPlaneMax.y);
+        }
+        return reach;
+    }
+};
+
+/// A box in a text's layout space (GlyphPlacement.Pen's) that its layout can't reach past: every glyph's ink, and every
+/// line from the first's ascender down to the last's descender (Metrics' height), across the widest any line can go.
+/// Found without laying it out, from its bytes alone and `font_reach` (FontReach.Of its font): how many lines it can
+/// have and how far along one the pen can be. Never smaller than the layout and often bigger, so a text it puts wholly
+/// out of sight is out of sight whatever its layout
+pub fn Reach(comptime FontT: type, text: []const u8, font: *const FontT, font_reach: FontReach, font_size: f32, wrap_width: f32) struct { Min: Vec2(f32), Max: Vec2(f32) } {
+    //its lines between newlines, and the longest of them in bytes: a codepoint is at least one byte
+    var newlines: usize = 0;
+    var longest: usize = 0;
+    var line: usize = 0;
+    for (text) |byte| {
+        if (byte == '\n') {
+            newlines += 1;
+            longest = @max(longest, line);
+            line = 0;
+        } else line += 1;
+    }
+    longest = @max(longest, line);
+
+    //no glyph's pen is further along its line than every codepoint before it there moving it a whole step
+    const step = font_reach.Step * font_size;
+    var lines: f32 = @floatFromInt(1 + newlines);
+    var pen_x: f32 = @as(f32, @floatFromInt(longest)) * step;
+    if (wrap_width > 0) {
+        //a glyph past the start of a line has to fit before its line's end, and a line only wraps once the pen has gone
+        //further than that end less one step, which the whole text's steps can only pay for so many times
+        const line_end = wrap_width * (1 + WRAP_SLACK);
+        pen_x = @min(pen_x, line_end);
+        const all_steps = @as(f32, @floatFromInt(text.len)) * step;
+        lines += if (line_end > step) @ceil(all_steps / (line_end - step)) else @floatFromInt(text.len);
+    }
+    const last_baseline = -(lines - 1) * font.mLineHeight * font_size;
+
+    var min = Vec2(f32){ .x = font_reach.InkMin.x * font_size, .y = last_baseline + @min(font_reach.InkMin.y, font.mDescender) * font_size };
+    var max = Vec2(f32){ .x = pen_x + font_reach.InkMax.x * font_size, .y = @max(font_reach.InkMax.y, font.mAscender) * font_size };
+    //a little room for the rounding of adding the steps up one at a time
+    const size = max.SubVec(min);
+    const pad = Vec2(f32){ .x = size.x * 1e-3 + 1e-4, .y = size.y * 1e-3 + 1e-4 };
+    min = min.SubVec(pad);
+    max = max.AddVec(pad);
+    return .{ .Min = min, .Max = max };
+}
+
 /// Where a caret just before the byte at `index` sits: the pen once everything before it is laid out, local to the
 /// text origin like GlyphPlacement.Pen, so on that line's baseline. `index` is the text's length for the end of it.
 /// A caret before a word that wraps stays at the end of the line above, where the word was typed

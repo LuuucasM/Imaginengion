@@ -392,3 +392,79 @@ test "the iterator puts every letter where decoding each codepoint on its own sa
         try std.testing.expectEqual(lines, iter.GetMetrics().LineCount);
     }
 }
+
+//==================================bounding a text before laying it out==================================
+
+test "a font's reach is its biggest step, kerning included, and the box around all of its ink" {
+    var font = try FakeFont.Init(std.testing.allocator);
+    defer font.Deinit();
+    //a kerning that pushes V on: its step is its advance and that
+    try font.mGlyphs[V_IND].mKernings.put('A', 0.6);
+    const reach = TextLayout.FontReach.Of(FakeFont, &font);
+    //V's 0.5 + 0.6 beats the Hangul glyph's 1
+    try std.testing.expectApproxEqAbs(@as(f32, 1.1), reach.Step, eps);
+    //the Hangul glyph dips below the baseline and is the widest and tallest; the space has no ink
+    try ExpectVec2(.{ .x = 0, .y = -0.1 }, reach.InkMin);
+    try ExpectVec2(.{ .x = 1, .y = 0.8 }, reach.InkMax);
+}
+
+/// Whether the box from `min` to `max` holds the box from `inner_min` to `inner_max`
+fn Holds(min: Vec2(f32), max: Vec2(f32), inner_min: Vec2(f32), inner_max: Vec2(f32)) bool {
+    return min.x <= inner_min.x and min.y <= inner_min.y and max.x >= inner_max.x and max.y >= inner_max.y;
+}
+
+test "a text's reach holds every glyph's ink and its whole height, however it wraps" {
+    var font = try FakeFont.Init(std.testing.allocator);
+    defer font.Deinit();
+    try font.mGlyphs[V_IND].mKernings.put('A', 0.6);
+    const font_reach = TextLayout.FontReach.Of(FakeFont, &font);
+    var prng = std.Random.DefaultPrng.init(0x2EAC);
+    const random = prng.random();
+    //letters, kerned pairs, spaces, newlines, a three byte Hangul one and one the font draws as its box
+    const pieces = [_][]const u8{ "A", "V", "AV", "VA", " ", "  ", "\n", "\xEA\xB0\x80", "x" };
+    var text_buffer: [64]u8 = undefined;
+    for (0..400) |_| {
+        var len: usize = 0;
+        const piece_count = random.uintLessThan(usize, 20);
+        for (0..piece_count) |_| {
+            const piece = pieces[random.uintLessThan(usize, pieces.len)];
+            if (len + piece.len > text_buffer.len) break;
+            @memcpy(text_buffer[len..][0..piece.len], piece);
+            len += piece.len;
+        }
+        const text = text_buffer[0..len];
+        const font_size = 0.25 + random.float(f32) * 3;
+        //never wrapping, wrapping narrower than a glyph, and in between
+        const wrap_width: f32 = switch (random.uintLessThan(u32, 3)) {
+            0 => 0,
+            1 => random.float(f32) * 0.5 * font_size,
+            else => (0.5 + random.float(f32) * 4) * font_size,
+        };
+        const reach = TextLayout.Reach(FakeFont, text, &font, font_reach, font_size, wrap_width);
+        var result = try Collect(text, &font, font_size, wrap_width);
+        defer result.Glyphs.deinit(std.testing.allocator);
+        for (result.Glyphs.items) |glyph| {
+            const center = glyph.Pen.AddVec(glyph.PlaneCenter);
+            const half = Vec2(f32){ .x = @abs(glyph.HalfExtents.x), .y = @abs(glyph.HalfExtents.y) };
+            try std.testing.expect(Holds(reach.Min, reach.Max, center.SubVec(half), center.AddVec(half)));
+        }
+        try std.testing.expect(reach.Min.y <= result.Metrics.Min.y and reach.Max.y >= result.Metrics.Max.y);
+    }
+}
+
+test "a one line text's reach is as tall as its line, and as wide as a step for each of its letters" {
+    var font = try FakeFont.Init(std.testing.allocator);
+    defer font.Deinit();
+    const font_reach = TextLayout.FontReach.Of(FakeFont, &font);
+    const reach = TextLayout.Reach(FakeFont, "AAAA", &font, font_reach, 2, 0);
+    //from the descender (below the Hangul glyph's dip) to the ascender (above its top), at size 2, give or take its
+    //rounding room
+    try std.testing.expectApproxEqAbs(@as(f32, DESCENDER * 2), reach.Min.y, 0.01);
+    try std.testing.expectApproxEqAbs(@as(f32, ASCENDER * 2), reach.Max.y, 0.01);
+    //four steps of the font's biggest (the Hangul glyph's 1), then the widest ink past the last pen
+    try std.testing.expectApproxEqAbs(@as(f32, 0), reach.Min.x, 0.02);
+    try std.testing.expectApproxEqAbs(@as(f32, (4 * 1 + 1) * 2), reach.Max.x, 0.02);
+    //each newline is another line down
+    const three_lines = TextLayout.Reach(FakeFont, "A\nA\nA", &font, font_reach, 1, 0);
+    try std.testing.expectApproxEqAbs(@as(f32, -2 * LINE_HEIGHT + DESCENDER), three_lines.Min.y, 0.01);
+}

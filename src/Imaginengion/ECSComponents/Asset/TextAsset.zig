@@ -7,6 +7,7 @@ const Vec2 = MathTypes.Vec2;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Tracy = @import("../../Core/Tracy.zig");
 const Texture2D = @import("Texture2D.zig");
+const TextLayout = @import("../../Renderer/TextLayout.zig");
 const TextAsset = @This();
 
 const KerningsT = std.AutoHashMap(u16, f32);
@@ -38,6 +39,9 @@ mDescender: f32 = 0.0,
 mEmsize: f32 = 0.0,
 mAtlasSize: Vec2(f32) = .{ .x = 0, .y = 0 },
 mAtlas: Texture2D = .{},
+/// how far any of its glyphs can go (TextLayout.FontReach), worked out once its glyphs are read, for bounding a text
+/// before laying it out (TextLayout.Reach). Null until then, which bounds nothing
+mReach: ?TextLayout.FontReach = null,
 
 /// `abs_path` is the font's, or in a packaged game its atlas .json's (AManager.PackagedPath): only the atlas's files are
 /// read, from next to it. The font itself is only needed to generate them
@@ -128,6 +132,7 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
         glyph.* = box;
         glyph.mKernings = KerningsT.init(engine_context.mAssetManager.KeepFor(TextAsset));
     }
+    self.mReach = TextLayout.FontReach.Of(TextAsset, self);
 
     const rel_ext = std.fs.path.extension(rel_path);
     const atlas_rel_path = try std.fmt.allocPrint(scratch_allocator, "{s}.png", .{rel_path[0 .. rel_path.len - rel_ext.len]});

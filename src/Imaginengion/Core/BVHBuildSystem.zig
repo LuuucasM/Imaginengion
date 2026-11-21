@@ -81,8 +81,11 @@ const Builder = struct {
     mBVH: *WorldBVH,
     mKeepAllocator: std.mem.Allocator,
     mScratchAllocator: std.mem.Allocator,
-    /// each scene's SceneSlot so far
+    /// each scene's SceneSlot so far, and the last one asked for, since an entity is usually in the same scene as the one
+    /// before it
     mSlots: std.AutoHashMapUnmanaged(Scene.Type, u8) = .empty,
+    mLastScene: ?Scene.Type = null,
+    mLastSlot: u8 = 0,
     /// the merges already added, so each is one item however many of its parts there are
     mMerges: std.AutoHashMapUnmanaged(Entity.Type, void) = .empty,
     /// each mask entity's room so far (RoomOf)
@@ -107,8 +110,10 @@ const Builder = struct {
         zone.Value(visuals.items.len);
         for (visuals.items) |entity_id| {
             const entity = world.GetEntity(entity_id);
+            //its merge and mask, both from the one look up
+            const ancestors = try self.mAncestry.Lookup(entity);
             //a part of a merge is its root's one item
-            if (try self.mAncestry.MergeRootOf(entity)) |root| {
+            if (ancestors.MergeRoot) |root| {
                 const seen = try self.mMerges.getOrPut(self.mScratchAllocator, root.mID);
                 if (!seen.found_existing) try self.AddMerge(root);
                 continue;
@@ -121,7 +126,7 @@ const Builder = struct {
             const text = entity.GetComponent(TextComponent);
             if (quad == null and text == null) continue;
             //where all its items go, its quad's and every letter's, and what its masks leave room for, found once
-            const mask_region = try self.mAncestry.MaskRegionAbove(entity);
+            const mask_region = ancestors.MaskRegion;
             const placement = try self.PlacementOf(entity, mask_region) orelse continue;
             const room = try self.RoomOf(mask_region);
 
@@ -219,6 +224,14 @@ const Builder = struct {
     }
 
     fn SceneSlot(self: *Builder, scene_id: Scene.Type) !u8 {
+        if (self.mLastScene == scene_id) return self.mLastSlot;
+        const slot = try self.NewSceneSlot(scene_id);
+        self.mLastScene = scene_id;
+        self.mLastSlot = slot;
+        return slot;
+    }
+
+    fn NewSceneSlot(self: *Builder, scene_id: Scene.Type) !u8 {
         const entry = try self.mSlots.getOrPut(self.mScratchAllocator, scene_id);
         if (!entry.found_existing) {
             const scenes = &self.mBVH.mScenes;
@@ -250,12 +263,14 @@ const Builder = struct {
     /// its layout space (WorldBVH.TextEntry), for refits and the renderer, and the size the same layout measured, which
     /// is what clicks land on. What lies outside the `room` its masks leave (RoomOf) is left out: its letters when all
     /// their ink is, its click area when all of that is, and the item when both are. A text across a mask's edge keeps
-    /// every letter, and the renderer leaves out the ones its mask cuts off
+    /// every letter, and the renderer leaves out the ones its mask cuts off. A text that can't reach into the room
+    /// whatever its layout (OutOfRoom) isn't laid out at all
     fn AddText(self: *Builder, placement: Placement, entity: Entity, transform: *const TransformComponent, text: *const TextComponent, font: anytype, room: []const ShapeGeometry.Box) !void {
         const zone = Tracy.ZoneInit("WorldBVH::AddText", @src());
         defer zone.Deinit();
 
         const params = ShapeGeometry.GetTextParams(transform, text);
+        if (OutOfRoom(@TypeOf(font.*), transform, text, params, font, room)) return;
         const bvh = self.mBVH;
         const glyphs = &bvh.mGlyphs;
         const first_glyph = glyphs.items.len;
@@ -307,6 +322,20 @@ const Builder = struct {
 /// What a mask cuts off further out is neither drawn, clicked nor refit
 pub const CULL_MARGIN: f32 = 1;
 
+/// Whether all of a text, its letters' ink and its click area, has to be outside the `room` its masks leave, before it
+/// is laid out: the box its layout can't reach past (TextLayout.Reach), across its click area's width too, is wholly
+/// outside it. False when it can't be told: no masks, or a font that doesn't know how far its glyphs go
+pub fn OutOfRoom(comptime FontT: type, transform: *const TransformComponent, text: *const TextComponent, params: ShapeGeometry.TextParams, font: *const FontT, room: []const ShapeGeometry.Box) bool {
+    if (room.len == 0) return false;
+    const font_reach = font.mReach orelse return false;
+    var reach = TextLayout.Reach(FontT, text.mText.items, font, font_reach, params.FontSize, params.WrapWidth);
+    //the click area runs from the left bound to the right bound (ShapeGeometry.TextBoxFromMetrics), which in layout
+    //space is from 0 to both of them
+    reach.Min.x = @min(reach.Min.x, 0);
+    reach.Max.x = @max(reach.Max.x, params.LeftBound + params.RightBound);
+    return CutOff(room, ShapeGeometry.TextInkBox(transform, params, reach.Min, reach.Max, null));
+}
+
 /// Whether `box` is wholly outside one of the masks' grown quads in `room` (Builder.RoomOf)
 fn CutOff(room: []const ShapeGeometry.Box, box: ShapeGeometry.Box) bool {
     for (room) |mask_box| {
@@ -345,6 +374,17 @@ pub const Ancestry = struct {
         const entries = try allocator.alloc(Entry, world.mEManager.mECSManager.SlotCount());
         @memset(entries, .{});
         return .{ .mWorld = world, .mEntries = entries, .mAllocator = allocator };
+    }
+
+    /// What a build asks of every entity: its merge (MergeRootOf) and its mask (MaskRegionAbove), from one look up. Only
+    /// a shape or a merge is part of a merge, checked only for one under a merge, since most entities are under none
+    pub fn Lookup(self: *Ancestry, entity: Entity) !struct { MergeRoot: ?Entity, MaskRegion: ?Entity } {
+        const entry = try self.Of(entity);
+        const in_merge = entry.OuterMerge != Entity.NullObject and (entity.HasComponent(ShapeComponent) or entity.HasComponent(MergeComponent));
+        return .{
+            .MergeRoot = if (in_merge) self.mWorld.GetEntity(entry.OuterMerge) else null,
+            .MaskRegion = if (entry.Above == Entity.NullObject) null else self.mWorld.GetEntity(entry.Above),
+        };
     }
 
     /// The same as ShapeGeometry.MaskRegionAbove
