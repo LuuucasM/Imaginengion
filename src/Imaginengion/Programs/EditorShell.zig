@@ -16,7 +16,6 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const LayoutComponent = EntityComponents.LayoutComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const TransformComponent = EntityComponents.TransformComponent;
-const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 
 const EditorShell = @This();
 
@@ -114,7 +113,6 @@ pub fn IsShown(entity: Entity) bool {
         if (current.GetComponent(LayoutItemComponent)) |item| {
             if (item.mCollapsed) return false;
         }
-        const child_component = current.GetComponent(EntityChildComponent) orelse return true;
-        current = Entity{ .mID = child_component.mParent, .mManager = current.mManager };
+        current = current.GetParent() orelse return true;
     }
 }

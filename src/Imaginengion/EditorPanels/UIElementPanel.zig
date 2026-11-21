@@ -20,7 +20,7 @@ const Vec2 = MathTypes.Vec2;
 
 const UIElementPanel = @This();
 
-pub const Components = @import("ComponentList.zig").ComponentList(UIElement, &UIComponents.ComponentsPanelList);
+pub const Components = @import("ComponentList.zig").ComponentList(UIElement, &UIComponents.SerializeList);
 
 /// Where the window opens, from the middle of the editor UI, and how big it is
 const AT = Vec2(f32){ .x = 250, .y = 0 };

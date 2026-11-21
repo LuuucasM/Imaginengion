@@ -75,7 +75,7 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
 
         /// Builds the list for `object` in `parent`, in place of the one there was. Right clicking `menu_target`
         /// opens the menu to add a component. `extras` adds rows of its own under each component's, for what needs the
-        /// object and not only the component (see Inspector.RenderComponentWith), or is null
+        /// object and not only the component (see Inspector.RenderComponent), or is null
         pub fn Build(self: *Self, engine_context: *EngineContext, parent: Entity, menu_target: Entity, object: ObjectType, options: Widgets.Options, extras: anytype) !void {
             const zone = Tracy.ZoneInit("ComponentList::Build", @src());
             defer zone.Deinit();
@@ -92,7 +92,7 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
                     const section = try Widgets.CollapsingHeader(engine_context, .{ .Entity = root }, component_type.Name, self.mOpen.isSet(i), options);
                     self.mSections[i] = section.Content;
                     if (comptime @hasDecl(component_type, "UIRender") or @TypeOf(extras) != @TypeOf(null)) {
-                        try Inspector.RenderComponentWith(engine_context, section.Content.?, root, object, component_type, options, extras);
+                        try Inspector.RenderComponent(engine_context, section.Content.?, root, object, component_type, options, extras);
                     }
                     if (comptime IsRemovable(component_type)) {
                         const menu = try Widgets.ContextMenu(engine_context, section.Header, options);

@@ -41,7 +41,6 @@ const DropTargetComponent = EntityComponents.DropTargetComponent;
 const FileRefComponent = EntityComponents.FileRefComponent;
 const ObjectRefComponent = EntityComponents.ObjectRefComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
-const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 
 const PointerSystem = @This();
 
@@ -172,29 +171,29 @@ fn SetDropReady(self: *PointerSystem, engine_context: *EngineContext, carrying: 
         const targets = try source.mManager.mEManager.GetGroup(scratch_allocator, .{ .Component = DropTargetComponent });
         for (targets.items) |target_id| {
             const target = Entity{ .mID = target_id, .mManager = source.mManager };
-            if (Same(target, source) or IsDisabled(target)) continue;
+            if (target.Eq(source) or IsDisabled(target)) continue;
             if (Takes(target.GetComponent(DropTargetComponent).?.*, source)) try ready.append(scratch_allocator, target);
         }
     }
 
     for (self.mDropReady.items) |entity| {
         if (!entity.IsActive() or Contains(ready.items, entity)) continue;
-        if (entity.HasComponent(DropReadyTag)) try entity.RemoveComponentSync(engine_context, DropReadyTag);
+        try entity.SetTag(engine_context, DropReadyTag, false);
     }
     for (ready.items) |entity| {
-        if (!entity.HasComponent(DropReadyTag)) _ = try entity.AddComponent(engine_context, DropReadyTag{});
+        try entity.SetTag(engine_context, DropReadyTag, true);
     }
     try Assign(&self.mDropReady, engine_context.Keep(), ready.items);
 }
 
 fn SetDropTarget(self: *PointerSystem, engine_context: *EngineContext, new_target: ?Entity) !void {
     if (self.mDropTarget) |old| {
-        if (new_target != null and Same(old, new_target.?)) return;
-        if (old.IsActive() and old.HasComponent(DropHoverTag)) try old.RemoveComponentSync(engine_context, DropHoverTag);
+        if (new_target != null and old.Eq(new_target.?)) return;
+        if (old.IsActive()) try old.SetTag(engine_context, DropHoverTag, false);
     }
     self.mDropTarget = new_target;
     if (new_target) |target| {
-        if (!target.HasComponent(DropHoverTag)) _ = try target.AddComponent(engine_context, DropHoverTag{});
+        try target.SetTag(engine_context, DropHoverTag, true);
     }
 }
 
@@ -202,7 +201,7 @@ fn SetDropTarget(self: *PointerSystem, engine_context: *EngineContext, new_targe
 /// A source isn't dropped on itself
 fn FindDropTarget(chain: []const Entity, source: Entity) ?Entity {
     for (chain) |entity| {
-        if (!entity.IsActive() or Same(entity, source)) continue;
+        if (!entity.IsActive() or entity.Eq(source)) continue;
         const drop_target = entity.GetComponent(DropTargetComponent) orelse continue;
         if (Takes(drop_target.*, source)) return entity;
     }
@@ -248,13 +247,13 @@ fn UpdateHover(self: *PointerSystem, engine_context: *EngineContext) !void {
     //left: in the old chain and not the new one. The ones that are gone altogether have nothing left to tell
     for (self.mHovered.items) |entity| {
         if (!entity.IsActive() or Contains(new_chain.items, entity)) continue;
-        if (entity.HasComponent(HoveredTag)) try entity.RemoveComponentSync(engine_context, HoveredTag);
+        try entity.SetTag(engine_context, HoveredTag, false);
         try Send(engine_context, entity, .{ .PointerExit = .{} });
     }
     //entered: in the new chain and not the old one
     for (new_chain.items) |entity| {
         if (Contains(self.mHovered.items, entity)) continue;
-        if (!entity.HasComponent(HoveredTag)) _ = try entity.AddComponent(engine_context, HoveredTag{});
+        try entity.SetTag(engine_context, HoveredTag, true);
         try Send(engine_context, entity, .{ .PointerEnter = .{} });
     }
 
@@ -347,7 +346,7 @@ pub fn OnPressed(self: *PointerSystem, engine_context: *EngineContext, button: M
 
     for (held.mChain.items) |entity| {
         if (!entity.IsActive()) continue;
-        if (!entity.HasComponent(PressedTag)) _ = try entity.AddComponent(engine_context, PressedTag{});
+        try entity.SetTag(engine_context, PressedTag, true);
         try Send(engine_context, entity, .{ .PointerPressed = .{ .mButton = button, .mPosition = self.mInput.Position, .mTarget = target } });
     }
 }
@@ -383,7 +382,7 @@ pub fn OnReleased(self: *PointerSystem, engine_context: *EngineContext, button: 
     for (released) |entity| {
         if (!entity.IsActive()) continue;
         //another button may still be holding it
-        if (!self.IsHeld(entity) and entity.HasComponent(PressedTag)) try entity.RemoveComponentSync(engine_context, PressedTag);
+        if (!self.IsHeld(entity)) try entity.SetTag(engine_context, PressedTag, false);
         if (was_dragging) try Send(engine_context, entity, .{ .PointerDragEnd = .{ .mButton = button, .mTotal = total, .mTarget = target } });
         try Send(engine_context, entity, .{ .PointerReleased = .{ .mButton = button, .mPosition = self.mInput.Position, .mTarget = target } });
     }
@@ -427,8 +426,7 @@ pub fn ChainOf(scratch_allocator: std.mem.Allocator, entity: ?Entity) !Chain {
     if (!current.IsActive()) return chain;
     while (true) {
         try chain.append(scratch_allocator, current);
-        const child_component = current.GetComponent(EntityChildComponent) orelse break;
-        current = Entity{ .mID = child_component.mParent, .mManager = current.mManager };
+        current = current.GetParent() orelse break;
     }
     return chain;
 }
@@ -451,20 +449,16 @@ pub fn IsDisabled(entity: Entity) bool {
     var current = entity;
     while (true) {
         if (current.HasComponent(DisabledTag)) return true;
-        const child_component = current.GetComponent(EntityChildComponent) orelse return false;
-        current = Entity{ .mID = child_component.mParent, .mManager = current.mManager };
+        current = current.GetParent() orelse return false;
     }
 }
 
-fn Contains(chain: []const Entity, entity: Entity) bool {
+/// Whether `entity` is in `chain`
+pub fn Contains(chain: []const Entity, entity: Entity) bool {
     for (chain) |other| {
-        if (Same(other, entity)) return true;
+        if (other.Eq(entity)) return true;
     }
     return false;
-}
-
-fn Same(a: Entity, b: Entity) bool {
-    return a.mID == b.mID and a.mManager == b.mManager;
 }
 
 fn Assign(chain: *Chain, keep_allocator: std.mem.Allocator, entities: []const Entity) !void {

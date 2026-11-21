@@ -44,3 +44,4 @@ pub const KeepFor = Core.KeepFor;
 pub const IsActive = Core.IsActive;
 pub const IsIDValid = Core.IsIDValid;
 pub const Invalidate = Core.Invalidate;
+pub const SetTag = Core.SetTag;

@@ -113,6 +113,11 @@ pub const NumberOptions = struct {
     Decimals: u8 = 3,
     Convert: ?Conversion = null,
     OnChange: ?OnChange = null,
+
+    /// The number field's settings these make
+    fn Settings(self: NumberOptions) NumberFieldComponent {
+        return .{ .mSpeed = self.Speed, .mMin = self.Min, .mMax = self.Max, .mDecimals = self.Decimals };
+    }
 };
 
 /// For a union: its case's own rows go under the dropdown of cases
@@ -135,13 +140,18 @@ pub const RefOptions = struct {
     /// whether a drop and Clear write the field, or are left to whoever built the inspector
     Writes: bool = true,
     OnChange: ?OnChange = null,
+    /// for a scene field: only an overlay scene can go in it
+    OverlayOnly: bool = false,
 };
 
-pub const SceneRefOptions = struct {
-    Writes: bool = true,
+/// How Bind ties a widget to its field (see FieldBindingComponent)
+const BindOptions = struct {
     OnChange: ?OnChange = null,
-    /// only an overlay scene can go in it
-    OverlayOnly: bool = false,
+    Convert: ?Conversion = null,
+    Rebuilds: bool = false,
+    WritesDrops: bool = false,
+    Clear: ?Value = null,
+    Copies: bool = false,
 };
 
 pub const FieldOptions = struct {
@@ -195,17 +205,10 @@ pub const Builder = struct {
     pub fn OptionalFloat(self: *Builder, field: *?f32, label: []const u8, options: NumberOptions) !void {
         const row = try self.Row(label);
         const checkbox = try Widgets.Checkbox(self.mEngineContext, .{ .Entity = row }, "", self.mOptions);
-        //the box, which the toggle's ValueChanged is sent from
-        var parts = checkbox.GetIterator(.Child);
-        try self.Bind(parts.next().?, field, &OPTIONAL_SET, options.OnChange, null, true);
+        try self.Bind(Widgets.CheckboxBox(checkbox), field, &OPTIONAL_SET, .{ .OnChange = options.OnChange, .Rebuilds = true });
 
-        const number_field = try Widgets.NumberField(self.mEngineContext, .{ .Entity = row }, .{ .float32 = field.* orelse 0 }, .{
-            .mSpeed = options.Speed,
-            .mMin = options.Min,
-            .mMax = options.Max,
-            .mDecimals = options.Decimals,
-        });
-        try self.Bind(number_field, field, &OPTIONAL_VALUE, options.OnChange, options.Convert, false);
+        const number_field = try Widgets.NumberField(self.mEngineContext, .{ .Entity = row }, .{ .float32 = field.* orelse 0 }, options.Settings());
+        try self.Bind(number_field, field, &OPTIONAL_VALUE, .{ .OnChange = options.OnChange, .Convert = options.Convert });
         if (field.* == null) try WidgetActions.SetDisabled(self.mEngineContext, number_field, true);
     }
 
@@ -219,7 +222,7 @@ pub const Builder = struct {
             else => null,
         };
         const dropdown = try Widgets.Dropdown(self.mEngineContext, .{ .Entity = row }, choices, chosen, self.mOptions);
-        try self.Bind(dropdown, field, access, options.OnChange, null, options.Rebuilds);
+        try self.Bind(dropdown, field, access, .{ .OnChange = options.OnChange, .Rebuilds = options.Rebuilds });
     }
 
     /// A rotation, as X, Y and Z in degrees. The three numbers are what is being edited: they are only set again from
@@ -229,14 +232,9 @@ pub const Builder = struct {
         //read before any widget is made, which can move the component when it is in the same ECS
         const degrees = field.ToDegrees();
         const row = try self.Row(label);
-        const numbers = try Widgets.NumberRow(self.mEngineContext, .{ .Entity = row }, &.{ degrees.x, degrees.y, degrees.z }, .{
-            .mSpeed = options.Speed,
-            .mMin = options.Min,
-            .mMax = options.Max,
-            .mDecimals = options.Decimals,
-        });
+        const numbers = try Widgets.NumberRow(self.mEngineContext, .{ .Entity = row }, &.{ degrees.x, degrees.y, degrees.z }, options.Settings());
         //the whole row, which each number's ValueChanged reaches too
-        try self.Bind(numbers, field, AccessFor(Quat(f32)), options.OnChange, null, false);
+        try self.Bind(numbers, field, AccessFor(Quat(f32)), .{ .OnChange = options.OnChange });
     }
 
     /// A tagged union: a dropdown of its cases, named as they are in the code, then the case's own rows. A case that is
@@ -251,7 +249,7 @@ pub const Builder = struct {
         var choices: [names.len][]const u8 = undefined;
         inline for (names, 0..) |name, i| choices[i] = name;
         const dropdown = try Widgets.Dropdown(self.mEngineContext, .{ .Entity = row }, &choices, chosen, self.mOptions);
-        try self.Bind(dropdown, field, UnionCaseAccess(U), options.OnChange, null, true);
+        try self.Bind(dropdown, field, UnionCaseAccess(U), .{ .OnChange = options.OnChange, .Rebuilds = true });
 
         switch (field.*) {
             inline else => |*payload, tag| {
@@ -287,12 +285,11 @@ pub const Builder = struct {
         const row = try self.Row(label);
         const shown = try Widgets.Label(self.mEngineContext, .{ .Entity = row }, text);
         const access = ReadoutAccess(T, show);
-        try self.Bind(shown, field, access, null, null, false);
+        try self.Bind(shown, field, access, .{});
 
         const menu = try Widgets.ContextMenu(self.mEngineContext, shown, self.mOptions);
         const item = try Widgets.MenuItem(self.mEngineContext, menu, "Copy", .{ .StockScripts = self.mOptions.StockScripts });
-        try self.Bind(item, field, access, null, null, false);
-        UIManager.GetUIComponentMut(item, FieldBindingComponent).?.mCopies = true;
+        try self.Bind(item, field, access, .{ .Copies = true });
     }
 
     /// A set of bits (a std.StaticBitSet): a checkbox for each, as many to a row as fit, each named by Names or else
@@ -313,8 +310,7 @@ pub const Builder = struct {
             var number: [4]u8 = undefined;
             const name = if (options.Names) |names| names[bit] else try std.fmt.bufPrint(&number, "{d}", .{bit});
             const checkbox = try Widgets.Checkbox(self.mEngineContext, .{ .Entity = grid }, name, self.mOptions);
-            var parts = checkbox.GetIterator(.Child);
-            try self.Bind(parts.next().?, field, BIT_ACCESSES[bit], options.OnChange, null, options.Rebuilds);
+            try self.Bind(Widgets.CheckboxBox(checkbox), field, BIT_ACCESSES[bit], .{ .OnChange = options.OnChange, .Rebuilds = options.Rebuilds });
         }
     }
 
@@ -325,48 +321,33 @@ pub const Builder = struct {
         const row = try self.Row(label);
         if (options.Thumbnail) {
             const thumbnail = try Widgets.Image(self.mEngineContext, .{ .Entity = row }, .uninit, .{ .x = THUMBNAIL_SIZE, .y = THUMBNAIL_SIZE });
-            try self.Bind(thumbnail, field, AccessFor(AssetHandle), null, null, false);
+            try self.Bind(thumbnail, field, AccessFor(AssetHandle), .{});
         }
         const shown = if (accepts.len > 0) try Widgets.DropBox(self.mEngineContext, .{ .Entity = row }, "", DropTargetComponent.Files(accepts)) else try Widgets.Label(self.mEngineContext, .{ .Entity = row }, "");
-        try self.Bind(shown, field, AccessFor(AssetHandle), options.OnChange, null, options.Rebuilds);
-        UIManager.GetUIComponentMut(shown, FieldBindingComponent).?.mWritesDrops = accepts.len > 0;
+        try self.Bind(shown, field, AccessFor(AssetHandle), .{ .OnChange = options.OnChange, .Rebuilds = options.Rebuilds, .WritesDrops = accepts.len > 0 });
         if (accepts.len > 0) try self.ClearMenu(shown, field, AccessFor(AssetHandle), .{ .Asset = .uninit }, options.OnChange);
     }
 
-    /// An entity field: the entity's name in a box an entity's row from the Entities panel can be dropped on, which
-    /// becomes the field's entity, with a right-click Clear. With Writes off a drop writes nothing and there is no
-    /// Clear: whoever built the inspector takes the drop on the returned box, for an entity that has to be set some
-    /// other way (a player possessing it)
-    pub fn EntityRef(self: *Builder, field: *Entity, label: []const u8, options: RefOptions) !Entity {
-        return try self.ObjectRefField(Entity, .entity, field, label, NameAccess(Entity, false), options);
-    }
-
-    /// A scene field, the same way, taking a row from the Scenes panel. With OverlayOnly a game layer scene is turned
-    /// down
-    pub fn SceneRef(self: *Builder, field: *Scene, label: []const u8, options: SceneRefOptions) !Entity {
-        const access = if (options.OverlayOnly) NameAccess(Scene, true) else NameAccess(Scene, false);
-        return try self.ObjectRefField(Scene, .scene_layer, field, label, access, .{ .Writes = options.Writes, .OnChange = options.OnChange });
-    }
-
-    /// A player field, the same way, taking a player's row from the Players panel
-    pub fn PlayerRef(self: *Builder, field: *Player, label: []const u8, options: RefOptions) !Entity {
-        return try self.ObjectRefField(Player, .player, field, label, NameAccess(Player, false), options);
-    }
-
-    /// A game context field, the same way, taking a game context's row
-    pub fn GameContextRef(self: *Builder, field: *GameContext, label: []const u8, options: RefOptions) !Entity {
-        return try self.ObjectRefField(GameContext, .gamecontext, field, label, NameAccess(GameContext, false), options);
-    }
-
-    fn ObjectRefField(self: *Builder, comptime T: type, comptime kind: std.meta.Tag(ObjectRefComponent.Ref), field: *T, label: []const u8, access: *const Access, options: RefOptions) !Entity {
+    /// An object field (an entity, scene, player or game context): the object's name in a box that a row of its type
+    /// from its hierarchy panel can be dropped on, which becomes the field's object, with a right-click Clear. With
+    /// OverlayOnly a scene field turns down a game layer scene. With Writes off a drop writes nothing and there is no
+    /// Clear: whoever built the inspector takes the drop on the returned box, for an object that has to be set some
+    /// other way (a player possessing an entity)
+    pub fn Ref(self: *Builder, field: anytype, label: []const u8, options: RefOptions) !Entity {
+        const T = @typeInfo(@TypeOf(field)).pointer.child;
+        const kind: std.meta.Tag(ObjectRefComponent.Ref) = switch (T) {
+            Entity => .entity,
+            Scene => .scene_layer,
+            Player => .player,
+            GameContext => .gamecontext,
+            else => @compileError("Not a reference field type: " ++ @typeName(T)),
+        };
+        const access = if (T == Scene and options.OverlayOnly) NameAccess(Scene, true) else NameAccess(T, false);
         const shown_name = NameOf(field.*);
         const row = try self.Row(label);
         const box = try Widgets.DropBox(self.mEngineContext, .{ .Entity = row }, shown_name, DropTargetComponent.Objects(kind));
-        try self.Bind(box, field, access, options.OnChange, null, false);
-        if (options.Writes) {
-            UIManager.GetUIComponentMut(box, FieldBindingComponent).?.mWritesDrops = true;
-            try self.ClearMenu(box, field, access, .{ .Ref = null }, options.OnChange);
-        }
+        try self.Bind(box, field, access, .{ .OnChange = options.OnChange, .WritesDrops = options.Writes });
+        if (options.Writes) try self.ClearMenu(box, field, access, .{ .Ref = null }, options.OnChange);
         return box;
     }
 
@@ -374,8 +355,7 @@ pub const Builder = struct {
     fn ClearMenu(self: *Builder, widget: Entity, field: anytype, access: *const Access, cleared: Value, on_change: ?OnChange) !void {
         const menu = try Widgets.ContextMenu(self.mEngineContext, widget, self.mOptions);
         const item = try Widgets.MenuItem(self.mEngineContext, menu, "Clear", .{ .StockScripts = self.mOptions.StockScripts });
-        try self.Bind(item, field, access, on_change, null, false);
-        UIManager.GetUIComponentMut(item, FieldBindingComponent).?.mClear = cleared;
+        try self.Bind(item, field, access, .{ .OnChange = on_change, .Clear = cleared });
     }
 
     /// Buttons side by side, one for each of `texts`, in their own row with no label. They do nothing when clicked:
@@ -392,15 +372,13 @@ pub const Builder = struct {
         const shown_name = NameOf(field.*);
         const row = try self.Row(label);
         const shown = try Widgets.Label(self.mEngineContext, .{ .Entity = row }, shown_name);
-        try self.Bind(shown, field, NameAccess(Entity, false), null, null, false);
+        try self.Bind(shown, field, NameAccess(Entity, false), .{});
     }
 
     pub fn Bool(self: *Builder, field: *bool, label: []const u8, options: FieldOptions) !void {
         const row = try self.Row(label);
         const checkbox = try Widgets.Checkbox(self.mEngineContext, .{ .Entity = row }, "", self.mOptions);
-        //the box, which the toggle's ValueChanged is sent from
-        var parts = checkbox.GetIterator(.Child);
-        try self.Bind(parts.next().?, field, AccessFor(bool), options.OnChange, null, options.Rebuilds);
+        try self.Bind(Widgets.CheckboxBox(checkbox), field, AccessFor(bool), .{ .OnChange = options.OnChange, .Rebuilds = options.Rebuilds });
     }
 
     /// A dropdown of an enum's values, named as they are in the code
@@ -410,7 +388,7 @@ pub const Builder = struct {
         var choices: [names.len][]const u8 = undefined;
         inline for (names, 0..) |name, i| choices[i] = name;
         const dropdown = try Widgets.Dropdown(self.mEngineContext, .{ .Entity = row }, &choices, ChoiceOf(T, field.*), self.mOptions);
-        try self.Bind(dropdown, field, AccessFor(T), options.OnChange, null, options.Rebuilds);
+        try self.Bind(dropdown, field, AccessFor(T), .{ .OnChange = options.OnChange, .Rebuilds = options.Rebuilds });
     }
 
     pub fn Vec2Field(self: *Builder, field: *Vec2(f32), label: []const u8, options: NumberOptions) !void {
@@ -429,7 +407,7 @@ pub const Builder = struct {
     pub fn Color(self: *Builder, field: *Vec4(f32), label: []const u8, options: FieldOptions) !void {
         const row = try self.Row(label);
         const color_field = try Widgets.ColorField(self.mEngineContext, .{ .Entity = row }, field.*, self.mOptions);
-        try self.Bind(color_field, field, AccessFor(Vec4(f32)), options.OnChange, null, options.Rebuilds);
+        try self.Bind(color_field, field, AccessFor(Vec4(f32)), .{ .OnChange = options.OnChange, .Rebuilds = options.Rebuilds });
     }
 
     /// A line of text typed into, kept when Enter is pressed or the field is left
@@ -437,7 +415,7 @@ pub const Builder = struct {
         const row = try self.Row(label);
         const text_field = try Widgets.TextField(self.mEngineContext, .{ .Entity = row }, field.items);
         //the text, which TextSubmitted is sent from
-        try self.Bind(UIManager.LabelOf(text_field).?, field, AccessFor(std.ArrayList(u8)), options.OnChange, null, options.Rebuilds);
+        try self.Bind(UIManager.LabelOf(text_field).?, field, AccessFor(std.ArrayList(u8)), .{ .OnChange = options.OnChange, .Rebuilds = options.Rebuilds });
     }
 
     /// A struct inside the component: its own UIRender's rows, under a header with `label` that folds them away. A struct
@@ -475,47 +453,34 @@ pub const Builder = struct {
             else => @compileError("Not a number field type: " ++ @typeName(T)),
         };
         value.SetFromFloat(shown);
-        const number_field = try Widgets.NumberField(self.mEngineContext, .{ .Entity = row }, value, .{
-            .mSpeed = options.Speed,
-            .mMin = options.Min,
-            .mMax = options.Max,
-            .mDecimals = options.Decimals,
-        });
-        try self.Bind(number_field, field, AccessFor(T), options.OnChange, options.Convert, false);
+        const number_field = try Widgets.NumberField(self.mEngineContext, .{ .Entity = row }, value, options.Settings());
+        try self.Bind(number_field, field, AccessFor(T), .{ .OnChange = options.OnChange, .Convert = options.Convert });
     }
 
     fn Vector(self: *Builder, comptime count: usize, field: *[count]f32, label: []const u8, options: NumberOptions) !void {
         const row = try self.Row(label);
-        const number_row = try Widgets.NumberRow(self.mEngineContext, .{ .Entity = row }, field, .{
-            .mSpeed = options.Speed,
-            .mMin = options.Min,
-            .mMax = options.Max,
-            .mDecimals = options.Decimals,
-        });
+        const number_row = try Widgets.NumberRow(self.mEngineContext, .{ .Entity = row }, field, options.Settings());
         //a binding for each number, to its own float of the vector
         var index: usize = 0;
         var children = number_row.GetIterator(.Child);
         while (children.next()) |child| {
             if (!child.HasComponent(EntityComponents.AttribComponent)) continue;
-            try self.Bind(child, &field[index], AccessFor(f32), options.OnChange, options.Convert, false);
+            try self.Bind(child, &field[index], AccessFor(f32), .{ .OnChange = options.OnChange, .Convert = options.Convert });
             index += 1;
         }
     }
 
-    /// A row with the field's label, for the field's widget to go after
+    /// A row as wide as the inspector with the field's label, for the field's widget to go after
     fn Row(self: *Builder, label: []const u8) !Entity {
-        const engine_context = self.mEngineContext;
-        const row = try self.mParent.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
-        try row.SetTranslation(engine_context, Vec3(f32){ .x = 0, .y = 0, .z = Widgets.DEPTH_STEP });
-        _ = try row.AddComponent(engine_context, LayoutComponent{ .mDirection = .Row, .mGap = Widgets.PADDING, .mCrossAlign = .Center });
-        _ = try row.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
-        const shown_label = try Widgets.Label(engine_context, .{ .Entity = row }, label);
+        const row = try Widgets.Row(self.mEngineContext, .{ .Entity = self.mParent });
+        row.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fill = 1 };
+        const shown_label = try Widgets.Label(self.mEngineContext, .{ .Entity = row }, label);
         shown_label.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fixed = LABEL_WIDTH };
         return row;
     }
 
     /// Ties `widget` to `field`, which is inside the component this builds for
-    fn Bind(self: *Builder, widget: Entity, field: anytype, access: *const Access, on_change: ?OnChange, convert: ?Conversion, rebuilds: bool) !void {
+    fn Bind(self: *Builder, widget: Entity, field: anytype, access: *const Access, options: BindOptions) !void {
         const engine_context = self.mEngineContext;
         if (!widget.HasComponent(UIElementComponent)) _ = try widget.AddComponent(engine_context, UIElementComponent{});
         _ = try UIManager.ElementOf(widget).?.AddComponent(engine_context, FieldBindingComponent{
@@ -525,10 +490,13 @@ pub const Builder = struct {
             .mOffset = @intFromPtr(field) - self.mBase,
             .mAccess = access,
             .mAfterEdit = self.mAfterEdit,
-            .mOnChange = on_change,
-            .mConvert = convert,
+            .mOnChange = options.OnChange,
+            .mConvert = options.Convert,
             .mRoot = self.mRoot,
-            .mRebuilds = rebuilds,
+            .mRebuilds = options.Rebuilds,
+            .mWritesDrops = options.WritesDrops,
+            .mClear = options.Clear,
+            .mCopies = options.Copies,
         });
     }
 };
@@ -544,22 +512,17 @@ pub fn BuildComponent(engine_context: *EngineContext, parent: Entity, root: Enti
     if (!object.HasComponent(component_type)) return null;
 
     const section = try Widgets.CollapsingHeader(engine_context, .{ .Entity = parent }, component_type.Name, true, options);
-    try RenderComponent(engine_context, section.Content.?, root, object, component_type, options);
+    try RenderComponent(engine_context, section.Content.?, root, object, component_type, options, null);
     return section.Content.?;
 }
 
-/// The rows `object`'s component of type `component_type` asks for (its UIRender), under `parent`, with no header.
-/// UIRender is handed a copy of the component, which its field offsets are measured from: making widgets adds
-/// components to ECSs, and when that is the ECS the component is in (a UI element's own components are in the
+/// The rows `object`'s component of type `component_type` asks for (its UIRender), under `parent`, with no header,
+/// and after them `extras.After(component_type, builder, component, object)` for rows that need the object rather than
+/// only the component: `extras` is whoever built the inspector, or null.
+/// UIRender (and After) is handed a copy of the component, which its field offsets are measured from: making widgets
+/// adds components to ECSs, and when that is the ECS the component is in (a UI element's own components are in the
 /// UIManager's, like the widgets' styles) it can move in memory part way through. The bindings find the real one
-pub fn RenderComponent(engine_context: *EngineContext, parent: Entity, root: Entity, object: anytype, comptime component_type: type, options: Widgets.Options) !void {
-    try RenderComponentWith(engine_context, parent, root, object, component_type, options, null);
-}
-
-/// RenderComponent, and after the component's own rows (if it has a UIRender) `extras.After(component_type, builder,
-/// component, object)`, for rows that need the object rather than only the component: `extras` is whoever built the
-/// inspector, or null. The component it is handed is the copy the rows were built from
-pub fn RenderComponentWith(engine_context: *EngineContext, parent: Entity, root: Entity, object: anytype, comptime component_type: type, options: Widgets.Options, extras: anytype) !void {
+pub fn RenderComponent(engine_context: *EngineContext, parent: Entity, root: Entity, object: anytype, comptime component_type: type, options: Widgets.Options, extras: anytype) !void {
     const zone = Tracy.ZoneInit("Inspector::RenderComponent", @src());
     defer zone.Deinit();
     const component = object.GetComponent(component_type) orelse return;

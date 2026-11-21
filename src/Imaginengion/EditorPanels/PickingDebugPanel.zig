@@ -78,7 +78,7 @@ pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Opti
 
 fn NewSection(engine_context: *EngineContext, content: Entity, title: []const u8, options: Widgets.Options) !Section {
     const section = try Widgets.CollapsingHeader(engine_context, .{ .Entity = content }, title, false, options);
-    return .{ .Content = section.Content.?, .Lines = try Widgets.Lines(engine_context, .{ .Entity = section.Content.? }) };
+    return .{ .Content = section.Content.?, .Lines = try Widgets.Column(engine_context, .{ .Entity = section.Content.? }) };
 }
 
 pub fn IsOpen(self: PickingDebugPanel) bool {
@@ -87,11 +87,7 @@ pub fn IsOpen(self: PickingDebugPanel) bool {
 
 /// Opens the window in front of the others, or closes it
 pub fn Toggle(self: PickingDebugPanel, engine_context: *EngineContext) !void {
-    if (self.IsOpen()) {
-        try WidgetActions.CloseWindow(engine_context, self.mWindow);
-    } else {
-        try WidgetActions.OpenWindow(engine_context, self.mWindow);
-    }
+    try WidgetActions.ToggleWindow(engine_context, self.mWindow);
 }
 
 /// Once a frame, before layout, while it is open: each open section's lines
@@ -277,17 +273,13 @@ pub fn OnUIEvent(self: *PickingDebugPanel, event: EntityUIEvent) void {
     const entity = event.mEntity;
     const text = switch (event.mEvent) {
         //one per entity in the chain: only the target's own, so it isn't always its top parent's
-        .FocusGained => |e| if (Same(entity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' got the keyboard", .{EntityName(e.mTarget)}) else return,
-        .FocusLost => |e| if (Same(entity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' lost the keyboard", .{EntityName(e.mTarget)}) else return,
-        .TextChanged => |e| if (Same(entity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' text changed", .{EntityName(e.mTarget)}) else return,
-        .TextSubmitted => |e| if (Same(entity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' text submitted", .{EntityName(e.mTarget)}) else return,
-        .PopupOpened => |e| if (Same(entity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "popup '{s}' opened", .{EntityName(e.mTarget)}) else return,
-        .PopupClosed => |e| if (Same(entity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "popup '{s}' closed", .{EntityName(e.mTarget)}) else return,
-        .ValueChanged => |e| if (Same(entity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' value changed", .{EntityName(e.mTarget)}) else return,
+        .FocusGained => |e| if (entity.Eq(e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' got the keyboard", .{EntityName(e.mTarget)}) else return,
+        .FocusLost => |e| if (entity.Eq(e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' lost the keyboard", .{EntityName(e.mTarget)}) else return,
+        .TextChanged => |e| if (entity.Eq(e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' text changed", .{EntityName(e.mTarget)}) else return,
+        .TextSubmitted => |e| if (entity.Eq(e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' text submitted", .{EntityName(e.mTarget)}) else return,
+        .PopupOpened => |e| if (entity.Eq(e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "popup '{s}' opened", .{EntityName(e.mTarget)}) else return,
+        .PopupClosed => |e| if (entity.Eq(e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "popup '{s}' closed", .{EntityName(e.mTarget)}) else return,
+        .ValueChanged => |e| if (entity.Eq(e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' value changed", .{EntityName(e.mTarget)}) else return,
     } catch return;
     self.mLastEventLen = text.len;
-}
-
-fn Same(a: Entity, b: Entity) bool {
-    return a.mID == b.mID and a.mManager == b.mManager;
 }

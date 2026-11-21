@@ -208,10 +208,9 @@ pub fn IsOpen(self: ContentBrowserPanel) bool {
     return !self.mArea.GetComponent(LayoutItemComponent).?.mCollapsed;
 }
 
+/// Folds the panel away, or out again
 pub fn Toggle(self: ContentBrowserPanel, engine_context: *EngineContext) !void {
-    const item = self.mArea.GetComponentMut(LayoutItemComponent).?;
-    item.mCollapsed = !item.mCollapsed;
-    try self.mArea.MarkLayoutDirty(engine_context);
+    try WidgetActions.Fold(engine_context, self.mArea, .uninit);
 }
 
 /// Shows `root`'s files, from its top: the project just opened or made
@@ -263,7 +262,7 @@ pub fn Update(self: *ContentBrowserPanel, engine_context: *EngineContext) !void 
 
     if (self.mPath.items.len == 0) {
         if (self.mGrid != null) try self.Rebuild(engine_context, &.{});
-        return try ShowLine(engine_context, self.mMessage, "Open a project to see its files");
+        return try WidgetActions.ShowLine(engine_context, self.mMessage, "Open a project to see its files");
     }
     self.mSinceListed += engine_context.mDT;
     if (self.mSinceListed < REFRESH_SECONDS and self.mGrid != null) return;
@@ -274,7 +273,7 @@ pub fn Update(self: *ContentBrowserPanel, engine_context: *EngineContext) !void 
         std.log.warn("The content browser can't show {s} ({s})", .{ self.mPath.items, @errorName(err) });
         return try self.GoToRoot(engine_context.ProgramKeep());
     };
-    try ShowLine(engine_context, self.mMessage, "");
+    try WidgetActions.ShowLine(engine_context, self.mMessage, "");
 
     if (self.IsBuiltFrom(listing)) return;
     try self.Rebuild(engine_context, listing);
@@ -295,14 +294,14 @@ fn IsBuiltFrom(self: ContentBrowserPanel, listing: []const Listed) bool {
 /// What a click on `entity` does: a double click on a folder, Back, or an object file, or New Scene Layer, a New
 /// Script item or New Enum from the pane's menu. Null for anything else
 pub fn ActionOf(self: *const ContentBrowserPanel, entity: Entity, clicks: u8) ?Action {
-    if (Same(entity, self.mNewScene)) return .NewScene;
+    if (entity.Eq(self.mNewScene)) return .NewScene;
     for (self.mNewScripts, 0..) |item, i| {
-        if (Same(entity, item)) return .{ .NewScript = i };
+        if (entity.Eq(item)) return .{ .NewScript = i };
     }
-    if (Same(entity, self.mNewEnum)) return .NewEnum;
+    if (entity.Eq(self.mNewEnum)) return .NewEnum;
     if (clicks != 2) return null;
     for (self.mTiles.items, 0..) |tile, i| {
-        if (!Same(tile.Entity, entity)) continue;
+        if (!tile.Entity.Eq(entity)) continue;
         return switch (tile.Kind) {
             .Back => .Up,
             .Folder => .{ .Enter = i },
@@ -481,18 +480,4 @@ fn ShortName(scratch_allocator: std.mem.Allocator, name: []const u8) ![]const u8
     var kept: usize = 0;
     for (0..MAX_NAME_LEN - 3 - ending.len) |_| kept += (view.nextCodepointSlice() orelse break).len;
     return try std.fmt.allocPrint(scratch_allocator, "{s}...{s}", .{ name[0..kept], ending });
-}
-
-fn Same(a: Entity, b: Entity) bool {
-    return a.mID == b.mID and a.mManager == b.mManager;
-}
-
-/// Puts `text` on a line, folded away while it says nothing
-fn ShowLine(engine_context: *EngineContext, line: Entity, text: []const u8) !void {
-    try WidgetActions.SetText(engine_context, line, text);
-    const item = line.GetComponentMut(LayoutItemComponent).?;
-    const hidden = text.len == 0;
-    if (item.mCollapsed == hidden) return;
-    item.mCollapsed = hidden;
-    try line.MarkLayoutDirty(engine_context);
 }

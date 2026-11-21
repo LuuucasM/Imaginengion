@@ -137,6 +137,28 @@ pub const SelectedObject = union(enum) {
     player: Player,
     gamecontext: GameContext,
 
+    /// Whether both are the same object of the same world
+    pub fn Eq(self: SelectedObject, other: SelectedObject) bool {
+        if (std.meta.activeTag(self) != std.meta.activeTag(other)) return false;
+        return switch (self) {
+            inline else => |object, tag| object.Eq(@field(other, @tagName(tag))),
+        };
+    }
+
+    pub fn IsActive(self: SelectedObject) bool {
+        return switch (self) {
+            inline else => |object| object.IsActive(),
+        };
+    }
+
+    /// Its name, up to the first 0 if it was saved with one
+    pub fn Name(self: SelectedObject) []const u8 {
+        const name = switch (self) {
+            inline else => |object| object.GetName(),
+        };
+        return name[0 .. std.mem.indexOfScalar(u8, name, 0) orelse name.len];
+    }
+
     pub fn Kind(self: SelectedObject) Serializer.ObjectKind {
         return switch (self) {
             .entity => .Entity,

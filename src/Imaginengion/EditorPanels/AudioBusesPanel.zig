@@ -76,11 +76,7 @@ pub fn IsOpen(self: AudioBusesPanel) bool {
 
 /// Opens the window in front of the others, or closes it
 pub fn Toggle(self: AudioBusesPanel, engine_context: *EngineContext) !void {
-    if (self.IsOpen()) {
-        try WidgetActions.CloseWindow(engine_context, self.mWindow);
-    } else {
-        try WidgetActions.OpenWindow(engine_context, self.mWindow);
-    }
+    try WidgetActions.ToggleWindow(engine_context, self.mWindow);
 }
 
 /// Once a frame, before layout, while it is open: the tree built again if the buses have changed, and each bus's node
@@ -172,7 +168,7 @@ fn BuildBus(self: *AudioBusesPanel, engine_context: *EngineContext, bus: Bus, pa
 
 /// The rows of one of the bus's components. A bus read from a hand edited file may be missing any of them
 fn Rows(self: AudioBusesPanel, engine_context: *EngineContext, bus: Bus, content: Entity, comptime component_type: type) !void {
-    try Inspector.RenderComponent(engine_context, content, content, bus, component_type, self.mOptions);
+    try Inspector.RenderComponent(engine_context, content, content, bus, component_type, self.mOptions, null);
 }
 
 fn NameOf(bus: Bus) []const u8 {

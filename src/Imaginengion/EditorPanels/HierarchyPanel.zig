@@ -268,15 +268,15 @@ pub fn HierarchyPanel(comptime T: type) type {
         /// anything else
         pub fn ActionOf(self: *const Self, entity: Entity, target: Entity) ?Action {
             for (self.mRows.items) |row| {
-                if (!Same(row.Header, entity)) continue;
+                if (!row.Header.Eq(entity)) continue;
                 if (row.Stripe) |stripe| {
-                    if (Same(stripe.Bar, target)) return .{ .SelectScene = stripe.Scene };
+                    if (stripe.Bar.Eq(target)) return .{ .SelectScene = stripe.Scene };
                 }
                 return .{ .Select = row.Object };
             }
             for ([_][]const MenuItem{ self.mRowItems.items, self.mAreaItems.items }) |items| {
                 for (items) |item| {
-                    if (Same(item.Item, entity)) return item.Action;
+                    if (item.Item.Eq(entity)) return item.Action;
                 }
             }
             return null;
@@ -286,7 +286,7 @@ pub fn HierarchyPanel(comptime T: type) type {
         /// out for what can't be done to it (Make Template with no project open, or for a copy of a template)
         pub fn OnRightClick(self: *Self, engine_context: *EngineContext, entity: Entity) !void {
             for (self.mRows.items) |row| {
-                if (!Same(row.Header, entity)) continue;
+                if (!row.Header.Eq(entity)) continue;
                 self.mMenuObject = row.Object;
                 const can_make_template = engine_context.mProject.IsOpen() and !row.Object.HasComponent(TmplRefComponent);
                 //a template's own root can't go, or have a copy next to it: the template is it
@@ -347,7 +347,7 @@ pub fn HierarchyPanel(comptime T: type) type {
         /// A drop on the panel: an object file of its type loaded into `world`, as Open Scene does. An entity goes into
         /// the selected scene, as New Entity does. The selection stays as it was, so more can be dropped into that scene
         pub fn OnDrop(self: *const Self, engine_context: *EngineContext, on: Entity, dropped: PointerDroppedEvent, world: *WorldManager, selected: ?SelectedObject) !void {
-            if (!Same(on, self.mArea)) return;
+            if (!on.Eq(self.mArea)) return;
             const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
             const rel_path = file_ref.mRelPath.items;
             switch (T) {
@@ -494,8 +494,8 @@ pub fn HierarchyPanel(comptime T: type) type {
                 const is_target = if (target) |object| object.mID == row.Object.mID else false;
                 if (is_target) {
                     try WidgetActions.Select(engine_context, row.Header);
-                } else if (row.Header.HasComponent(SelectedTag)) {
-                    try row.Header.RemoveComponentSync(engine_context, SelectedTag);
+                } else {
+                    try row.Header.SetTag(engine_context, SelectedTag, false);
                 }
             }
         }
@@ -574,8 +574,4 @@ fn SceneColor(scene: Scene) MathTypes.Vec4(f32) {
     };
     const low = value - chroma;
     return .{ .x = rgb[0] + low, .y = rgb[1] + low, .z = rgb[2] + low, .w = 1 };
-}
-
-fn Same(a: Entity, b: Entity) bool {
-    return a.mID == b.mID and a.mManager == b.mManager;
 }

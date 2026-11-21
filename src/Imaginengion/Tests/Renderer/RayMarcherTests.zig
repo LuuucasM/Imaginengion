@@ -354,40 +354,144 @@ fn CountWork(scene: TestScene, ray: Ray) !SDFRayMarcher.Counters {
 /// TraceSearch, with the work counted. Set up the way Renderer2D and SDFComputeGame's main set up a pixel's ray: the
 /// tree built over the direct shapes and them put in its order, then the first node and edge
 fn TraceCounted(scene: TestScene, ray: Ray, direct_count: usize, comptime search: SDFRayMarcher.DirectSearch, comptime features: SDFRayMarcher.Features) !Traced {
-    std.debug.assert(scene.Shadings.len > 0);
-    std.debug.assert(scene.Shapes.len <= MAX_TEST_SHAPES and direct_count <= scene.Shapes.len);
+    var built = BuiltScene{ .Scene = scene, .DirectCount = direct_count };
+    try built.Build();
+    defer built.Deinit();
 
-    var shapes: [MAX_TEST_SHAPES]ShapeData = undefined;
-    var surfaces: [MAX_TEST_SHAPES]ShapeSurface = undefined;
-    //surfaces are in draw order, the shapes wherever the scene put them, the way Renderer2D uploads them once sorted
-    for (scene.Shapes, 0..) |test_shape, i| {
-        const draw_order: u32 = test_shape.DrawOrder orelse @intCast(i);
-        shapes[i] = test_shape.Shape;
-        shapes[i].SurfaceIndex = draw_order;
-        surfaces[draw_order] = test_shape.Surface;
+    var marcher = built.Marcher(search, features);
+    return .{ .Color = marcher.Trace(ray, FakeSample, &TEXTURES), .Counters = marcher.mCounters };
+}
+
+/// A scene's buffers as Renderer2D uploads them, for marchers to read: the shapes and their surfaces, and the tree over
+/// the first DirectCount shapes. Kept in one place while marchers are made from it, since they point into it
+const BuiltScene = struct {
+    Scene: TestScene,
+    DirectCount: usize,
+    Shapes: [MAX_TEST_SHAPES]ShapeData = undefined,
+    Surfaces: [MAX_TEST_SHAPES]ShapeSurface = undefined,
+    Nodes: std.ArrayList(BVH.Node) = .empty,
+
+    fn Build(self: *BuiltScene) !void {
+        const scene = self.Scene;
+        std.debug.assert(scene.Shadings.len > 0);
+        std.debug.assert(scene.Shapes.len <= MAX_TEST_SHAPES and self.DirectCount <= scene.Shapes.len);
+
+        //surfaces are in draw order, the shapes wherever the scene put them, the way Renderer2D uploads them once sorted
+        for (scene.Shapes, 0..) |test_shape, i| {
+            const draw_order: u32 = test_shape.DrawOrder orelse @intCast(i);
+            self.Shapes[i] = test_shape.Shape;
+            self.Shapes[i].SurfaceIndex = draw_order;
+            self.Surfaces[draw_order] = test_shape.Surface;
+        }
+        try BuildForBVH(self.Shapes[0..self.DirectCount], &self.Nodes);
     }
 
-    var bvh_nodes: std.ArrayList(BVH.Node) = .empty;
-    defer bvh_nodes.deinit(std.testing.allocator);
-    try BuildForBVH(shapes[0..direct_count], &bvh_nodes);
+    fn Deinit(self: *BuiltScene) void {
+        self.Nodes.deinit(std.testing.allocator);
+    }
 
-    const Marcher = TestMarcher(search, features);
-    var marcher = Marcher{
-        .mDefaultColor = scene.Background,
-        .mShapes = &shapes,
-        .mShapeSurfaces = &surfaces,
-        .mShapesCount = scene.Shapes.len,
-        .mDirectCount = direct_count,
-        .mBVHNodes = bvh_nodes.items.ptr,
-        .mMasks = &scene.Programs.Masks,
-        .mInstrs = &scene.Programs.Instrs,
-        .mParts = &scene.Programs.Parts,
-        .mSurfShading = scene.Shadings.ptr,
-        .mMedShading = scene.Mediums.ptr,
-        .mPerspectiveFar = FAR,
-    };
+    /// A marcher over the scene, set up the way SDFComputeGame's main sets one up for a pixel
+    fn Marcher(self: *const BuiltScene, comptime search: SDFRayMarcher.DirectSearch, comptime features: SDFRayMarcher.Features) TestMarcher(search, features) {
+        return .{
+            .mDefaultColor = self.Scene.Background,
+            .mShapes = &self.Shapes,
+            .mShapeSurfaces = &self.Surfaces,
+            .mShapesCount = self.Scene.Shapes.len,
+            .mDirectCount = self.DirectCount,
+            .mBVHNodes = self.Nodes.items.ptr,
+            .mMasks = &self.Scene.Programs.Masks,
+            .mInstrs = &self.Scene.Programs.Instrs,
+            .mParts = &self.Scene.Programs.Parts,
+            .mSurfShading = self.Scene.Shadings.ptr,
+            .mMedShading = self.Scene.Mediums.ptr,
+            .mPerspectiveFar = FAR,
+        };
+    }
+};
 
-    return .{ .Color = marcher.Trace(ray, FakeSample, &TEXTURES), .Counters = marcher.mCounters };
+const MAX_TEST_RAYS = 16;
+
+/// The colors `rays` come out with when traced the way a pass split into kernels traces them, every shape direct.
+/// A: each ray's first surface found and colored, the ray then done or queued. Then round by round, B: every queued
+/// ray's next surface found, all of them before any is colored, a ray that finds none done there. C: each found
+/// surface colored, the ray then done or queued for the next round. Every kernel's every ray gets a marcher of its
+/// own, so nothing crosses from one kernel to the next but the RayState
+fn TraceInKernels(scene: TestScene, rays: []const Ray, colors: []Vec4(f32)) !void {
+    std.debug.assert(rays.len <= MAX_TEST_RAYS and colors.len == rays.len);
+    var built = BuiltScene{ .Scene = scene, .DirectCount = scene.Shapes.len };
+    try built.Build();
+    defer built.Deinit();
+
+    const Queued = struct { Pixel: usize, State: SDFRayMarcher.RayState };
+    const Found = struct { Queued: usize, Surface: SDFRayMarcher.SurfaceHit };
+    var queue: [MAX_TEST_RAYS]Queued = undefined;
+    var queued: usize = 0;
+
+    //A
+    for (rays, 0..) |ray, pixel| {
+        var marcher = built.Marcher(.BVH, .full);
+        var state = SDFRayMarcher.RayState.Begin(ray);
+        const surface = marcher.FindSurface(state, FakeSample, &TEXTURES);
+        if (!surface.Found) {
+            marcher.AddMiss(&state);
+            colors[pixel] = marcher.Finish(state);
+        } else if (marcher.ColorSurface(&state, surface, FakeSample, &TEXTURES)) {
+            queue[queued] = .{ .Pixel = pixel, .State = state };
+            queued += 1;
+        } else {
+            colors[pixel] = marcher.Finish(state);
+        }
+    }
+
+    var rounds: u32 = 0;
+    while (queued > 0) {
+        //each round takes a ray one segment further, so none can go round more than MAX_SEGMENTS - 1 times
+        rounds += 1;
+        try std.testing.expect(rounds < SDFRayMarcher.MAX_SEGMENTS);
+
+        //B
+        var found: [MAX_TEST_RAYS]Found = undefined;
+        var found_count: usize = 0;
+        for (queue[0..queued], 0..) |*entry, i| {
+            var marcher = built.Marcher(.BVH, .full);
+            const surface = marcher.FindSurface(entry.State, FakeSample, &TEXTURES);
+            if (surface.Found) {
+                found[found_count] = .{ .Queued = i, .Surface = surface };
+                found_count += 1;
+            } else {
+                marcher.AddMiss(&entry.State);
+                colors[entry.Pixel] = marcher.Finish(entry.State);
+            }
+        }
+
+        //C, into the next round's queue
+        var next: [MAX_TEST_RAYS]Queued = undefined;
+        var next_count: usize = 0;
+        for (found[0..found_count]) |hit| {
+            var marcher = built.Marcher(.BVH, .full);
+            var entry = queue[hit.Queued];
+            if (marcher.ColorSurface(&entry.State, hit.Surface, FakeSample, &TEXTURES)) {
+                next[next_count] = entry;
+                next_count += 1;
+            } else {
+                colors[entry.Pixel] = marcher.Finish(entry.State);
+            }
+        }
+        queue = next;
+        queued = next_count;
+    }
+}
+
+/// TraceInKernels has to give every ray the color Trace gives it
+fn ExpectKernelsMatchTrace(scene: TestScene, rays: []const Ray) !void {
+    var colors: [MAX_TEST_RAYS]Vec4(f32) = undefined;
+    try TraceInKernels(scene, rays, colors[0..rays.len]);
+    for (rays, colors[0..rays.len]) |ray, color| {
+        ExpectColor(try Trace(scene, ray), color) catch |err| {
+            std.debug.print("split into kernels and traced in one go disagree for the ray {any}\n", .{ray});
+            return err;
+        };
+    }
 }
 
 /// Straight down -z from in front of everything, at (x, y)
@@ -1509,6 +1613,62 @@ test "past MAX_SEGMENTS see-through layers, what is behind the last one is the b
     const ray = Ray{ .Origin = .{ .x = 0, .y = 0, .z = 20 }, .Dir = .{ .x = 0, .y = 0, .z = -1 } };
     try ExpectColor(StackColor(colors[0..SDFRayMarcher.MAX_SEGMENTS], DEFAULT_COLOR), try Trace(scene, ray));
     try std.testing.expectEqual(SDFRayMarcher.MAX_SEGMENTS, (try CountWork(scene, ray)).Segments);
+}
+
+test "split into kernels, rays that end after different numbers of segments each come out as Trace gives them" {
+    //a stack of three see-through quads over blue, a see-through sphere over blue to its right, a solid quad to its
+    //left, and nothing further out: rays that end in one, two, three and four segments, or on a miss, all in one go
+    const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
+    var shapes: [7]TestShape = undefined;
+    var shadings: [7]SurfShadingData = undefined;
+    var colors: [3]Vec4(f32) = undefined;
+    SeeThroughStack(3, shapes[0..4], shadings[0..4], &colors);
+    shadings[4] = ColorShading(half_red);
+    shadings[5] = ColorShading(RED);
+    shapes[4] = MakeSphere(.{ .x = 4, .y = 0, .z = 1 }, 1, 4, TRANSPARENT);
+    shapes[5] = MakeQuad(.{ .x = 4, .y = 0, .z = -1 }, IDENTITY, .{ .x = 2, .y = 2 }, 3, 0, NO_MASK);
+    shapes[6] = MakeQuad(.{ .x = -4, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 5, 0, NO_MASK);
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
+    try ExpectKernelsMatchTrace(scene, &.{ RayAt(0, 0), RayAt(0.5, -0.5), RayAt(4, 0), RayAt(4.3, 0.2), RayAt(5.5, 0), RayAt(-4, 0), RayAt(10, 10) });
+}
+
+test "split into kernels, air and a see-through background come out as Trace gives them" {
+    const air = MedShadingData{ .Color = .{ 0, 0, 0, 0 }, .Absorption = .{ 0.3, 0.1, 0.05 }, .Scattering = .{ 0.05, 0.1, 0.2 } };
+    var shapes: [4]TestShape = undefined;
+    var shadings: [4]SurfShadingData = undefined;
+    var colors: [3]Vec4(f32) = undefined;
+    SeeThroughStack(3, &shapes, &shadings, &colors);
+    const backgrounds = [_]Vec4(f32){ DEFAULT_COLOR, .{ .x = 0, .y = 0, .z = 0, .w = 0 }, .{ .x = 0.2, .y = 0.4, .z = 0.6, .w = 0.5 } };
+    for (backgrounds) |background| {
+        //ending on the solid blue quad, and with it left out, ending out in the air
+        try ExpectKernelsMatchTrace(.{ .Shapes = &shapes, .Shadings = &shadings, .Mediums = &.{air}, .Background = background }, &.{ RayAt(0, 0), RayAt(5, 5) });
+        try ExpectKernelsMatchTrace(.{ .Shapes = shapes[0..3], .Shadings = &shadings, .Mediums = &.{air}, .Background = background }, &.{ RayAt(0, 0), RayAt(5, 5) });
+    }
+}
+
+test "split into kernels, a ray stops at MAX_SEGMENTS as Trace's does" {
+    var shapes: [11]TestShape = undefined;
+    var shadings: [11]SurfShadingData = undefined;
+    var colors: [10]Vec4(f32) = undefined;
+    SeeThroughStack(10, &shapes, &shadings, &colors);
+    const deep = Ray{ .Origin = .{ .x = 0, .y = 0, .z = 20 }, .Dir = .{ .x = 0, .y = 0, .z = -1 } };
+    try ExpectKernelsMatchTrace(.{ .Shapes = &shapes, .Shadings = &shadings }, &.{ deep, RayAt(5, 5) });
+}
+
+test "split into kernels, a ray in and out of see-through solids, or starting inside one, comes out as Trace gives it" {
+    const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
+    const half_green = Vec4(f32){ .x = 0, .y = 1, .z = 0, .w = 0.5 };
+    const shadings = [_]SurfShadingData{ ColorShading(half_red), ColorShading(half_green), ColorShading(BLUE) };
+    const turned = Quat(f32).FromAxisAngle(.{ .x = 0, .y = 1, .z = 0 }, 0.5).MulQuat(Quat(f32).FromAxisAngle(.{ .x = 1, .y = 0, .z = 0 }, 0.35));
+    const shapes = [_]TestShape{
+        MakeBox(.{ .x = 0, .y = 0, .z = 0 }, turned, .{ .x = 1, .y = 1, .z = 1 }, 0, TRANSPARENT),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 0.5, .y = 0.5 }, 1, TRANSPARENT, NO_MASK),
+        MakeSphere(.{ .x = 4, .y = 0, .z = 0 }, 1, 0, TRANSPARENT),
+        MakeQuad(.{ .x = 2, .y = 0, .z = -3 }, IDENTITY, .{ .x = 4, .y = 2 }, 2, 0, NO_MASK),
+    };
+    const from_inside_box = Ray{ .Origin = .{ .x = 0, .y = 0, .z = 0.5 }, .Dir = .{ .x = 0, .y = 0, .z = -1 } };
+    const from_inside_sphere = Ray{ .Origin = .{ .x = 4, .y = 0, .z = 0.5 }, .Dir = .{ .x = 0, .y = 0, .z = -1 } };
+    try ExpectKernelsMatchTrace(.{ .Shapes = &shapes, .Shadings = &shadings }, &.{ RayAt(0, 0), RayAt(0.2, -0.1), RayAt(4.3, 0.2), from_inside_box, from_inside_sphere });
 }
 
 test "a see-through quad whose color turns out solid still hides what is behind it" {

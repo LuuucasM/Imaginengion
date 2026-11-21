@@ -5,6 +5,7 @@
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 const UIManager = @import("UIManager.zig");
 const PopupSystem = @import("PopupSystem.zig");
 
@@ -24,11 +25,8 @@ const FloatingWindowComponent = UIComponents.FloatingWindowComponent;
 const LayoutComponent = EntityComponents.LayoutComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
-const UIElement = @import("../ECSObjects/UIElement.zig");
 const Vec3 = @import("../Math/MathTypes.zig").Vec3;
 const NumberFieldSystem = @import("NumberFieldSystem.zig");
-const ECSComponents = @import("../ECS/Components.zig");
-const EntityChildComponent = ECSComponents.ChildComponent(Entity.Type);
 
 //a widget's value goes in an AttribComponent, set through NumberFieldSystem.SetValue so it keeps a number field's limits
 //and sends ValueChanged
@@ -38,12 +36,8 @@ pub const SetValue = NumberFieldSystem.SetValue;
 /// Widgets.AddCheckMark) only while it is checked. uninit for no mark. ValueChanged goes to it and its parents
 pub fn Toggle(engine_context: *EngineContext, entity: Entity, mark: Entity) !void {
     const checked = !entity.HasComponent(SelectedTag);
-    if (checked) {
-        _ = try entity.AddComponent(engine_context, SelectedTag{});
-    } else {
-        //at once, so it is drawn unchecked this frame
-        try entity.RemoveComponentSync(engine_context, SelectedTag);
-    }
+    //taken off at once, so it is drawn unchecked this frame
+    try entity.SetTag(engine_context, SelectedTag, checked);
     if (mark.IsActive()) {
         if (mark.GetComponentMut(LayoutItemComponent)) |item| {
             item.mCollapsed = !checked;
@@ -91,7 +85,7 @@ pub fn Chosen(dropdown: Entity) ?Entity {
 /// Where a dropdown's choice is among its rows, 0 for the first. Null if nothing is chosen
 pub fn ChosenIndex(dropdown: Entity) ?usize {
     const row = Chosen(dropdown) orelse return null;
-    const parent = Parent(row) orelse return null;
+    const parent = row.GetParent() orelse return null;
     var index: usize = 0;
     var siblings = parent.GetIterator(.Child);
     while (siblings.next()) |sibling| : (index += 1) {
@@ -133,9 +127,7 @@ pub fn ShowColor(color_field: Entity, color: Vec4(f32)) void {
 /// Puts a row's text on a dropdown's button, the way a choice shows: both through their label (UIManager.LabelOf)
 pub fn ShowChoice(engine_context: *EngineContext, dropdown: Entity, row: Entity) !void {
     const from = UIManager.LabelOf(row) orelse return;
-    const to = UIManager.LabelOf(dropdown) orelse return;
-    try to.GetComponentMut(TextComponent).?.SetText(to.KeepFor(TextComponent), from.GetComponent(TextComponent).?.mText.items);
-    try to.MarkLayoutDirty(engine_context);
+    try SetText(engine_context, dropdown, from.GetComponent(TextComponent).?.mText.items);
 }
 
 /// Opens the popup the entity's PopupRefComponent names against the entity, or closes it if it is open: a dropdown's
@@ -202,15 +194,15 @@ pub fn HoverMenuBarButton(engine_context: *EngineContext, button: Entity) !void 
     const popup = PopupOf(button) orelse return;
     const popups = &engine_context.mUIManager.mPopupSystem;
     if (popups.IsOpen(popup)) return;
-    const bar = Parent(button) orelse return;
+    const bar = button.GetParent() orelse return;
     for (popups.OpenPopups()) |open| {
         const opener = switch (open.mAt) {
             .Opener => |opener| opener,
             .Point => continue,
         };
         if (!opener.IsActive() or opener.mID == button.mID) continue;
-        const opener_bar = Parent(opener) orelse continue;
-        if (opener_bar.mID == bar.mID and opener_bar.mManager == bar.mManager) {
+        const opener_bar = opener.GetParent() orelse continue;
+        if (opener_bar.Eq(bar)) {
             try popups.Open(engine_context, popup, .{ .Opener = button });
             return;
         }
@@ -227,26 +219,26 @@ pub fn SetText(engine_context: *EngineContext, entity: Entity, text: []const u8)
     try label.MarkLayoutDirty(engine_context);
 }
 
+/// Puts `text` on a line (SetText), folded away while it says nothing: a panel's message that is only sometimes there
+pub fn ShowLine(engine_context: *EngineContext, line: Entity, text: []const u8) !void {
+    try SetText(engine_context, line, text);
+    const item = line.GetComponentMut(LayoutItemComponent).?;
+    const hidden = text.len == 0;
+    if (item.mCollapsed == hidden) return;
+    item.mCollapsed = hidden;
+    try line.MarkLayoutDirty(engine_context);
+}
+
 /// Greys an entity out (DisabledTag), or makes it usable again: a menu item that can't be used right now
 pub fn SetDisabled(engine_context: *EngineContext, entity: Entity, disabled: bool) !void {
-    if (disabled == entity.HasComponent(EntityComponents.DisabledTag)) return;
-    if (disabled) {
-        _ = try entity.AddComponent(engine_context, EntityComponents.DisabledTag{});
-    } else {
-        try entity.RemoveComponentSync(engine_context, EntityComponents.DisabledTag);
-    }
+    try entity.SetTag(engine_context, EntityComponents.DisabledTag, disabled);
 }
 
 /// Checks or unchecks a checkable menu item: SelectedTag on its check box, its last child if that is a quad (see
 /// Widgets.MenuItem). Nothing happens for an item with no check box
 pub fn SetChecked(engine_context: *EngineContext, item: Entity, checked: bool) !void {
     const check = CheckOf(item) orelse return;
-    if (checked == check.HasComponent(SelectedTag)) return;
-    if (checked) {
-        _ = try check.AddComponent(engine_context, SelectedTag{});
-    } else {
-        try check.RemoveComponentSync(engine_context, SelectedTag);
-    }
+    try check.SetTag(engine_context, SelectedTag, checked);
 }
 
 /// Whether a checkable menu item is checked. False for an item with no check box
@@ -308,10 +300,10 @@ pub fn UpdateSwatch(color_field: Entity) void {
 /// SelectedTag on the entity and off every sibling that had it. Returns whether that changed anything
 fn SelectAmongSiblings(engine_context: *EngineContext, entity: Entity) !bool {
     if (entity.HasComponent(SelectedTag)) return false;
-    if (Parent(entity)) |parent| {
+    if (entity.GetParent()) |parent| {
         var siblings = parent.GetIterator(.Child);
         while (siblings.next()) |sibling| {
-            if (sibling.mID != entity.mID and sibling.HasComponent(SelectedTag)) try sibling.RemoveComponentSync(engine_context, SelectedTag);
+            if (sibling.mID != entity.mID) try sibling.SetTag(engine_context, SelectedTag, false);
         }
     }
     _ = try entity.AddComponent(engine_context, SelectedTag{});
@@ -325,7 +317,7 @@ pub const MIN_PANE_SIZE: f32 = 40;
 /// size along the split grows or shrinks by that much, and the other pane takes the rest. Neither pane goes below
 /// MIN_PANE_SIZE, as far as their last laid out sizes tell
 pub fn DragDivider(engine_context: *EngineContext, divider: Entity, delta: Vec3(f32)) !void {
-    const split = Parent(divider) orelse return;
+    const split = divider.GetParent() orelse return;
     const direction = (split.GetComponent(LayoutComponent) orelse return).mDirection;
     var panes = split.GetIterator(.Child);
     const first = panes.next() orelse return;
@@ -359,7 +351,7 @@ pub fn DragDivider(engine_context: *EngineContext, divider: Entity, delta: Vec3(
 /// goes to the tab and everything it is inside, unless it was already the one shown
 pub fn SelectTab(engine_context: *EngineContext, tab: Entity, page: Entity) !void {
     if (page.IsActive()) {
-        if (Parent(page)) |pages| {
+        if (page.GetParent()) |pages| {
             var children = pages.GetIterator(.Child);
             while (children.next()) |other| {
                 const item = other.GetComponentMut(LayoutItemComponent) orelse continue;
@@ -385,11 +377,11 @@ pub fn RaiseWindow(engine_context: *EngineContext, window: Entity) !void {
 
     //the scene's other windows, back to front
     var others: std.ArrayList(Entity) = .empty;
-    const ui_manager = &engine_context.mUIManager;
-    const element_ids = try ui_manager.GetGroup(engine_context.Scratch(), .{ .Component = FloatingWindowComponent });
-    for (element_ids.items) |element_id| {
-        const other = (UIElement{ .mID = element_id, .mManager = ui_manager }).GetOwner();
-        if (!other.IsIDValid() or !other.IsActive() or other.mManager != window.mManager or other.mID == window.mID) continue;
+    const worlds = [_]*WorldManager{window.mManager};
+    var windows = try engine_context.mUIManager.Elements(engine_context.Scratch(), FloatingWindowComponent, &worlds);
+    while (windows.Next()) |owned| {
+        const other = owned.Owner;
+        if (other.Eq(window)) continue;
         if (other.GetComponent(EntitySceneComponent).?.mScene.mID != scene.mID) continue;
         try others.append(engine_context.Scratch(), other);
     }
@@ -431,6 +423,15 @@ pub fn OpenWindow(engine_context: *EngineContext, window: Entity) !void {
         try window.MarkLayoutDirty(engine_context);
     }
     try RaiseWindow(engine_context, window);
+}
+
+/// Opens a floating window in front of the others, or closes it
+pub fn ToggleWindow(engine_context: *EngineContext, window: Entity) !void {
+    if (IsWindowOpen(window)) {
+        try CloseWindow(engine_context, window);
+    } else {
+        try OpenWindow(engine_context, window);
+    }
 }
 
 /// Whether a floating window is shown
@@ -478,10 +479,10 @@ fn CheckOf(item: Entity) ?Entity {
 
 /// The nearest entity above `entity` whose UI element has a SelectionGroupComponent
 fn GroupOf(entity: Entity) ?Entity {
-    var current = Parent(entity) orelse return null;
+    var current = entity.GetParent() orelse return null;
     while (true) {
         if (UIManager.HasUIComponent(current, SelectionGroupComponent)) return current;
-        current = Parent(current) orelse return null;
+        current = current.GetParent() orelse return null;
     }
 }
 
@@ -489,7 +490,7 @@ fn GroupOf(entity: Entity) ?Entity {
 fn UnselectTree(engine_context: *EngineContext, root: Entity) !void {
     var children = root.GetIterator(.Child);
     while (children.next()) |child| {
-        if (child.HasComponent(SelectedTag)) try child.RemoveComponentSync(engine_context, SelectedTag);
+        try child.SetTag(engine_context, SelectedTag, false);
         try UnselectTree(engine_context, child);
     }
 }
@@ -499,7 +500,7 @@ fn PopupContaining(entity: Entity) ?Entity {
     var current = entity;
     while (true) {
         if (UIManager.HasUIComponent(current, PopupComponent)) return current;
-        current = Parent(current) orelse return null;
+        current = current.GetParent() orelse return null;
     }
 }
 
@@ -511,10 +512,5 @@ fn FirstSelected(root: Entity) ?Entity {
         if (FirstSelected(child)) |found| return found;
     }
     return null;
-}
-
-fn Parent(entity: Entity) ?Entity {
-    const child_component = entity.GetComponent(EntityChildComponent) orelse return null;
-    return Entity{ .mID = child_component.mParent, .mManager = entity.mManager };
 }
 

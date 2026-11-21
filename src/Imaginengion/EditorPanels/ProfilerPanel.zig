@@ -218,11 +218,7 @@ pub fn IsOpen(self: ProfilerPanel) bool {
 
 /// Opens the window in front of the others, or closes it
 pub fn Toggle(self: ProfilerPanel, engine_context: *EngineContext) !void {
-    if (self.IsOpen()) {
-        try WidgetActions.CloseWindow(engine_context, self.mWindow);
-    } else {
-        try WidgetActions.OpenWindow(engine_context, self.mWindow);
-    }
+    try WidgetActions.ToggleWindow(engine_context, self.mWindow);
 }
 
 /// Once a frame, before layout, while it is open: every REFRESH_SECONDS, rows for the nodes `profiler` has met since,

@@ -21,6 +21,10 @@ const TransformComponent = EntityComponents.TransformComponent;
 const TransformDirtyTag = EntityComponents.TransformDirtyTag;
 const SceneComponent = @import("../../ECSComponents/SComponents.zig").SceneComponent;
 const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
+const UIElementComponent = EntityComponents.UIElementComponent;
+const UIManager = @import("../../UI/UIManager.zig");
+const ScrollComponent = @import("../../ECSComponents/UIComponents.zig").ScrollComponent;
+const EntityChildComponent = @import("../../ECS/Components.zig").ChildComponent(Entity.Type);
 const TextComponent = EntityComponents.TextComponent;
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const LoadFailedTag = @import("../../ECSComponents/AComponents.zig").LoadFailedTag;
@@ -588,6 +592,169 @@ test "a collapsed element and everything under it are hidden, and shown again wh
     try std.testing.expect(!by_hand.HasComponent(LayoutHiddenTag));
     try std.testing.expect(inner.HasComponent(LayoutHiddenTag));
     try std.testing.expect(inner_child.HasComponent(LayoutHiddenTag));
+}
+
+//------------------------------leaving out what is folded------------------------------
+
+/// A computed size layout never gives: still there after a pass means that pass didn't lay its element out
+const UNTOUCHED = Vec2(f32){ .x = -7, .y = -7 };
+
+fn Untouched(entity: Entity) void {
+    entity.GetComponentMut(LayoutItemComponent).?.mComputedSize = UNTOUCHED;
+}
+
+fn ExpectUntouched(entity: Entity, untouched: bool) !void {
+    const size = entity.GetComponent(LayoutItemComponent).?.mComputedSize;
+    try std.testing.expectEqual(untouched, size.x == UNTOUCHED.x and size.y == UNTOUCHED.y);
+}
+
+test "a change under something collapsed lays nothing out, and what is added there is hidden as it comes" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try world.DrawnOverlay();
+
+    const column = try Element(engine_context, scene, null, .{ .mPlacement = .{ .Anchored = .{} } }, .{});
+    const shown = try Element(engine_context, scene, column, Fixed(10, 10), null);
+    const node = try Element(engine_context, scene, column, .{ .mCollapsed = true }, .{});
+    const folded = try Element(engine_context, scene, node, Fixed(10, 10), null);
+    try world.Update();
+    Untouched(column);
+    Untouched(shown);
+
+    folded.GetComponentMut(LayoutItemComponent).?.mWidth = .{ .Fixed = 30 };
+    try folded.MarkLayoutDirty(engine_context);
+    const added = try Element(engine_context, scene, node, Fixed(20, 20), .{});
+    const added_child = try Element(engine_context, scene, added, Fixed(5, 5), null);
+    try world.Update();
+    try ExpectUntouched(column, true);
+    try ExpectUntouched(shown, true);
+    for ([_]Entity{ folded, added, added_child }) |entity| {
+        try std.testing.expect(entity.HasComponent(LayoutHiddenTag));
+        try std.testing.expect(!entity.HasComponent(LayoutDirtyTag));
+    }
+
+    //unfolding lays it all out, with the change made while it was folded
+    node.GetComponentMut(LayoutItemComponent).?.mCollapsed = false;
+    try node.MarkLayoutDirty(engine_context);
+    try world.Update();
+    try ExpectUntouched(column, false);
+    try ExpectQuad(30, 10, folded);
+    try ExpectQuad(20, 20, added);
+    for ([_]Entity{ node, folded, added, added_child }) |entity| try std.testing.expect(!entity.HasComponent(LayoutHiddenTag));
+}
+
+/// Whether something from `entity` up is collapsed: what layout hides
+fn UnderCollapsed(entity: Entity) bool {
+    var current: ?Entity = entity;
+    while (current) |e| {
+        if (e.GetComponent(LayoutItemComponent)) |item| {
+            if (item.mCollapsed) return true;
+        }
+        const child_component = e.GetComponent(EntityChildComponent) orelse break;
+        current = Entity{ .mID = child_component.mParent, .mManager = e.mManager };
+    }
+    return false;
+}
+
+const Snapshot = struct { Translation: Vec3(f32), Quad: Vec2(f32), Computed: Vec2(f32) };
+
+fn Snap(entity: Entity) Snapshot {
+    return .{
+        .Translation = entity.GetComponent(TransformComponent).?.GetTranslation(),
+        .Quad = entity.GetComponent(ShapeComponent).?.GetQuad().?.Size,
+        .Computed = entity.GetComponent(LayoutItemComponent).?.mComputedSize,
+    };
+}
+
+fn RandomSizing(random: std.Random) Layout.Sizing {
+    return switch (random.uintLessThan(u8, 4)) {
+        0 => .{ .Fixed = @floatFromInt(random.intRangeAtMost(u8, 5, 60)) },
+        1 => .Fit,
+        2 => .{ .Fill = @floatFromInt(random.intRangeAtMost(u8, 1, 3)) },
+        else => .{ .Percent = @as(f32, @floatFromInt(random.intRangeAtMost(u8, 1, 10))) / 10 },
+    };
+}
+
+/// A random element under `parent`, and at random a subtree under it while `depth` lasts
+fn RandomElement(random: std.Random, engine_context: *EngineContext, scene: Scene, parent: Entity, depth: u32, all: *std.ArrayList(Entity)) !void {
+    var item = LayoutItemComponent{ .mWidth = RandomSizing(random), .mHeight = RandomSizing(random) };
+    if (random.uintLessThan(u8, 7) == 0) item.mPlacement = .{ .Anchored = .{ .Anchor = .{ .x = 1, .y = -1 }, .Pivot = .{ .x = 1, .y = -1 } } };
+    if (random.uintLessThan(u8, 6) == 0) item.mCollapsed = true;
+    const container: ?LayoutComponent = if (depth > 0 and random.boolean()) .{
+        .mDirection = random.enumValue(Layout.Direction),
+        .mPadding = .All(@floatFromInt(random.uintLessThan(u8, 6))),
+        .mGap = @floatFromInt(random.uintLessThan(u8, 5)),
+        .mMainAlign = random.enumValue(Layout.MainAlign),
+        .mCrossAlign = random.enumValue(Layout.CrossAlign),
+    } else null;
+    const entity = try Element(engine_context, scene, parent, item, container);
+    try all.append(std.testing.allocator, entity);
+    if (container == null) return;
+    if (random.uintLessThan(u8, 4) == 0) {
+        _ = try entity.AddComponent(engine_context, UIElementComponent{});
+        _ = try UIManager.ElementOf(entity).?.AddComponent(engine_context, ScrollComponent{ .mScroll = random.enumValue(Layout.Scroll) });
+    }
+    for (0..random.uintLessThan(u8, 4)) |_| try RandomElement(random, engine_context, scene, entity, depth - 1, all);
+}
+
+test "changes laid out as they come, folded ones left for later, end where laying out the whole tree puts them" {
+    for (1..41) |seed| {
+        var prng = std.Random.DefaultPrng.init(seed);
+        const random = prng.random();
+        const world = try TestWorld.Init();
+        defer world.Deinit();
+        const engine_context = world.mEngineContext;
+        const scene = try world.DrawnOverlay();
+
+        var all: std.ArrayList(Entity) = .empty;
+        defer all.deinit(std.testing.allocator);
+        const root = try Element(engine_context, scene, null, .{ .mPlacement = .{ .Anchored = .{} } }, .{ .mPadding = .All(3) });
+        try all.append(std.testing.allocator, root);
+        for (0..4) |_| try RandomElement(random, engine_context, scene, root, 3, &all);
+        try world.Update();
+
+        for (0..8) |_| {
+            for (0..random.intRangeAtMost(u8, 1, 4)) |_| {
+                const entity = all.items[random.uintLessThan(usize, all.items.len)];
+                const item = entity.GetComponentMut(LayoutItemComponent).?;
+                switch (random.uintLessThan(u8, 4)) {
+                    0 => item.mWidth = RandomSizing(random),
+                    1 => item.mHeight = .{ .Fixed = @floatFromInt(random.intRangeAtMost(u8, 5, 60)) },
+                    2 => item.mCollapsed = !item.mCollapsed,
+                    else => {
+                        //a new element, if this is a container
+                        if (entity.HasComponent(LayoutComponent)) try RandomElement(random, engine_context, scene, entity, 1, &all);
+                        continue;
+                    },
+                }
+                try entity.MarkLayoutDirty(engine_context);
+            }
+            try world.Update();
+
+            const snapshots = try std.testing.allocator.alloc(Snapshot, all.items.len);
+            defer std.testing.allocator.free(snapshots);
+            for (all.items, snapshots) |entity, *snapshot| {
+                snapshot.* = Snap(entity);
+                try std.testing.expect(!entity.HasComponent(LayoutDirtyTag));
+                try std.testing.expectEqual(UnderCollapsed(entity), entity.HasComponent(LayoutHiddenTag));
+            }
+
+            //the whole tree from its top
+            try root.MarkLayoutDirty(engine_context);
+            try world.Update();
+            for (all.items, snapshots) |entity, snapshot| {
+                if (entity.HasComponent(LayoutHiddenTag)) continue;
+                const now = Snap(entity);
+                try std.testing.expectApproxEqAbs(now.Translation.x, snapshot.Translation.x, eps);
+                try std.testing.expectApproxEqAbs(now.Translation.y, snapshot.Translation.y, eps);
+                try std.testing.expectApproxEqAbs(now.Quad.x, snapshot.Quad.x, eps);
+                try std.testing.expectApproxEqAbs(now.Quad.y, snapshot.Quad.y, eps);
+                try std.testing.expectApproxEqAbs(now.Computed.x, snapshot.Computed.x, eps);
+                try std.testing.expectApproxEqAbs(now.Computed.y, snapshot.Computed.y, eps);
+            }
+        }
+    }
 }
 
 //------------------------------measuring text------------------------------

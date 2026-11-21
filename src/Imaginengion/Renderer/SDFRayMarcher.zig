@@ -71,8 +71,26 @@ const SegmentStart = struct {
 /// A shape index that is no shape: what a miss or an empty skip slot holds
 const NO_SHAPE: u32 = std.math.maxInt(u32);
 
+/// A ray on its way: the segment it traces next, and everything in front of it so far. All one step of a ray needs,
+/// so Trace's loop carries nothing else from one segment to the next, and a pass split into kernels (find the surface,
+/// then color it and carry on) can hand one from kernel to kernel
+pub const RayState = struct {
+    /// where the next segment starts, and the way it goes
+    Ray: Ray,
+    Start: SegmentStart = .{},
+    /// which segment is next, the first being 1
+    Segment: u32 = 1,
+    /// everything in front so far, surfaces and air
+    Front: Blend = .none,
+
+    /// A ray starting out, with nothing in front of it yet
+    pub fn Begin(ray: Ray) RayState {
+        return .{ .Ray = ray };
+    }
+};
+
 /// A hit the march has checked against the shape itself.
-const SurfaceHit = struct {
+pub const SurfaceHit = struct {
     Found: bool,
     //the shape's index in the shape buffer, and its kind
     Shape: u32,
@@ -497,40 +515,67 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// The same color as blending each surface Over what is behind it, back to front
         pub fn Trace(self: *Self, ray: Ray, sample_sampler: anytype, textures_array: textures_array_type) Vec4(f32) {
             if (features.Heatmap) self.mCounters = .{};
-            var front = Blend.none;
-            var from = ray.Origin;
-            var start = SegmentStart{};
-            var segment: u32 = 1;
-            while (true) : (segment += 1) {
-                self.Count(.Segments);
-                const segment_ray = Ray{ .Origin = from, .Dir = ray.Dir };
-
-                //the direct shapes first, then the marched ones only as far as that hit, since nothing behind it
-                //can show. With no marched shapes, every pixel skips the march together
-                var surface = self.DirectSurface(segment_ray, start, sample_sampler, textures_array);
-                if (features.Marched and self.mDirectCount < self.mShapesCount) {
-                    const limit = if (surface.Found) surface.T else self.mPerspectiveFar;
-                    const marched = self.MarchedSurface(segment_ray, start.Skip, limit, sample_sampler, textures_array);
-                    if (marched.Found and marched.T < limit) surface = marched;
+            var state = RayState.Begin(ray);
+            while (true) {
+                const surface = self.FindSurface(state, sample_sampler, textures_array);
+                if (!surface.Found) {
+                    self.AddMiss(&state);
+                    break;
                 }
-
-                //the air up to the surface, or all the way to the far distance when nothing is drawn along it
-                front.AddMedium(self.Medium(if (surface.Found) surface.T else self.mPerspectiveFar));
-                if (!surface.Found) break;
-                const color = self.SurfaceColor(surface, sample_sampler, textures_array);
-                front.AddSurface(color);
-
-                //on through it only if it's flagged see-through, really is, and a segment is left. Through a solid's
-                //near side the ray is inside it and still has its far side to hit; past a plate or out of a solid's far
-                //side, it's done with that shape
-                const shading_flags = self.mShapes[surface.Shape].Flags;
-                self.Loaded(u32);
-                if (shading_flags & ShapeData.FLAG_TRANSPARENT == 0 or color.w >= 1.0 or segment >= MAX_SEGMENTS) break;
-                const went_in = IsSolid(surface.Type) and !surface.Exit;
-                start = .{ .Skip = if (went_in) NO_SHAPE else surface.Shape, .Inside = if (went_in) surface.Shape else NO_SHAPE };
-                from = from.AddVec(ray.Dir.MulScalar(surface.T));
+                if (!self.ColorSurface(&state, surface, sample_sampler, textures_array)) break;
             }
-            return front.Over(self.mDefaultColor);
+            return self.Finish(state);
+        }
+
+        /// The surface `state`'s next segment ends on, if any: the direct shapes first, then the marched ones only as
+        /// far as that hit, since nothing behind it can show. With no marched shapes, every pixel skips the march
+        /// together. Only finds it: ColorSurface (or AddMiss, for none) is what adds it to the ray
+        pub fn FindSurface(self: *Self, state: RayState, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+            self.Count(.Segments);
+            var surface = self.DirectSurface(state.Ray, state.Start, sample_sampler, textures_array);
+            if (features.Marched and self.mDirectCount < self.mShapesCount) {
+                const limit = if (surface.Found) surface.T else self.mPerspectiveFar;
+                const marched = self.MarchedSurface(state.Ray, state.Start.Skip, limit, sample_sampler, textures_array);
+                if (marched.Found and marched.T < limit) surface = marched;
+            }
+            return surface;
+        }
+
+        /// Adds the surface `state`'s segment ended on (FindSurface), and the air up to it, behind everything in front.
+        /// True when the ray goes on through it, with `state` moved on to the segment past it: only for a surface
+        /// flagged see-through that really is, while a segment is left. Through a solid's near side the ray is inside
+        /// it and still has its far side to hit; past a plate or out of a solid's far side, it's done with that shape
+        pub fn ColorSurface(self: *Self, state: *RayState, surface: SurfaceHit, sample_sampler: anytype, textures_array: textures_array_type) bool {
+            //grown in a copy of its own: a shader can only pass a whole variable's pointer to a function (AddMedium's
+            //self), not one to a field of another
+            var front = state.Front;
+            front.AddMedium(self.Medium(surface.T));
+            const color = self.SurfaceColor(surface, sample_sampler, textures_array);
+            front.AddSurface(color);
+            state.Front = front;
+
+            const shading_flags = self.mShapes[surface.Shape].Flags;
+            self.Loaded(u32);
+            if (shading_flags & ShapeData.FLAG_TRANSPARENT == 0 or color.w >= 1.0 or state.Segment >= MAX_SEGMENTS) return false;
+            const went_in = IsSolid(surface.Type) and !surface.Exit;
+            state.Start = .{ .Skip = if (went_in) NO_SHAPE else surface.Shape, .Inside = if (went_in) surface.Shape else NO_SHAPE };
+            state.Ray.Origin = state.Ray.Origin.AddVec(state.Ray.Dir.MulScalar(surface.T));
+            state.Segment += 1;
+            return true;
+        }
+
+        /// For a segment that ends on nothing (FindSurface): the air all the way out to the far distance, behind
+        /// everything in front. The ray is done
+        pub fn AddMiss(self: *Self, state: *RayState) void {
+            //a copy of its own, as in ColorSurface
+            var front = state.Front;
+            front.AddMedium(self.Medium(self.mPerspectiveFar));
+            state.Front = front;
+        }
+
+        /// The color a ray that is done comes out with: everything in front of it over the background
+        pub fn Finish(self: *const Self, state: RayState) Vec4(f32) {
+            return state.Front.Over(self.mDefaultColor);
         }
 
         /// The nearest surface a ray draws among the direct shapes, found by a ray test straight against each candidate

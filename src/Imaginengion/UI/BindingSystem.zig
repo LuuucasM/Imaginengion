@@ -7,7 +7,6 @@
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
-const UIElement = @import("../ECSObjects/UIElement.zig");
 const EntityUIEvent = @import("../Events/UIEventData.zig").EntityEvent;
 const EntityPointerEvent = @import("../Events/PointerEventData.zig").EntityEvent;
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
@@ -41,7 +40,7 @@ pub fn Deinit(self: *BindingSystem, keep_allocator: std.mem.Allocator) void {
 /// Whether the inspector `root` was asked to be built again, which it no longer is once this has said so
 pub fn TakeRebuild(self: *BindingSystem, root: Entity) bool {
     for (self.mRebuild.items, 0..) |asked, i| {
-        if (asked.mID == root.mID and asked.mManager == root.mManager) {
+        if (asked.Eq(root)) {
             _ = self.mRebuild.swapRemove(i);
             return true;
         }
@@ -54,13 +53,10 @@ pub const Update = struct {
     pub const Name = "BindingUpdate";
 
     pub fn Run(engine_context: *EngineContext, _: *BindingSystem) !void {
-        const ui_manager = &engine_context.mUIManager;
-        const element_ids = try ui_manager.GetGroup(engine_context.Scratch(), .{ .Component = FieldBindingComponent });
-        for (element_ids.items) |element_id| {
-            const element = UIElement{ .mID = element_id, .mManager = ui_manager };
-            const widget = element.GetOwner();
-            if (!widget.IsIDValid() or !widget.IsActive()) continue;
-            const binding = element.GetComponent(FieldBindingComponent).?.*;
+        var widgets = try engine_context.mUIManager.Elements(engine_context.Scratch(), FieldBindingComponent, null);
+        while (widgets.Next()) |owned| {
+            const widget = owned.Owner;
+            const binding = owned.Element.GetComponent(FieldBindingComponent).?.*;
             //a Clear menu item only writes, and a Copy one only reads when clicked
             if (binding.mClear != null or binding.mCopies) continue;
             if (IsBeingEdited(engine_context, widget)) continue;
@@ -127,7 +123,7 @@ fn Write(self: *BindingSystem, engine_context: *EngineContext, binding: FieldBin
     if (binding.mRebuilds or reshaped) {
         const root = binding.mRoot;
         for (self.mRebuild.items) |asked| {
-            if (asked.mID == root.mID and asked.mManager == root.mManager) return;
+            if (asked.Eq(root)) return;
         }
         try self.mRebuild.append(engine_context.Keep(), root);
     }
@@ -183,17 +179,10 @@ fn Show(engine_context: *EngineContext, widget: Entity, value: Inspector.Value) 
             const attrib = widget.GetComponentMut(AttribComponent) orelse return;
             if (attrib.mData.AsFloat() != number) attrib.mData.SetFromFloat(number);
         },
-        .Bool => |checked| {
-            if (checked == widget.HasComponent(SelectedTag)) return;
-            if (checked) {
-                _ = try widget.AddComponent(engine_context, SelectedTag{});
-            } else {
-                try widget.RemoveComponentSync(engine_context, SelectedTag);
-            }
-        },
+        .Bool => |checked| try widget.SetTag(engine_context, SelectedTag, checked),
         .Choice => |index| try WidgetActions.ShowChosen(engine_context, widget, index),
         .Color => |color| WidgetActions.ShowColor(widget, color),
-        .Text => |text| try ShowText(engine_context, widget, text),
+        .Text => |text| try WidgetActions.SetText(engine_context, widget, text),
         .Rotation => |rotation| {
             //the numbers being edited stay as they are while they still make this rotation: only a rotation changed by
             //something else sets them again
@@ -214,7 +203,7 @@ fn Show(engine_context: *EngineContext, widget: Entity, value: Inspector.Value) 
         },
         .Asset => |asset| {
             //a name on a label, or the asset itself on a thumbnail
-            if (UIManager.LabelOf(widget)) |label| return try ShowText(engine_context, label, AssetName(asset));
+            if (UIManager.LabelOf(widget)) |label| return try WidgetActions.SetText(engine_context, label, AssetName(asset));
             const surface = widget.GetComponentMut(SurfaceComponent) orelse return;
             if (surface.mTexture.mID == asset.mID) return;
             surface.mTexture.ReleaseAsset();
@@ -224,15 +213,6 @@ fn Show(engine_context: *EngineContext, widget: Entity, value: Inspector.Value) 
         //never read from a field
         .Ref => {},
     }
-}
-
-/// Text on a label, or on the label inside a box (a reference field's)
-fn ShowText(engine_context: *EngineContext, widget: Entity, text: []const u8) !void {
-    const label = if (widget.HasComponent(TextComponent)) widget else UIManager.LabelOf(widget) orelse return;
-    const text_component = label.GetComponentMut(TextComponent).?;
-    if (std.mem.eql(u8, text_component.mText.items, text)) return;
-    try text_component.SetText(label.KeepFor(TextComponent), text);
-    try label.MarkLayoutDirty(engine_context);
 }
 
 /// What an asset field shows: the asset's file name without its extension, "None" for none
@@ -264,20 +244,10 @@ fn SameRotation(a: Quat(f32), b: Quat(f32)) bool {
 fn IsBeingEdited(engine_context: *EngineContext, widget: Entity) bool {
     const ui_manager = &engine_context.mUIManager;
     if (ui_manager.mFocusSystem.Focused()) |focused| {
-        if (IsInside(focused, widget)) return true;
+        if (focused.IsInside(widget)) return true;
     }
     if (ui_manager.mNumberFieldSystem.mDragged) |dragged| {
-        if (dragged.IsActive() and IsInside(dragged, widget)) return true;
+        if (dragged.IsActive() and dragged.IsInside(widget)) return true;
     }
     return false;
-}
-
-/// Whether `entity` is `container` or inside it
-fn IsInside(entity: Entity, container: Entity) bool {
-    var current = entity;
-    while (true) {
-        if (current.mID == container.mID and current.mManager == container.mManager) return true;
-        const child_component = current.GetComponent(@import("../ECS/Components.zig").ChildComponent(Entity.Type)) orelse return false;
-        current = Entity{ .mID = child_component.mParent, .mManager = current.mManager };
-    }
 }

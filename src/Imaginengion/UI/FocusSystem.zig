@@ -19,7 +19,6 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const MouseCodes = @import("../Inputs/InputEnums.zig").MouseCodes;
 const KeyboardPressedEvent = @import("../Events/WindowEventData.zig").KeyboardPressedEvent;
-const UIEvent = @import("../Events/UIEventData.zig").UIEvent;
 const PointerClickedEvent = @import("../Events/PointerEventData.zig").PointerClickedEvent;
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
 const TextEdit = @import("TextEdit.zig");
@@ -38,10 +37,7 @@ const TextComponent = EntityComponents.TextComponent;
 const ShapeComponent = EntityComponents.ShapeComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const Widgets = @import("Widgets.zig");
-const NameComponent = EntityComponents.NameComponent;
 const TransformComponent = EntityComponents.TransformComponent;
-const EntitySceneComponent = EntityComponents.EntitySceneComponent;
-const StackPosComponent = @import("../ECSComponents/SComponents.zig").StackPosComponent;
 
 const FocusSystem = @This();
 
@@ -99,10 +95,7 @@ pub fn Focused(self: *const FocusSystem) ?Entity {
 /// Where the focused text input's scene sits in the scene stack, which is its turn at key events. Null if nothing
 /// has the keyboard
 pub fn FocusedStackPos(self: *const FocusSystem) ?usize {
-    const focused = self.Focused() orelse return null;
-    const scene = focused.GetComponent(EntitySceneComponent).?.mScene;
-    const stack_pos = scene.GetComponent(StackPosComponent) orelse return 0;
-    return stack_pos.mPosition;
+    return UIManager.StackPosOf(self.Focused() orelse return null);
 }
 
 /// The caret's position in the focused text, see mCaret
@@ -128,7 +121,7 @@ pub const OnPressed = struct {
         if (pressed == null and pointer.mHovered.items.len > 0) pressed = ChildTextInput(pointer.mHovered.items[0]);
 
         if (self.Focused()) |focused| {
-            if (pressed != null and Same(pressed.?, focused)) {
+            if (pressed != null and pressed.?.Eq(focused)) {
                 if (button == .BUTTON_LEFT) try self.PlaceCaretAt(engine_context, focused, pointer.mInput);
                 return;
             }
@@ -152,7 +145,7 @@ pub const OnClicked = struct {
         //one event per entity in the chain: the text input's own, or the box it is in when that is what was clicked
         const entity = if (UIManager.HasUIComponent(clicked, TextInputComponent))
             clicked
-        else if (Same(clicked, e.mTarget))
+        else if (clicked.Eq(e.mTarget))
             ChildTextInput(clicked) orelse return
         else
             return;
@@ -179,7 +172,7 @@ fn ChildTextInput(box: Entity) ?Entity {
 /// Gives `entity` the keyboard, with the caret at the end of its text. Returns false if it has no text to type into
 pub fn Focus(self: *FocusSystem, engine_context: *EngineContext, entity: Entity) !bool {
     if (self.Focused()) |focused| {
-        if (Same(focused, entity)) return true;
+        if (focused.Eq(entity)) return true;
         try self.EndEdit(engine_context, .Submit);
     }
     const text = entity.GetComponent(TextComponent) orelse return false;
@@ -192,10 +185,10 @@ pub fn Focus(self: *FocusSystem, engine_context: *EngineContext, entity: Entity)
     self.mOriginal.clearRetainingCapacity();
     try self.mOriginal.appendSlice(engine_context.Keep(), text.mText.items);
 
-    if (!entity.HasComponent(FocusedTag)) _ = try entity.AddComponent(engine_context, FocusedTag{});
+    try entity.SetTag(engine_context, FocusedTag, true);
     //typed text is turned on by the next Update
     engine_context.mInputManager.mKeyboardTaken = true;
-    try Send(engine_context, entity, .FocusGained);
+    try engine_context.mUIManager.SendToChain(engine_context, entity, .FocusGained);
     return true;
 }
 
@@ -213,7 +206,7 @@ pub fn EndEdit(self: *FocusSystem, engine_context: *EngineContext, how: EndHow) 
 
     if (!focused.IsActive()) return;
     switch (how) {
-        .Submit => try Send(engine_context, focused, .TextSubmitted),
+        .Submit => try engine_context.mUIManager.SendToChain(engine_context, focused, .TextSubmitted),
         .Revert => if (focused.GetComponentMut(TextComponent)) |text| {
             if (!std.mem.eql(u8, text.mText.items, self.mOriginal.items)) {
                 try text.SetText(focused.KeepFor(TextComponent), self.mOriginal.items);
@@ -221,8 +214,8 @@ pub fn EndEdit(self: *FocusSystem, engine_context: *EngineContext, how: EndHow) 
             }
         },
     }
-    if (focused.HasComponent(FocusedTag)) try focused.RemoveComponentSync(engine_context, FocusedTag);
-    try Send(engine_context, focused, .FocusLost);
+    try focused.SetTag(engine_context, FocusedTag, false);
+    try engine_context.mUIManager.SendToChain(engine_context, focused, .FocusLost);
 }
 
 /// A key went down (or repeated, from being held) and it is the focused text input's turn at it
@@ -328,14 +321,8 @@ fn CaretEntity(self: *FocusSystem, engine_context: *EngineContext, focused: Enti
     if (self.mCaretEntity) |caret| {
         if (caret.IsActive()) return caret;
     }
-    const caret = try focused.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
-    if (caret.GetComponentMut(NameComponent)) |name| {
-        name.mName.clearRetainingCapacity();
-        try name.mName.appendSlice(caret.KeepFor(NameComponent), "Caret");
-    }
-    try Widgets.AddQuad(engine_context, caret, .{}, .{});
     //its color is the theme's
-    try UIManager.Style(engine_context, caret, "Caret");
+    const caret = try Widgets.PartQuad(engine_context, focused, "Caret", "Caret");
     self.mCaretEntity = caret;
     return caret;
 }
@@ -395,7 +382,7 @@ fn WrapWidth(text: *const TextComponent) f32 {
 fn Changed(self: *FocusSystem, engine_context: *EngineContext, focused: Entity) !void {
     self.mBlinkTime = 0;
     try focused.MarkLayoutDirty(engine_context);
-    try Send(engine_context, focused, .TextChanged);
+    try engine_context.mUIManager.SendToChain(engine_context, focused, .TextChanged);
 }
 
 /// Typed text is turned off by the next Update
@@ -413,16 +400,4 @@ fn SyncTextInput(self: *FocusSystem, engine_context: *EngineContext) void {
         engine_context.mAppWindow.StopTextInput();
         self.mTextInputOn = false;
     }
-}
-
-/// One event of `kind` to the text input and to everything it is inside
-fn Send(engine_context: *EngineContext, text_input: Entity, comptime kind: std.meta.Tag(UIEvent)) !void {
-    const chain = try PointerSystem.ChainOf(engine_context.Scratch(), text_input);
-    for (chain.items) |entity| {
-        try engine_context.mUIManager.Send(engine_context, entity, @unionInit(UIEvent, @tagName(kind), .{ .mTarget = text_input }));
-    }
-}
-
-fn Same(a: Entity, b: Entity) bool {
-    return a.mID == b.mID and a.mManager == b.mManager;
 }

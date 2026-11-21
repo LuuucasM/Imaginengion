@@ -104,7 +104,7 @@ fn Part(row: Entity, index: usize) Entity {
 
 fn IndexOf(comptime component_type: type) usize {
     return comptime blk: {
-        for (UIComponents.ComponentsPanelList, 0..) |listed, i| {
+        for (UIComponents.SerializeList, 0..) |listed, i| {
             if (listed == component_type) break :blk i;
         }
         unreachable;

@@ -13,10 +13,10 @@ const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
-const UIElement = @import("../ECSObjects/UIElement.zig");
 const EntityPointerEvent = @import("../Events/PointerEventData.zig").EntityEvent;
 const EntityUIEvent = @import("../Events/UIEventData.zig").EntityEvent;
 const UIManager = @import("UIManager.zig");
+const WidgetActions = @import("WidgetActions.zig");
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const AttribComponent = EntityComponents.AttribComponent;
@@ -53,13 +53,13 @@ pub const OnPointerEvent = struct {
                 self.mRemainder = 0;
             },
             .PointerDrag => |e| if (e.mButton == .BUTTON_LEFT and IsField(entity)) {
-                if (self.mDragged == null or !Same(self.mDragged.?, entity)) {
+                if (self.mDragged == null or !self.mDragged.?.Eq(entity)) {
                     self.mDragged = entity;
                     self.mRemainder = 0;
                 }
                 try self.Drag(engine_context, entity, e.mDelta.x);
             },
-            .PointerDragEnd => if (self.mDragged != null and Same(self.mDragged.?, entity)) {
+            .PointerDragEnd => if (self.mDragged != null and self.mDragged.?.Eq(entity)) {
                 self.mDragged = null;
             },
             else => {},
@@ -80,7 +80,7 @@ pub const OnUIEvent = struct {
         const field = event.mEntity;
         if (!IsField(field) or !field.IsActive()) return;
         const label = LabelOf(field) orelse return;
-        if (!Same(label, submitted.mTarget)) return;
+        if (!label.Eq(submitted.mTarget)) return;
 
         const typed = std.mem.trim(u8, label.GetComponent(TextComponent).?.mText.items, " \t");
         if (ParseNumber(typed)) |number| {
@@ -98,14 +98,11 @@ pub const Update = struct {
     pub fn Run(engine_context: *EngineContext, _: *NumberFieldSystem) !void {
         const ui_manager = &engine_context.mUIManager;
         const focused = ui_manager.mFocusSystem.Focused();
-        const element_ids = try ui_manager.GetGroup(engine_context.Scratch(), .{ .Component = NumberFieldComponent });
-        for (element_ids.items) |element_id| {
-            const element = UIElement{ .mID = element_id, .mManager = ui_manager };
-            const field = element.GetOwner();
-            //an element no entity has taken yet has nothing to show
-            if (!field.IsIDValid() or !field.IsActive()) continue;
+        var fields = try ui_manager.Elements(engine_context.Scratch(), NumberFieldComponent, null);
+        while (fields.Next()) |owned| {
+            const field = owned.Owner;
             const label = LabelOf(field) orelse continue;
-            if (focused != null and Same(focused.?, label)) continue;
+            if (focused != null and focused.?.Eq(label)) continue;
             try ShowValue(engine_context, field, label);
         }
     }
@@ -117,7 +114,7 @@ fn Drag(self: *NumberFieldSystem, engine_context: *EngineContext, field: Entity,
     //a field being typed into keeps its value until the edit ends
     if (engine_context.mUIManager.mFocusSystem.Focused()) |focused| {
         if (LabelOf(field)) |label| {
-            if (Same(focused, label)) return;
+            if (focused.Eq(label)) return;
         }
     }
     const settings = UIManager.GetUIComponent(field, NumberFieldComponent).?.*;
@@ -174,18 +171,9 @@ fn ShowValue(engine_context: *EngineContext, field: Entity, label: Entity) !void
     const attrib = field.GetComponent(AttribComponent) orelse return;
     const settings = UIManager.GetUIComponent(field, NumberFieldComponent) orelse return;
     var buffer: [64]u8 = undefined;
-    const shown = Format(&buffer, attrib.mData, settings.mDecimals);
-    const text = label.GetComponentMut(TextComponent).?;
-    if (std.mem.eql(u8, text.mText.items, shown)) return;
-    try text.SetText(label.KeepFor(TextComponent), shown);
-    //layout sizes text to fit
-    try label.MarkLayoutDirty(engine_context);
+    try WidgetActions.SetText(engine_context, label, Format(&buffer, attrib.mData, settings.mDecimals));
 }
 
 fn IsField(entity: Entity) bool {
     return UIManager.HasUIComponent(entity, NumberFieldComponent);
-}
-
-fn Same(a: Entity, b: Entity) bool {
-    return a.mID == b.mID and a.mManager == b.mManager;
 }

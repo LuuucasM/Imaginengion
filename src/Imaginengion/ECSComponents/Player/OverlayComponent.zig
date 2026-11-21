@@ -21,7 +21,7 @@ mScene: Scene = .uninit,
 mWantedUUID: ?u64 = null,
 
 pub fn UIRender(self: *OverlayComponent, ui: *Inspector.Builder) !void {
-    _ = try ui.SceneRef(&self.mScene, "Overlay Scene", .{ .OverlayOnly = true, .OnChange = OnRefEdited });
+    _ = try ui.Ref(&self.mScene, "Overlay Scene", .{ .OverlayOnly = true, .OnChange = OnRefEdited });
 }
 
 fn OnRefEdited(component: *anyopaque) void {

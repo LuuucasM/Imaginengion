@@ -494,10 +494,7 @@ pub fn BuildFields(engine_context: *EngineContext, parent: Entity, root: Entity,
             .Vec2 => try builder.Vec2Field(At(Vec2, data, field), label, .{}),
             .Vec3 => try builder.Vec3Field(At(Vec3, data, field), label, .{}),
             .Vec4 => try builder.Vec4Field(At(Vec4, data, field), label, .{}),
-            .Entity => _ = try builder.EntityRef(At(Entity, data, field), label, .{}),
-            .Scene => _ = try builder.SceneRef(At(Scene, data, field), label, .{}),
-            .Player => _ = try builder.PlayerRef(At(Player, data, field), label, .{}),
-            .GameContext => _ = try builder.GameContextRef(At(GameContext, data, field), label, .{}),
+            inline .Entity, .Scene, .Player, .GameContext => |kind| _ = try builder.Ref(At(kind.ObjectType(), data, field), label, .{}),
             inline .EntityRef, .SceneRef, .PlayerRef, .GameContextRef => |kind| try builder.Struct(At(kind.RefType(), data, field), label),
         }
     }

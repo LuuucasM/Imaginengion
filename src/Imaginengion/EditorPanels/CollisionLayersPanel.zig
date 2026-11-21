@@ -61,11 +61,7 @@ pub fn IsOpen(self: CollisionLayersPanel) bool {
 
 /// Opens the window in front of the others, or closes it
 pub fn Toggle(self: CollisionLayersPanel, engine_context: *EngineContext) !void {
-    if (self.IsOpen()) {
-        try WidgetActions.CloseWindow(engine_context, self.mWindow);
-    } else {
-        try WidgetActions.OpenWindow(engine_context, self.mWindow);
-    }
+    try WidgetActions.ToggleWindow(engine_context, self.mWindow);
 }
 
 /// Once a frame, before layout, while it is open: the fields given the names again if they have changed

@@ -28,8 +28,11 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
 const UIComponents = @import("../ECSComponents/UIComponents.zig");
 const ElementOwnerComponent = UIComponents.ElementOwnerComponent;
-const UIElementComponent = @import("../ECSComponents/EComponents.zig").UIElementComponent;
-const TextComponent = @import("../ECSComponents/EComponents.zig").TextComponent;
+const EntityComponents = @import("../ECSComponents/EComponents.zig");
+const UIElementComponent = EntityComponents.UIElementComponent;
+const TextComponent = EntityComponents.TextComponent;
+const EntitySceneComponent = EntityComponents.EntitySceneComponent;
+const StackPosComponent = @import("../ECSComponents/SComponents.zig").StackPosComponent;
 const UIEventData = @import("../Events/UIEventData.zig");
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const EventManager = @import("../Events/EventManager.zig");
@@ -430,13 +433,61 @@ const HeldUIEvent = struct {
 /// One `kind` of UI event, about `target`, to it and to everything it is inside. For the events that are only a
 /// target (ValueChanged, TextChanged, ...)
 pub fn SendToChain(self: *UIManager, engine_context: *EngineContext, target: Entity, comptime kind: std.meta.Tag(UIEventData.UIEvent)) !void {
-    var current = target;
-    while (true) {
-        try self.Send(engine_context, current, @unionInit(UIEventData.UIEvent, @tagName(kind), .{ .mTarget = target }));
-        const child_component = current.GetComponent(@import("../ECS/Components.zig").ChildComponent(Entity.Type)) orelse break;
-        current = Entity{ .mID = child_component.mParent, .mManager = current.mManager };
-    }
+    try self.SendEventToChain(engine_context, target, @unionInit(UIEventData.UIEvent, @tagName(kind), .{ .mTarget = target }));
 }
+
+/// `event` to `target` and to everything it is inside. Nothing for a target that is gone
+pub fn SendEventToChain(self: *UIManager, engine_context: *EngineContext, target: Entity, event: UIEventData.UIEvent) !void {
+    if (!target.IsActive()) return;
+    var current: ?Entity = target;
+    while (current) |entity| : (current = entity.GetParent()) try self.Send(engine_context, entity, event);
+}
+
+/// Where `entity`'s scene sits in the scene stack, which is its turn at key events. 0 for a scene with no place in it
+pub fn StackPosOf(entity: Entity) usize {
+    const scene = entity.GetComponent(EntitySceneComponent).?.mScene;
+    const stack_pos = scene.GetComponent(StackPosComponent) orelse return 0;
+    return stack_pos.mPosition;
+}
+
+/// A UI element and the entity it belongs to
+pub const Owned = struct {
+    Element: UIElement,
+    Owner: Entity,
+};
+
+/// The UI elements with a `component_type` and the entities they belong to, skipping elements no entity has taken yet
+/// and entities that are gone. With `worlds`, only the ones whose entity is in one of those:
+///
+///     var elements = try ui.Elements(engine_context.Scratch(), ScrollComponent, worlds);
+///     while (elements.Next()) |owned| ...
+pub fn Elements(self: *UIManager, scratch_allocator: std.mem.Allocator, comptime component_type: type, worlds: ?[]const *WorldManager) !ElementIterator {
+    const element_ids = try self.GetGroup(scratch_allocator, .{ .Component = component_type });
+    return .{ .mManager = self, .mIDs = element_ids.items, .mWorlds = worlds };
+}
+
+pub const ElementIterator = struct {
+    mManager: *UIManager,
+    mIDs: []const UIElement.Type,
+    mWorlds: ?[]const *WorldManager,
+    mIndex: usize = 0,
+
+    pub fn Next(self: *ElementIterator) ?Owned {
+        while (self.mIndex < self.mIDs.len) {
+            const element = UIElement{ .mID = self.mIDs[self.mIndex], .mManager = self.mManager };
+            self.mIndex += 1;
+            const owner = element.GetOwner();
+            if (!owner.IsIDValid()) continue;
+            //before IsActive: an entity of a world that isn't one of them may be of a world that is gone
+            if (self.mWorlds) |worlds| {
+                if (std.mem.indexOfScalar(*WorldManager, worlds, owner.mManager) == null) continue;
+            }
+            if (!owner.IsActive()) continue;
+            return .{ .Element = element, .Owner = owner };
+        }
+        return null;
+    }
+};
 
 /// The entity showing an entity's text: the entity itself if it has a TextComponent, otherwise its first child that
 /// does. A number field's value, a button's or a row's label

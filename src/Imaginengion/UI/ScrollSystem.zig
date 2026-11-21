@@ -9,7 +9,6 @@ const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
-const UIElement = @import("../ECSObjects/UIElement.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const EntityPointerEvent = @import("../Events/PointerEventData.zig").EntityEvent;
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
@@ -24,9 +23,7 @@ const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
 const Widgets = @import("Widgets.zig");
-const NameComponent = EntityComponents.NameComponent;
 const TransformComponent = EntityComponents.TransformComponent;
-const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const UIComponents = @import("../ECSComponents/UIComponents.zig");
 const ScrollComponent = UIComponents.ScrollComponent;
 const ScrollStateComponent = UIComponents.ScrollStateComponent;
@@ -73,15 +70,15 @@ pub const OnPointerEvent = struct {
 
         const thumb = drag.mTarget;
         if (!thumb.IsActive()) return;
-        const region = Parent(thumb) orelse return;
+        const region = thumb.GetParent() orelse return;
         const state = UIManager.GetUIComponent(region, ScrollStateComponent) orelse return;
         const axis: Layout.Axis = if (IsThumb(state.mThumbY, thumb)) .Y else if (IsThumb(state.mThumbX, thumb)) .X else return;
 
         //the drag is in the units the region is placed in, before its own scale
         const scale = if (region.GetComponent(TransformComponent)) |transform| transform.GetWorldScale() else Vec3(f32){ .x = 1, .y = 1, .z = 1 };
         const size = RegionSize(region) orelse return;
-        const track = Get(size, axis);
-        const content = Get(state.mContentSize, axis);
+        const track = Layout.Get(size, axis);
+        const content = Layout.Get(state.mContentSize, axis);
         const travel = track - ThumbLength(track, content);
         if (travel <= 0) return;
         //the thumb's whole travel is the whole scroll range
@@ -103,13 +100,10 @@ pub const Update = struct {
     pub const Name = "ScrollUpdate";
 
     pub fn Run(engine_context: *EngineContext, _: *ScrollSystem, worlds: []const *WorldManager) !void {
-        const ui_manager = &engine_context.mUIManager;
-        const element_ids = try ui_manager.GetGroup(engine_context.Scratch(), .{ .Component = ScrollComponent });
-        for (element_ids.items) |element_id| {
-            const element = UIElement{ .mID = element_id, .mManager = ui_manager };
-            const region = element.GetOwner();
-            //an element no entity has taken yet has nothing to compare
-            if (!region.IsIDValid() or !InWorlds(worlds, region) or !region.IsActive()) continue;
+        var regions = try engine_context.mUIManager.Elements(engine_context.Scratch(), ScrollComponent, worlds);
+        while (regions.Next()) |owned| {
+            const element = owned.Element;
+            const region = owned.Owner;
             const scroll = element.GetComponent(ScrollComponent).?.*;
             const state = element.GetComponentMut(ScrollStateComponent) orelse continue;
             const size = RegionSize(region) orelse Vec2(f32){ .x = 0, .y = 0 };
@@ -118,13 +112,6 @@ pub const Update = struct {
         }
     }
 };
-
-fn InWorlds(worlds: []const *WorldManager, entity: Entity) bool {
-    for (worlds) |world| {
-        if (entity.mManager == world) return true;
-    }
-    return false;
-}
 
 /// Moves a region's scroll offset by `delta` and asks for it to be laid out again, which keeps it in range
 pub fn ScrollBy(engine_context: *EngineContext, region: Entity, delta: Vec2(f32)) !void {
@@ -136,8 +123,8 @@ pub fn ScrollBy(engine_context: *EngineContext, region: Entity, delta: Vec2(f32)
 /// `state` and `thumb_slot` (one of its thumbs) live in the UIManager's ECS, so making the thumb entity in the region's
 /// world never moves them
 fn UpdateThumb(engine_context: *EngineContext, region: Entity, scroll: ScrollComponent, state: *ScrollStateComponent, thumb_slot: *?Entity, axis: Layout.Axis, size: Vec2(f32)) !void {
-    const track = Get(size, axis);
-    const content = Get(state.mContentSize, axis);
+    const track = Layout.Get(size, axis);
+    const content = Layout.Get(state.mContentSize, axis);
     const overflows = scroll.mScroll.Along(axis) and content > track + 0.001 and track > 0;
 
     if (!overflows) {
@@ -150,7 +137,7 @@ fn UpdateThumb(engine_context: *EngineContext, region: Entity, scroll: ScrollCom
 
     const thumb = try ThumbEntity(engine_context, region, thumb_slot);
     const length = ThumbLength(track, content);
-    const scrolled = Get(state.mOffset, axis);
+    const scrolled = Layout.Get(state.mOffset, axis);
     //how far along its travel, from the start (the top, or the left)
     const along = (track - length) * std.math.clamp(scrolled / (content - track), 0, 1);
 
@@ -182,14 +169,8 @@ fn ThumbEntity(engine_context: *EngineContext, region: Entity, thumb_slot: *?Ent
     if (thumb_slot.*) |thumb| {
         if (thumb.IsActive()) return thumb;
     }
-    const thumb = try region.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
-    if (thumb.GetComponentMut(NameComponent)) |name| {
-        name.mName.clearRetainingCapacity();
-        try name.mName.appendSlice(thumb.KeepFor(NameComponent), "Scrollbar");
-    }
-    try Widgets.AddQuad(engine_context, thumb, .{}, .{});
     //its colors, including when it is hovered and dragged, are the theme's
-    try UIManager.Style(engine_context, thumb, "Scrollbar");
+    const thumb = try Widgets.PartQuad(engine_context, region, "Scrollbar", "Scrollbar");
     thumb_slot.* = thumb;
     return thumb;
 }
@@ -221,19 +202,7 @@ fn Step(region: Entity) f32 {
     return UIManager.GetUIComponent(region, ScrollComponent).?.mWheelStep;
 }
 
-fn Parent(entity: Entity) ?Entity {
-    const child_component = entity.GetComponent(EntityChildComponent) orelse return null;
-    return Entity{ .mID = child_component.mParent, .mManager = entity.mManager };
-}
-
 fn IsThumb(slot: ?Entity, entity: Entity) bool {
     const thumb = slot orelse return false;
     return thumb.mID == entity.mID;
-}
-
-fn Get(v: Vec2(f32), axis: Layout.Axis) f32 {
-    return switch (axis) {
-        .X => v.x,
-        .Y => v.y,
-    };
 }

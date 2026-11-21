@@ -31,14 +31,11 @@ const Vec3 = MathTypes.Vec3;
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const UIManager = @import("UIManager.zig");
-const UIElement = @import("../ECSObjects/UIElement.zig");
 const PopupComponent = @import("../ECSComponents/UIComponents.zig").PopupComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
-const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const SComponents = @import("../ECSComponents/SComponents.zig");
-const StackPosComponent = SComponents.StackPosComponent;
 const SceneComponent = SComponents.SceneComponent;
 
 const PopupSystem = @This();
@@ -156,9 +153,7 @@ pub fn TopStackPos(self: *const PopupSystem) ?usize {
     if (self.mOpen.items.len == 0) return null;
     const top = self.mOpen.items[self.mOpen.items.len - 1].mPopup;
     if (!top.IsActive()) return null;
-    const scene = top.GetComponent(EntitySceneComponent).?.mScene;
-    const stack_pos = scene.GetComponent(StackPosComponent) orelse return 0;
-    return stack_pos.mPosition;
+    return UIManager.StackPosOf(top);
 }
 
 /// Where the pointer is in `popup`'s scene, in its units, for opening it there (a right-click menu). Null if that
@@ -196,7 +191,7 @@ pub const OnPressed = struct {
                 .Opener => |opener| opener,
                 .Point => continue,
             };
-            if (opener.IsActive() and Contains(chain, opener)) {
+            if (opener.IsActive() and PointerSystem.Contains(chain, opener)) {
                 keep = index;
                 break;
             }
@@ -222,25 +217,14 @@ pub const Update = struct {
             }
         }
 
-        const ui_manager = &engine_context.mUIManager;
-        const element_ids = try ui_manager.GetGroup(engine_context.Scratch(), .{ .Component = PopupComponent });
-        for (element_ids.items) |element_id| {
-            const popup = (UIElement{ .mID = element_id, .mManager = ui_manager }).GetOwner();
-            //an element no entity has taken yet has nothing to compare
-            if (!popup.IsIDValid() or !InWorlds(worlds, popup) or !popup.IsActive()) continue;
-            if (!self.IsOpen(popup)) try SetCollapsed(engine_context, popup, true);
+        var popups = try engine_context.mUIManager.Elements(engine_context.Scratch(), PopupComponent, worlds);
+        while (popups.Next()) |owned| {
+            if (!self.IsOpen(owned.Owner)) try SetCollapsed(engine_context, owned.Owner, true);
         }
 
         for (self.mOpen.items) |open| try Place(engine_context, open);
     }
 };
-
-fn InWorlds(worlds: []const *WorldManager, entity: Entity) bool {
-    for (worlds) |world| {
-        if (entity.mManager == world) return true;
-    }
-    return false;
-}
 
 /// Moves the popup's root to where its PopupComponent pins it against what opened it. Uses the size layout gave it
 /// this frame, and where its opener was as of the last world transform pass
@@ -275,8 +259,7 @@ fn Place(engine_context: *EngineContext, open: OpenPopup) !void {
     //placed in its parent's space, if it has one
     const transform = popup.GetComponent(TransformComponent) orelse return;
     var local = Vec3(f32){ .x = center.x, .y = center.y, .z = 0 };
-    if (popup.GetComponent(EntityChildComponent)) |child_component| {
-        const parent = Entity{ .mID = child_component.mParent, .mManager = popup.mManager };
+    if (popup.GetParent()) |parent| {
         if (parent.GetComponent(TransformComponent)) |parent_transform| {
             const scale = parent_transform.GetWorldScale();
             if (scale.x == 0 or scale.y == 0) return;
@@ -333,8 +316,7 @@ fn CloseAbove(self: *PopupSystem, engine_context: *EngineContext, index: usize) 
         //a text input in it can't be typed into once it is hidden: its edit ends, kept
         const focus = &engine_context.mUIManager.mFocusSystem;
         if (focus.Focused()) |focused| {
-            const chain = try PointerSystem.ChainOf(engine_context.Scratch(), focused);
-            if (Contains(chain.items, popup)) try focus.EndEdit(engine_context, .Submit);
+            if (focused.IsInside(popup)) try focus.EndEdit(engine_context, .Submit);
         }
 
         try SetCollapsed(engine_context, popup, true);
@@ -348,14 +330,14 @@ fn TopmostContaining(self: *const PopupSystem, chain: []const Entity) ?usize {
     while (index > 0) {
         index -= 1;
         const popup = self.mOpen.items[index].mPopup;
-        if (popup.IsActive() and Contains(chain, popup)) return index;
+        if (popup.IsActive() and PointerSystem.Contains(chain, popup)) return index;
     }
     return null;
 }
 
 fn IndexOf(self: *const PopupSystem, popup: Entity) ?usize {
     for (self.mOpen.items, 0..) |open, index| {
-        if (Same(open.mPopup, popup)) return index;
+        if (open.mPopup.Eq(popup)) return index;
     }
     return null;
 }
@@ -374,19 +356,5 @@ fn Send(engine_context: *EngineContext, popup: Entity, at: At, comptime kind: st
         .Opener => |entity| entity,
         .Point => null,
     };
-    const chain = try PointerSystem.ChainOf(engine_context.Scratch(), popup);
-    for (chain.items) |entity| {
-        try engine_context.mUIManager.Send(engine_context, entity, @unionInit(UIEvent, @tagName(kind), .{ .mTarget = popup, .mOpener = opener }));
-    }
-}
-
-fn Contains(chain: []const Entity, entity: Entity) bool {
-    for (chain) |other| {
-        if (Same(other, entity)) return true;
-    }
-    return false;
-}
-
-fn Same(a: Entity, b: Entity) bool {
-    return a.mID == b.mID and a.mManager == b.mManager;
+    try engine_context.mUIManager.SendEventToChain(engine_context, popup, @unionInit(UIEvent, @tagName(kind), .{ .mTarget = popup, .mOpener = opener }));
 }

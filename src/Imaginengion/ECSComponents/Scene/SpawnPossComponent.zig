@@ -14,7 +14,7 @@ mEntityRef: Entity = .uninit,
 mWantedUUID: ?u64 = null,
 
 pub fn UIRender(self: *SpawnPossComponent, ui: *Inspector.Builder) !void {
-    _ = try ui.EntityRef(&self.mEntityRef, "Spawns", .{ .OnChange = OnRefEdited });
+    _ = try ui.Ref(&self.mEntityRef, "Spawns", .{ .OnChange = OnRefEdited });
 }
 
 fn OnRefEdited(component: *anyopaque) void {

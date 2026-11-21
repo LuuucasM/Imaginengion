@@ -45,11 +45,6 @@ pub fn SetText(self: *TextComponent, keep_allocator: std.mem.Allocator, text: []
     try self.mText.appendSlice(keep_allocator, text);
 }
 
-/// Adds to the end of the text. Same as SetText, the caller marks this entity's layout dirty if it is in one
-pub fn AppendText(self: *TextComponent, keep_allocator: std.mem.Allocator, text: []const u8) !void {
-    try self.mText.appendSlice(keep_allocator, text);
-}
-
 pub fn UIRender(self: *TextComponent, ui: *Inspector.Builder) !void {
     try ui.Text(&self.mText, "Text", .{});
     try ui.Asset(&self.mTextAssetHandle, "Font", &.{ ".ttf", ".otf" }, .{});

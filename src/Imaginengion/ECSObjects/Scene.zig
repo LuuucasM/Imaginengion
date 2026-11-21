@@ -147,6 +147,7 @@ pub fn GetLayer(self: Scene) LayerType {
     return .GameLayer;
 }
 pub const IsIDValid = Core.IsIDValid;
+pub const Eq = Core.Eq;
 //===================END for the scenes==============================================
 
 //======================for the entities in the scenes=====================================

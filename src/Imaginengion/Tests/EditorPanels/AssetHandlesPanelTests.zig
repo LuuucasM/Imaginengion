@@ -1,5 +1,5 @@
 //! The Asset Handles panel (EditorPanels/AssetHandlesPanel.zig): a section per asset type, a row per asset with what it
-//! takes and whether it is on its way out. And the column of lines widget (Widgets.Lines and SyncLines): lines made and
+//! takes and whether it is on its way out. And the column of lines widget (Widgets.Column and SyncLines): lines made and
 //! deleted only as the list grows and shrinks, and their text only set when it changes. No window or GPU needed. Run
 //! with `zig build test-engine`.
 const std = @import("std");
@@ -75,7 +75,7 @@ test "a column of lines follows its list as it grows, changes and shrinks, and a
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     const panel = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
-    const column = try Widgets.Lines(engine_context, .{ .Entity = panel });
+    const column = try Widgets.Column(engine_context, .{ .Entity = panel });
 
     try Widgets.SyncLines(engine_context, column, &.{ "1: a.png", "2: b.ttf" });
     try ExpectLines(&.{ "1: a.png", "2: b.ttf" }, column);

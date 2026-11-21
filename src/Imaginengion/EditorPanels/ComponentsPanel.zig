@@ -114,10 +114,9 @@ pub fn IsOpen(self: ComponentsPanel) bool {
     return !self.mArea.GetComponent(LayoutItemComponent).?.mCollapsed;
 }
 
+/// Folds the panel away, or out again
 pub fn Toggle(self: ComponentsPanel, engine_context: *EngineContext) !void {
-    const item = self.mArea.GetComponentMut(LayoutItemComponent).?;
-    item.mCollapsed = !item.mCollapsed;
-    try self.mArea.MarkLayoutDirty(engine_context);
+    try WidgetActions.Fold(engine_context, self.mArea, .uninit);
 }
 
 /// Once a frame, before layout, while it is shown: the components built again if the selection or which components
@@ -129,27 +128,27 @@ pub fn Update(self: *ComponentsPanel, engine_context: *EngineContext, selected: 
 
     const object = selected orelse {
         try self.Clear(engine_context);
-        try ShowLine(engine_context, self.mTitle, "");
-        return try ShowLine(engine_context, self.mMessage, "Select an object to see its components");
+        try WidgetActions.ShowLine(engine_context, self.mTitle, "");
+        return try WidgetActions.ShowLine(engine_context, self.mMessage, "Select an object to see its components");
     };
-    if (!IsActive(object)) {
+    if (!object.IsActive()) {
         try self.Clear(engine_context);
-        try ShowLine(engine_context, self.mTitle, "");
-        return try ShowLine(engine_context, self.mMessage, "");
+        try WidgetActions.ShowLine(engine_context, self.mTitle, "");
+        return try WidgetActions.ShowLine(engine_context, self.mMessage, "");
     }
 
     const present = PresentOf(object);
     const layer_names = engine_context.mCollisionLayers.mVersion;
-    const stale = if (self.mBuiltFor) |built| !SameObject(built, object) or present != self.mBuiltPresent or layer_names != self.mBuiltLayerNames or EnumFileChanged(engine_context, object) or self.TakeRebuild(engine_context) else true;
+    const stale = if (self.mBuiltFor) |built| !built.Eq(object) or present != self.mBuiltPresent or layer_names != self.mBuiltLayerNames or EnumFileChanged(engine_context, object) or self.TakeRebuild(engine_context) else true;
     if (stale) try self.Rebuild(engine_context, object, present);
-    try ShowLine(engine_context, self.mTitle, NameOf(object));
-    try ShowLine(engine_context, self.mMessage, if (present == 0) "No components yet. Right click to add one" else "");
+    try WidgetActions.ShowLine(engine_context, self.mTitle, object.Name());
+    try WidgetActions.ShowLine(engine_context, self.mMessage, if (present == 0) "No components yet. Right click to add one" else "");
 }
 
 /// What a click on `entity` does: one of its buttons, or a component menu's Add or Delete. Null for anything else
 pub fn ActionOf(self: *const ComponentsPanel, entity: Entity) ?Action {
     for (self.mButtons.items) |entry| {
-        if (Same(entry.Button, entity)) return entry.Action;
+        if (entry.Button.Eq(entity)) return entry.Action;
     }
     const built = self.mBuiltFor orelse return null;
     return switch (built) {
@@ -208,7 +207,7 @@ pub fn Run(self: *const ComponentsPanel, engine_context: *EngineContext, action:
 /// A drop on the panel: an entity's row on the selected player's possessed entity, which it possesses
 pub fn OnDrop(self: *const ComponentsPanel, on: Entity, dropped: PointerDroppedEvent) void {
     const box = self.mPossessBox orelse return;
-    if (!Same(on, box)) return;
+    if (!on.Eq(box)) return;
     const built = self.mBuiltFor orelse return;
     if (built != .player) return;
     const object_ref = dropped.mSource.GetComponent(ObjectRefComponent) orelse return;
@@ -223,7 +222,7 @@ pub fn OnUIEvent(self: *const ComponentsPanel, engine_context: *EngineContext, e
         else => return,
     };
     const dropdown = self.mBodyType orelse return;
-    if (!Same(changed, dropdown)) return;
+    if (!changed.Eq(dropdown)) return;
     const built = self.mBuiltFor orelse return;
     if (built != .entity) return;
     const index = WidgetActions.ChosenIndex(dropdown) orelse return;
@@ -232,7 +231,7 @@ pub fn OnUIEvent(self: *const ComponentsPanel, engine_context: *EngineContext, e
     }
 }
 
-/// Rows of its own under a component's (see Inspector.RenderComponentWith), for what needs the object
+/// Rows of its own under a component's (see Inspector.RenderComponent), for what needs the object
 pub fn After(self: *ComponentsPanel, comptime component_type: type, ui: *Inspector.Builder, component: *component_type, object: anytype) !void {
     const keep_allocator = ui.mEngineContext.ProgramKeep();
     const Object = @TypeOf(object);
@@ -252,7 +251,7 @@ pub fn After(self: *ComponentsPanel, comptime component_type: type, ui: *Inspect
     if (comptime component_type == PossessComponent and Object == Player) {
         //possessing links both sides, so the box takes the drop itself (OnDrop) rather than writing the field
         //the copy the rows are built from, which field offsets are measured from
-        const box = try ui.EntityRef(&component.mPossessedEntity, "Possessed", .{ .Writes = false });
+        const box = try ui.Ref(&component.mPossessedEntity, "Possessed", .{ .Writes = false });
         self.mPossessBox = box;
         const menu = try Widgets.ContextMenu(ui.mEngineContext, box, self.mOptions);
         const clear = try Widgets.MenuItem(ui.mEngineContext, menu, "Clear", .{ .StockScripts = self.mOptions.StockScripts });
@@ -276,7 +275,7 @@ pub fn After(self: *ComponentsPanel, comptime component_type: type, ui: *Inspect
     if (comptime component_type == UIElementComponent and Object == Entity) {
         var count: usize = 0;
         if (UIManager.ElementOf(object)) |element| {
-            inline for (UIComponents.ComponentsPanelList) |ui_component| {
+            inline for (UIComponents.SerializeList) |ui_component| {
                 if (element.HasComponent(ui_component)) {
                     try ui.Note(ui_component.Name);
                     count += 1;
@@ -370,39 +369,4 @@ fn ToListAction(comptime List: type, action: Action) List.Action {
         .Delete => |index| .{ .Delete = index },
         else => unreachable,
     };
-}
-
-fn IsActive(object: SelectedObject) bool {
-    return switch (object) {
-        inline else => |typed| typed.IsActive(),
-    };
-}
-
-/// An object's name, up to the first 0 if it was saved with one
-fn NameOf(object: SelectedObject) []const u8 {
-    const name = switch (object) {
-        inline else => |typed| typed.GetName(),
-    };
-    return name[0 .. std.mem.indexOfScalar(u8, name, 0) orelse name.len];
-}
-
-fn SameObject(a: SelectedObject, b: SelectedObject) bool {
-    if (std.meta.activeTag(a) != std.meta.activeTag(b)) return false;
-    return switch (a) {
-        inline else => |typed, tag| typed.mID == @field(b, @tagName(tag)).mID and typed.mManager == @field(b, @tagName(tag)).mManager,
-    };
-}
-
-fn Same(a: Entity, b: Entity) bool {
-    return a.mID == b.mID and a.mManager == b.mManager;
-}
-
-/// Puts `text` on a line, folded away while it says nothing
-fn ShowLine(engine_context: *EngineContext, line: Entity, text: []const u8) !void {
-    try WidgetActions.SetText(engine_context, line, text);
-    const item = line.GetComponentMut(LayoutItemComponent).?;
-    const hidden = text.len == 0;
-    if (item.mCollapsed == hidden) return;
-    item.mCollapsed = hidden;
-    try line.MarkLayoutDirty(engine_context);
 }

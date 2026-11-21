@@ -267,7 +267,8 @@ const Solver = struct {
 
         for ([_]Axis{ .X, .Y }) |axis| {
             self.Fit(root, axis);
-            if (root_area) |area| self.SizeRootToArea(root, axis, Get(area, axis));
+            //the root against the root area, the way a parent treats a child across its direction
+            if (root_area) |area| self.TakeShare(root, axis, Get(area, axis));
             self.Distribute(root, axis);
         }
 
@@ -353,11 +354,12 @@ const Solver = struct {
         return Span(lines, self.CellSize(index, axis), container.Gap) + container.Padding.Along(axis);
     }
 
-    /// The root against the root area, the way a parent treats a child across its direction
-    fn SizeRootToArea(self: *Solver, root: Index, axis: Axis, area: f32) void {
-        switch (self.mNodes[root].SizingOf(axis)) {
-            .Percent => |fraction| self.SetSize(root, axis, fraction * area),
-            .Fill => self.SetSize(root, axis, area),
+    /// `index` takes its share of `room` along `axis`: all of it if it fills, its fraction if it is a percent. A fixed
+    /// or fitting size stays as it is
+    fn TakeShare(self: *Solver, index: Index, axis: Axis, room: f32) void {
+        switch (self.mNodes[index].SizingOf(axis)) {
+            .Percent => |fraction| self.SetSize(index, axis, fraction * room),
+            .Fill => self.SetSize(index, axis, room),
             .Fixed, .Fit => {},
         }
     }
@@ -370,23 +372,18 @@ const Solver = struct {
 
         const size = Get(self.mResults[index].Size, axis);
         const inner = @max(size - container.Padding.Along(axis), 0);
-        if (container.Direction == .Grid) {
-            self.DistributeCells(index, axis);
-        } else if (container.Direction.MainAxis() == axis) {
+        if (container.Direction != .Grid and container.Direction.MainAxis() == axis) {
             self.DistributeAlong(index, axis, inner, container.Gap);
         } else {
-            self.DistributeAcross(index, axis, inner);
+            //across a row or column its children share its inside; in a grid each child shares its cell
+            const room = if (container.Direction == .Grid) self.CellSize(index, axis) else inner;
+            var flow = self.FlowChildren(index);
+            while (flow.Next()) |child| self.TakeShare(child, axis, room);
         }
 
         //anchored children size against the whole of this one, the same rectangle they're pinned to
         var anchored = self.AnchoredChildren(index);
-        while (anchored.Next()) |child| {
-            switch (self.mNodes[child].SizingOf(axis)) {
-                .Percent => |fraction| self.SetSize(child, axis, fraction * size),
-                .Fill => self.SetSize(child, axis, size),
-                .Fixed, .Fit => {},
-            }
-        }
+        while (anchored.Next()) |child| self.TakeShare(child, axis, size);
 
         var children = self.Children(index);
         while (children.Next()) |child| self.Distribute(child, axis);
@@ -422,32 +419,6 @@ const Solver = struct {
                     self.SetSize(child, axis, size + leftover * @max(weight, 0) / total_weight);
                 },
                 .Fixed, .Fit, .Percent => {},
-            }
-        }
-    }
-
-    /// In a grid: children that fill take their whole cell, percents their share of it, and the rest keep their size
-    fn DistributeCells(self: *Solver, index: Index, axis: Axis) void {
-        const cell = self.CellSize(index, axis);
-        var flow = self.FlowChildren(index);
-        while (flow.Next()) |child| {
-            switch (self.mNodes[child].SizingOf(axis)) {
-                .Percent => |fraction| self.SetSize(child, axis, fraction * cell),
-                .Fill => self.SetSize(child, axis, cell),
-                .Fixed, .Fit => {},
-            }
-        }
-    }
-
-    /// Across the container's direction: children that fill take all of it, percents their share, and the rest
-    /// keep their size
-    fn DistributeAcross(self: *Solver, index: Index, axis: Axis, inner: f32) void {
-        var flow = self.FlowChildren(index);
-        while (flow.Next()) |child| {
-            switch (self.mNodes[child].SizingOf(axis)) {
-                .Percent => |fraction| self.SetSize(child, axis, fraction * inner),
-                .Fill => self.SetSize(child, axis, inner),
-                .Fixed, .Fit => {},
             }
         }
     }
@@ -698,7 +669,8 @@ fn Span(count: usize, cell: f32, gap: f32) f32 {
     return n * cell + (n - 1) * gap;
 }
 
-fn Get(v: Vec2(f32), axis: Axis) f32 {
+/// `v` along `axis`
+pub fn Get(v: Vec2(f32), axis: Axis) f32 {
     return switch (axis) {
         .X => v.x,
         .Y => v.y,

@@ -1,4 +1,4 @@
-//! Reference fields taking dropped hierarchy rows (UI/Inspector.zig EntityRef / SceneRef, UI/BindingSystem.zig): a row
+//! Reference fields taking dropped hierarchy rows (UI/Inspector.zig Builder.Ref, UI/BindingSystem.zig): a row
 //! of the right kind becomes the field's object and the wrong kind is turned down, an overlay-only field turns down a
 //! game layer scene, a field's right-click Clear empties it (an asset field's too), and the Components panel's Possess
 //! box possessing a dropped entity through Player.Possess and letting go of it on Clear. Drops and clicks are sent the
@@ -73,7 +73,7 @@ const TestWorld = struct {
     /// The rows of `object`'s component, under a fresh panel
     fn Render(self: *TestWorld, object: anytype, comptime component_type: type) !Entity {
         const panel = try self.mUIScene.CreateEntity(self.mEngineContext, Entity.DefaultConfig);
-        try Inspector.RenderComponent(self.mEngineContext, panel, panel, object, component_type, NO_SCRIPTS);
+        try Inspector.RenderComponent(self.mEngineContext, panel, panel, object, component_type, NO_SCRIPTS, null);
         return panel;
     }
 

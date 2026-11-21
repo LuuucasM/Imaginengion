@@ -14,7 +14,6 @@ const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
-const UIElement = @import("../ECSObjects/UIElement.zig");
 const ThemeAsset = @import("../ECSComponents/Asset/ThemeAsset.zig");
 const Texture2D = @import("../ECSComponents/Asset/Texture2D.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
@@ -95,19 +94,17 @@ pub const Update = struct {
 
     pub fn Run(engine_context: *EngineContext, self: *StyleSystem, theme: *const ThemeAsset, plain_texture: AssetHandle, restyle_all: bool) !void {
         const ui_manager = &engine_context.mUIManager;
-        const scratch_allocator = engine_context.Scratch();
-        const element_ids = if (restyle_all)
-            try ui_manager.GetGroup(scratch_allocator, .{ .Component = StyleComponent })
+        var elements = if (restyle_all)
+            try ui_manager.Elements(engine_context.Scratch(), StyleComponent, null)
         else
-            try ui_manager.GetGroup(scratch_allocator, .{ .Component = StyleDirtyTag });
+            try ui_manager.Elements(engine_context.Scratch(), StyleDirtyTag, null);
         //every styled element is about to say which theme it takes its style from
         if (restyle_all) self.mThemesUsed.clearRetainingCapacity();
-        for (element_ids.items) |element_id| {
-            const element = UIElement{ .mID = element_id, .mManager = ui_manager };
-            const entity = element.GetOwner();
-            //no entity has taken it yet: it stays marked until one does
-            if (!entity.IsActive()) continue;
-            if (element.HasComponent(StyleDirtyTag)) try ui_manager.mECSManager.RemoveComponentSync(engine_context, element_id, @TypeOf(ui_manager.mECSManager).ComponentInd(StyleDirtyTag));
+        //one no entity has taken yet is skipped, and stays marked until one does
+        while (elements.Next()) |owned| {
+            const element = owned.Element;
+            const entity = owned.Owner;
+            try element.SetTag(engine_context, StyleDirtyTag, false);
 
             const style_component = element.GetComponent(StyleComponent) orelse continue;
             const name = style_component.mStyle.items;

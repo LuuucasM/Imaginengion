@@ -369,3 +369,8 @@ pub const IsActive = Core.IsActive;
 pub const Invalidate = Core.Invalidate;
 
 pub const IsIDValid = Core.IsIDValid;
+
+pub const Eq = Core.Eq;
+pub const GetParent = Core.GetParent;
+pub const IsInside = Core.IsInside;
+pub const SetTag = Core.SetTag;

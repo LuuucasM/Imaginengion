@@ -87,6 +87,7 @@ pub const GetIterator = Core.GetIterator;
 pub const IsActive = Core.IsActive;
 
 pub const IsIDValid = Core.IsIDValid;
+pub const Eq = Core.Eq;
 
 pub const Invalidate = Core.Invalidate;
 

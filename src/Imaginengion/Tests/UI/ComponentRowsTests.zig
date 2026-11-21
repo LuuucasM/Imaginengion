@@ -70,7 +70,7 @@ const TestWorld = struct {
     /// The rows of `object`'s component, under a fresh panel each time
     fn Render(self: *TestWorld, object: anytype, comptime component_type: type) !Entity {
         const panel = try self.mScene.CreateEntity(self.mEngineContext, Entity.DefaultConfig);
-        try Inspector.RenderComponent(self.mEngineContext, panel, panel, object, component_type, NO_SCRIPTS);
+        try Inspector.RenderComponent(self.mEngineContext, panel, panel, object, component_type, NO_SCRIPTS, null);
         return panel;
     }
 

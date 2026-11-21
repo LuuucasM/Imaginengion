@@ -99,13 +99,7 @@ pub fn ObjectFileRef(comptime obj_t: type) type {
 
         pub fn UIRender(self: *Self, ui: *Inspector.Builder) !void {
             try ui.Asset(&self.mFile, "File", EXTENSIONS, .{});
-            _ = switch (obj_t) {
-                Entity => try ui.EntityRef(&self.mObject, "Loaded", .{}),
-                Scene => try ui.SceneRef(&self.mObject, "Loaded", .{}),
-                Player => try ui.PlayerRef(&self.mObject, "Loaded", .{}),
-                GameContext => try ui.GameContextRef(&self.mObject, "Loaded", .{}),
-                else => @compileError(@typeName(obj_t) ++ " is not an object type"),
-            };
+            _ = try ui.Ref(&self.mObject, "Loaded", .{});
         }
 
         /// The file as every asset reference is written, and the object as its UUID. Each left out when it isn't set

@@ -102,11 +102,7 @@ pub fn IsOpen(self: AssetHandlesPanel) bool {
 
 /// Opens the window in front of the others, or closes it
 pub fn Toggle(self: AssetHandlesPanel, engine_context: *EngineContext) !void {
-    if (self.IsOpen()) {
-        try WidgetActions.CloseWindow(engine_context, self.mWindow);
-    } else {
-        try WidgetActions.OpenWindow(engine_context, self.mWindow);
-    }
+    try WidgetActions.ToggleWindow(engine_context, self.mWindow);
 }
 
 /// Once a frame, before layout, while it is open: every REFRESH_SECONDS, the sections made again if the assets or their

@@ -79,10 +79,9 @@ pub fn IsOpen(self: ScriptsPanel) bool {
     return !self.mArea.GetComponent(LayoutItemComponent).?.mCollapsed;
 }
 
+/// Folds the panel away, or out again
 pub fn Toggle(self: ScriptsPanel, engine_context: *EngineContext) !void {
-    const item = self.mArea.GetComponentMut(LayoutItemComponent).?;
-    item.mCollapsed = !item.mCollapsed;
-    try self.mArea.MarkLayoutDirty(engine_context);
+    try WidgetActions.Fold(engine_context, self.mArea, .uninit);
 }
 
 /// Once a frame, before layout, while it is shown: the rows built again if the selection or its scripts changed or the
@@ -98,8 +97,8 @@ pub fn Update(self: *ScriptsPanel, engine_context: *EngineContext, selected: ?Se
     var scripts: std.ArrayList(SelectedObject) = .empty;
     var listed: ?SelectedObject = null;
     if (selected) |object| {
-        if (IsActive(object)) {
-            title = NameOf(object);
+        if (object.IsActive()) {
+            title = object.Name();
             listed = object;
             try ScriptsOf(scratch_allocator, object, &scripts);
             if (scripts.items.len == 0) message = "No scripts yet";
@@ -110,14 +109,14 @@ pub fn Update(self: *ScriptsPanel, engine_context: *EngineContext, selected: ?Se
 
     const layer_names_changed = self.mBuiltLayerNames != engine_context.mCollisionLayers.mVersion;
     if (layer_names_changed or !self.IsBuiltFor(listed, scripts.items)) try self.Rebuild(engine_context, listed, scripts.items);
-    try ShowLine(engine_context, self.mTitle, title);
-    try ShowLine(engine_context, self.mMessage, message);
+    try WidgetActions.ShowLine(engine_context, self.mTitle, title);
+    try WidgetActions.ShowLine(engine_context, self.mMessage, message);
 }
 
 /// What clicking `item` does: the script to delete, null if it isn't one of the panel's menu items
 pub fn ActionOf(self: *const ScriptsPanel, item: Entity) ?SelectedObject {
     for (self.mItems.items) |entry| {
-        if (Same(entry.Item, item)) return entry.Script;
+        if (entry.Item.Eq(item)) return entry.Script;
     }
     return null;
 }
@@ -141,11 +140,11 @@ pub fn ScriptOwnerOf(owner: OwnerKind) std.meta.Tag(SelectedObject) {
 
 /// A drop on the panel: a script added to the selected object, if it is the kind of script that object takes
 pub fn OnDrop(self: ScriptsPanel, engine_context: *EngineContext, on: Entity, dropped: PointerDroppedEvent, selected: ?SelectedObject) !void {
-    if (!Same(on, self.mArea)) return;
+    if (!on.Eq(self.mArea)) return;
     const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
     const rel_path = file_ref.mRelPath.items;
     const object = selected orelse return;
-    if (!IsActive(object)) return;
+    if (!object.IsActive()) return;
 
     //loading it (compiling it if it hasn't been) to find out what it is a script for
     var script_handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = file_ref.mPathType } });
@@ -168,11 +167,11 @@ pub fn OnDrop(self: ScriptsPanel, engine_context: *EngineContext, on: Entity, dr
 fn IsBuiltFor(self: ScriptsPanel, listed: ?SelectedObject, scripts: []const SelectedObject) bool {
     if ((listed == null) != (self.mBuiltFor == null)) return false;
     if (listed) |object| {
-        if (!SameObject(object, self.mBuiltFor.?)) return false;
+        if (!object.Eq(self.mBuiltFor.?)) return false;
     }
     if (scripts.len != self.mBuiltScripts.items.len) return false;
     for (scripts, self.mBuiltScripts.items, self.mBuiltVersions.items) |script, built, version| {
-        if (!SameObject(script, built)) return false;
+        if (!script.Eq(built)) return false;
         //swapped for a new build, whose variables can be others or elsewhere: the rows editing them are built again
         if (Version(script) != version) return false;
     }
@@ -212,7 +211,7 @@ fn Rebuild(self: *ScriptsPanel, engine_context: *EngineContext, listed: ?Selecte
     self.mRows = rows;
     for (scripts) |script| {
         //a plain row: it only has its menu, clicking it does nothing
-        const row = try Widgets.SelectableRow(engine_context, .{ .Entity = rows }, NameOf(script), .{ .StockScripts = false });
+        const row = try Widgets.SelectableRow(engine_context, .{ .Entity = rows }, script.Name(), .{ .StockScripts = false });
         const menu = try Widgets.ContextMenu(engine_context, row, self.mOptions);
         try self.mMenus.append(keep_allocator, menu);
         const item = try Widgets.MenuItem(engine_context, menu, "Delete Script", .{ .StockScripts = self.mOptions.StockScripts });
@@ -238,39 +237,4 @@ fn ScriptsOf(scratch_allocator: std.mem.Allocator, object: SelectedObject, scrip
             while (iter.next()) |script| try scripts.append(scratch_allocator, @unionInit(SelectedObject, @tagName(tag), script));
         },
     }
-}
-
-fn IsActive(object: SelectedObject) bool {
-    return switch (object) {
-        inline else => |typed| typed.IsActive(),
-    };
-}
-
-/// An object's name, up to the first 0 if it was saved with one
-fn NameOf(object: SelectedObject) []const u8 {
-    const name = switch (object) {
-        inline else => |typed| typed.GetName(),
-    };
-    return name[0 .. std.mem.indexOfScalar(u8, name, 0) orelse name.len];
-}
-
-fn SameObject(a: SelectedObject, b: SelectedObject) bool {
-    if (std.meta.activeTag(a) != std.meta.activeTag(b)) return false;
-    return switch (a) {
-        inline else => |typed, tag| typed.mID == @field(b, @tagName(tag)).mID and typed.mManager == @field(b, @tagName(tag)).mManager,
-    };
-}
-
-fn Same(a: Entity, b: Entity) bool {
-    return a.mID == b.mID and a.mManager == b.mManager;
-}
-
-/// Puts `text` on a line, folded away while it says nothing
-fn ShowLine(engine_context: *EngineContext, line: Entity, text: []const u8) !void {
-    try WidgetActions.SetText(engine_context, line, text);
-    const item = line.GetComponentMut(LayoutItemComponent).?;
-    const hidden = text.len == 0;
-    if (item.mCollapsed == hidden) return;
-    item.mCollapsed = hidden;
-    try line.MarkLayoutDirty(engine_context);
 }

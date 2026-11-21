@@ -21,7 +21,7 @@ mWantedUUID: ?u64 = null,
 pub fn Deinit(_: *PopupRefComponent, _: *EngineContext, _: std.mem.Allocator) void {}
 
 pub fn UIRender(self: *PopupRefComponent, ui: *Inspector.Builder) !void {
-    _ = try ui.EntityRef(&self.mPopup, "Popup", .{ .OnChange = OnRefEdited });
+    _ = try ui.Ref(&self.mPopup, "Popup", .{ .OnChange = OnRefEdited });
 }
 
 fn OnRefEdited(component: *anyopaque) void {

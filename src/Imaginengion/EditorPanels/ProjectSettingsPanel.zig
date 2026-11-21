@@ -171,11 +171,7 @@ pub fn IsOpen(self: ProjectSettingsPanel) bool {
 
 /// Opens the window in front of the others, or closes it
 pub fn Toggle(self: ProjectSettingsPanel, engine_context: *EngineContext) !void {
-    if (self.IsOpen()) {
-        try WidgetActions.CloseWindow(engine_context, self.mWindow);
-    } else {
-        try WidgetActions.OpenWindow(engine_context, self.mWindow);
-    }
+    try WidgetActions.ToggleWindow(engine_context, self.mWindow);
 }
 
 /// Once a frame, before layout, while it is open: the fields given the project's settings again if they have changed
@@ -224,15 +220,15 @@ fn ShowFile(engine_context: *EngineContext, box: Entity, path: []const u8) !void
 
 /// What clicking `button` does, null if it isn't one of the panel's buttons
 pub fn ActionOf(self: *const ProjectSettingsPanel, button: Entity) ?Action {
-    if (Same(self.mIcon.Browse, button)) return .BrowseIcon;
-    if (Same(self.mClearIcon, button)) return .ClearIcon;
+    if (self.mIcon.Browse.Eq(button)) return .BrowseIcon;
+    if (self.mClearIcon.Eq(button)) return .ClearIcon;
     for (std.enums.values(Project.Entry)) |entry| {
-        if (Same(self.mEntries.get(entry).Browse, button)) return .{ .BrowseEntry = entry };
+        if (self.mEntries.get(entry).Browse.Eq(button)) return .{ .BrowseEntry = entry };
     }
-    if (Same(self.mAddPlatform, button)) return .AddPlatform;
+    if (self.mAddPlatform.Eq(button)) return .AddPlatform;
     for (self.mPlatforms, 0..) |row, index| {
-        if (Same(row.Target, button)) return .{ .MakeTarget = index };
-        if (Same(row.Remove, button)) return .{ .RemovePlatform = index };
+        if (row.Target.Eq(button)) return .{ .MakeTarget = index };
+        if (row.Remove.Eq(button)) return .{ .RemovePlatform = index };
     }
     return null;
 }
@@ -264,12 +260,12 @@ pub fn Run(engine_context: *EngineContext, action: Action) !void {
 pub fn OnDrop(self: *const ProjectSettingsPanel, engine_context: *EngineContext, on: Entity, dropped: PointerDroppedEvent) !void {
     const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
     const rel_path = file_ref.mRelPath.items;
-    if (Same(self.mIcon.Box, on)) {
+    if (self.mIcon.Box.Eq(on)) {
         if (file_ref.mPathType != .Prj) return std.log.warn("The window icon has to be a file inside the project folder, not {s}", .{rel_path});
         return try SetWindowIcon(engine_context, try engine_context.mProject.GetAbsPath(engine_context.ProgramScratch(), rel_path));
     }
     for (std.enums.values(Project.Entry)) |entry| {
-        if (!Same(self.mEntries.get(entry).Box, on)) continue;
+        if (!self.mEntries.get(entry).Box.Eq(on)) continue;
         if (file_ref.mPathType != .Prj) return std.log.warn("The project's entry {s} has to be a file inside the project folder, not {s}", .{ EntryName(entry), rel_path });
         return try SetEntry(engine_context, entry, try engine_context.mProject.GetAbsPath(engine_context.ProgramScratch(), rel_path));
     }
@@ -282,9 +278,9 @@ pub fn OnUIEvent(self: *ProjectSettingsPanel, engine_context: *EngineContext, ev
         else => return,
     };
     //one event per entity in the chain: the field's own
-    if (!Same(event.mEntity, submitted)) return;
+    if (!event.mEntity.Eq(submitted)) return;
     if (try self.SubmitPlatform(engine_context, submitted)) return;
-    if (!Same(submitted, self.mName)) return;
+    if (!submitted.Eq(self.mName)) return;
     const text = self.mName.GetComponent(TextComponent) orelse return;
     engine_context.mProject.SetName(engine_context, text.mText.items) catch |err| switch (err) {
         error.NoProjectOpen => std.log.warn("Open a project before naming it", .{}),
@@ -300,15 +296,15 @@ fn SubmitPlatform(self: *ProjectSettingsPanel, engine_context: *EngineContext, f
     const platforms = &engine_context.mTargetPlatforms;
     for (self.mPlatforms[0..platforms.Count()], 0..) |row, index| {
         const text = (field.GetComponent(TextComponent) orelse return false).mText.items;
-        if (Same(field, row.Name)) {
+        if (field.Eq(row.Name)) {
             platforms.SetName(index, text);
-        } else if (Same(field, row.CPU) or Same(field, row.Video)) {
+        } else if (field.Eq(row.CPU) or field.Eq(row.Video)) {
             const mb = std.fmt.parseUnsigned(u32, std.mem.trim(u8, text, " \t"), 10) catch {
                 std.log.warn("A budget is a whole number of MB, not {s}", .{text});
                 self.mShownPlatforms = null;
                 return true;
             };
-            if (Same(field, row.CPU)) platforms.SetCPUMemoryMB(index, mb) else platforms.SetVideoMemoryMB(index, mb);
+            if (field.Eq(row.CPU)) platforms.SetCPUMemoryMB(index, mb) else platforms.SetVideoMemoryMB(index, mb);
         } else continue;
         self.mShownPlatforms = null;
         return true;
@@ -332,8 +328,4 @@ fn SetWindowIcon(engine_context: *EngineContext, abs_path: []const u8) !void {
         error.NotInProject, error.WrongFileKind => return std.log.warn("The window icon has to be a {s} file inside the project folder, not {s}", .{ ICON_EXTENSION, abs_path }),
         else => return err,
     };
-}
-
-fn Same(a: Entity, b: Entity) bool {
-    return a.mID == b.mID and a.mManager == b.mManager;
 }

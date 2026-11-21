@@ -271,7 +271,7 @@ test "extras add rows after a component's own, and for a component with no UIRen
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     var extras = Extras{};
-    try Inspector.RenderComponentWith(engine_context, world.mPanel, world.mPanel, world.mObject, UUIDComponent, NO_SCRIPTS, &extras);
+    try Inspector.RenderComponent(engine_context, world.mPanel, world.mPanel, world.mObject, UUIDComponent, NO_SCRIPTS, &extras);
     try std.testing.expectEqual(@as(usize, 1), extras.mCalls);
     try std.testing.expectEqualStrings("UUIDComponent", extras.mLastType);
     try std.testing.expectEqualStrings("extra", world.Row(world.RowCount() - 1).GetComponent(TextComponent).?.mText.items);

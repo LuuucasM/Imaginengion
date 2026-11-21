@@ -471,8 +471,36 @@ pub fn Core(comptime Self: type) type {
             try _Fill(self, engine_context, &tmpl_path);
         }
 
+        /// Whether both are the same object of the same world
         pub fn Eq(self: Self, other: Self) bool {
-            return if (self.mID == other.mID) true else false;
+            return self.mID == other.mID and self.mManager == other.mManager;
+        }
+
+        /// The object this one is a child of, null for one at the top
+        pub fn GetParent(self: Self) ?Self {
+            const child_component = GetComponent(self, ChildComponent(Self.Type)) orelse return null;
+            return .{ .mID = child_component.mParent, .mManager = self.mManager };
+        }
+
+        /// Whether this object is `container` or somewhere under it
+        pub fn IsInside(self: Self, container: Self) bool {
+            var current: ?Self = self;
+            while (current) |object| : (current = GetParent(object)) {
+                if (Eq(object, container)) return true;
+            }
+            return false;
+        }
+
+        /// Puts the tag `tag_type` on the object, or takes it off straight away (RemoveComponentSync, which is safe
+        /// for a tag), if it isn't that way already
+        pub fn SetTag(self: Self, engine_context: *EngineContext, comptime tag_type: type, on: bool) !void {
+            comptime std.debug.assert(@sizeOf(tag_type) == 0);
+            if (on == HasComponent(self, tag_type)) return;
+            if (on) {
+                _ = try AddComponent(self, engine_context, tag_type{});
+            } else {
+                try RemoveComponentSync(self, engine_context, tag_type);
+            }
         }
 
         /// The SerializeList components an object has, one bit per entry

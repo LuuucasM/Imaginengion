@@ -1,8 +1,8 @@
 //! The layout pass: lays out every layout tree that has been marked dirty (LayoutDirtyTag), and writes the
-//! results into the components that already exist. A tree is an entity with a LayoutItemComponent or a
-//! LayoutComponent, and below it every child that has one of those too, for as long as each parent is a container
-//! (has a LayoutComponent). Entities without either are left wherever their transform puts them, and anything
-//! under one starts a tree of its own.
+//! results into the components that already exist. Nothing under something collapsed is laid out: it takes no room.
+//! A tree is an entity with a LayoutItemComponent or a LayoutComponent, and below it every child that has one of
+//! those too, for as long as each parent is a container (has a LayoutComponent). Entities without either are left
+//! wherever their transform puts them, and anything under one starts a tree of its own.
 //!
 //! Written back for each element:
 //!   - its translation's x and y, when layout decided where it goes. Never z: how things stack in depth is up
@@ -47,7 +47,8 @@ const EventResult = @import("../Events/EventManager.zig").EventResult;
 
 pub const Name = "Layout";
 
-/// Lays out every tree in `world` that has a dirty entity in it, each once however many of its entities are dirty
+/// Lays out every tree in `world` that has a dirty entity in it, each once however many of its entities are dirty. A
+/// change under something collapsed lays nothing out (see Fold)
 pub fn Run(engine_context: *EngineContext, world: *WorldManager) !void {
     const scratch_allocator = world.Scratch();
     const dirty_ids = try world.GetEntityGroup(scratch_allocator, .{ .Component = LayoutDirtyTag });
@@ -60,13 +61,37 @@ pub fn Run(engine_context: *EngineContext, world: *WorldManager) !void {
             try entity.ClearLayoutDirty(engine_context);
             continue;
         }
-        const root = FindRoot(entity);
-        if (std.mem.indexOfScalar(Entity.Type, roots.items, root.mID) == null) try roots.append(scratch_allocator, root.mID);
+        const top = FindTop(entity);
+        if (top.Folded) {
+            try Fold(entity, engine_context);
+            continue;
+        }
+        if (std.mem.indexOfScalar(Entity.Type, roots.items, top.Root.mID) == null) try roots.append(scratch_allocator, top.Root.mID);
     }
 
     for (roots.items) |root_id| {
         try LayoutTree(world.GetEntity(root_id), engine_context);
     }
+}
+
+/// The top of the tree `entity` is in, and whether it is folded away under something collapsed above it
+fn FindTop(entity: Entity) struct { Root: Entity, Folded: bool } {
+    var current = entity;
+    var folded = false;
+    while (ContainerAbove(current)) |parent| {
+        if (IsCollapsed(parent)) folded = true;
+        current = parent;
+    }
+    return .{ .Root = current, .Folded = folded };
+}
+
+/// A change under something collapsed: nothing of it shows or takes room, so nothing is laid out. It is laid out with
+/// the rest of its tree when it unfolds, as unfolding tags the element that unfolds. Until then it is kept hidden, and
+/// its text is measured again once it shows
+fn Fold(entity: Entity, engine_context: *EngineContext) !void {
+    ForgetMeasuredText(entity);
+    try ApplyHidden(entity, true, engine_context);
+    try entity.ClearLayoutDirty(engine_context);
 }
 
 /// Asks for every layout tree in `scene` to be laid out again, e.g. because the screen it fits into changed. Tagging
@@ -121,13 +146,15 @@ pub fn IsInLayout(entity: Entity) bool {
 
 /// The top of the layout tree `entity` is in: up through its parents for as long as each one is a container
 pub fn FindRoot(entity: Entity) Entity {
-    var current = entity;
-    while (current.GetComponent(EntityChildComponent)) |child_component| {
-        const parent = Entity{ .mID = child_component.mParent, .mManager = entity.mManager };
-        if (!parent.HasComponent(LayoutComponent)) break;
-        current = parent;
-    }
-    return current;
+    return FindTop(entity).Root;
+}
+
+/// The entity's parent if it is a container, so the two are in the same tree
+fn ContainerAbove(entity: Entity) ?Entity {
+    const child_component = entity.GetComponent(EntityChildComponent) orelse return null;
+    const parent = Entity{ .mID = child_component.mParent, .mManager = entity.mManager };
+    if (!parent.HasComponent(LayoutComponent)) return null;
+    return parent;
 }
 
 /// Whether layout decides where this entity goes, so a translation set by hand is put back: a flow item in a
@@ -193,7 +220,7 @@ fn LayoutTree(root: Entity, engine_context: *EngineContext) !void {
     };
 
     var tree: Tree = .{};
-    try tree.Add(root, null, false, engine_context, scratch_allocator);
+    try tree.Add(root, null, engine_context, scratch_allocator);
 
     const results = try Layout.Solve(scratch_allocator, tree.mNodes.items, 0, root_area);
     for (tree.mEntities.items, tree.mTextCenters.items, results) |entity, text_center, result| {
@@ -210,8 +237,11 @@ fn LayoutTree(root: Entity, engine_context: *EngineContext) !void {
 }
 
 /// Hides or shows `entity` and everything under it: layout elements, and anything placed by hand under them too.
-/// A collapsed element further down keeps its own part hidden when an outer one is expanded
+/// A collapsed element further down keeps its own part hidden when an outer one is expanded. A collapsed element
+/// that is already hidden has everything under it hidden already: it was all hidden as it collapsed, and anything
+/// laid out added under it since is hidden as it comes (Fold)
 fn ApplyHidden(entity: Entity, hidden: bool, engine_context: *EngineContext) !void {
+    if (IsCollapsed(entity) and entity.HasComponent(LayoutHiddenTag)) return;
     if (hidden and !entity.HasComponent(LayoutHiddenTag)) {
         _ = try entity.AddComponent(engine_context, LayoutHiddenTag{});
     } else if (!hidden and entity.HasComponent(LayoutHiddenTag)) {
@@ -238,12 +268,12 @@ const Tree = struct {
     mTextCenters: std.ArrayList(?Vec2(f32)) = .empty,
     mLastChild: std.ArrayList(?Layout.Index) = .empty,
 
-    /// Adds `entity` as the last child of `parent`, and then everything under it that is in the tree. `folded` is
-    /// whether something above it is collapsed
-    fn Add(self: *Tree, entity: Entity, parent: ?Layout.Index, folded: bool, engine_context: *EngineContext, scratch_allocator: std.mem.Allocator) anyerror!void {
+    /// Adds `entity` as the last child of `parent`, and then everything under it that is in the tree. Not what is
+    /// under a collapsed element: the solver leaves all of it out, so it is neither laid out nor written back to
+    fn Add(self: *Tree, entity: Entity, parent: ?Layout.Index, engine_context: *EngineContext, scratch_allocator: std.mem.Allocator) anyerror!void {
         var node = if (entity.GetComponent(LayoutItemComponent)) |item| item.ToNode() else (LayoutItemComponent{}).ToNode();
-        //the solver leaves out a collapsed element and everything under it, so there is no text in there to measure
-        const hidden = folded or node.Collapsed;
+        //there is no text to measure in a collapsed element
+        const hidden = node.Collapsed;
         var text_center: ?Vec2(f32) = null;
         if (entity.GetComponent(LayoutComponent)) |layout| {
             node.Container = layout.ToContainer();
@@ -275,10 +305,10 @@ const Tree = struct {
             self.mLastChild.items[parent_index] = index;
         }
 
-        if (node.Container == null) return;
+        if (node.Container == null or hidden) return;
         var children = entity.GetIterator(.Child);
         while (children.next()) |child| {
-            if (IsInLayout(child)) try self.Add(child, index, hidden, engine_context, scratch_allocator);
+            if (IsInLayout(child)) try self.Add(child, index, engine_context, scratch_allocator);
         }
     }
 };
